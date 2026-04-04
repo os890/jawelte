@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>introducing jawelte</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green:      #4ade80;
+    --green-dark: #15803d;
+    --green-dim:  #166534;
+    --red:        #ef4444;
+    --bg:         #1a1a1a;
+    --bg2:        #222222;
+    --bg3:        #2a2a2a;
+    --text:       #e4e4e7;
+    --muted:      #71717a;
+    --border:     #2e2e2e;
+  }
+  html { background: var(--bg); color: var(--text); font-family: monospace; scroll-behavior: smooth; }
+  body { max-width: 720px; margin: 0 auto; padding: 0 24px 80px; }
+  header { display: flex; flex-direction: column; align-items: center; padding: 64px 0 48px; border-bottom: 1px solid var(--border); margin-bottom: 56px; }
+  .logo-mark { margin-bottom: 12px; }
+  .wordmark { font-size: 48px; font-family: monospace; font-weight: 500; letter-spacing: 4px; color: var(--text); line-height: 1; margin-bottom: 8px; }
+  .wordmark .g { color: var(--green); }
+  .tagline { font-size: 11px; letter-spacing: 3px; color: var(--green); font-family: monospace; }
+  .meta { font-size: 12px; color: var(--muted); margin-bottom: 56px; letter-spacing: 1px; }
+  h2 { font-size: 13px; font-weight: 500; letter-spacing: 3px; color: var(--green); text-transform: lowercase; margin: 48px 0 16px; }
+  p { font-size: 15px; line-height: 1.85; color: #c4c4c7; margin-bottom: 20px; }
+  strong { color: var(--text); font-weight: 500; }
+  .name-box { border: 1px solid var(--border); background: var(--bg2); border-radius: 8px; padding: 28px 32px; margin: 32px 0; }
+  .name-full { font-size: 36px; font-family: monospace; font-weight: 500; letter-spacing: 4px; margin-bottom: 24px; }
+  .name-full .g { color: var(--green); }
+  .name-parts { display: flex; flex-direction: column; gap: 10px; }
+  .name-part { display: flex; align-items: baseline; gap: 12px; font-size: 13px; font-family: monospace; }
+  .name-part .letters { color: var(--green); font-weight: 500; min-width: 52px; letter-spacing: 2px; }
+  .name-part .letters.red { color: var(--red); }
+  .name-part .arrow { color: var(--muted); font-size: 11px; }
+  .name-part .meaning { color: #a1a1aa; }
+  .name-part .meaning em { color: var(--text); font-style: normal; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 28px; }
+  .pill { font-size: 11px; font-family: monospace; letter-spacing: 1px; padding: 4px 12px; border-radius: 4px; border: 1px solid var(--green-dim); color: var(--green); background: #071a0b; }
+  .pill.core { border-color: #3f3f46; color: #a1a1aa; background: var(--bg3); }
+  .principles { display: flex; flex-direction: column; gap: 0; margin: 20px 0 28px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .principle { display: flex; align-items: flex-start; gap: 16px; padding: 16px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .principle:last-child { border-bottom: none; }
+  .principle .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-top: 5px; flex-shrink: 0; }
+  .principle .dot.red { background: var(--red); }
+  .principle .label { color: var(--text); font-weight: 500; min-width: 160px; flex-shrink: 0; }
+  .principle .desc { color: #a1a1aa; line-height: 1.6; }
+  .closing { margin-top: 56px; padding-top: 32px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); letter-spacing: 1px; text-align: center; }
+  .closing strong { color: var(--green); font-weight: 500; }
+  .logo-badge { display: inline-block; font-size: 10px; letter-spacing: 1px; padding: 3px 10px; border-radius: 4px; font-family: monospace; margin-bottom: 8px; }
+  .badge-wip { border: 1px solid #38bdf8; color: #38bdf8; background: #0c1a27; }
+  .badge-v1  { border: 1px solid var(--green-dim); color: var(--green); background: #071a0b; }
+  .logo-caption { font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <svg class="logo-mark" width="120" viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="200,20 298,184 102,184" fill="#071a0b"/>
+    <polygon points="200,20 298,184 102,184" fill="none" stroke="#4ade80" stroke-width="1.8"/>
+    <polygon points="200,38 282,176 118,176" fill="none" stroke="#166534" stroke-width="0.9"/>
+    <line x1="148" y1="128" x2="252" y2="128" stroke="#166534" stroke-width="0.7"/>
+    <line x1="187" y1="83" x2="213" y2="109" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
+    <line x1="213" y1="83" x2="187" y2="109" stroke="#4ade80" stroke-width="6" stroke-linecap="round"/>
+    <line x1="164" y1="153" x2="181" y2="162" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="181" y1="162" x2="200" y2="141" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="236" y1="153" x2="219" y2="162" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+    <line x1="219" y1="162" x2="200" y2="141" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+  </svg>
+  <div class="wordmark">ja<span class="g">we</span>lte</div>
+  <div class="tagline">the test-framework</div>
+</header>
+
+<div class="meta">// april 2026 &nbsp;·&nbsp; open source &nbsp;·&nbsp; jakarta 11 &nbsp;·&nbsp; junit 6</div>
+
+<h2>// introducing jawelte</h2>
+<p>Testing Jakarta applications is harder than it should be. You wire together a JPA provider, a transaction manager, an embedded JAX-RS server, a test database, mock libraries and stub servers — and before you have written a single assertion, you have already written hundreds of lines of infrastructure. Then you do it again for the next project. And the next.</p>
+<p><strong>jawelte</strong> exists to end that. It is a Java test framework built on the Jakarta 10 platform that makes integration testing as simple as writing a plain JUnit test. One annotation. A running container. Your test.</p>
+
+<h2>// the name</h2>
+<p>The name is not an accident. Every letter earns its place.</p>
+<div class="name-box">
+  <div class="name-full">ja<span class="g">we</span>lte</div>
+  <div class="name-parts">
+    <div class="name-part"><span class="letters">ja</span><span class="arrow">→</span><span class="meaning"><em>Jakarta</em> — the platform jawelte is built for and built with</span></div>
+    <div class="name-part"><span class="letters">wel</span><span class="arrow">→</span><span class="meaning"><em>Weld</em> — the CDI reference implementation</span></div>
+    <div class="name-part"><span class="letters">te</span><span class="arrow">→</span><span class="meaning"><em>test</em> — what it is all about</span></div>
+    <div class="name-part"><span class="letters">jawel·te</span><span class="arrow">→</span><span class="meaning">Dutch <em>"yes indeed"</em> + <em>test</em> — or in German: <em>jawohl test</em>. because your tests should pass. absolutely.</span></div>
+  </div>
+</div>
+
+<h2>// the logo</h2>
+<p>jawelte has two logos. The <strong>version 1.0 logo</strong> is the target — the mark the project will carry once it reaches its first stable release. Until then, the <strong>work-in-progress logo</strong> is what you will see in repositories, docs and releases. Both tell the same story; the WIP logo carries a gear and checkmark to signal that we are still building — and that tests should pass.</p>
+
+<!-- WIP logo -->
+<div style="display:flex;justify-content:center;margin:40px 0 8px;">
+  <div style="display:flex;flex-direction:column;align-items:center;">
+    <span class="logo-badge badge-wip">work in progress</span>
+    <svg id="wip-svg" width="260" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="200,20 298,184 102,184" fill="#071a0b"/>
+      <g id="wip-gear" transform="translate(200,96)"/>
+      <polygon points="200,20 298,184 102,184" fill="none" stroke="#4ade80" stroke-width="1.8"/>
+      <polygon points="200,38 282,176 118,176" fill="none" stroke="#166534" stroke-width="0.9"/>
+      <line x1="148" y1="128" x2="252" y2="128" stroke="#166534" stroke-width="0.7"/>
+      <line x1="164" y1="153" x2="181" y2="162" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+      <line x1="181" y1="162" x2="200" y2="141" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+      <line x1="236" y1="153" x2="219" y2="162" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+      <line x1="219" y1="162" x2="200" y2="141" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+      <text x="200" y="222" font-size="32" font-family="monospace" font-weight="500" fill="#e4e4e7" text-anchor="middle" letter-spacing="4">ja<tspan fill="#4ade80">we</tspan>lte</text>
+      <text x="200" y="244" font-size="11" font-family="monospace" font-weight="400" fill="#4ade80" text-anchor="middle" letter-spacing="3">the test-framework</text>
+      <text x="200" y="260" font-size="12" font-family="monospace" font-weight="500" fill="#38bdf8" text-anchor="middle" letter-spacing="3">experimental</text>
+    </svg>
+    <span class="logo-caption">used during development</span>
+  </div>
+</div>
+
+<!-- v1.0 logo -->
+<div style="display:flex;justify-content:center;margin:40px 0 8px;">
+  <div style="display:flex;flex-direction:column;align-items:center;">
+    <span class="logo-badge badge-v1">version 1.0</span>
+    <svg width="260" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+      <polygon points="200,20 298,184 102,184" fill="#071a0b"/>
+      <polygon points="200,20 298,184 102,184" fill="none" stroke="#4ade80" stroke-width="1.8"/>
+      <polygon points="200,38 282,176 118,176" fill="none" stroke="#166534" stroke-width="0.9"/>
+      <line x1="148" y1="128" x2="252" y2="128" stroke="#166534" stroke-width="0.7"/>
+      <line x1="187" y1="83" x2="213" y2="109" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
+      <line x1="213" y1="83" x2="187" y2="109" stroke="#4ade80" stroke-width="6" stroke-linecap="round"/>
+      <line x1="164" y1="153" x2="181" y2="162" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+      <line x1="181" y1="162" x2="200" y2="141" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+      <line x1="236" y1="153" x2="219" y2="162" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+      <line x1="219" y1="162" x2="200" y2="141" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+      <text x="200" y="222" font-size="32" font-family="monospace" font-weight="500" fill="#e4e4e7" text-anchor="middle" letter-spacing="4">ja<tspan fill="#4ade80">we</tspan>lte</text>
+      <text x="200" y="244" font-size="11" font-family="monospace" font-weight="400" fill="#4ade80" text-anchor="middle" letter-spacing="3">the test-framework</text>
+    </svg>
+    <span class="logo-caption">target for stable release</span>
+  </div>
+</div>
+
+<p>The <strong>version 1.0 logo</strong> carries an <strong>x</strong> above the W — two-colored, the <span style="color:#ef4444">red \</span> a failing test, the <span style="color:#4ade80">green /</span> a passing one. Together they form the universal symbol for a test result. The <strong>W</strong> below is built from two checkmarks mirrored on the y-axis — <span style="color:#ef4444">red left tick</span> failing, <span style="color:#4ade80">green right tick</span> passing.</p>
+<p>The <strong>work-in-progress logo</strong> replaces the x with a gear and checkmark. The gear is a deliberate signal: jawelte is under active construction. Not ready. Not stable. Moving parts still turning. The checkmark inside it is the destination — tests that pass, reliably, every time. The word <span style="color:#38bdf8">experimental</span> below the tagline makes the status explicit: use it, try it, break it — but know what you are holding. When the gear disappears and the x returns, jawelte is done.</p>
+
+<h2>// what jawelte does</h2>
+<p>jawelte is not just built <em>for</em> Jakarta — it is built <em>with</em> it. CDI beans and events form its internal backbone. MicroProfile Config drives its configuration. Every abstraction jawelte exposes is backed by the same standards it helps you test.</p>
+<p>Core technologies:</p>
+<div class="pills">
+  <span class="pill core">jakarta 11 · junit 6</span>
+  <span class="pill core">CDI</span>
+  <span class="pill core">MicroProfile Config</span>
+</div>
+<p>First-class integrations — all opt-in, all pluggable:</p>
+<div class="pills">
+  <span class="pill">JPA</span><span class="pill">JTA</span><span class="pill">JAX-RS</span><span class="pill">MicroProfile</span><span class="pill">DB-Unit</span><span class="pill">H2</span><span class="pill">Mockito</span><span class="pill">WireMock</span>
+</div>
+
+<h2>// how it works</h2>
+<p>Every test method runs in its own CDI request scope. If you need a database, jawelte boots JPA and JTA, loads your test data, and wraps your entire test — setup, execution and assertion — in a single shared transaction. Before the assert phase, the <code style="color:var(--green);font-size:13px">EntityManager</code> is flushed so you can inspect the real database state. Then the transaction is rolled back. No cleanup. No leftover state. Fast.</p>
+<p>Test data is declared externally — via DB-Unit datasets — and referenced per test method through an annotation. Datasets can be shared across a test class or specific to a single method, or both combined. The framework loads them. You focus on the assertion.</p>
+
+<h2>// design principles</h2>
+<div class="principles">
+  <div class="principle"><div class="dot"></div><div class="label">simple to use</div><div class="desc">if you know JUnit, you already know how to run a jawelte test</div></div>
+  <div class="principle"><div class="dot"></div><div class="label">minimal by design</div><div class="desc">a small, intentional API with meaningful defaults — configuration only when you need it</div></div>
+  <div class="principle"><div class="dot"></div><div class="label">pluggable at heart</div><div class="desc">every integration is a port-and-adapter — add what you need, leave out what you don't</div></div>
+  <div class="principle"><div class="dot"></div><div class="label">solid to the core</div><div class="desc">jawelte is exhaustively self-tested and thoroughly documented — it eats its own cooking</div></div>
+  <div class="principle"><div class="dot red"></div><div class="label">fast by necessity</div><div class="desc">integrating many technologies is no excuse for being slow — startup is lean, rollback is the default</div></div>
+</div>
+
+<h2>// what's next</h2>
+<p>jawelte is in active development. The core — JUnit 5 extension, CDI lifecycle, MicroProfile Config integration and the port/adapter SPI — is being built first. Integrations follow. Documentation and self-tests ship alongside the code, not after.</p>
+<p>The goal is a framework the Jakarta community can rely on. Solid, fast, honest about what it does. And when your test passes — <strong style="color:var(--green)">jawohl</strong>.</p>
+
+<div style="margin-top:48px;padding:20px 24px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);font-size:13px;font-family:monospace;color:var(--muted);">
+  <span style="color:var(--green)">license</span> &nbsp;·&nbsp; jawelte is released under the <strong style="color:var(--text)">Apache License 2.0</strong> — free to use, modify and distribute, in open source and commercial projects alike.
+</div>
+
+<div class="closing">
+  <strong>jawelte</strong> &nbsp;·&nbsp; open source &nbsp;·&nbsp; jakarta 11 &nbsp;·&nbsp; junit 6 &nbsp;·&nbsp; built on cdi
+</div>
+
+<script>
+const ns = 'http://www.w3.org/2000/svg';
+const g = document.getElementById('wip-gear');
+
+const teeth = 12, outerR = 22, innerR = 17.5, boreR = 12;
+const toothFrac = 0.62;
+const step = (Math.PI * 2) / teeth;
+
+function pt(r, a) { return `${(r*Math.cos(a)).toFixed(3)},${(r*Math.sin(a)).toFixed(3)}`; }
+
+let d = '';
+for (let i = 0; i < teeth; i++) {
+  const a   = i * step - Math.PI/2;
+  const ta0 = a - step * toothFrac/2;
+  const ta1 = a + step * toothFrac/2;
+  const ga1 = a + step - step * toothFrac/2;
+  if (i === 0) d += `M${pt(innerR,ta0)} `;
+  else         d += `L${pt(innerR,ta0)} `;
+  d += `L${pt(outerR,ta0+0.08)} A${outerR},${outerR},0,0,1,${pt(outerR,ta1-0.08)} L${pt(innerR,ta1)} A${innerR},${innerR},0,0,1,${pt(innerR,ga1)} `;
+}
+d += 'Z';
+
+const gearPath = document.createElementNS(ns, 'path');
+gearPath.setAttribute('d', d);
+gearPath.setAttribute('fill', 'rgba(74,222,128,0.55)');
+g.appendChild(gearPath);
+
+const bore = document.createElementNS(ns, 'circle');
+bore.setAttribute('r', boreR);
+bore.setAttribute('fill', '#071a0b');
+g.appendChild(bore);
+
+const s = 22/50;
+const ckBg = document.createElementNS(ns, 'path');
+ckBg.setAttribute('d', `M${-12*s},${-2*s} L${5*s},${12*s} Q${23*s},${-20*s} ${42*s},${-40*s}`);
+ckBg.setAttribute('fill', 'none');
+ckBg.setAttribute('stroke', '#071a0b');
+ckBg.setAttribute('stroke-width', (17*s).toFixed(2));
+ckBg.setAttribute('stroke-linecap', 'square');
+ckBg.setAttribute('stroke-linejoin', 'miter');
+ckBg.setAttribute('stroke-miterlimit', '10');
+g.appendChild(ckBg);
+
+const ck = document.createElementNS(ns, 'path');
+ck.setAttribute('d', `M${-12*s},${-2*s} L${5*s},${12*s} Q${23*s},${-20*s} ${42*s},${-40*s}`);
+ck.setAttribute('fill', 'none');
+ck.setAttribute('stroke', 'rgba(74,222,128,0.78)');
+ck.setAttribute('stroke-width', (9*s).toFixed(2));
+ck.setAttribute('stroke-linecap', 'square');
+ck.setAttribute('stroke-linejoin', 'miter');
+ck.setAttribute('stroke-miterlimit', '10');
+g.appendChild(ck);
+</script>
+</body>
+</html>

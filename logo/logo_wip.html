@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jawelte</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #1a1a1a; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<svg width="400" viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="200,20 298,184 102,184" fill="#071a0b"/>
+
+  <g id="gear" transform="translate(200,96)"/>
+
+  <polygon points="200,20 298,184 102,184" fill="none" stroke="#4ade80" stroke-width="1.8"/>
+  <polygon points="200,38 282,176 118,176" fill="none" stroke="#166534" stroke-width="0.9"/>
+  <line x1="148" y1="128" x2="252" y2="128" stroke="#166534" stroke-width="0.7"/>
+
+  <line x1="164" y1="153" x2="181" y2="162" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+  <line x1="181" y1="162" x2="200" y2="141" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+  <line x1="236" y1="153" x2="219" y2="162" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+  <line x1="219" y1="162" x2="200" y2="141" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+
+  <text x="200" y="222" font-size="32" font-family="monospace" font-weight="500"
+    fill="#e4e4e7" text-anchor="middle" letter-spacing="4">ja<tspan fill="#4ade80">we</tspan>lte</text>
+  <text x="200" y="244" font-size="11" font-family="monospace" font-weight="400"
+    fill="#4ade80" text-anchor="middle" letter-spacing="3">the test-framework</text>
+  <text x="200" y="260" font-size="12" font-family="monospace" font-weight="500"
+    fill="#38bdf8" text-anchor="middle" letter-spacing="3">experimental</text>
+</svg>
+
+<script>
+const ns = 'http://www.w3.org/2000/svg';
+const g = document.getElementById('gear');
+
+const teeth = 12, outerR = 22, innerR = 17.5, boreR = 12;
+const toothFrac = 0.62;
+const step = (Math.PI * 2) / teeth;
+
+function pt(r, a) { return `${(r*Math.cos(a)).toFixed(3)},${(r*Math.sin(a)).toFixed(3)}`; }
+
+let d = '';
+for (let i = 0; i < teeth; i++) {
+  const a   = i * step - Math.PI/2;
+  const ta0 = a - step * toothFrac/2;
+  const ta1 = a + step * toothFrac/2;
+  const ga1 = a + step - step * toothFrac/2;
+  if (i === 0) d += `M${pt(innerR,ta0)} `;
+  else         d += `L${pt(innerR,ta0)} `;
+  d += `L${pt(outerR, ta0+0.08)} A${outerR},${outerR},0,0,1,${pt(outerR,ta1-0.08)} L${pt(innerR,ta1)} A${innerR},${innerR},0,0,1,${pt(innerR,ga1)} `;
+}
+d += 'Z';
+
+const gearPath = document.createElementNS(ns, 'path');
+gearPath.setAttribute('d', d);
+gearPath.setAttribute('fill', 'rgba(74,222,128,0.55)');
+g.appendChild(gearPath);
+
+const bore = document.createElementNS(ns, 'circle');
+bore.setAttribute('r', boreR);
+bore.setAttribute('fill', '#071a0b');
+g.appendChild(bore);
+
+const s = 22/50;
+
+const ckBg = document.createElementNS(ns, 'path');
+ckBg.setAttribute('d', `M${-12*s},${-2*s} L${5*s},${12*s} Q${23*s},${-20*s} ${42*s},${-40*s}`);
+ckBg.setAttribute('fill', 'none');
+ckBg.setAttribute('stroke', '#071a0b');
+ckBg.setAttribute('stroke-width', (17*s).toFixed(2));
+ckBg.setAttribute('stroke-linecap', 'square');
+ckBg.setAttribute('stroke-linejoin', 'miter');
+ckBg.setAttribute('stroke-miterlimit', '10');
+g.appendChild(ckBg);
+
+const ck = document.createElementNS(ns, 'path');
+ck.setAttribute('d', `M${-12*s},${-2*s} L${5*s},${12*s} Q${23*s},${-20*s} ${42*s},${-40*s}`);
+ck.setAttribute('fill', 'none');
+ck.setAttribute('stroke', 'rgba(74,222,128,0.78)');
+ck.setAttribute('stroke-width', (9*s).toFixed(2));
+ck.setAttribute('stroke-linecap', 'square');
+ck.setAttribute('stroke-linejoin', 'miter');
+ck.setAttribute('stroke-miterlimit', '10');
+g.appendChild(ck);
+</script>
+</body>
+</html>
