@@ -45,7 +45,8 @@
 
     <modules>
         <module>core</module>
-        <!-- tests/ and coverage/ added in later tasks of TICKET-001 -->
+        <module>tests</module>
+        <!-- coverage/ added in task #9 -->
     </modules>
 
     <properties>

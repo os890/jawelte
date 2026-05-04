@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-core</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/core aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-core orchestration. Centralizes the shared test dependencies (core-api / core-impl / JUnit / AssertJ / junit-platform-testkit) so each scenario pom stays minimal.</description>
+
+    <modules>
+        <module>scenario-01-proxy-resolves-delegating-extension</module>
+        <module>scenario-02-priority-ordering-before</module>
+        <module>scenario-03-priority-ordering-after-lifo</module>
+        <module>scenario-04-no-priority-last</module>
+        <module>scenario-05-testcontext-binding</module>
+        <module>scenario-10-zero-container-managers</module>
+        <module>scenario-11-multiple-container-managers</module>
+        <module>scenario-15-error-propagation</module>
+        <module>scenario-19-afterall-throws-fresh-testcontext</module>
+        <module>scenario-20-multiple-aftereach-failures</module>
+        <module>scenario-21-test-fail-and-aftereach-fail</module>
+        <module>scenario-22-beforeall-throws-afterall-runs</module>
+        <module>scenario-proxy-no-provider</module>
+        <module>scenario-proxy-multi-provider</module>
+    </modules>
+
+    <dependencies>
+        <!-- jawelte API is required by every scenario; core-impl is not, because
+             scenario-proxy-no-provider deliberately runs WITHOUT core-impl on its
+             classpath to verify the proxy's "No TestBeansExtension found" error.
+             Each scenario's own pom adds jawelte-core-impl when needed. -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Jakarta CDI / annotation APIs are needed at test runtime -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- JUnit 6 + Platform Test Kit for asserting on a sub-engine run -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-testkit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- AssertJ for assertion fluency -->
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

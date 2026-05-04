@@ -69,3 +69,44 @@ Verification: `./mvnw compile -am` builds the full reactor (4 modules) in 0.6s; 
 
 Behaviour tests for the orchestration contracts arrive in `tests/core/scenario-*` per task #8 (12 in-scope orchestration scenarios).
 
+
+## 2026-05-05 — TICKET-001 task #8: 14 scenario test sub-modules
+
+Built the complete tests/ tree per TICKET-001's in-scope orchestration scenarios PLUS the two implicit Proxy-level SPI scenarios required by the Acceptance Criteria. 14 scenario sub-modules; ~70 source files; one big commit per the user's chosen rollout.
+
+Top-level structure:
+- `tests/pom.xml` (jawelte-tests, packaging=pom): aggregator only.
+- `tests/core/pom.xml` (jawelte-tests-core, packaging=pom): aggregator AND parent for the 14 scenario modules. Centralizes shared test deps (jawelte-core-api, junit-jupiter, junit-platform-testkit, AssertJ, jakarta.* APIs). `jawelte-core-impl` is intentionally NOT in the parent's `<dependencies>` so `scenario-proxy-no-provider` can run without it on its classpath; the 13 scenarios that do need it declare it explicitly in their own pom.
+- Root `pom.xml` updated to include `<module>tests</module>`.
+
+Scenario inventory and what each verifies:
+
+| # | Scenario | What it verifies |
+|---|---|---|
+| 01 | proxy-resolves-delegating-extension | Happy path. EngineTestKit launches a subject; the recording fake's events show beforeAll → postProcessTestInstance → beforeEach → afterEach → afterAll exactly. |
+| 02 | priority-ordering-before | 3 module ports @Priority(50/100/200). beforeEach fires 50 → 100 → 200 (ascending). |
+| 03 | priority-ordering-after-lifo | Same 3 ports. afterEach fires 200 → 100 → 50 (LIFO). |
+| 04 | no-priority-last | Prioritized port (50) and unprioritized port. beforeEach fires prioritized → unprioritized (no-@Priority sorts last). |
+| 05 | testcontext-binding | All 5 callbacks receive the same TestContext.getTestClass() == Subject.class. |
+| 10 | zero-container-managers | No TestBeanContainerPort registered. EngineTestKit reports failure with `IllegalStateException("No TestBeanContainerPort found via ServiceLoader…")` (TICKET-001 SPI section verbatim). |
+| 11 | multiple-container-managers | Two TestBeanContainerPort impls registered. Failure with `IllegalStateException("Multiple TestBeanContainerPort implementations found:…")`. |
+| 15 | error-propagation | AlphaPort @Priority(50) completes beforeEach; BetaPort @Priority(100) throws beforeEach. After test failure: alpha's afterEach IS called, beta's is NOT, original exception propagates. |
+| 19 | afterall-throws-fresh-testcontext | Container port's afterAll throws on first subject. Second subject runs and gets a NEW TestContext instance — JUnit Store entry is disposed cleanly. |
+| 20 | multiple-aftereach-failures | Three module ports' afterEach all throw (50/100/200). LIFO order means primary = priority-200's exception, suppressed in iteration order = [priority-100, priority-50]. |
+| 21 | test-fail-and-aftereach-fail | Test method fails AssertionError; container.afterEach also throws. AssertionError is primary; afterEach exception is in `getSuppressed()` (JUnit cross-extension aggregation). |
+| 22 | beforeall-throws-afterall-runs | Container's beforeAll throws. Module port's beforeAll is NEVER called; container's afterAll IS called (cleanup-guarantee for partial state). |
+| proxy-no-provider | core-impl deliberately absent from classpath. EnableTestBeans.Proxy throws `IllegalStateException("No TestBeansExtension found via ServiceLoader…")`. |
+| proxy-multi-provider | core-impl on classpath PLUS a SecondTestBeansExtension fake registered via test-only META-INF/services. Proxy throws `IllegalStateException("Multiple TestBeansExtension implementations found:…")`. |
+
+Per-scenario layout:
+- `pom.xml` — minimal; inherits from `jawelte-tests-core`. 13 scenarios declare `jawelte-core-impl` (test scope); `scenario-proxy-no-provider` does not.
+- `src/test/java/<scenario-package>/` — Subject.java (`@EnableTestBeans` + `@Test`), TestClass.java (Surefire-discovered, uses EngineTestKit + AssertJ), one or more fake ports.
+- `src/test/resources/META-INF/services/...` — scenario-tailored ServiceLoader registrations (test scope only; no main jar pollution).
+- Apache 2.0 license header on every Java file. No `final` on classes or methods. 4-space indent.
+
+Test approach: every scenario uses `org.junit.platform.testkit.engine.EngineTestKit` to launch the Subject inside the running JVM, then asserts on the recorded events / failures. The Subject classes use `*Subject` naming so Surefire's default `*Test` pattern skips them — only the Test classes run as direct Surefire tests.
+
+Verification: `./mvnw test` succeeds. 16-module reactor (parent + core aggregator + core/api + core/impl + tests aggregator + tests/core aggregator + 14 scenarios) builds and runs all scenarios in 4.7s. **Every TICKET-001 in-scope orchestration scenario plus both Proxy-level SPI scenarios passes.**
+
+All NFR contracts verified end-to-end through real JUnit lifecycle: ServiceLoader resolution + caching, `@Priority` ascending+LIFO ordering, error propagation, completed-only cleanup, exception aggregation with first-primary + others-suppressed, container-port cleanup guarantees on partial-state failures, fresh-TestContext-per-class.
+
