@@ -220,10 +220,6 @@
                             <exclude>docs/**</exclude>
                             <exclude>errors/**</exclude>
                             <exclude>tickets/**</exclude>
-                            <exclude>diary.md</exclude>
-                            <exclude>idea.md</exclude>
-                            <exclude>todo.md</exclude>
-                            <exclude>team.md</exclude>
                             <exclude>**/META-INF/services/**</exclude>
                         </excludes>
                     </configuration>
