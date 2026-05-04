@@ -23,14 +23,14 @@ import org.os890.jawelte.core.api.port.TestContext;
 
 public class RecordingContainerPort implements TestBeanContainerPort {
 
-    public static final List<TestContext> contextsSeenInBeforeAll = new CopyOnWriteArrayList<>();
+    public static final List<TestContext> CONTEXTS_SEEN_IN_BEFORE_ALL = new CopyOnWriteArrayList<>();
 
     public RecordingContainerPort() {
     }
 
     @Override
     public void beforeAll(TestContext testContext) {
-        contextsSeenInBeforeAll.add(testContext);
+        CONTEXTS_SEEN_IN_BEFORE_ALL.add(testContext);
     }
 
     @Override

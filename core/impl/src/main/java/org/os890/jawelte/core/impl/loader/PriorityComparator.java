@@ -34,6 +34,12 @@ import jakarta.annotation.Priority;
  */
 public class PriorityComparator<T> implements Comparator<T> {
 
+    /**
+     * Default no-arg constructor.
+     */
+    public PriorityComparator() {
+    }
+
     @Override
     public int compare(T left, T right) {
         return Integer.compare(priorityOf(left), priorityOf(right));

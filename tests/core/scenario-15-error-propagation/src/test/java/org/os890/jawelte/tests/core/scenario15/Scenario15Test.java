@@ -30,7 +30,7 @@ class Scenario15Test {
 
     @Test
     void completedPortGetsAfterEachEvenWhenLaterPortThrows() {
-        RecordedEvents.entries.clear();
+        RecordedEvents.ENTRIES.clear();
 
         List<Event> failed = EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario15Subject.class))
@@ -56,7 +56,7 @@ class Scenario15Test {
 
         // Cleanup guarantee: alpha.beforeEach completed, so alpha.afterEach
         // ran. beta.beforeEach threw, so beta.afterEach was NOT called.
-        assertThat(RecordedEvents.entries).containsExactly(
+        assertThat(RecordedEvents.ENTRIES).containsExactly(
                 "alpha.beforeEach",
                 "beta.beforeEach",
                 "alpha.afterEach");

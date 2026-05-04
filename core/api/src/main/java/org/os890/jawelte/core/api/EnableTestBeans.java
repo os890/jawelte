@@ -31,7 +31,6 @@ import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
-
 import org.os890.jawelte.core.api.port.TestBeansExtension;
 
 /**
@@ -112,9 +111,12 @@ public @interface EnableTestBeans {
 
         /**
          * No-arg constructor used by JUnit to instantiate the proxy
-         * via {@code @ExtendWith(EnableTestBeans.Proxy.class)}.
+         * via {@code @ExtendWith(EnableTestBeans.Proxy.class)}. The
+         * {@code public} modifier is implicit for members of a class
+         * nested in an interface; declaring it explicitly here is
+         * flagged by Checkstyle's RedundantModifier rule.
          */
-        public Proxy() {
+        Proxy() {
         }
 
         @Override

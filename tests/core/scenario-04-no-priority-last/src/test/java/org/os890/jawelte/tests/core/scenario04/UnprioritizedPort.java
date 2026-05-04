@@ -25,6 +25,6 @@ public class UnprioritizedPort implements TestModuleLifecyclePort {
 
     @Override
     public void beforeEach(TestContext testContext) {
-        RecordedEvents.entries.add("unprioritized.beforeEach");
+        RecordedEvents.ENTRIES.add("unprioritized.beforeEach");
     }
 }

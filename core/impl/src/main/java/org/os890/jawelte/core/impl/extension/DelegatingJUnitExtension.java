@@ -23,7 +23,6 @@ import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ExtensionContext.Store;
 import org.junit.platform.commons.support.AnnotationSupport;
-
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestBeanContainerPort;
 import org.os890.jawelte.core.api.port.TestBeansExtension;

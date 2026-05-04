@@ -25,7 +25,7 @@ class Scenario04Test {
 
     @Test
     void portsWithoutPriorityRunAfterPrioritizedPortsInBeforeEach() {
-        RecordedEvents.entries.clear();
+        RecordedEvents.ENTRIES.clear();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario04Subject.class))
@@ -33,7 +33,7 @@ class Scenario04Test {
                 .testEvents()
                 .assertStatistics(stats -> stats.started(1).succeeded(1).failed(0));
 
-        assertThat(RecordedEvents.entries).containsExactly(
+        assertThat(RecordedEvents.ENTRIES).containsExactly(
                 "prioritized.beforeEach",
                 "unprioritized.beforeEach");
     }

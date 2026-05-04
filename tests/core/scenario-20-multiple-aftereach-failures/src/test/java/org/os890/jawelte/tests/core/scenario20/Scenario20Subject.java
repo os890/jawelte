@@ -22,6 +22,6 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 class Scenario20Subject {
 
     @Test
-    void testItself_passes_butAllAfterEachPortsWillThrow() {
+    void subjectPassesButAllAfterEachPortsWillThrow() {
     }
 }

@@ -28,11 +28,11 @@ public class AlphaPort implements TestModuleLifecyclePort {
 
     @Override
     public void beforeEach(TestContext testContext) {
-        RecordedEvents.entries.add("alpha.beforeEach");
+        RecordedEvents.ENTRIES.add("alpha.beforeEach");
     }
 
     @Override
     public void afterEach(TestContext testContext) {
-        RecordedEvents.entries.add("alpha.afterEach");
+        RecordedEvents.ENTRIES.add("alpha.afterEach");
     }
 }

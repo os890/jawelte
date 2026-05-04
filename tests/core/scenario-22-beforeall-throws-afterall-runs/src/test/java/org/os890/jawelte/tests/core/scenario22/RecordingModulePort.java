@@ -22,13 +22,13 @@ import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 
 public class RecordingModulePort implements TestModuleLifecyclePort {
 
-    public static final AtomicBoolean beforeAllCalled = new AtomicBoolean(false);
+    public static final AtomicBoolean BEFORE_ALL_CALLED = new AtomicBoolean(false);
 
     public RecordingModulePort() {
     }
 
     @Override
     public void beforeAll(TestContext testContext) {
-        beforeAllCalled.set(true);
+        BEFORE_ALL_CALLED.set(true);
     }
 }

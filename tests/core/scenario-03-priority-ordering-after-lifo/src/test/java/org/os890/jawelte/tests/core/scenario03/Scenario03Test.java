@@ -25,7 +25,7 @@ class Scenario03Test {
 
     @Test
     void afterEachRunsModulePortsInReverseLifoOrder() {
-        RecordedEvents.entries.clear();
+        RecordedEvents.ENTRIES.clear();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario03Subject.class))
@@ -33,7 +33,7 @@ class Scenario03Test {
                 .testEvents()
                 .assertStatistics(stats -> stats.started(1).succeeded(1).failed(0));
 
-        assertThat(RecordedEvents.entries).containsExactly(
+        assertThat(RecordedEvents.ENTRIES).containsExactly(
                 "port200.afterEach",
                 "port100.afterEach",
                 "port050.afterEach");

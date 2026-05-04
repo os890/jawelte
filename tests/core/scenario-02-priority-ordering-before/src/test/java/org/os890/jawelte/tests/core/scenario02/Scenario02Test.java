@@ -25,7 +25,7 @@ class Scenario02Test {
 
     @Test
     void beforeEachRunsModulePortsInAscendingPriorityOrder() {
-        RecordedEvents.entries.clear();
+        RecordedEvents.ENTRIES.clear();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario02Subject.class))
@@ -33,7 +33,7 @@ class Scenario02Test {
                 .testEvents()
                 .assertStatistics(stats -> stats.started(1).succeeded(1).failed(0));
 
-        assertThat(RecordedEvents.entries).containsExactly(
+        assertThat(RecordedEvents.ENTRIES).containsExactly(
                 "port050.beforeEach",
                 "port100.beforeEach",
                 "port200.beforeEach");

@@ -110,3 +110,29 @@ Verification: `./mvnw test` succeeds. 16-module reactor (parent + core aggregato
 
 All NFR contracts verified end-to-end through real JUnit lifecycle: ServiceLoader resolution + caching, `@Priority` ascending+LIFO ordering, error propagation, completed-only cleanup, exception aggregation with first-primary + others-suppressed, container-port cleanup guarantees on partial-state failures, fresh-TestContext-per-class.
 
+
+## 2026-05-05 — TICKET-001 task #9: quality gates wired
+
+Activated all the cross-cutting quality gates from TICKET-001's NFR section, plus the JaCoCo coverage aggregator.
+
+- **Checkstyle**: new `checkstyle.xml` at the project root. Google-style ruleset with project-specific overrides:
+    - 4-space indent (override Google's 2)
+    - 120-char line length (override Google's 100)
+    - AnnotationLocation rule disabled (Jakarta-style flexibility, per the user's earlier choice)
+    - Custom RegexpSingleline rules to ban `final class` and `final ReturnType methodName(` declarations (CDI proxy compatibility — `final` on classes or methods blocks `RequestScoped`/`ApplicationScoped` proxying)
+    - VisibilityModifier requires private instance fields (with `allowPublicFinalFields=true` for static-final containers used by tests)
+    - Standard Google rules retained: AvoidStarImport, ModifierOrder, NeedBraces, ImportOrder (with static-imports-at-top), TypeName / MemberName / MethodName / ConstantName, EmptyBlock, OneStatementPerLine, etc.
+- Activated the **maven-checkstyle-plugin** in the parent's `<build><plugins>` at the `validate` phase. Fixed 28 violations across the new code (most were ConstantName for the test fakes' `static final` containers — `events`/`entries`/`testClassesSeen` etc. renamed to `EVENTS`/`ENTRIES`/`TEST_CLASSES_SEEN` etc.; ImportOrder option flipped from `bottom` to `top` to match the static-import-first style; one `final class` removed from each of the four `RecordedEvents` test holders; `Proxy` constructor's redundant `public` modifier removed; one underscored test method renamed). All references updated together via a perl one-liner across the affected files.
+- Activated the **jacoco-maven-plugin** in the parent's `<build><plugins>` (prepare-agent at `initialize`, report at `verify`). Each module produces its own `target/jacoco.exec` plus per-module HTML/XML report.
+- Activated the **maven-javadoc-plugin** (`jar` goal at `verify`) on `core/api` and `core/impl` only — the JAR-publishing modules. The plugin runs with `failOnWarnings=true` and `doclint=all`. Fixed one warning by adding an explicit Javadoc'd no-arg constructor to `PriorityComparator` (javac otherwise flagged the synthesized default constructor as "use of default constructor, which does not provide a comment").
+- New **`coverage/`** module (`jawelte-coverage`, packaging=pom): runs `jacoco:report-aggregate` at `verify`. Lists `core/api`, `core/impl`, and all 14 scenario modules as `<dependencies>` so JaCoCo collects every sibling's `jacoco.exec` and produces a project-wide aggregated report at `coverage/target/site/jacoco-aggregate/{index.html,jacoco.xml,jacoco.csv}`. Added `<module>coverage</module>` to the root pom.
+
+Coverage results on production code (from the aggregated CSV):
+- jawelte-core-api: 100% on `EnableTestBeans.Proxy`, `TestModuleLifecyclePort` defaults; **0%** on the 3 CDI event classes (`ContainerStarted`, `BeforeScopeStarted`, `AfterTestTransaction`) — these are CDI contract classes (constructor + getters) that are *fired by adapter implementations*; TICKET-001 has no adapter in scope, so they get covered when the cdi-module / scope-module / jpa-module tickets land. This is intentional and aligned with the scope-split note in the local ticket file.
+- jawelte-core-impl: 100% on `ServiceLoaderCache` and `PriorityComparator`; ~94% on `DelegatingJUnitExtension` (gaps are unreachable defensive branches in `rethrowAggregated`); ~58% on `TestContextImpl` (gaps are `unbindMetadata` and parts of `getMetadata` not exercised by the in-scope scenarios).
+- Overall (computed from the CSV INSTRUCTION counts): ~87% line / ~77% branch on production code, both above the 80%/70% project thresholds the user picked.
+
+**Project-wide threshold ENFORCEMENT (jacoco:check at the aggregate level)** is NOT wired yet — explained as a comment in `coverage/pom.xml`. The stock JaCoCo Maven plugin's `check` goal binds to the local module's class files; the coverage aggregator has none, so check skips. The clean fix is `jacoco:merge` + `jacoco:check` against a leaf module, but that requires a build-order trick that is best paired with the canonical run-scripts (per the `feedback_testing_is_foundational` rule). Deferred to a follow-up ticket alongside the OWB / Weld / Quarkus profile matrix and the run-scripts.
+
+Verification: `./mvnw verify` succeeds end-to-end on the 21-module reactor in ~7.7s, with all of Enforcer (Java 25, Maven 3.9, banned `javax.*`, dependency convergence), Checkstyle (project ruleset), Apache RAT (Apache 2.0 headers on every Java/XML file; the agreed-on excludes), JaCoCo (per-module + aggregated), and Javadoc (strict) gates green.
+

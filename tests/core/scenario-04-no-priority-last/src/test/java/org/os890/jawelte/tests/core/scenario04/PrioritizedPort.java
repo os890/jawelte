@@ -28,6 +28,6 @@ public class PrioritizedPort implements TestModuleLifecyclePort {
 
     @Override
     public void beforeEach(TestContext testContext) {
-        RecordedEvents.entries.add("prioritized.beforeEach");
+        RecordedEvents.ENTRIES.add("prioritized.beforeEach");
     }
 }

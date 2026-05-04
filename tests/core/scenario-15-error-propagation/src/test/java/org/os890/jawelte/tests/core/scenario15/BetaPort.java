@@ -28,12 +28,12 @@ public class BetaPort implements TestModuleLifecyclePort {
 
     @Override
     public void beforeEach(TestContext testContext) {
-        RecordedEvents.entries.add("beta.beforeEach");
+        RecordedEvents.ENTRIES.add("beta.beforeEach");
         throw new IllegalStateException("BBB beta beforeEach failure marker");
     }
 
     @Override
     public void afterEach(TestContext testContext) {
-        RecordedEvents.entries.add("beta.afterEach");
+        RecordedEvents.ENTRIES.add("beta.afterEach");
     }
 }

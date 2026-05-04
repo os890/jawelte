@@ -23,33 +23,33 @@ import org.os890.jawelte.core.api.port.TestContext;
 
 public class RecordingContainerPort implements TestBeanContainerPort {
 
-    public static final List<Class<?>> testClassesSeen = new CopyOnWriteArrayList<>();
+    public static final List<Class<?>> TEST_CLASSES_SEEN = new CopyOnWriteArrayList<>();
 
     public RecordingContainerPort() {
     }
 
     @Override
     public void beforeAll(TestContext testContext) {
-        testClassesSeen.add(testContext.getTestClass());
+        TEST_CLASSES_SEEN.add(testContext.getTestClass());
     }
 
     @Override
     public void beforeEach(TestContext testContext) {
-        testClassesSeen.add(testContext.getTestClass());
+        TEST_CLASSES_SEEN.add(testContext.getTestClass());
     }
 
     @Override
     public void postProcessTestInstance(TestContext testContext, Object testInstance) {
-        testClassesSeen.add(testContext.getTestClass());
+        TEST_CLASSES_SEEN.add(testContext.getTestClass());
     }
 
     @Override
     public void afterEach(TestContext testContext) {
-        testClassesSeen.add(testContext.getTestClass());
+        TEST_CLASSES_SEEN.add(testContext.getTestClass());
     }
 
     @Override
     public void afterAll(TestContext testContext) {
-        testClassesSeen.add(testContext.getTestClass());
+        TEST_CLASSES_SEEN.add(testContext.getTestClass());
     }
 }

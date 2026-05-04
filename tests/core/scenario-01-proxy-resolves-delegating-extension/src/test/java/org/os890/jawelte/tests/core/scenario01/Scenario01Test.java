@@ -25,7 +25,7 @@ class Scenario01Test {
 
     @Test
     void proxyResolvesDelegatingExtensionAndDispatchesCallbacksInJUnitOrder() {
-        FakeContainerPort.events.clear();
+        FakeContainerPort.EVENTS.clear();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario01Subject.class))
@@ -33,7 +33,7 @@ class Scenario01Test {
                 .testEvents()
                 .assertStatistics(stats -> stats.started(1).succeeded(1).failed(0));
 
-        assertThat(FakeContainerPort.events).containsExactly(
+        assertThat(FakeContainerPort.EVENTS).containsExactly(
                 "container.beforeAll",
                 "container.postProcessTestInstance",
                 "container.beforeEach",

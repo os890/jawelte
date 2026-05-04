@@ -18,9 +18,9 @@ package org.os890.jawelte.tests.core.scenario15;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-final class RecordedEvents {
+class RecordedEvents {
 
-    static final List<String> entries = new CopyOnWriteArrayList<>();
+    static final List<String> ENTRIES = new CopyOnWriteArrayList<>();
 
     private RecordedEvents() {
     }

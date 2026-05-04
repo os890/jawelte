@@ -22,7 +22,7 @@ import org.os890.jawelte.core.api.port.TestContext;
 
 public class BeforeAllThrowingContainerPort implements TestBeanContainerPort {
 
-    public static final AtomicBoolean afterAllCalled = new AtomicBoolean(false);
+    public static final AtomicBoolean AFTER_ALL_CALLED = new AtomicBoolean(false);
 
     public BeforeAllThrowingContainerPort() {
     }
@@ -46,6 +46,6 @@ public class BeforeAllThrowingContainerPort implements TestBeanContainerPort {
 
     @Override
     public void afterAll(TestContext testContext) {
-        afterAllCalled.set(true);
+        AFTER_ALL_CALLED.set(true);
     }
 }

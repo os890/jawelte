@@ -23,33 +23,33 @@ import org.os890.jawelte.core.api.port.TestContext;
 
 public class FakeContainerPort implements TestBeanContainerPort {
 
-    public static final List<String> events = new CopyOnWriteArrayList<>();
+    public static final List<String> EVENTS = new CopyOnWriteArrayList<>();
 
     public FakeContainerPort() {
     }
 
     @Override
     public void beforeAll(TestContext testContext) {
-        events.add("container.beforeAll");
+        EVENTS.add("container.beforeAll");
     }
 
     @Override
     public void beforeEach(TestContext testContext) {
-        events.add("container.beforeEach");
+        EVENTS.add("container.beforeEach");
     }
 
     @Override
     public void postProcessTestInstance(TestContext testContext, Object testInstance) {
-        events.add("container.postProcessTestInstance");
+        EVENTS.add("container.postProcessTestInstance");
     }
 
     @Override
     public void afterEach(TestContext testContext) {
-        events.add("container.afterEach");
+        EVENTS.add("container.afterEach");
     }
 
     @Override
     public void afterAll(TestContext testContext) {
-        events.add("container.afterAll");
+        EVENTS.add("container.afterAll");
     }
 }

@@ -26,7 +26,7 @@ class Scenario19Test {
 
     @Test
     void afterAllFailureDoesNotLeakTestContextToNextTestClass() {
-        RecordingContainerPort.contextsSeenInBeforeAll.clear();
+        RecordingContainerPort.CONTEXTS_SEEN_IN_BEFORE_ALL.clear();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(
@@ -34,9 +34,9 @@ class Scenario19Test {
                         selectClass(SecondSubject.class))
                 .execute();
 
-        assertThat(RecordingContainerPort.contextsSeenInBeforeAll).hasSize(2);
-        TestContext firstContext = RecordingContainerPort.contextsSeenInBeforeAll.get(0);
-        TestContext secondContext = RecordingContainerPort.contextsSeenInBeforeAll.get(1);
+        assertThat(RecordingContainerPort.CONTEXTS_SEEN_IN_BEFORE_ALL).hasSize(2);
+        TestContext firstContext = RecordingContainerPort.CONTEXTS_SEEN_IN_BEFORE_ALL.get(0);
+        TestContext secondContext = RecordingContainerPort.CONTEXTS_SEEN_IN_BEFORE_ALL.get(1);
 
         // Each test class gets its own TestContext - the JUnit Store entry
         // disposed when the first class-level ExtensionContext closed

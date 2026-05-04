@@ -25,8 +25,8 @@ class Scenario22Test {
 
     @Test
     void containerAfterAllRunsEvenWhenContainerBeforeAllThrew() {
-        BeforeAllThrowingContainerPort.afterAllCalled.set(false);
-        RecordingModulePort.beforeAllCalled.set(false);
+        BeforeAllThrowingContainerPort.AFTER_ALL_CALLED.set(false);
+        RecordingModulePort.BEFORE_ALL_CALLED.set(false);
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario22Subject.class))
@@ -35,14 +35,14 @@ class Scenario22Test {
         // No module lifecycle port's beforeAll ran (the container port's
         // beforeAll threw, so the delegating extension propagated and
         // never reached the loop over module ports).
-        assertThat(RecordingModulePort.beforeAllCalled.get())
+        assertThat(RecordingModulePort.BEFORE_ALL_CALLED.get())
                 .as("RecordingModulePort.beforeAll must NOT be called when "
                         + "containerPort.beforeAll throws")
                 .isFalse();
 
         // The container port's afterAll IS still called - cleanup
         // guarantee for partial state.
-        assertThat(BeforeAllThrowingContainerPort.afterAllCalled.get())
+        assertThat(BeforeAllThrowingContainerPort.AFTER_ALL_CALLED.get())
                 .as("BeforeAllThrowingContainerPort.afterAll must be called "
                         + "even when its beforeAll threw")
                 .isTrue();

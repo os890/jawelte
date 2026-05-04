@@ -28,6 +28,6 @@ public class PortPriority50 implements TestModuleLifecyclePort {
 
     @Override
     public void afterEach(TestContext testContext) {
-        RecordedEvents.entries.add("port050.afterEach");
+        RecordedEvents.ENTRIES.add("port050.afterEach");
     }
 }
