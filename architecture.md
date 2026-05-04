@@ -2,18 +2,18 @@
 
 ## Overview
 
-jakwelte is structured in layers. The core layer provides the CDI-based foundation. The integration layer plugs additional Jakarta and third-party technologies into that foundation. The user-facing API sits on top of both and exposes a minimal, JUnit-native interface.
+jawelte is structured in layers. The core layer provides the CDI-based foundation. The integration layer plugs additional Jakarta and third-party technologies into that foundation. The user-facing API sits on top of both and exposes a minimal, JUnit-native interface.
 
 ```
 ┌─────────────────────────────────────────┐
-│              User Test Code             │  JUnit 5 @Test
+│              User Test Code             │  JUnit 6 @Test
 ├─────────────────────────────────────────┤
-│               jakwelte API              │  Annotations, extensions, assertions
+│               jawelte API               │  Annotations, extensions, assertions
 ├─────────────────────────────────────────┤
 │           Integration Layer             │  JPA/JTA · JAX-RS · MicroProfile
 │                                         │  DB-Unit · H2 · Mockito · WireMock
 ├─────────────────────────────────────────┤
-│               Core Layer                │  JUnit 5 · CDI · MicroProfile Config · SPI
+│               Core Layer                │  JUnit 6 · CDI · MicroProfile Config · SPI
 └─────────────────────────────────────────┘
 ```
 
@@ -21,9 +21,9 @@ jakwelte is structured in layers. The core layer provides the CDI-based foundati
 
 ## Core Layer
 
-The core is the heart of jakwelte and the only mandatory dependency. It is responsible for:
+The core is the heart of jawelte and the only mandatory dependency. It is responsible for:
 
-- **JUnit 5 extension** — jakwelte registers itself as a JUnit 5 `Extension`, implementing `BeforeAllCallback`, `AfterAllCallback`, `BeforeEachCallback`, `AfterEachCallback` and `InvocationInterceptor` to take full control of the test lifecycle; a single `@ExtendWith(JakwelteExtension.class)` — or the composed `@JakwelteTest` annotation — is all the user needs
+- **JUnit 6 extension** — jawelte registers itself as a JUnit 6 `Extension`, implementing `BeforeAllCallback`, `BeforeEachCallback`, `TestInstancePostProcessor`, `AfterEachCallback` and `AfterAllCallback` to take full control of the test lifecycle; a single `@EnableTestBeans` annotation on the test class is all the user needs
 - **CDI container lifecycle** — bootstrapping and shutting down the CDI container around each test run
 - **CDI beans and events** — all internal communication between components happens through CDI events; integrations listen and react without tight coupling
 - **MicroProfile Config** — drives all configuration, both internal and user-facing; every default can be overridden via config sources (properties file, environment, system properties)
@@ -39,13 +39,13 @@ Each integration is an independent module that hooks into the core via the SPI a
 
 | Module | Technology | Purpose |
 |---|---|---|
-| `jakwelte-jpa` | JPA + JTA | Managed persistence context, transaction lifecycle |
-| `jakwelte-jaxrs` | JAX-RS | Embedded REST container for endpoint testing |
-| `jakwelte-microprofile` | MicroProfile | Config, Health, Metrics, OpenAPI support |
-| `jakwelte-dbunit` | DB-Unit | Dataset-based database state management |
-| `jakwelte-h2` | H2 | In-memory database for fast persistence tests |
-| `jakwelte-mockito` | Mockito | CDI-aware mock injection |
-| `jakwelte-wiremock` | WireMock | HTTP stub server lifecycle management |
+| `jawelte-jpa` | JPA + JTA | Managed persistence context, transaction lifecycle |
+| `jawelte-jaxrs` | JAX-RS | Embedded REST container for endpoint testing |
+| `jawelte-microprofile` | MicroProfile | Config, Health, Metrics, OpenAPI support |
+| `jawelte-dbunit` | DB-Unit | Dataset-based database state management |
+| `jawelte-h2` | H2 | In-memory database for fast persistence tests |
+| `jawelte-mockito` | Mockito | CDI-aware mock injection |
+| `jawelte-wiremock` | WireMock | HTTP stub server lifecycle management |
 
 New integrations follow the same pattern and require no changes to the core.
 
@@ -53,11 +53,11 @@ New integrations follow the same pattern and require no changes to the core.
 
 ## Hexagonal Architecture
 
-jakwelte is structured around the hexagonal architecture (ports and adapters). The core contains the domain logic of the test framework and defines **ports** — technology-agnostic interfaces that describe what the framework needs. Each integration or extension provides an **adapter** that fulfills one or more of those ports for a specific technology.
+jawelte is structured around the hexagonal architecture (ports and adapters). The core contains the domain logic of the test framework and defines **ports** — technology-agnostic interfaces that describe what the framework needs. Each integration or extension provides an **adapter** that fulfills one or more of those ports for a specific technology.
 
 A port may be realized as a Java SPI (`ServiceLoader`), a CDI extension point, or a plain interface — the port definition is what matters, not the mechanism behind it.
 
-Each port represents the integration boundary between jakwelte's core and an external technology container. A technology container is any runtime that manages its own lifecycle and resources — a JPA persistence provider, a JTA transaction manager, a JAX-RS runtime, an H2 database engine, a WireMock HTTP server. The port defines what jakwelte needs from that container; the adapter wires it up.
+Each port represents the integration boundary between jawelte's core and an external technology container. A technology container is any runtime that manages its own lifecycle and resources — a JPA persistence provider, a JTA transaction manager, a JAX-RS runtime, an H2 database engine, a WireMock HTTP server. The port defines what jawelte needs from that container; the adapter wires it up.
 
 **Core ports (examples):**
 
@@ -87,7 +87,7 @@ New integrations are simply new adapters — the core remains untouched.
 
 ## Configuration
 
-jakwelte uses MicroProfile Config as its single configuration API. Config sources are resolved in standard MicroProfile priority order, with jakwelte providing sensible defaults at the lowest priority.
+jawelte uses MicroProfile Config as its single configuration API. Config sources are resolved in standard MicroProfile priority order, with jawelte providing sensible defaults at the lowest priority.
 
 ---
 
@@ -97,13 +97,13 @@ jakwelte uses MicroProfile Config as its single configuration API. Config source
 JUnit discovers test class
         │
         ▼
-jakwelte JUnit Extension activated
+jawelte JUnit extension activated
         │
         ▼
 CDI container bootstrapped (once per class or per method)
         │
         ▼
-ContainerStartedEvent fired → adapters initialize their containers
+ContainerStarted event fired → adapters initialize their containers
         │
         ▼
 ── per test method ──────────────────────────────────────────────
@@ -141,7 +141,7 @@ CDI request scope destroyed
 ── end per test method ──────────────────────────────────────────
         │
         ▼
-ContainerStoppingEvent fired → adapters tear down their containers
+container shutdown event (TBD) fired → adapters tear down their containers
         │
         ▼
 CDI container shut down
@@ -162,6 +162,6 @@ CDI container shut down
 
 - **CDI-first** — prefer CDI beans, producers and events over static state or proprietary APIs
 - **Convention over configuration** — every integration works out of the box; configuration is only needed to override defaults
-- **No magic** — behavior is traceable; every decision jakwelte makes can be understood by reading its own tests and documentation
-- **Self-tested** — jakwelte uses itself to test its own integrations wherever possible
+- **No magic** — behavior is traceable; every decision jawelte makes can be understood by reading its own tests and documentation
+- **Self-tested** — jawelte uses itself to test its own integrations wherever possible
 - **Minimal surface area** — the public API is as small as possible; complexity lives in the SPI and integration modules, not in user-facing code
