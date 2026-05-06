@@ -46,7 +46,7 @@
     <modules>
         <module>core</module>
         <module>tests</module>
-        <module>coverage</module>
+        <module>jawelte-coverage</module>
     </modules>
 
     <properties>

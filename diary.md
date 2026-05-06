@@ -136,3 +136,8 @@ Coverage results on production code (from the aggregated CSV):
 
 Verification: `./mvnw verify` succeeds end-to-end on the 21-module reactor in ~7.7s, with all of Enforcer (Java 25, Maven 3.9, banned `javax.*`, dependency convergence), Checkstyle (project ruleset), Apache RAT (Apache 2.0 headers on every Java/XML file; the agreed-on excludes), JaCoCo (per-module + aggregated), and Javadoc (strict) gates green.
 
+
+## 2026-05-06 — TICKET-001 PR follow-ups
+
+- Renamed `coverage/` Maven module to `jawelte-coverage/` to avoid the `.gitignore` collision (the `coverage` pattern there was meant for runtime artifacts but silently swallowed the whole module so the directory never reached origin). Root pom `<modules>` updated. The artifactId was already `jawelte-coverage`, so only the directory rename and the `<module>` reference changed.
+
