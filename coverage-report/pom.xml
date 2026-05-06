@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>coverage-report</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (coverage report aggregator)</name>
+    <description>JaCoCo coverage report aggregator. Depends on every production and test module so it builds last in the reactor; runs jacoco:report-aggregate to merge per-module exec data into a single project-wide report. Project-wide threshold enforcement is deferred (see in-pom comment).</description>
+
+    <dependencies>
+        <!-- Production modules: their classes ARE the analysis target. -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+            Test scenario modules: their jacoco.exec files contain the
+            coverage data for the production classes above. Listing them
+            as dependencies lets report-aggregate collect their exec data
+            into the project-wide report.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-01-proxy-resolves-delegating-extension</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-02-priority-ordering-before</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-03-priority-ordering-after-lifo</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-04-no-priority-last</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-05-testcontext-binding</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-10-zero-container-managers</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-11-multiple-container-managers</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-15-error-propagation</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-19-afterall-throws-fresh-testcontext</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-20-multiple-aftereach-failures</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-21-test-fail-and-aftereach-fail</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-22-beforeall-throws-afterall-runs</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-proxy-no-provider</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-proxy-multi-provider</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>jacoco-report-aggregate</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report-aggregate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <!--
+        Threshold enforcement note: this aggregator produces the
+        project-wide JaCoCo report (HTML + XML) under
+        target/site/jacoco-aggregate/. Threshold enforcement
+        (jawelte-parent properties: jacoco.line.coverage.minimum=0.80,
+        jacoco.branch.coverage.minimum=0.70) is not run here because
+        jacoco:check ties to the local module's class files, of which
+        this aggregator has none. Project-wide threshold enforcement
+        will land in a follow-up ticket together with the run-scripts
+        (per the testing-foundational rule) and may use an external
+        coverage gate or jacoco-merge+check pattern targeted at one of
+        the leaf modules. The per-module reports already produced by
+        the parent's <build><plugins> jacoco entry are unaffected.
+    -->
+</project>

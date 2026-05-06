@@ -1,0 +1,129 @@
+/*
+ * Copyright 2026 os890
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.os890.jawelte.core.impl.loader;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ServiceLoader;
+
+import org.os890.jawelte.core.api.port.TestBeanContainerPort;
+import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
+
+/**
+ * Per-classloader cache of the SPI implementations the delegating
+ * extension forwards to. The classpath does not change between test
+ * classes within a single JVM, so each SPI is resolved at most once
+ * per classloader (lazy on first use, double-checked locking).
+ *
+ * <p>{@link TestBeanContainerPort} requires exactly one implementation
+ * on the classpath; zero or multiple implementations result in an
+ * {@link IllegalStateException} with the messages mandated by
+ * TICKET-001's SPI section.
+ *
+ * <p>{@link TestModuleLifecyclePort} allows zero or more
+ * implementations; the cached list is sorted in ascending
+ * {@code @Priority} order via {@link PriorityComparator}. Implementations
+ * without {@code @Priority} sort last.
+ */
+public class ServiceLoaderCache {
+
+    private static volatile TestBeanContainerPort cachedContainerPort;
+    private static volatile List<TestModuleLifecyclePort> cachedLifecyclePorts;
+
+    private ServiceLoaderCache() {
+        // utility class - no instances
+    }
+
+    /**
+     * Resolve and cache the single {@link TestBeanContainerPort}
+     * implementation on the classpath.
+     *
+     * @return the single implementation
+     * @throws IllegalStateException if zero or more than one
+     *         implementation is found
+     */
+    public static TestBeanContainerPort resolveContainerPort() {
+        TestBeanContainerPort local = cachedContainerPort;
+        if (local == null) {
+            synchronized (ServiceLoaderCache.class) {
+                local = cachedContainerPort;
+                if (local == null) {
+                    local = loadSingletonContainerPort();
+                    cachedContainerPort = local;
+                }
+            }
+        }
+        return local;
+    }
+
+    /**
+     * Resolve and cache all {@link TestModuleLifecyclePort}
+     * implementations on the classpath, sorted by ascending
+     * {@code @Priority}.
+     *
+     * @return an unmodifiable, priority-sorted list (possibly empty)
+     */
+    public static List<TestModuleLifecyclePort> resolveLifecyclePorts() {
+        List<TestModuleLifecyclePort> local = cachedLifecyclePorts;
+        if (local == null) {
+            synchronized (ServiceLoaderCache.class) {
+                local = cachedLifecyclePorts;
+                if (local == null) {
+                    local = loadAndSortLifecyclePorts();
+                    cachedLifecyclePorts = local;
+                }
+            }
+        }
+        return local;
+    }
+
+    private static TestBeanContainerPort loadSingletonContainerPort() {
+        List<TestBeanContainerPort> providers = new ArrayList<>();
+        Iterator<TestBeanContainerPort> iterator =
+                ServiceLoader.load(TestBeanContainerPort.class).iterator();
+        while (iterator.hasNext()) {
+            providers.add(iterator.next());
+        }
+
+        if (providers.isEmpty()) {
+            throw new IllegalStateException(
+                    "No TestBeanContainerPort found via ServiceLoader. "
+                            + "Add cdi-module or quarkus-module to the test classpath.");
+        }
+        if (providers.size() > 1) {
+            throw new IllegalStateException(
+                    "Multiple TestBeanContainerPort implementations found: ["
+                            + providers.get(0).getClass().getName()
+                            + ", "
+                            + providers.get(1).getClass().getName()
+                            + "]. Exactly one is required.");
+        }
+        return providers.get(0);
+    }
+
+    private static List<TestModuleLifecyclePort> loadAndSortLifecyclePorts() {
+        List<TestModuleLifecyclePort> providers = new ArrayList<>();
+        Iterator<TestModuleLifecyclePort> iterator =
+                ServiceLoader.load(TestModuleLifecyclePort.class).iterator();
+        while (iterator.hasNext()) {
+            providers.add(iterator.next());
+        }
+        providers.sort(new PriorityComparator<>());
+        return Collections.unmodifiableList(providers);
+    }
+}
