@@ -169,3 +169,17 @@ Simplified child poms:
 
 Verified: `./mvnw verify` passes on the full reactor; all 14 scenarios still pass; aggregated coverage report still produced.
 
+
+## 2026-05-06 — Module rename jawelte-coverage -> coverage-report; branch + PR cleanup
+
+Pointed out by os890 during PR review: module name should match its purpose; "coverage-report" is more descriptive than "jawelte-coverage" and avoids the awkwardness of carrying the project prefix in the folder name. The previous "jawelte-coverage" was a workaround for the `.gitignore` collision with the bare "coverage" rule; "coverage-report" is a different name and isn't matched by that rule.
+
+Changes:
+- Renamed `jawelte-coverage/` -> `coverage-report/`. artifactId changed from `jawelte-coverage` to `coverage-report` (deviates from the `jawelte-` prefix convention; reads more naturally). `<name>` and `<description>` updated.
+- Root pom `<modules>` and the threshold-comment-property reference updated.
+- Local workflow guide and checklist updated to reflect the convention nuance: module DIRECTORIES are named to escape `.gitignore` collisions; artifactIds typically carry the `jawelte-` prefix but the project allows direct names like `coverage-report` where the directory name is already collision-free.
+- PR #2 closed (branch is also being renamed to match the renamed issue title; the PR will be re-opened on the renamed branch when ready).
+- Branch renamed `1-ticket-001-core-junit-adapter-and-spi-foundation` -> `1-core-junit-adapter-and-spi-foundation` to match the issue title (which had the `TICKET-001:` prefix removed in the previous round).
+
+Verified: `./mvnw verify` is green; `coverage-report/target/site/jacoco-aggregate/` continues to be produced; the 14 scenarios continue to pass.
+

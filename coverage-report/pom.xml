@@ -27,11 +27,11 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-coverage</artifactId>
+    <artifactId>coverage-report</artifactId>
     <packaging>pom</packaging>
 
-    <name>jawelte (coverage aggregator)</name>
-    <description>JaCoCo coverage aggregator. Depends on every production and test module so it builds last in the reactor; runs jacoco:report-aggregate to merge per-module exec data into a single project-wide report and jacoco:check to enforce the project-wide coverage thresholds.</description>
+    <name>jawelte (coverage report aggregator)</name>
+    <description>JaCoCo coverage report aggregator. Depends on every production and test module so it builds last in the reactor; runs jacoco:report-aggregate to merge per-module exec data into a single project-wide report. Project-wide threshold enforcement is deferred (see in-pom comment).</description>
 
     <dependencies>
         <!-- Production modules: their classes ARE the analysis target. -->
