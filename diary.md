@@ -234,3 +234,18 @@ Implemented the three TICKET-001 addenda from TICKET-003 as a foundational, pure
 
 Verification: `./mvnw verify` passes the full 22-module reactor; all 21 prior scenarios still pass (14 TICKET-001 + 7 TICKET-002).
 
+
+## 2026-05-06 — TICKET-003 Phase 2: cdi-module/api ports
+
+Bootstrapped the `modules/` aggregator and the cdi-module's api jar with the two pluggable ports.
+
+- `modules/pom.xml` — top-level `jawelte-modules` aggregator (packaging=pom). Added `<module>modules</module>` to the root pom; reactor order: core → modules → tests → coverage-report.
+- `modules/cdi-module/pom.xml` — `jawelte-cdi-module` aggregator. Lists `api` as a child; `impl` will be added in Phase 3.
+- `modules/cdi-module/api/pom.xml` — `jawelte-cdi-module-api` jar. Compile-deps: only `jawelte-core-api`. Deliberately no CDI / Mockito imports (the jar must load cleanly in JVMs that have neither). Strict Javadoc activated (mirroring core/api / core/impl).
+- `org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter` — single-method port `boolean isExcluded(Class<?> rawType)`. Documented as the auto-mocking exclude policy; consulted by cdi-module's CDI Extension during `AfterBeanDiscovery`.
+- `org.os890.jawelte.module.cdi.api.port.WhitelistFilter` — single-method port `boolean isAllowed(Class<?> rawType)`. Documented as the `limitToTestBeans=true` whitelist policy; consulted by the Extension during `ProcessAnnotatedType`.
+
+Both ports specify their `ServiceLoader` + `TestContext.loadService` selection in their Javadoc so future implementers don't reinvent the discovery contract.
+
+Verification: `./mvnw verify` passes the full 23-module reactor; all 21 prior scenarios still pass.
+
