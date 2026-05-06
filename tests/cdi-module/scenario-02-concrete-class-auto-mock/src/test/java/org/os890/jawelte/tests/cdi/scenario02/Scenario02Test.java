@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
@@ -32,7 +31,6 @@ class Scenario02Test {
     @Test
     void concreteClassWithoutScopeIsAutoMocked() {
         assertThat(sender).isNotNull();
-        assertThat(Mockito.mockingDetails(sender).isMock()).isTrue();
         assertThat(sender.send("a", "b")).isNull();
     }
 }

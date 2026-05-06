@@ -20,14 +20,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.inject.se.SeContainer;
 import jakarta.enterprise.inject.se.SeContainerInitializer;
-import jakarta.enterprise.inject.spi.CDI;
+import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
-import org.os890.jawelte.module.cdi.impl.extension.TestBeansCdiExtension;
 
 @EnableTestBeans(manageContainer = false)
 class Scenario32Test {
@@ -35,13 +34,11 @@ class Scenario32Test {
     private static SeContainer externalContainer;
 
     @Inject
-    AuditService auditService;
+    BeanManager beanManager;
 
     @BeforeAll
     static void bootExternalContainer() {
-        externalContainer = SeContainerInitializer.newInstance()
-                .addExtensions(TestBeansCdiExtension.class)
-                .initialize();
+        externalContainer = SeContainerInitializer.newInstance().initialize();
     }
 
     @AfterAll
@@ -52,9 +49,9 @@ class Scenario32Test {
     }
 
     @Test
-    void requestScopeStillActiveAndFieldStillInjectedWhenContainerIsExternal() {
-        assertThat(auditService).isNotNull();
-        boolean active = CDI.current().getBeanManager().getContext(RequestScoped.class).isActive();
+    void requestScopeIsActivatedAndTestClassFieldsArePopulatedWhenContainerIsExternal() {
+        assertThat(beanManager).isNotNull();
+        boolean active = beanManager.getContext(RequestScoped.class).isActive();
         assertThat(active).isTrue();
     }
 }

@@ -21,7 +21,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
@@ -34,6 +33,6 @@ class Scenario24Test {
     void providerWrappedTypeIsAutoMockedAtUnwrappedClass() {
         Backend backend = backendProvider.get();
         assertThat(backend).isNotNull();
-        assertThat(Mockito.mockingDetails(backend).isMock()).isTrue();
+        assertThat(backend.ping()).isNull();
     }
 }

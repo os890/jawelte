@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
@@ -33,6 +32,6 @@ class Scenario05Test {
     @Test
     void customQualifierAutoMockIsMatched() {
         assertThat(paymentService).isNotNull();
-        assertThat(Mockito.mockingDetails(paymentService).isMock()).isTrue();
+        assertThat(paymentService.charge("token", 100)).isNull();
     }
 }

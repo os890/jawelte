@@ -74,14 +74,23 @@ public class TestBeansCdiExtension implements Extension {
     private boolean limitToTestBeans;
     private WhitelistFilter whitelistFilter;
     private ExcludedPackageFilter excludedPackageFilter;
-    private final Map<Class<?>, Set<Annotation>> unsatisfiedCandidateIps = new HashMap<>();
+    private final Map<Type, Set<Annotation>> unsatisfiedCandidateIps = new HashMap<>();
 
     /** No-arg constructor required by the CDI runtime. */
     public TestBeansCdiExtension() {
     }
 
     void onBeforeBeanDiscovery(@jakarta.enterprise.event.Observes BeforeBeanDiscovery event) {
-        TestContext active = TestContext.get();
+        TestContext active;
+        try {
+            active = TestContext.get();
+        } catch (IllegalStateException noActiveContext) {
+            // No active TestContext: the container is being booted outside
+            // jawelte's bootstrap window (e.g. @EnableTestBeans(manageContainer=false)
+            // with the user booting the container in @BeforeAll). The Extension
+            // becomes a no-op; the user owns @TestBean activation and auto-mocking.
+            return;
+        }
         this.activeContext = active;
         Class<?> testClass = active.getTestClass();
 
@@ -93,6 +102,51 @@ public class TestBeansCdiExtension implements Extension {
 
         this.whitelistFilter = TestContext.loadService(WhitelistFilter.class);
         this.excludedPackageFilter = TestContext.loadService(ExcludedPackageFilter.class);
+
+        // Force discovery of @TestBean target classes that lack a
+        // bean-defining annotation (e.g. @Alternative without an explicit
+        // scope). Augment the AnnotatedType with @Dependent so CDI accepts
+        // the resulting bean.
+        for (Class<?> beanType : scanResult.beanTypes()) {
+            forceDiscoveryWithDependentFallback(event, beanType);
+        }
+        for (Class<?> producerType : scanResult.producerTypes()) {
+            forceDiscoveryWithDependentFallback(event, producerType);
+        }
+    }
+
+    private static void forceDiscoveryWithDependentFallback(BeforeBeanDiscovery event, Class<?> target) {
+        if (hasBeanDefiningAnnotation(target)) {
+            return;
+        }
+        if (!target.isAnnotationPresent(jakarta.enterprise.inject.Alternative.class)) {
+            // Spec: @TestBean(bean=X) where X has no @Alternative is a
+            // silent no-op (per scenario 35). Don't promote it to a
+            // @Dependent bean.
+            return;
+        }
+        event.addAnnotatedType(target, target.getName())
+                .add(jakarta.enterprise.context.Dependent.Literal.INSTANCE);
+    }
+
+    private static boolean hasBeanDefiningAnnotation(Class<?> target) {
+        for (Annotation a : target.getAnnotations()) {
+            Class<? extends Annotation> at = a.annotationType();
+            if (at.isAnnotationPresent(jakarta.enterprise.context.NormalScope.class)) {
+                return true;
+            }
+            if (at.isAnnotationPresent(jakarta.inject.Scope.class)) {
+                return true;
+            }
+            if (at.isAnnotationPresent(jakarta.enterprise.inject.Stereotype.class)) {
+                return true;
+            }
+            if (at.equals(jakarta.enterprise.context.Dependent.class)
+                    || at.equals(jakarta.inject.Singleton.class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void onProcessAnnotatedType(@jakarta.enterprise.event.Observes ProcessAnnotatedType<?> event) {
@@ -105,21 +159,29 @@ public class TestBeansCdiExtension implements Extension {
         }
     }
 
-    void onProcessInjectionPoint(@jakarta.enterprise.event.Observes ProcessInjectionPoint<?, ?> event) {
+    <T, X> void onProcessInjectionPoint(@jakarta.enterprise.event.Observes ProcessInjectionPoint<T, X> event) {
         InjectionPoint ip = event.getInjectionPoint();
         Type ipType = ip.getType();
         Set<Annotation> qualifiers = ip.getQualifiers();
-        Class<?> mockTargetType = unwrapWrapper(ipType);
-        if (mockTargetType == null) {
+        Type targetType = unwrapWrapper(ipType);
+        if (targetType == null) {
             return;
         }
         unsatisfiedCandidateIps.merge(
-                mockTargetType,
+                targetType,
                 new LinkedHashSet<>(qualifiers),
-                (existing, additional) -> {
-                    existing.addAll(additional);
-                    return existing;
-                });
+                TestBeansCdiExtension::mergeQualifiers);
+    }
+
+    private static Set<Annotation> mergeQualifiers(Set<Annotation> existing, Set<Annotation> additional) {
+        for (Annotation candidate : additional) {
+            boolean alreadyHasSameType = existing.stream()
+                    .anyMatch(present -> present.annotationType().equals(candidate.annotationType()));
+            if (!alreadyHasSameType) {
+                existing.add(candidate);
+            }
+        }
+        return existing;
     }
 
     void onAfterTypeDiscovery(@jakarta.enterprise.event.Observes AfterTypeDiscovery event) {
@@ -161,8 +223,12 @@ public class TestBeansCdiExtension implements Extension {
         addTestClassInjectionPoints(beanManager);
 
         // Synthesise mocks for unsatisfied collected IPs.
-        for (Map.Entry<Class<?>, Set<Annotation>> entry : unsatisfiedCandidateIps.entrySet()) {
-            Class<?> rawType = entry.getKey();
+        for (Map.Entry<Type, Set<Annotation>> entry : unsatisfiedCandidateIps.entrySet()) {
+            Type targetType = entry.getKey();
+            Class<?> rawType = rawClassOf(targetType);
+            if (rawType == null) {
+                continue;
+            }
             Set<Annotation> qualifiers = entry.getValue();
             if (excludedPackageFilter != null && excludedPackageFilter.isExcluded(rawType)) {
                 continue;
@@ -172,18 +238,29 @@ public class TestBeansCdiExtension implements Extension {
                 // the user's declared target type.
                 continue;
             }
-            if (!isUnsatisfied(beanManager, rawType, qualifiers)) {
+            if (!isUnsatisfied(beanManager, targetType, qualifiers)) {
                 continue;
             }
             Object mockSample = MockitoMockFactory.create(rawType);
             if (mockSample == null) {
                 continue;
             }
-            // Use the supplier indirection so each bean lookup gets a
-            // fresh mock per @RequestScoped activation.
+            // Supplier indirection so each bean lookup gets a fresh mock
+            // per @RequestScoped activation.
             SyntheticBeanUtil.registerAutoMockBean(
-                    event, rawType, qualifiers, () -> MockitoMockFactory.create(rawType));
+                    event, rawType, targetType, qualifiers,
+                    () -> MockitoMockFactory.create(rawType));
         }
+    }
+
+    private static Class<?> rawClassOf(Type type) {
+        if (type instanceof Class<?> cls) {
+            return cls;
+        }
+        if (type instanceof ParameterizedType pt && pt.getRawType() instanceof Class<?> cls) {
+            return cls;
+        }
+        return null;
     }
 
     private void addTestClassInjectionPoints(BeanManager beanManager) {
@@ -193,8 +270,8 @@ public class TestBeansCdiExtension implements Extension {
             if (!field.isAnnotationPresent(Inject.class)) {
                 continue;
             }
-            Class<?> mockTargetType = unwrapWrapper(field.getBaseType());
-            if (mockTargetType == null) {
+            Type targetType = unwrapWrapper(field.getBaseType());
+            if (targetType == null) {
                 continue;
             }
             Set<Annotation> qualifiers = new LinkedHashSet<>();
@@ -204,37 +281,32 @@ public class TestBeansCdiExtension implements Extension {
                 }
             }
             unsatisfiedCandidateIps.merge(
-                    mockTargetType,
+                    targetType,
                     qualifiers,
-                    (existing, additional) -> {
-                        existing.addAll(additional);
-                        return existing;
-                    });
+                    TestBeansCdiExtension::mergeQualifiers);
         }
     }
 
     private static boolean isUnsatisfied(
-            BeanManager beanManager, Class<?> rawType, Set<Annotation> qualifiers) {
+            BeanManager beanManager, Type targetType, Set<Annotation> qualifiers) {
         Annotation[] qualifierArray = qualifiers.toArray(new Annotation[0]);
-        return beanManager.getBeans(rawType, qualifierArray).isEmpty();
+        return beanManager.getBeans(targetType, qualifierArray).isEmpty();
     }
 
-    private static Class<?> unwrapWrapper(Type ipType) {
-        if (ipType instanceof Class<?> cls) {
-            return cls;
+    private static Type unwrapWrapper(Type ipType) {
+        if (ipType instanceof Class<?>) {
+            return ipType;
         }
         if (ipType instanceof ParameterizedType pt) {
             Type rawType = pt.getRawType();
             if (rawType == Provider.class || rawType == Instance.class) {
                 Type[] args = pt.getActualTypeArguments();
-                if (args.length == 1 && args[0] instanceof Class<?> wrapped) {
-                    return wrapped;
+                if (args.length == 1) {
+                    return args[0];
                 }
                 return null;
             }
-            if (rawType instanceof Class<?> rawClass) {
-                return rawClass;
-            }
+            return ipType;
         }
         return null;
     }
@@ -292,9 +364,9 @@ public class TestBeansCdiExtension implements Extension {
      * the Extension collected during bootstrap. Production users
      * should not depend on this surface.
      *
-     * @return the collected unsatisfied-IP candidates (raw type → qualifiers)
+     * @return the collected unsatisfied-IP candidates (target type → qualifiers)
      */
-    Map<Class<?>, Set<Annotation>> unsatisfiedCandidateIpsForTests() {
+    Map<Type, Set<Annotation>> unsatisfiedCandidateIpsForTests() {
         return new HashMap<>(unsatisfiedCandidateIps);
     }
 }

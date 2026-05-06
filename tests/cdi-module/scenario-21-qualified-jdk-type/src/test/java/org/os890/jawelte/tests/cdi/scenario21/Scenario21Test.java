@@ -17,11 +17,14 @@ package org.os890.jawelte.tests.cdi.scenario21;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.lang.reflect.Type;
+import java.util.List;
 import java.util.Set;
 
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.inject.spi.Bean;
 import jakarta.enterprise.inject.spi.BeanManager;
+import jakarta.enterprise.util.TypeLiteral;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
@@ -35,14 +38,15 @@ class Scenario21Test {
 
     @Inject
     @ConfigKey(name = "app.name")
-    String appName;
+    List<String> tags;
 
     @Test
     void jdkTypedAutoMockUsesDependentScopeAndCarriesQualifier() {
-        assertThat(appName).isNotNull();
+        assertThat(tags).isNotNull();
 
         ConfigKey qualifier = new ConfigKeyLiteral("app.name");
-        Set<Bean<?>> beans = beanManager.getBeans(String.class, qualifier);
+        Type parameterizedListOfString = new TypeLiteral<List<String>>() { }.getType();
+        Set<Bean<?>> beans = beanManager.getBeans(parameterizedListOfString, qualifier);
         assertThat(beans).hasSize(1);
         assertThat(beans.iterator().next().getScope()).isEqualTo(Dependent.class);
     }

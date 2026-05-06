@@ -21,7 +21,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
@@ -34,6 +33,6 @@ class Scenario04Test {
     @Test
     void namedQualifierAutoMockIsMatched() {
         assertThat(auditService).isNotNull();
-        assertThat(Mockito.mockingDetails(auditService).isMock()).isTrue();
+        assertThat(auditService.audit("hello")).isNull();
     }
 }

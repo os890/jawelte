@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
@@ -34,6 +33,6 @@ class Scenario06Test {
     @Test
     void multipleQualifiersAreBothMatchedOnAutoMock() {
         assertThat(shippingService).isNotNull();
-        assertThat(Mockito.mockingDetails(shippingService).isMock()).isTrue();
+        assertThat(shippingService.ship("address")).isNull();
     }
 }

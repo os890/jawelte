@@ -20,6 +20,8 @@ import jakarta.enterprise.context.control.RequestContextController;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.se.SeContainer;
 import jakarta.enterprise.inject.se.SeContainerInitializer;
+import jakarta.enterprise.inject.spi.BeanManager;
+import jakarta.enterprise.inject.spi.CDI;
 
 import org.os890.jawelte.core.api.event.BeforeScopeStarted;
 import org.os890.jawelte.core.api.event.ContainerStarted;
@@ -69,19 +71,19 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     @Override
     public void postProcessTestInstance(TestContext testContext, Object testInstance) {
-        SeContainer container = container(testContext);
-        InjectFieldsHelper.inject(container.getBeanManager(), testInstance);
+        InjectFieldsHelper.inject(beanManager(testContext), testInstance);
     }
 
     @Override
     public void beforeEach(TestContext testContext) {
-        SeContainer container = container(testContext);
+        BeanManager beanManager = beanManager(testContext);
         BeforeScopeStarted event = new BeforeScopeStarted(RequestScoped.class);
-        container.getBeanManager().getEvent().fire(event);
+        beanManager.getEvent().fire(event);
         if (event.isVetoed()) {
             return;
         }
-        RequestContextController controller = container
+        RequestContextController controller = beanManager
+                .createInstance()
                 .select(RequestContextController.class, Any.Literal.INSTANCE)
                 .get();
         controller.activate();
@@ -107,10 +109,9 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         });
     }
 
-    private static SeContainer container(TestContext testContext) {
+    private static BeanManager beanManager(TestContext testContext) {
         return testContext.getMetadata(SeContainer.class)
-                .orElseThrow(() -> new IllegalStateException(
-                        "No SeContainer is bound on TestContext. Was beforeAll skipped via "
-                                + "manageContainer=false without an externally booted container?"));
+                .map(SeContainer::getBeanManager)
+                .orElseGet(() -> CDI.current().getBeanManager());
     }
 }

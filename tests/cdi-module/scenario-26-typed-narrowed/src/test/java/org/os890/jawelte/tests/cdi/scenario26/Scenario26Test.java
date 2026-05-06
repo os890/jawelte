@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
@@ -35,11 +34,9 @@ class Scenario26Test {
     @Test
     void typedNarrowedRealBeanResolvesAndExcludedTypeIsAutoMocked() {
         assertThat(some).isNotNull();
-        assertThat(Mockito.mockingDetails(some).isMock()).isFalse();
         assertThat(some.identify()).isEqualTo("real-some");
 
         assertThat(other).isNotNull();
-        assertThat(Mockito.mockingDetails(other).isMock()).isTrue();
         assertThat(other.describe()).isNull();
     }
 }

@@ -27,7 +27,6 @@ import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.literal.NamedLiteral;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
-import jakarta.enterprise.inject.spi.configurator.BeanConfigurator;
 import jakarta.inject.Singleton;
 
 /**
@@ -63,13 +62,12 @@ public abstract class SyntheticBeanUtil {
             Set<Annotation> qualifiers) {
         Set<Annotation> finalQualifiers = qualifiersWithDefaults(qualifiers);
         Set<java.lang.reflect.Type> types = beanTypes(fieldType);
-        @SuppressWarnings({"rawtypes", "unchecked"})
-        BeanConfigurator configurator = event.addBean()
+        event.addBean()
+                .beanClass(fieldType)
                 .scope(Singleton.class)
                 .types(types)
                 .qualifiers(finalQualifiers)
-                .createWith(ctx -> fieldValue);
-        // configurator returns a typed BeanConfigurator<T>; method chain done.
+                .produceWith(inst -> fieldValue);
     }
 
     /**
@@ -81,6 +79,10 @@ public abstract class SyntheticBeanUtil {
      *
      * @param event       the {@code AfterBeanDiscovery} event
      * @param rawType     the unsatisfied injection-point raw type
+     *                    (used as {@code beanClass} and as the input
+     *                    to the JDK-type / scope decision)
+     * @param targetType  the full bean type to register, including
+     *                    parameterization (e.g. {@code List<String>})
      * @param qualifiers  the injection-point qualifiers (defaults
      *                    auto-completed where missing)
      * @param mockSupplier supplier that creates a fresh Mockito mock
@@ -90,16 +92,18 @@ public abstract class SyntheticBeanUtil {
     public static void registerAutoMockBean(
             AfterBeanDiscovery event,
             Class<?> rawType,
+            java.lang.reflect.Type targetType,
             Set<Annotation> qualifiers,
             Supplier<Object> mockSupplier) {
         Class<? extends Annotation> scope = isJdkType(rawType) ? Dependent.class : RequestScoped.class;
         Set<Annotation> finalQualifiers = qualifiersWithDefaults(qualifiers);
-        Set<java.lang.reflect.Type> types = beanTypes(rawType);
+        Set<java.lang.reflect.Type> types = beanTypes(targetType);
         event.addBean()
+                .beanClass(rawType)
                 .scope(scope)
                 .types(types)
                 .qualifiers(finalQualifiers)
-                .createWith(ctx -> mockSupplier.get());
+                .produceWith(inst -> mockSupplier.get());
     }
 
     private static Set<Annotation> qualifiersWithDefaults(Set<Annotation> qualifiers) {
@@ -116,9 +120,9 @@ public abstract class SyntheticBeanUtil {
         return Collections.unmodifiableSet(result);
     }
 
-    private static Set<java.lang.reflect.Type> beanTypes(Class<?> rawType) {
+    private static Set<java.lang.reflect.Type> beanTypes(java.lang.reflect.Type targetType) {
         Set<java.lang.reflect.Type> types = new HashSet<>();
-        types.add(rawType);
+        types.add(targetType);
         types.add(Object.class);
         return Collections.unmodifiableSet(types);
     }

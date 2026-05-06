@@ -17,28 +17,14 @@ package org.os890.jawelte.tests.cdi.scenario33;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import jakarta.enterprise.context.ContextNotActiveException;
-import jakarta.enterprise.context.RequestScoped;
-import jakarta.enterprise.inject.spi.BeanManager;
-import jakarta.inject.Inject;
-
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
 class Scenario33Test {
 
-    @Inject
-    BeanManager beanManager;
-
     @Test
-    void requestScopeIsNotActivatedWhenBeforeScopeStartedIsVetoed() {
-        boolean active;
-        try {
-            active = beanManager.getContext(RequestScoped.class).isActive();
-        } catch (ContextNotActiveException notActive) {
-            active = false;
-        }
-        assertThat(active).isFalse();
+    void vetoBlocksRequestContextControllerActivationAndAfterEachStillRuns() {
+        assertThat(CapturingLifecyclePort.CONTROLLER_BOUND_AFTER_BEFORE_EACH).isFalse();
     }
 }
