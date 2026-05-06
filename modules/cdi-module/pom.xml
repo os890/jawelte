@@ -35,6 +35,6 @@
 
     <modules>
         <module>api</module>
-        <!-- impl added in Phase 3 of TICKET-003 -->
+        <module>impl</module>
     </modules>
 </project>

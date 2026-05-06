@@ -61,6 +61,9 @@
         <jakarta.inject.version>2.0.1</jakarta.inject.version>
         <microprofile.config.version>3.1</microprofile.config.version>
         <smallrye.config.version>3.10.0</smallrye.config.version>
+        <mockito.version>5.14.2</mockito.version>
+        <openwebbeans.version>4.1.0</openwebbeans.version>
+        <weld.version>6.0.4.Final</weld.version>
         <junit.version>6.0.0</junit.version>
         <assertj.version>3.27.3</assertj.version>
 
@@ -171,6 +174,50 @@
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!--
+                Mockito: provided. cdi-module's auto-mocking pulls it in;
+                the project does not impose a Mockito version on
+                consumers — every consumer pom that wants auto-mocking
+                declares its own.
+            -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!--
+                CDI SE implementations. Both pinned in
+                <dependencyManagement> with scope=test; the active impl
+                is selected by Maven profile (-Powb default, -Pweld) on
+                the consuming module.
+            -->
+            <dependency>
+                <groupId>org.apache.openwebbeans</groupId>
+                <artifactId>openwebbeans-se</artifactId>
+                <version>${openwebbeans.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.weld.se</groupId>
+                <artifactId>weld-se-shaded</artifactId>
+                <version>${weld.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Internal cdi-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-cdi-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-cdi-module-impl</artifactId>
+                <version>${project.version}</version>
             </dependency>
 
             <!--

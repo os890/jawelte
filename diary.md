@@ -249,3 +249,36 @@ Both ports specify their `ServiceLoader` + `TestContext.loadService` selection i
 
 Verification: `./mvnw verify` passes the full 23-module reactor; all 21 prior scenarios still pass.
 
+
+## 2026-05-06 — TICKET-003 Phase 3: cdi-module/impl
+
+Built cdi-module/impl with the CDI SE adapter, the CDI Extension, the default filter implementations, and the helper utilities. Code compiles cleanly under all gates (Checkstyle, RAT, Javadoc strict, Enforcer). Behaviour verification arrives in Phase 4 via the 49 scenario sub-modules.
+
+Production classes (8):
+- `CdiTestBeanContainer` — `TestBeanContainerPort` impl. No instance fields; `SeContainer` and `RequestContextController` bound on `TestContext` metadata. Boots `SeContainerInitializer` with `TestBeansCdiExtension`, fires `ContainerStarted` while the container is live, manages `RequestContextController.activate/deactivate` per test method (with `BeforeScopeStarted` veto support), closes the container in `afterAll`.
+- `TestBeansCdiExtension` — CDI Extension. `BeforeBeanDiscovery` reads the active test class via `TestContext.get()`, scans `@TestBean` declarations + meta-annotations + superclass-walk + static fields (with the documented validation errors thrown synchronously), binds the scan result on `TestContext` metadata, loads `WhitelistFilter` + `ExcludedPackageFilter` via `TestContext.loadService(...)`. `ProcessAnnotatedType` applies the whitelist veto when `limitToTestBeans=true`. `ProcessInjectionPoint` collects unsatisfied IP candidate types (with `Provider<X>` / `Instance<X>` unwrap). `AfterTypeDiscovery` registers `@TestBean(bean=X)` and `@TestBean(beanProducer=X)` alternatives. `AfterBeanDiscovery` registers static-field synthetic beans, walks the test-class `@Inject` fields explicitly (since the test class is not a CDI bean and no `ProcessInjectionPoint` event fires for it), and synthesises Mockito mocks for unsatisfied non-excluded non-target types using `BeanManager.getBeans(...)` to confirm "unsatisfied".
+- `DefaultExcludedPackageFilter` (`@Priority(Integer.MAX_VALUE)`) — reads `org.os890.jawelte.module.cdi.auto-mock.exclude-packages` directly via `ConfigProvider.getConfig()` (the bean-injected `ConfigResolver` from TICKET-002 is unavailable while the container is bootstrapping). Walks the type's supertype hierarchy. Caches the parsed prefix list in a `volatile` field for the filter instance's lifetime.
+- `DefaultWhitelistFilter` (`@Priority(Integer.MAX_VALUE)`) — allows when `FrameworkAllowlist.isAllowlisted(rawType)` OR when `rawType` is a `@TestBean` target on the active test class (read via `TestContext.get().getMetadata(TestBeanScanner.Result.class)` with the `IllegalStateException`-no-active-context fall-through documented in the impl).
+- `FrameworkAllowlist` — abstract util. Reads the `org.os890.jawelte.module.cdi.framework-allowlist.packages` MP Config key (dot-then-underscore fallback). `volatile` cached prefix list. Walks supertypes recursively.
+- `TestBeanScanner` — abstract util. Walks class + superclasses + meta-annotations (cycle-safe; skips `java.*`/`jakarta.*` annotation-type packages). Returns an immutable `Result` record with bean targets, producer targets, and static-field entries. Throws `IllegalStateException` on the documented validation cases (instance-field, null field, dual `bean`+`beanProducer`, field-with-bean-attribute).
+- `SyntheticBeanUtil` — abstract util. `registerStaticFieldBean` (scope `@Singleton`) and `registerAutoMockBean` (scope `@RequestScoped` for non-JDK types, `@Dependent` for JDK types). Adds `@Default` (when no custom qualifier) and `@Any` automatically. Ships a `named(...)` helper that returns a `NamedLiteral`.
+- `InjectFieldsHelper` — abstract util. Single static `inject(BeanManager, Object)` using CDI 4.x's `createAnnotatedType` → `getInjectionTargetFactory` → `createInjectionTarget(null)` → `inject` chain. The cdi-module performs no per-field reflective walk of its own; the underlying CDI runtime handles inheritance, qualifiers, generic types, and `Provider`/`Instance` wrappers.
+- `MockitoMockFactory` — abstract util. Returns `null` from `Mockito.mock(...)` when Mockito throws (typical for unmockable bootstrap JDK classes); the Extension then leaves the IP unsatisfied so CDI's own deployment validation surfaces the offending type.
+
+All 6 util classes follow the new util-class shape from TICKET-003's coding guidelines: `public abstract class FooUtil` with an explicit Javadoc'd `protected` constructor (the `abstract` modifier prevents direct instantiation; the explicit constructor silences `javadoc -doclint:all` on the otherwise synthesised default).
+
+META-INF (6 files):
+- `META-INF/services/org.os890.jawelte.core.api.port.TestBeanContainerPort` → `CdiTestBeanContainer`
+- `META-INF/services/jakarta.enterprise.inject.spi.Extension` → `TestBeansCdiExtension`
+- `META-INF/services/org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter` → `DefaultExcludedPackageFilter`
+- `META-INF/services/org.os890.jawelte.module.cdi.api.port.WhitelistFilter` → `DefaultWhitelistFilter`
+- `META-INF/beans.xml` (`bean-discovery-mode="annotated"`)
+- `META-INF/microprofile-config.properties` ships the framework allowlist defaults (`java.`, `javax.`, `jakarta.`, `org.jboss.weld.`, `org.apache.webbeans.`, `org.os890.jawelte.`)
+
+Maven:
+- Root pom: added `mockito.version=5.14.2`, `openwebbeans.version=4.1.0`, `weld.version=6.0.4.Final` properties; added `mockito-core` (provided), `openwebbeans-se` (test), `weld-se-shaded` (test), and the internal `jawelte-cdi-module-{api,impl}` cross-references to `<dependencyManagement>` with appropriate default scopes.
+- `modules/cdi-module/impl/pom.xml` — declares the deps (compile cdi-module-api + core-api; provided cdi-api / annotation-api / mp-config-api / mockito-core; test owb/weld via profiles). Two profiles: `owb` (active by default) injects `openwebbeans-se`, `weld` injects `weld-se-shaded`. CI / local runs both via `mvn verify -Powb` and `mvn verify -Pweld`.
+- `modules/cdi-module/pom.xml` — adds `<module>impl</module>`.
+
+Verification: `./mvnw verify` passes the now-24-module reactor; all 21 prior scenarios still pass; cdi-module/impl jar produced (with javadoc jar) under default profile (OWB on classpath but no integration tests yet exercise it).
+
