@@ -48,6 +48,13 @@
         <module>scenario-22-beforeall-throws-afterall-runs</module>
         <module>scenario-proxy-no-provider</module>
         <module>scenario-proxy-multi-provider</module>
+        <module>scenario-config-01-dot-key-resolves</module>
+        <module>scenario-config-02-underscore-fallback</module>
+        <module>scenario-config-03-neither-key-set</module>
+        <module>scenario-config-04-both-keys-dot-wins</module>
+        <module>scenario-config-05-key-without-dot-no-fallback</module>
+        <module>scenario-config-06-key-without-dot-not-set</module>
+        <module>scenario-config-07-null-key</module>
     </modules>
 
     <dependencies>

@@ -183,3 +183,31 @@ Changes:
 
 Verified: `./mvnw verify` is green; `coverage-report/target/site/jacoco-aggregate/` continues to be produced; the 14 scenarios continue to pass.
 
+
+## 2026-05-06 — TICKET-002 implementation: @ConfigBean + ConfigResolver port + ConfigResolverAdapter
+
+Implemented the configuration-support layer of jawelte per TICKET-002's in-scope subset (7 of 10 scenarios; 3 deferred to a future cdi-module ticket).
+
+- **`org.os890.jawelte.core.api.ConfigBean`** — CDI stereotype that meta-applies `@ApplicationScoped`. Pure scope marker; no interceptors. Discovery marker for `limitToTestBeans` logic later.
+- **`org.os890.jawelte.core.api.port.ConfigResolver`** — single-method SPI port: `Optional<String> resolve(String dotKey)`. Lives next to the other port contracts; `null` key throws `NullPointerException`.
+- **`org.os890.jawelte.core.impl.config.ConfigResolverAdapter`** — `@ApplicationScoped` adapter implementing `ConfigResolver` via MicroProfile Config. Renamed from `DefaultConfigResolver` per os890's request — "Adapter" is more accurate ports-and-adapters terminology.
+- **Caching design**: hybrid `@PostConstruct` + lazy-init. The `Config` reference is populated once and reused. `@PostConstruct init()` fires when the bean is CDI-managed; `cachedConfig()` lazily initializes the same field on the first `resolve()` call when no `@PostConstruct` ran (covers unit tests that construct the adapter directly without a CDI container). Either path is a no-op once the field is set.
+- **Resolution algorithm**: dot-key first; if empty AND the key contains at least one `.`, retry with `_` substituted for `.`; otherwise return `Optional.empty()`. Dot-key precedence is preserved when both variants are set.
+
+Maven changes:
+- Root pom adds `microprofile.config.version=3.1` and `smallrye.config.version=3.10.0` properties; both pinned in `<dependencyManagement>` with appropriate default scopes (`microprofile-config-api` = `provided`, `smallrye-config` = `test`).
+- `core/impl/pom.xml` adds `microprofile-config-api` (inherits `provided`).
+- 7 new test sub-modules under `tests/core/scenario-config-NN-*/`. Each pom declares `jawelte-core-impl` (test), `microprofile-config-api` (test), `smallrye-config` (default test from dependencyManagement). Added all 7 to `tests/core/pom.xml` `<modules>` and to `coverage-report/pom.xml` `<dependencies>` (so report-aggregate picks up their exec data).
+
+Test architecture:
+- Simple direct JUnit `@Test` calling `new ConfigResolverAdapter()` and asserting via AssertJ. No EngineTestKit, no Subject classes, no Fakes — TICKET-001's machinery was needed to verify JUnit lifecycle dispatch; TICKET-002's tests verify pure resolver behavior, so the simpler shape applies.
+- Per-scenario `src/test/resources/META-INF/microprofile-config.properties` carries the keys/values for that scenario (with the standard Apache 2.0 header as `# `-prefixed comment lines). SmallRye Config picks them up automatically. Scenarios where no key is set ship without a properties file (3, 6, 7).
+
+Scope split between TICKET-002 and the future cdi-module ticket:
+- **In TICKET-002 (7 scenarios; pure resolver lookup behavior, no CDI runtime needed):** dot-key resolves, underscore fallback, neither key set, both keys (dot wins), key without dot (no fallback), key without dot (not set), null key NPE.
+- **Postponed to cdi-module (3 scenarios; require a real CDI runtime):** `@ConfigBean` stereotype auto-scoping, `@Inject ConfigResolver`, `@Alternative @Priority` override.
+- Local ticket file keeps all 10 scenarios with `[postponed to cdi-module]` tags inline; the GitHub issue body lists only the 7 in-scope scenarios.
+- Acceptance Criteria rewritten: declaration-side criteria (annotations / interfaces / class declarations) covered by TICKET-002; CDI-runtime-verification criteria explicitly tagged as postponed.
+
+Verification: `./mvnw verify` passes the now-22-module reactor in ~9s; all 14 TICKET-001 scenarios still pass; all 7 new config scenarios pass; aggregated coverage report includes the new modules.
+
