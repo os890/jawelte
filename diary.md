@@ -150,3 +150,22 @@ Why this matters: the previous exclusion silently let any future services regist
 
 `./mvnw verify` passes. RAT reports 0 unapproved across every module.
 
+
+## 2026-05-06 — dependencyManagement default scopes
+
+Refactored the parent pom's `<dependencyManagement>` to predefine sensible default scopes for every project dependency, so child poms only have to specify scope when overriding.
+
+Default scopes:
+- jakarta.enterprise.cdi-api / jakarta.annotation-api / jakarta.inject-api → `provided` (the CDI runtime supplies these; consumers bring their own runtime)
+- junit-jupiter-api → `provided` (jawelte's user-facing classes implement JUnit callbacks but consumers bring their own JUnit version)
+- junit-jupiter / junit-platform-testkit / assertj-core → `test`
+- junit-bom → `import` (unchanged; BOM)
+- jawelte-core-api / jawelte-core-impl → compile (default; no scope set)
+
+Simplified child poms:
+- `core/api`: dropped explicit `<scope>provided</scope>` from junit-jupiter-api + the two jakarta deps (now inherited).
+- `core/impl`: same — dropped `<scope>provided</scope>` from the same three deps.
+- `tests/core`: dropped `<scope>test</scope>` from junit-jupiter, junit-platform-testkit, assertj-core (test is now the default for these). Kept explicit `<scope>test</scope>` on jawelte-core-api and the three jakarta deps because tests/core overrides their compile / provided defaults.
+
+Verified: `./mvnw verify` passes on the full reactor; all 14 scenarios still pass; aggregated coverage report still produced.
+

@@ -83,6 +83,7 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- BOM import: pins every JUnit Jupiter / Platform artifact to ${junit.version}. -->
             <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
@@ -91,29 +92,70 @@
                 <scope>import</scope>
             </dependency>
 
+            <!--
+                Jakarta APIs are provided by the CDI runtime at test time;
+                consumers of jawelte bring their own runtime, so we never
+                ship these jars on a compile or runtime classpath. Children
+                inherit this default and only override when they need a
+                different scope (e.g. test sub-modules upgrade to test).
+            -->
             <dependency>
                 <groupId>jakarta.enterprise</groupId>
                 <artifactId>jakarta.enterprise.cdi-api</artifactId>
                 <version>${jakarta.cdi.version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>jakarta.annotation</groupId>
                 <artifactId>jakarta.annotation-api</artifactId>
                 <version>${jakarta.annotation.version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>jakarta.inject</groupId>
                 <artifactId>jakarta.inject-api</artifactId>
                 <version>${jakarta.inject.version}</version>
+                <scope>provided</scope>
             </dependency>
 
+            <!--
+                JUnit defaults: junit-jupiter-api is `provided` because
+                jawelte's user-facing classes implement JUnit callbacks
+                but consumers bring their own JUnit version; the
+                junit-jupiter umbrella + junit-platform-testkit are
+                test-only.
+            -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-api</artifactId>
+                <version>${junit.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-testkit</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- AssertJ is test-only across the project. -->
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
+                <scope>test</scope>
             </dependency>
 
-            <!-- Internal cross-module references -->
+            <!--
+                Internal cross-module references default to compile.
+                Test sub-modules override to test scope at the leaf pom.
+            -->
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-core-api</artifactId>

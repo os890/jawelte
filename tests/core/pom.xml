@@ -51,17 +51,25 @@
     </modules>
 
     <dependencies>
-        <!-- jawelte API is required by every scenario; core-impl is not, because
-             scenario-proxy-no-provider deliberately runs WITHOUT core-impl on its
-             classpath to verify the proxy's "No TestBeansExtension found" error.
-             Each scenario's own pom adds jawelte-core-impl when needed. -->
+        <!--
+            jawelte API is required by every scenario; core-impl is not,
+            because scenario-proxy-no-provider deliberately runs WITHOUT
+            core-impl on its classpath to verify the proxy's
+            "No TestBeansExtension found" error. Each scenario's own pom
+            adds jawelte-core-impl when needed.
+
+            jawelte-core-api and the Jakarta APIs default to compile /
+            provided in the parent's <dependencyManagement>; tests need
+            them on the test classpath, so the scope is overridden here.
+            JUnit and AssertJ already default to test scope in the
+            parent and are inherited without an override.
+        -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Jakarta CDI / annotation APIs are needed at test runtime -->
         <dependency>
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
@@ -78,23 +86,18 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- JUnit 6 + Platform Test Kit for asserting on a sub-engine run -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-testkit</artifactId>
-            <scope>test</scope>
         </dependency>
 
-        <!-- AssertJ for assertion fluency -->
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>
