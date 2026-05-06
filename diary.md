@@ -141,3 +141,12 @@ Verification: `./mvnw verify` succeeds end-to-end on the 21-module reactor in ~7
 
 - Renamed `coverage/` Maven module to `jawelte-coverage/` to avoid the `.gitignore` collision (the `coverage` pattern there was meant for runtime artifacts but silently swallowed the whole module so the directory never reached origin). Root pom `<modules>` updated. The artifactId was already `jawelte-coverage`, so only the directory rename and the `<module>` reference changed.
 
+
+## 2026-05-06 — META-INF/services license headers + drop RAT exclusion
+
+Added Apache 2.0 license headers (as `#` comments per `ServiceLoader`'s spec) to every `META-INF/services` file in the project (1 production registration in `core/impl` + 18 across the 14 scenario test modules). Then dropped `<exclude>**/META-INF/services/**</exclude>` from the parent pom's RAT config so these files participate in the license-header check.
+
+Why this matters: the previous exclusion silently let any future services registration ship without an attribution header. Per the project's quality NFRs, every distributable file should carry the license. RAT recognizes the canonical Apache 2.0 wording with `#`-prefix comment style.
+
+`./mvnw verify` passes. RAT reports 0 unapproved across every module.
+

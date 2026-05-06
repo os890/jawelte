@@ -221,7 +221,6 @@
                             <exclude>docs/**</exclude>
                             <exclude>errors/**</exclude>
                             <exclude>tickets/**</exclude>
-                            <exclude>**/META-INF/services/**</exclude>
                         </excludes>
                     </configuration>
                 </plugin>
