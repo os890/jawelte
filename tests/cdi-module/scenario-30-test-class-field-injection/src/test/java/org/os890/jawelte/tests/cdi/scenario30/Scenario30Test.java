@@ -42,7 +42,7 @@ class Scenario30Test extends BaseScenario30 {
 
     @Test
     void allInjectFieldVariantsArePopulatedIncludingInheritedAndWrappedAndQualified() {
-        assertThat(inheritedLogger).isNotNull();
+        assertThat(inheritedBeacon).isNotNull();
         assertThat(auditProvider).isNotNull();
         assertThat(auditProvider.get()).isNotNull();
         assertThat(emailInstance).isNotNull();

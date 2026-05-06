@@ -31,7 +31,7 @@ class Scenario09Test {
     @Test
     void initializerMethodParameterIsAutoMockedAndInjected() {
         assertThat(greeter).isNotNull();
-        assertThat(greeter.logger()).isNotNull();
-        greeter.logger().log("test");
+        assertThat(greeter.beacon()).isNotNull();
+        greeter.beacon().signal("test");
     }
 }

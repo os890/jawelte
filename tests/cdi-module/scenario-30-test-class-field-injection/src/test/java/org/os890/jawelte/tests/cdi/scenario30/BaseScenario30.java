@@ -20,7 +20,7 @@ import jakarta.inject.Inject;
 public class BaseScenario30 {
 
     @Inject
-    Logger inheritedLogger;
+    Beacon inheritedBeacon;
 
     public BaseScenario30() {
     }

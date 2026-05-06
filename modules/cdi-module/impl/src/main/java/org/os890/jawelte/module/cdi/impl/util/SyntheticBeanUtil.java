@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.cdi.impl.util;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -61,7 +62,7 @@ public abstract class SyntheticBeanUtil {
             Object fieldValue,
             Set<Annotation> qualifiers) {
         Set<Annotation> finalQualifiers = qualifiersWithDefaults(qualifiers);
-        Set<java.lang.reflect.Type> types = beanTypes(fieldType);
+        Set<Type> types = beanTypes(fieldType);
         event.addBean()
                 .beanClass(fieldType)
                 .scope(Singleton.class)
@@ -92,12 +93,12 @@ public abstract class SyntheticBeanUtil {
     public static void registerAutoMockBean(
             AfterBeanDiscovery event,
             Class<?> rawType,
-            java.lang.reflect.Type targetType,
+            Type targetType,
             Set<Annotation> qualifiers,
             Supplier<Object> mockSupplier) {
         Class<? extends Annotation> scope = isJdkType(rawType) ? Dependent.class : RequestScoped.class;
         Set<Annotation> finalQualifiers = qualifiersWithDefaults(qualifiers);
-        Set<java.lang.reflect.Type> types = beanTypes(targetType);
+        Set<Type> types = beanTypes(targetType);
         event.addBean()
                 .beanClass(rawType)
                 .scope(scope)
@@ -120,8 +121,8 @@ public abstract class SyntheticBeanUtil {
         return Collections.unmodifiableSet(result);
     }
 
-    private static Set<java.lang.reflect.Type> beanTypes(java.lang.reflect.Type targetType) {
-        Set<java.lang.reflect.Type> types = new HashSet<>();
+    private static Set<Type> beanTypes(Type targetType) {
+        Set<Type> types = new HashSet<>();
         types.add(targetType);
         types.add(Object.class);
         return Collections.unmodifiableSet(types);

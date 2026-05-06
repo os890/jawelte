@@ -17,6 +17,7 @@ package org.os890.jawelte.module.cdi.impl.extension;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Collections;
@@ -25,10 +26,16 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.context.NormalScope;
+import jakarta.enterprise.event.Observes;
+import jakarta.enterprise.inject.Alternative;
 import jakarta.enterprise.inject.Instance;
+import jakarta.enterprise.inject.Stereotype;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
 import jakarta.enterprise.inject.spi.AfterTypeDiscovery;
 import jakarta.enterprise.inject.spi.AnnotatedField;
@@ -39,8 +46,12 @@ import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.InjectionPoint;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.enterprise.inject.spi.ProcessInjectionPoint;
+import jakarta.enterprise.util.Nonbinding;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.inject.Qualifier;
+import jakarta.inject.Scope;
+import jakarta.inject.Singleton;
 
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
@@ -80,7 +91,7 @@ public class TestBeansCdiExtension implements Extension {
     public TestBeansCdiExtension() {
     }
 
-    void onBeforeBeanDiscovery(@jakarta.enterprise.event.Observes BeforeBeanDiscovery event) {
+    void onBeforeBeanDiscovery(@Observes BeforeBeanDiscovery event) {
         TestContext active;
         try {
             active = TestContext.get();
@@ -119,37 +130,36 @@ public class TestBeansCdiExtension implements Extension {
         if (hasBeanDefiningAnnotation(target)) {
             return;
         }
-        if (!target.isAnnotationPresent(jakarta.enterprise.inject.Alternative.class)) {
+        if (!target.isAnnotationPresent(Alternative.class)) {
             // Spec: @TestBean(bean=X) where X has no @Alternative is a
             // silent no-op (per scenario 35). Don't promote it to a
             // @Dependent bean.
             return;
         }
         event.addAnnotatedType(target, target.getName())
-                .add(jakarta.enterprise.context.Dependent.Literal.INSTANCE);
+                .add(Dependent.Literal.INSTANCE);
     }
 
     private static boolean hasBeanDefiningAnnotation(Class<?> target) {
         for (Annotation a : target.getAnnotations()) {
             Class<? extends Annotation> at = a.annotationType();
-            if (at.isAnnotationPresent(jakarta.enterprise.context.NormalScope.class)) {
+            if (at.isAnnotationPresent(NormalScope.class)) {
                 return true;
             }
-            if (at.isAnnotationPresent(jakarta.inject.Scope.class)) {
+            if (at.isAnnotationPresent(Scope.class)) {
                 return true;
             }
-            if (at.isAnnotationPresent(jakarta.enterprise.inject.Stereotype.class)) {
+            if (at.isAnnotationPresent(Stereotype.class)) {
                 return true;
             }
-            if (at.equals(jakarta.enterprise.context.Dependent.class)
-                    || at.equals(jakarta.inject.Singleton.class)) {
+            if (at.equals(Dependent.class) || at.equals(Singleton.class)) {
                 return true;
             }
         }
         return false;
     }
 
-    void onProcessAnnotatedType(@jakarta.enterprise.event.Observes ProcessAnnotatedType<?> event) {
+    void onProcessAnnotatedType(@Observes ProcessAnnotatedType<?> event) {
         if (!limitToTestBeans) {
             return;
         }
@@ -159,7 +169,7 @@ public class TestBeansCdiExtension implements Extension {
         }
     }
 
-    <T, X> void onProcessInjectionPoint(@jakarta.enterprise.event.Observes ProcessInjectionPoint<T, X> event) {
+    <T, X> void onProcessInjectionPoint(@Observes ProcessInjectionPoint<T, X> event) {
         InjectionPoint ip = event.getInjectionPoint();
         Type ipType = ip.getType();
         Set<Annotation> qualifiers = ip.getQualifiers();
@@ -173,18 +183,46 @@ public class TestBeansCdiExtension implements Extension {
                 TestBeansCdiExtension::mergeQualifiers);
     }
 
+    /**
+     * Merge {@code additional} into {@code existing} using CDI qualifier
+     * equivalence: two annotations are considered the same when their
+     * annotation type matches and their non-{@code @Nonbinding} member
+     * values are equal. Qualifiers that differ only in {@code @Nonbinding}
+     * member values are equivalent for resolution and are deduplicated
+     * here so the synthetic bean ends up with at most one annotation per
+     * qualifier type.
+     */
     private static Set<Annotation> mergeQualifiers(Set<Annotation> existing, Set<Annotation> additional) {
         for (Annotation candidate : additional) {
-            boolean alreadyHasSameType = existing.stream()
-                    .anyMatch(present -> present.annotationType().equals(candidate.annotationType()));
-            if (!alreadyHasSameType) {
+            boolean alreadyEquivalent = existing.stream()
+                    .anyMatch(present -> qualifiersEquivalent(present, candidate));
+            if (!alreadyEquivalent) {
                 existing.add(candidate);
             }
         }
         return existing;
     }
 
-    void onAfterTypeDiscovery(@jakarta.enterprise.event.Observes AfterTypeDiscovery event) {
+    private static boolean qualifiersEquivalent(Annotation a, Annotation b) {
+        if (!a.annotationType().equals(b.annotationType())) {
+            return false;
+        }
+        for (Method member : a.annotationType().getDeclaredMethods()) {
+            if (member.isAnnotationPresent(Nonbinding.class)) {
+                continue;
+            }
+            try {
+                if (!Objects.deepEquals(member.invoke(a), member.invoke(b))) {
+                    return false;
+                }
+            } catch (ReflectiveOperationException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void onAfterTypeDiscovery(@Observes AfterTypeDiscovery event) {
         if (scanResult == null) {
             return;
         }
@@ -198,7 +236,7 @@ public class TestBeansCdiExtension implements Extension {
     }
 
     void onAfterBeanDiscovery(
-            @jakarta.enterprise.event.Observes AfterBeanDiscovery event,
+            @Observes AfterBeanDiscovery event,
             BeanManager beanManager) {
         if (scanResult == null) {
             return;
@@ -314,8 +352,7 @@ public class TestBeansCdiExtension implements Extension {
     private static Set<Annotation> collectFieldQualifiers(Field field) {
         Set<Annotation> qualifiers = new LinkedHashSet<>();
         for (Annotation annotation : field.getAnnotations()) {
-            if (annotation.annotationType()
-                    .isAnnotationPresent(jakarta.inject.Qualifier.class)) {
+            if (annotation.annotationType().isAnnotationPresent(Qualifier.class)) {
                 qualifiers.add(annotation);
             }
         }

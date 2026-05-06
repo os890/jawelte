@@ -21,17 +21,17 @@ import jakarta.inject.Inject;
 @Dependent
 public class Greeter {
 
-    private Logger logger;
+    private Beacon beacon;
 
     public Greeter() {
     }
 
     @Inject
-    void initLogger(Logger logger) {
-        this.logger = logger;
+    void initBeacon(Beacon beacon) {
+        this.beacon = beacon;
     }
 
-    public Logger logger() {
-        return logger;
+    public Beacon beacon() {
+        return beacon;
     }
 }

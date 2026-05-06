@@ -31,8 +31,8 @@ class Scenario08Test {
     @Test
     void constructorParameterIsAutoMockedAndInjected() {
         assertThat(greeter).isNotNull();
-        assertThat(greeter.logger()).isNotNull();
+        assertThat(greeter.beacon()).isNotNull();
         // Mock returns void with no exception; reaching here means resolution + injection worked.
-        greeter.logger().log("test");
+        greeter.beacon().signal("test");
     }
 }

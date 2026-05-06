@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.tests.cdi.scenario08;
+package org.os890.jawelte.tests.cdi.scenario09;
 
-public interface Logger {
-    void log(String message);
+public interface Beacon {
+    void signal(String message);
 }
