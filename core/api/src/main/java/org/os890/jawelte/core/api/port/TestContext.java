@@ -15,7 +15,15 @@
  */
 package org.os890.jawelte.core.api.port;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.ServiceLoader;
+
+import jakarta.enterprise.inject.spi.CDI;
+
+import org.eclipse.microprofile.config.Config;
+import org.eclipse.microprofile.config.ConfigProvider;
 
 /**
  * Per-test-class facade exposed to {@link TestBeanContainerPort} and
@@ -40,9 +48,29 @@ import java.util.Optional;
  * <p>The current JUnit {@code ExtensionContext} is also seeded as
  * metadata under the key {@code ExtensionContext.class} and refreshed
  * on every callback so the value is always the current JUnit context.
- * Modules that genuinely need a JUnit-specific capability retrieve it
- * via {@code getMetadata(ExtensionContext.class)}; this is the uniform
- * mechanism shared with every other metadata entry.
+ *
+ * <h2>Static accessors (TICKET-001 addendum, introduced in TICKET-003)</h2>
+ *
+ * <p>{@link #get()} returns the {@code TestContext} active on the
+ * current thread. It resolves the accessor implementation class via
+ * MicroProfile Config (key = this interface's own full class name;
+ * dot-then-underscore fallback applies), instantiates it reflectively
+ * via its public no-arg constructor, and delegates to
+ * {@link #getCurrent()} on that accessor. Used by CDI extensions and
+ * other bootstrap-time consumers that need the active context but
+ * have no parameter to receive it through.
+ *
+ * <p>{@link #loadService(Class)} is the project-wide canonical entry
+ * point for prioritized SPI lookup. Pass the port interface and get
+ * back the active implementation. The static method body encapsulates
+ * the priority sort and the bootstrap of {@link ServicePriorityResolver}
+ * itself; callers do not look up the resolver themselves and do not
+ * enumerate candidates themselves.
+ *
+ * <p>The two SPI methods {@link #getCurrent()} and {@link #reset()} are
+ * framework-internal — they back {@link #get()} and {@code core/impl}'s
+ * cleanup path respectively. User code calls the static {@link #get()}
+ * helper instead of {@code getCurrent()} directly.
  */
 public interface TestContext {
 
@@ -78,4 +106,155 @@ public interface TestContext {
      * @param <T> the type of the value
      */
     <T> void unbindMetadata(Class<T> key);
+
+    /**
+     * Framework-internal SPI. Returns the {@code TestContext} active
+     * on the calling thread, or {@code null} if none.
+     *
+     * <p>Implementations back this with a class-level
+     * {@code static ThreadLocal<TestContext>}. User code calls the
+     * static {@link #get()} helper instead.
+     *
+     * @return the per-thread active {@code TestContext}, or {@code null}
+     */
+    TestContext getCurrent();
+
+    /**
+     * Framework-internal SPI. Clears the active {@code TestContext}
+     * on the calling thread.
+     *
+     * <p>Called by {@code core/impl} on its own local {@code TestContext}
+     * reference in the {@code beforeAll} {@code finally} block, after
+     * {@link TestBeanContainerPort#beforeAll(TestContext)} returns or
+     * throws.
+     */
+    void reset();
+
+    /**
+     * Returns the {@code TestContext} active on the current thread.
+     *
+     * <p>Resolves the accessor implementation class via MicroProfile
+     * Config (key = the {@code TestContext} interface's own full class
+     * name; dot-then-underscore fallback applies, value = the FQCN of
+     * a class implementing {@code TestContext} with a public no-arg
+     * constructor), instantiates the accessor reflectively, and
+     * delegates to {@link #getCurrent()} on the result. The lookup is
+     * uncached — every call repeats the MP Config / reflective
+     * instantiation, since the accessor itself is essentially stateless
+     * and {@code get()} is invoked only on the brief CDI bootstrap
+     * window.
+     *
+     * @return the per-thread active {@code TestContext}
+     * @throws IllegalStateException if no {@code TestContext} is active
+     *         on the current thread or if the configured accessor
+     *         cannot be loaded
+     */
+    static TestContext get() {
+        TestContext accessor = instantiateConfigured(TestContext.class, false);
+        TestContext current = accessor.getCurrent();
+        if (current == null) {
+            throw new IllegalStateException(
+                    "No TestContext is active on the current thread. "
+                            + "TestContext.get() may only be called inside the bootstrap window of "
+                            + "core/impl's DelegatingJUnitExtension.beforeAll.");
+        }
+        return current;
+    }
+
+    /**
+     * Returns the active implementation of the given SPI port type —
+     * the project-wide canonical mechanism for prioritized SPI
+     * lookup.
+     *
+     * <p>Two cases:
+     * <ul>
+     *   <li><strong>{@code targetType == ServicePriorityResolver.class}</strong>:
+     *       reads the MP Config key whose name is
+     *       {@code ServicePriorityResolver}'s own FQCN, resolves the
+     *       configured class, and returns an instance — first via
+     *       {@code CDI.current().select(configuredClass).get()}, then
+     *       falling back to reflective {@code newInstance()} when CDI
+     *       is not up. The reflectively-constructed instance is not
+     *       cached.</li>
+     *   <li><strong>any other {@code targetType}</strong>: obtains the
+     *       active resolver via case 1, enumerates candidates via
+     *       {@link ServiceLoader#load(Class)}, and returns
+     *       {@link ServicePriorityResolver#resolve(List)} of the
+     *       candidates (the head of the priority-sorted list).
+     *       Returns {@code null} when no providers are on the
+     *       classpath; ports that require exactly one impl document
+     *       their own zero-impl failure mode.</li>
+     * </ul>
+     *
+     * @param targetType the SPI port interface to load
+     * @param <T>        the SPI port type
+     * @return the active provider, or {@code null} if no provider is
+     *         on the classpath (case 2 only)
+     * @throws IllegalStateException if the {@code ServicePriorityResolver}
+     *         bootstrap fails (configured class missing, wrong type,
+     *         no public no-arg constructor)
+     */
+    static <T> T loadService(Class<T> targetType) {
+        if (targetType == ServicePriorityResolver.class) {
+            return targetType.cast(instantiateConfigured(ServicePriorityResolver.class, true));
+        }
+        ServicePriorityResolver resolver = loadService(ServicePriorityResolver.class);
+        List<T> candidates = new ArrayList<>();
+        for (T provider : ServiceLoader.load(targetType)) {
+            candidates.add(provider);
+        }
+        return resolver.resolve(candidates);
+    }
+
+    /**
+     * Helper for the static accessors: read the FQCN of the configured
+     * implementation from MicroProfile Config (key = {@code portType}'s
+     * own FQCN, dot-then-underscore fallback applies), reflectively
+     * load the class, and instantiate. When {@code tryCdiFirst} is
+     * {@code true}, attempt {@code CDI.current().select(...).get()}
+     * before reflective instantiation.
+     */
+    private static <T> T instantiateConfigured(Class<T> portType, boolean tryCdiFirst) {
+        Config config = ConfigProvider.getConfig();
+        String dotKey = portType.getName();
+        String configuredClassName = config.getOptionalValue(dotKey, String.class)
+                .or(() -> config.getOptionalValue(dotKey.replace('.', '_'), String.class))
+                .orElseThrow(() -> new IllegalStateException(
+                        "MicroProfile Config key not set: " + dotKey
+                                + " (or its underscore variant). Expected the FQCN of a "
+                                + portType.getName() + " implementation."));
+
+        Class<?> configuredClass;
+        try {
+            configuredClass = Class.forName(
+                    configuredClassName, true, Thread.currentThread().getContextClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw new IllegalStateException(
+                    "Configured " + portType.getName() + " class is not on the classpath: "
+                            + configuredClassName + " (MP Config key: " + dotKey + ")", e);
+        }
+        if (!portType.isAssignableFrom(configuredClass)) {
+            throw new IllegalStateException(
+                    "Configured class " + configuredClassName + " does not implement "
+                            + portType.getName() + " (MP Config key: " + dotKey + ")");
+        }
+
+        if (tryCdiFirst) {
+            try {
+                Object cdiInstance = CDI.current().select(configuredClass).get();
+                return portType.cast(cdiInstance);
+            } catch (RuntimeException ignored) {
+                // CDI is not up (typical during pre-container windows). Fall through.
+            }
+        }
+
+        try {
+            Object instance = configuredClass.getDeclaredConstructor().newInstance();
+            return portType.cast(instance);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                    "Could not instantiate " + configuredClassName
+                            + " via its public no-arg constructor (MP Config key: " + dotKey + ")", e);
+        }
+    }
 }

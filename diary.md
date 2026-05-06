@@ -211,3 +211,26 @@ Scope split between TICKET-002 and the future cdi-module ticket:
 
 Verification: `./mvnw verify` passes the now-22-module reactor in ~9s; all 14 TICKET-001 scenarios still pass; all 7 new config scenarios pass; aggregated coverage report includes the new modules.
 
+
+## 2026-05-06 — TICKET-003 Phase 1: TestContext addenda (TestContext.get + ServicePriorityResolver + loadService)
+
+Implemented the three TICKET-001 addenda from TICKET-003 as a foundational, purely-additive layer. Existing TICKET-001/002 scenarios untouched (still pass 21/21).
+
+- **`TestContext` interface (`core/api/port`)** — added two abstract SPI methods (`getCurrent()`, `reset()`) and two static method bodies:
+    - `static TestContext get()` — uncached MP-Config-based bootstrap that reads the FQCN of the accessor impl from the key `org.os890.jawelte.core.api.port.TestContext`, dot-then-underscore fallback, reflective `newInstance()`, then delegates to `getCurrent()` on the resulting accessor. Throws `IllegalStateException` when no `TestContext` is active on the calling thread.
+    - `static <T> T loadService(Class<T> targetType)` — single canonical SPI lookup. Two cases:
+        1. `targetType == ServicePriorityResolver`: read MP Config key whose name is `ServicePriorityResolver`'s own FQCN, `Class.forName`, try `CDI.current().select(configuredClass).get()`, fall back to reflective `newInstance()` (uncached) when CDI is not up.
+        2. any other target: route through case 1 to obtain the resolver, then `ServiceLoader.load(targetType)` + `resolver.resolve(...)`.
+- **`ServicePriorityResolver` port (NEW, `core/api/port`)** — `<T> List<T> sort(List<T>)` + default `<T> T resolve(List<T>)` (head of sort). Documents the project-wide ordering rule.
+- **`DefaultServicePriorityResolver` (NEW, `core/impl/spi`)** — `@ApplicationScoped`. Sorts by `@Priority` ascending; missing `@Priority` is treated as `Integer.MAX_VALUE` (sort last); ties broken by full class name ascending so the order is stable, deterministic, and independent of classpath enumeration.
+- **`TestContextImpl` (`core/impl/context`)** — refactored to play two roles. The new public no-arg constructor produces an "accessor" instance for `TestContext.get()`'s reflective bootstrap (per-test methods throw `IllegalStateException` on accessor instances). The existing `(Class<?>)` constructor produces a "per-test" instance that self-registers on a class-level static `ThreadLocal<TestContextImpl>` so `TestContext.get()` returns it from any caller on the same thread. `reset()` clears the `ThreadLocal` slot; calling on accessor instance is a no-op.
+- **`DelegatingJUnitExtension.beforeAll`** — wrapped the post-construction logic (containerPort.beforeAll + module-port iteration) in a try/finally with `testContext.reset()` in finally, per the addendum's lifecycle contract: ThreadLocal is cleared even if a port throws or a `ContainerStarted` listener throws. After `beforeAll` returns, `TestContext.get()` throws — bootstrap-only.
+- **Bootstrap config files in `core/impl`**:
+    - `META-INF/microprofile-config.properties`: defaults the two FQCN-keyed bootstraps (`...port.TestContext` → `TestContextImpl`; `...port.ServicePriorityResolver` → `DefaultServicePriorityResolver`).
+    - `META-INF/beans.xml` with `bean-discovery-mode="annotated"` so CDI runtimes pick up `DefaultServicePriorityResolver` automatically when the cdi-module ticket lands.
+- **`core/api/pom.xml`** — added `microprofile-config-api` (provided, inherited from parent dependencyManagement) so `TestContext`'s static method bodies can compile against `ConfigProvider` / `Config`.
+
+`ServiceLoaderCache` was NOT refactored to use `TestContext.loadService` in this phase — the unification would have required adding MP Config impl (SmallRye) to every existing TICKET-001 scenario module's classpath, which is a much wider change than the addenda need. Defer to a later phase or follow-up ticket; the new mechanism is in place for cdi-module's CDI Extension to use.
+
+Verification: `./mvnw verify` passes the full 22-module reactor; all 21 prior scenarios still pass (14 TICKET-001 + 7 TICKET-002).
+

@@ -97,13 +97,22 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
         TestBeanContainerPort containerPort = ServiceLoaderCache.resolveContainerPort();
         List<TestModuleLifecyclePort> lifecyclePorts = ServiceLoaderCache.resolveLifecyclePorts();
 
-        if (manageContainer) {
-            containerPort.beforeAll(testContext);
-        }
-
-        for (TestModuleLifecyclePort port : lifecyclePorts) {
-            port.beforeAll(testContext);
-            completed.add(port);
+        try {
+            if (manageContainer) {
+                containerPort.beforeAll(testContext);
+            }
+            for (TestModuleLifecyclePort port : lifecyclePorts) {
+                port.beforeAll(testContext);
+                completed.add(port);
+            }
+        } finally {
+            // Clears the per-thread ThreadLocal that TestContextImpl's
+            // (Class<?>) constructor set when this beforeAll started, so
+            // TestContext.get() throws outside the bootstrap window. Runs
+            // unconditionally - even if a port's beforeAll or a
+            // ContainerStarted observer threw - per the TICKET-003
+            // addendum's lifecycle contract.
+            testContext.reset();
         }
     }
 
