@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-cdi-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/cdi-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-cdi-module. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld).</description>
+
+    <modules>
+        <module>scenario-01-interface-auto-mock</module>
+        <module>scenario-02-concrete-class-auto-mock</module>
+        <module>scenario-03-parameterized-generic</module>
+        <module>scenario-04-named-qualifier</module>
+        <module>scenario-05-custom-qualifier</module>
+        <module>scenario-06-multiple-qualifiers</module>
+        <module>scenario-07-nonbinding-deduplication</module>
+        <module>scenario-08-constructor-injection</module>
+        <module>scenario-09-initializer-method-injection</module>
+        <module>scenario-10-producer-method-parameter</module>
+        <module>scenario-11-observer-method-parameter</module>
+        <module>scenario-12-satisfied-not-mocked</module>
+        <module>scenario-13-testbean-bean</module>
+        <module>scenario-14-testbean-bean-producer</module>
+        <module>scenario-15-testbean-static-field</module>
+        <module>scenario-16-testbean-repeatable</module>
+        <module>scenario-17-testbean-meta-annotation</module>
+        <module>scenario-18-whitelist-mode</module>
+        <module>scenario-19-exclude-packages</module>
+        <module>scenario-20-test-class-isolation</module>
+        <module>scenario-21-qualified-jdk-type</module>
+        <module>scenario-22-same-simple-name</module>
+        <module>scenario-23-auto-mock-request-scoped</module>
+        <module>scenario-24-provider-unwrap</module>
+        <module>scenario-25-instance-unwrap</module>
+        <module>scenario-26-typed-narrowed</module>
+        <module>scenario-27-testbean-instance-field-error</module>
+        <module>scenario-28-testbean-null-field-error</module>
+        <module>scenario-29-testbean-bean-and-producer-error</module>
+        <module>scenario-30-test-class-field-injection</module>
+        <module>scenario-31-test-class-not-cdi-bean</module>
+        <module>scenario-32-manage-container-false</module>
+        <module>scenario-33-before-scope-veto</module>
+        <module>scenario-34-alternative-without-scope</module>
+        <module>scenario-35-testbean-not-alternative</module>
+        <module>scenario-36-custom-excluded-package-filter</module>
+        <module>scenario-37-testbean-overrides-exclude</module>
+        <module>scenario-38-framework-allowlist-override</module>
+        <module>scenario-39-testcontext-get-during-bootstrap</module>
+        <module>scenario-40-testcontext-get-after-container-started</module>
+        <module>scenario-41-testcontext-get-cleanup-on-failure</module>
+        <module>scenario-42-testcontext-parallel-isolation</module>
+        <module>scenario-43-custom-whitelist-filter</module>
+        <module>scenario-44-service-priority-resolver-mp-config</module>
+        <module>scenario-45-priority-resolver-tiebreak</module>
+        <module>scenario-46-container-started-event-timing</module>
+        <module>scenario-47-config-bean-stereotype-scope</module>
+        <module>scenario-48-config-resolver-injectable</module>
+        <module>scenario-49-config-resolver-alternative</module>
+    </modules>
+
+    <dependencies>
+        <!--
+            jawelte-core-api is needed by every scenario; core-impl
+            (DelegatingJUnitExtension) is needed by every scenario;
+            cdi-module-impl (CdiTestBeanContainer + Extension) is needed
+            by every scenario. SmallRye Config provides the MP Config
+            implementation at test runtime.
+
+            jakarta.* default to provided in dependencyManagement; tests
+            need them on the test classpath, hence the explicit test scope.
+            JUnit / AssertJ / Mockito default to test scope.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-testkit</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-se</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.weld.se</groupId>
+                    <artifactId>weld-se-shaded</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>
