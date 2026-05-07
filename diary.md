@@ -705,3 +705,11 @@ Result: Tests run: 1, Failures: 0, Errors: 0 — task #107 done.
 Added `tests/jpa-module/scenario-57-framework-owned-tx-events`. Two persist paths to a real `Marker` entity: a `@Transactional` method (framework-driven), and a method that pulls a fresh `EntityManager` from the injected `EntityManagerFactory` and drives its `EntityTransaction` directly (user-driven, bypasses the strategy). A `TxEventRecorder` observer counts every `TransactionStarted` / `TransactionBeforeCompletion` / `TransactionCommitted` / `TransactionRolledBack`. After the framework path the counts are 1/1/1/0; after the user path the counts stay 1/1/1/0 — the strategy never saw the user-driven tx, so no events fired. Confirms the framework-owned filter ties events to the strategy's `begin/commit/rollback` boundaries.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #111 done.
+
+## 2026-05-07 — scenario-25: fileMode skip-after-first + per-class lifecycle
+
+Filled in `tests/jpa-module/scenario-25-file-mode-true` (was a placeholder). Drives a `@PersistenceConfig(fileMode = true)`-annotated `Scenario25FileModeSubject` via JUnit Platform Test Kit (`EngineTestKit.engine("junit-jupiter").selectors(selectClass(...))`); subject's name (`...Subject`) keeps surefire from picking it up directly. The subject has two ordered `@Test` methods that each append to a static list. After the kit run, statistics are `started(2).succeeded(1).aborted(1)` — `JpaLifecycleAdapter.beforeEach` raises `TestAbortedException` for the second method because the first already executed. `EXECUTED_METHODS` confirms only the first method's body ran.
+
+Note: tested via the framework's URL-override hook (`microprofile-config.properties` setting `org.os890.jawelte.module.jpa.persistence-property.jakarta.persistence.jdbc.url` to an in-memory H2 URL). Hibernate 7's `DriverManagerConnectionProviderImpl` wouldn't bootstrap the framework's default `jdbc:h2:file:...;AUTO_SERVER=TRUE` URL inside the testkit-launched sub-container, throwing `Cannot get a connection as the driver manager is not properly initialized`. The lifecycle assertion is the test's actual point — the URL override keeps that surface in focus.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #112 done.

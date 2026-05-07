@@ -15,17 +15,39 @@
  */
 package org.os890.jawelte.tests.jpa.scenario25;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClass;
+
+import org.junit.jupiter.api.Test;
+import org.junit.platform.testkit.engine.EngineTestKit;
+
 /**
- * Test scenario #25 (file-mode-true) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Drives {@link Scenario25FileModeSubject} via the JUnit Platform
+ * Test Kit and asserts the {@code @PersistenceConfig(fileMode = true)}
+ * skip-after-first behaviour: the first {@code @Test} method runs
+ * (and writes into the H2 file), every subsequent method is
+ * aborted by {@code JpaLifecycleAdapter.beforeEach}'s
+ * {@code TestAbortedException}.
  */
 public class Scenario25Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    /** No-arg constructor required by JUnit. */
     public Scenario25Test() {
+    }
+
+    /** Subject runs first method; second method is aborted by JpaLifecycleAdapter. */
+    @Test
+    public void fileModeRunsFirstMethodAndAbortsSubsequent() {
+        Scenario25FileModeSubject.EXECUTED_METHODS.clear();
+
+        EngineTestKit.engine("junit-jupiter")
+                .selectors(selectClass(Scenario25FileModeSubject.class))
+                .execute()
+                .testEvents()
+                .assertStatistics(stats -> stats.started(2).succeeded(1).aborted(1).failed(0));
+
+        assertThat(Scenario25FileModeSubject.EXECUTED_METHODS)
+                .as("only the first method's body ran; the second was aborted in beforeEach")
+                .containsExactly("firstMethodPersists");
     }
 }
