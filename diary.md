@@ -489,3 +489,9 @@ Reactor went from 124 → 168 modules. 44 scenario sub-modules created under `te
 - `./mvnw validate` green: 168 modules, all jpa-module scenario rows SUCCESS, RAT clean across the new files.
 
 Real test bodies for each scenario land in follow-up commits on this branch.
+
+## 2026-05-07 — TICKET-005 Phase 7d (coverage-report deps)
+
+`coverage-report/pom.xml` now lists `jawelte-jpa-module-{api,impl}` as production-class deps (so `report-aggregate` analyzes them) and every one of the 44 new jpa-module scenarios as test-execution-data deps. The aggregator entries were inserted in deterministic order via an `awk` splice keyed on the last scope-module entry; total line count went from 634 to 864.
+
+`./mvnw -pl coverage-report validate` green.
