@@ -19,6 +19,7 @@ import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.se.SeContainer;
 import jakarta.persistence.EntityManagerFactory;
 
+import org.opentest4j.TestAbortedException;
 import org.os890.jawelte.core.api.event.AfterTestTransaction;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
@@ -26,6 +27,7 @@ import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
+import org.os890.jawelte.module.jpa.impl.util.FileModeState;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
 import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 
@@ -62,7 +64,17 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  *
  * <p>{@code afterAll} clears the per-thread EM stack as a safety
  * net and resets {@link JpaActivePersistenceUnits}; cached EMFs
- * stay in {@link EmfCache} for the next test class.
+ * stay in {@link EmfCache} for the next test class — except for
+ * file-mode runs, which evict their EMFs so the H2 file lock
+ * releases and the next test class can take it.
+ *
+ * <p>{@code @PersistenceConfig(fileMode=true)} engages a "skip
+ * subsequent methods" debug mode: the first {@code @Test} method
+ * runs and writes into the H2 file; every subsequent
+ * {@code @Test} is aborted via
+ * {@link TestAbortedException} so the developer can inspect the
+ * file with the data shape that produced the first method's
+ * outcome. Per-method DB cleanup is also skipped in file mode.
  *
  * <p>Stateless across test classes — no instance fields. The same
  * adapter instance is reused for every test class running in the
@@ -78,14 +90,21 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void beforeAll(TestContext testContext) {
-        // No-op: EMFs are pre-warmed by JpaCdiExtension.beforeBeanDiscovery
-        // during phase 1 of the bootstrap.
+        if (isFileMode(testContext)) {
+            String filePath = resolveFileModePath(testContext);
+            testContext.bindMetadata(FileModeState.class, new FileModeState(filePath));
+        }
     }
 
     @Override
     public void beforeEach(TestContext testContext) {
-        // No-op: per-method transactions are driven by
-        // TransactionalInterceptor inside the test code.
+        FileModeState fileModeState = testContext.getMetadata(FileModeState.class).orElse(null);
+        if (fileModeState != null && fileModeState.isFirstMethodExecuted()) {
+            throw new TestAbortedException(
+                    "[jawelte] @PersistenceConfig(fileMode=true): skipping subsequent test methods so the H2 "
+                            + "file state from the first method is preserved for inspection. "
+                            + "DB file directory: " + fileModeState.getFilePath());
+        }
     }
 
     @Override
@@ -111,8 +130,8 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
             }
         }
 
-        boolean fileMode = isFileMode(testContext);
-        if (!fileMode) {
+        FileModeState fileModeState = testContext.getMetadata(FileModeState.class).orElse(null);
+        if (fileModeState == null) {
             try {
                 runCleanup();
             } catch (RuntimeException cleanupFailure) {
@@ -122,6 +141,8 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
                     primary.addSuppressed(cleanupFailure);
                 }
             }
+        } else {
+            fileModeState.markFirstMethodExecuted();
         }
 
         if (primary != null) {
@@ -131,8 +152,26 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void afterAll(TestContext testContext) {
+        FileModeState fileModeState = testContext.getMetadata(FileModeState.class).orElse(null);
+        if (fileModeState != null) {
+            for (String persistenceUnitName : JpaActivePersistenceUnits.get()) {
+                EmfCache.evict(persistenceUnitName);
+            }
+            testContext.unbindMetadata(FileModeState.class);
+        }
         TransactionScopedEmHolder.clearForCurrentThread();
         JpaActivePersistenceUnits.reset();
+    }
+
+    private static String resolveFileModePath(TestContext testContext) {
+        PersistenceConfig persistenceConfig = testContext.getTestClass().getAnnotation(PersistenceConfig.class);
+        if (persistenceConfig == null) {
+            return "";
+        }
+        if (!persistenceConfig.filePath().isEmpty()) {
+            return persistenceConfig.filePath();
+        }
+        return System.getProperty("user.home") + "/" + testContext.getTestClass().getSimpleName() + "_db";
     }
 
     private static void fireAfterTestTransaction(TestContext testContext) {

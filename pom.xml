@@ -71,6 +71,7 @@
         <hibernate.orm.version>7.0.4.Final</hibernate.orm.version>
         <h2.version>2.3.232</h2.version>
         <asm.version>9.7.1</asm.version>
+        <opentest4j.version>1.3.0</opentest4j.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -296,6 +297,20 @@
                 <artifactId>h2</artifactId>
                 <version>${h2.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!--
+                opentest4j ships TestAbortedException — used by
+                jpa-module/impl to skip subsequent test methods in
+                @PersistenceConfig(fileMode=true). provided scope
+                matches its usual delivery via junit-jupiter-api in
+                test classpaths.
+            -->
+            <dependency>
+                <groupId>org.opentest4j</groupId>
+                <artifactId>opentest4j</artifactId>
+                <version>${opentest4j.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!--

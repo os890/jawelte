@@ -70,6 +70,20 @@
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
         </dependency>
+
+        <!--
+            opentest4j ships TestAbortedException, which jpa-module's
+            lifecycle adapter throws to skip subsequent test methods
+            when @PersistenceConfig(fileMode=true) is active. provided
+            scope: every JUnit-driven consumer brings opentest4j
+            transitively via junit-jupiter-api, so we don't impose a
+            version.
+        -->
+        <dependency>
+            <groupId>org.opentest4j</groupId>
+            <artifactId>opentest4j</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

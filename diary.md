@@ -605,3 +605,17 @@ Made the "framework owns this tx" property explicit. Added a `FRAMEWORK_OWNED` t
 Net effect: identical observable behaviour to before (we already only fired events from inside framework code paths), but now the contract is explicit and verifiable. User code that calls `em.getTransaction().begin()` directly bypasses the framework and therefore does not see the four CDI tx events fire. Defensive against future drift if event-firing helpers are reused from new call sites.
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #82: fileMode redesign)
+
+`@PersistenceConfig(fileMode=true)` now mirrors POC's debug-mode shape inside our existing structure:
+
+**URL change** (`JpaCdiExtension.computeProperties`): file-mode H2 URL becomes `jdbc:h2:file:{filePath}/{puName}_{testClassSimpleName};DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE`. The test-class suffix prevents two test classes that share a PU name from colliding on the same H2 file. `AUTO_SERVER=TRUE` lets a developer attach with the H2 console while the test JVM still holds the file.
+
+**Skip-after-first** (`JpaLifecycleAdapter`): in `beforeAll`, when `@PersistenceConfig.fileMode=true`, bind a new `FileModeState` (small util in `…impl.util`) on `TestContext` via the existing typed-metadata mechanism. `beforeEach` checks for the marker and throws `TestAbortedException` if `firstMethodExecuted` is set, with a message pointing at the H2 file directory. `afterEach` marks the flag after the first method completes and skips per-method DB cleanup so the file state is preserved.
+
+**Per-class file lifecycle** (`JpaLifecycleAdapter.afterAll` + `EmfCache`): in file mode, evict every active PU's EMF (close + remove from cache) so the H2 file lock releases for the next test class. New `EmfCache.evict(puName)` helper handles the close + removal and logs failures at WARNING. `afterAll` also unbinds the `FileModeState` marker before resetting the global registries.
+
+**opentest4j dep**: `jpa-module/impl` now declares `org.opentest4j:opentest4j` at `provided` scope (version `1.3.0` pinned in root `<dependencyManagement>`). `TestAbortedException` is a JUnit-spec marker for "this method was skipped"; consumers always have it transitively via `junit-jupiter-api`.
+
+Full reactor mvn -P owb verify green.

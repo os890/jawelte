@@ -377,8 +377,14 @@ public class JpaCdiExtension implements Extension {
             String filePath = persistenceConfig.filePath().isEmpty()
                     ? defaultFilePath(testClass)
                     : persistenceConfig.filePath();
+            // Append the test-class simple name to the file path so
+            // two test classes that share a PU name don't collide on
+            // the same H2 file. AUTO_SERVER=TRUE lets the developer
+            // open the file from a separate H2 console process while
+            // the test JVM still holds it.
             properties.put("jakarta.persistence.jdbc.url",
-                    "jdbc:h2:file:" + filePath + "/" + unit.name());
+                    "jdbc:h2:file:" + filePath + "/" + unit.name() + "_" + testClass.getSimpleName()
+                            + ";DB_CLOSE_DELAY=-1;AUTO_SERVER=TRUE");
         } else {
             properties.put("jakarta.persistence.jdbc.url",
                     "jdbc:h2:mem:" + unit.name() + ";DB_CLOSE_DELAY=-1");

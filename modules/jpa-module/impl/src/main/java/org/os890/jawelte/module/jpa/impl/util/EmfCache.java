@@ -88,6 +88,33 @@ public abstract class EmfCache {
         return Optional.ofNullable(CACHE.get(persistenceUnitName));
     }
 
+    /**
+     * Close and remove the cached {@link EntityManagerFactory} for
+     * the given persistence unit, if one exists. Used by
+     * {@code JpaLifecycleAdapter.afterAll} in file mode so the H2
+     * file lock is released for the next test class. Idempotent —
+     * a missing entry is a silent no-op. Close failures are logged
+     * at {@link Level#WARNING} and not propagated.
+     *
+     * @param persistenceUnitName the persistence unit name to evict
+     */
+    public static void evict(String persistenceUnitName) {
+        EntityManagerFactory removed = CACHE.remove(persistenceUnitName);
+        if (removed == null) {
+            return;
+        }
+        try {
+            if (removed.isOpen()) {
+                removed.close();
+            }
+        } catch (RuntimeException loggedAndIgnored) {
+            LOG.log(Level.WARNING,
+                    "Failed to close evicted EntityManagerFactory for persistence unit '"
+                            + persistenceUnitName + "'",
+                    loggedAndIgnored);
+        }
+    }
+
     private static void registerShutdownHookOnce() {
         if (SHUTDOWN_HOOK_REGISTERED.compareAndSet(false, true)) {
             Runtime.getRuntime().addShutdownHook(new Thread(EmfCache::closeAll, "jawelte-emf-cache-shutdown"));
