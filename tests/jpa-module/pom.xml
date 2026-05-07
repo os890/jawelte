@@ -80,6 +80,7 @@
         <module>scenario-44-transaction-strategy-swap</module>
         <module>scenario-45-container-started-seeding</module>
         <module>scenario-46-m1-relationship</module>
+        <module>scenario-47-prod-shaped-persistence-xml</module>
     </modules>
 
     <dependencies>
