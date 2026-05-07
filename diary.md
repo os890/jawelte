@@ -507,3 +507,13 @@ Real test bodies for each scenario land in follow-up commits on this branch.
 - Both profiles complete in roughly 1m54s on the local machine; per-scenario runtime is ~0.35-0.40s for the placeholders.
 
 Build is in a clean, reviewable state for PR. The scaffold + jpa-module/api + jpa-module/impl + coverage-report integration are reviewable independently of the per-scenario `@Test` bodies that follow.
+
+## 2026-05-07 — TICKET-005 Phase 9a (architecture.md)
+
+Updated `architecture.md` with the four pre-approved changes for jpa-module:
+1. Modules table: `jawelte-jpa` → `jawelte-jpa-module`, plus a "per-method DB cleanup" addition to the Purpose column.
+2. After scope-module additions: added a `**jpa-module additions (in jpa-module/api):**` subsection listing `@PersistenceConfig`, `@ReadOnly`, the five ports (`TransactionStrategy`, `DbCleanupStrategy`, `EntityResolver`, `PersistenceUnitConnectionResolver`, `PersistencePropertyResolver`), the four CDI events, and the explicit reuse of `jakarta.transaction.{Transactional,TransactionScoped}`.
+3. Adapters table: appended five new rows for jpa-module's adapters (`JpaLifecycleAdapter` + `JpaCdiExtension` for `TestModuleLifecyclePort`, default impls for the four prioritized SPIs).
+4. Planned section: removed the old `JpaContainerPort / JtaContainerPort` placeholder (replaced by the actual port set we shipped); added `JtaTransactionStrategy` as the future @Priority-substitution placeholder. JaxRs / Dataset / HttpStub planned items unchanged.
+
+Diff matched the user-approved preview verbatim.
