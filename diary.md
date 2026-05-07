@@ -592,3 +592,16 @@ Per-table failures aggregate via primary + `addSuppressed` per TICKET-001; on a 
 H2-specific: `SET REFERENTIAL_INTEGRITY` is an H2 extension and the schema filter uses `'PUBLIC'`. Documented in the class Javadoc.
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #84: owned-tx event filter)
+
+Made the "framework owns this tx" property explicit. Added a `FRAMEWORK_OWNED` thread-local flag on `TransactionScopedEmHolder`:
+
+- Set to `TRUE` in `enterTransactionalScope` (called from `Strategy.begin()`).
+- Cleared in `exitTransactionalScope` once the outermost frame pops.
+- Read by `DefaultResourceLocalTransactionStrategy.fireEvent` and `TransactionScopedEmHolder.fireTransactionStartedQuietly` — both early-return when the flag is `false`.
+- Wiped by `clearForCurrentThread` (the lifecycle adapter's `afterEach` safety net).
+
+Net effect: identical observable behaviour to before (we already only fired events from inside framework code paths), but now the contract is explicit and verifiable. User code that calls `em.getTransaction().begin()` directly bypasses the framework and therefore does not see the four CDI tx events fire. Defensive against future drift if event-firing helpers are reused from new call sites.
+
+Full reactor mvn -P owb verify green.

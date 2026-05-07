@@ -74,6 +74,21 @@ public abstract class TransactionScopedEmHolder {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Per-thread "framework owns this tx" flag. Set whenever the
+     * active strategy drives a {@code begin()} (directly or via
+     * {@link #peekOrAutoBegin(String)}'s lazy-join path), cleared
+     * whenever the matching {@code commit()} / {@code rollback()}
+     * finishes. The four CDI tx events
+     * ({@code TransactionStarted} / {@code BeforeCompletion} /
+     * {@code Committed} / {@code RolledBack}) only fire while this
+     * flag is {@code true} — user code that calls
+     * {@code em.getTransaction().begin()} directly bypasses the
+     * framework and therefore does not trigger the events.
+     */
+    private static final ThreadLocal<Boolean> FRAMEWORK_OWNED =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    /**
      * Suppressed-instantiation constructor. The class is
      * {@code abstract} so direct {@code new} is impossible; the
      * explicit declaration silences {@code javadoc -doclint:all} on
@@ -162,6 +177,7 @@ public abstract class TransactionScopedEmHolder {
         Set<String> framePersistenceUnits = new LinkedHashSet<>();
         framePersistenceUnits.add(managedPersistenceUnitName);
         FRAME_PUS_STACK.get().push(framePersistenceUnits);
+        FRAMEWORK_OWNED.set(Boolean.TRUE);
     }
 
     /**
@@ -183,7 +199,22 @@ public abstract class TransactionScopedEmHolder {
         }
         if (managedStack.isEmpty()) {
             MANAGED_PU_STACK.remove();
+            FRAMEWORK_OWNED.remove();
         }
+    }
+
+    /**
+     * Whether the current transactional scope on the calling
+     * thread was opened by the framework (the strategy or the
+     * lazy-join path) rather than by user code calling
+     * {@code em.getTransaction().begin()} directly. Read by the
+     * event-firing helpers to gate their fire calls.
+     *
+     * @return {@code true} if the framework drives the active scope
+     *         on this thread; {@code false} otherwise
+     */
+    public static boolean isFrameworkOwned() {
+        return Boolean.TRUE.equals(FRAMEWORK_OWNED.get());
     }
 
     /**
@@ -269,9 +300,13 @@ public abstract class TransactionScopedEmHolder {
         STACKS.remove();
         MANAGED_PU_STACK.remove();
         FRAME_PUS_STACK.remove();
+        FRAMEWORK_OWNED.remove();
     }
 
     private static void fireTransactionStartedQuietly(String persistenceUnitName) {
+        if (!isFrameworkOwned()) {
+            return;
+        }
         try {
             CDI.current().getBeanManager().getEvent().fire(new TransactionStarted(persistenceUnitName));
         } catch (RuntimeException ignored) {

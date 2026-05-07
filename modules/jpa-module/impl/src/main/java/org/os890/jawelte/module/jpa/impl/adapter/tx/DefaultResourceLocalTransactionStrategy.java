@@ -297,6 +297,9 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
     }
 
     private static void fireEvent(Object event) {
+        if (!TransactionScopedEmHolder.isFrameworkOwned()) {
+            return;
+        }
         try {
             BeanManager beanManager = CDI.current().getBeanManager();
             beanManager.getEvent().fire(event);
