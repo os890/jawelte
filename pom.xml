@@ -66,6 +66,11 @@
         <weld.version>6.0.4.Final</weld.version>
         <junit.version>6.0.0</junit.version>
         <assertj.version>3.27.3</assertj.version>
+        <jakarta.persistence.version>3.2.0</jakarta.persistence.version>
+        <jakarta.transaction.version>2.0.1</jakarta.transaction.version>
+        <hibernate.orm.version>7.0.4.Final</hibernate.orm.version>
+        <h2.version>2.3.232</h2.version>
+        <asm.version>9.7.1</asm.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -230,6 +235,67 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-scope-module-impl</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal jpa-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jpa-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jpa-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!--
+                JPA / Transaction APIs default to provided: the CDI runtime
+                (or a Jakarta EE container) supplies them at test time, the
+                same way as the core jakarta.* APIs above.
+            -->
+            <dependency>
+                <groupId>jakarta.persistence</groupId>
+                <artifactId>jakarta.persistence-api</artifactId>
+                <version>${jakarta.persistence.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>jakarta.transaction</groupId>
+                <artifactId>jakarta.transaction-api</artifactId>
+                <version>${jakarta.transaction.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!--
+                ASM is provided so consumers can bring their own version
+                without conflicting with ours. jpa-module/impl uses it
+                for bytecode-level @Entity scanning (avoids Class.forName).
+            -->
+            <dependency>
+                <groupId>org.ow2.asm</groupId>
+                <artifactId>asm</artifactId>
+                <version>${asm.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!--
+                Hibernate ORM and H2 are test-only across the project:
+                jpa-module's per-scenario smoke tests bring them up.
+                Consumers pick their own JPA provider and JDBC driver in
+                production deployments.
+            -->
+            <dependency>
+                <groupId>org.hibernate.orm</groupId>
+                <artifactId>hibernate-core</artifactId>
+                <version>${hibernate.orm.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.h2database</groupId>
+                <artifactId>h2</artifactId>
+                <version>${h2.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <!--

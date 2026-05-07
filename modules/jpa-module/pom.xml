@@ -22,20 +22,19 @@
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
-        <artifactId>jawelte-parent</artifactId>
+        <artifactId>jawelte-modules</artifactId>
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-modules</artifactId>
+    <artifactId>jawelte-jpa-module</artifactId>
     <packaging>pom</packaging>
 
-    <name>jawelte (modules aggregator)</name>
-    <description>Top-level aggregator for jawelte feature modules. Each feature module is a Maven aggregator with api / impl submodules.</description>
+    <name>jawelte (jpa-module aggregator)</name>
+    <description>JPA testing primitives for jawelte. jpa-module/api ships @PersistenceConfig, @ReadOnly, the prioritized SPIs (TransactionStrategy, DbCleanupStrategy, EntityResolver, PersistenceUnitConnectionResolver, PersistencePropertyResolver) and the four JPA-specific CDI events. jpa-module/impl ships the lifecycle adapter, the CDI Extension, the @Transactional / @ReadOnly interceptors, the @TransactionScoped Context, the EMF cache, the EntityManager proxy, the per-thread EM stack, the table cleaner, and the default RESOURCE_LOCAL TransactionStrategy.</description>
 
     <modules>
-        <module>cdi-module</module>
-        <module>scope-module</module>
-        <module>jpa-module</module>
+        <module>api</module>
+        <module>impl</module>
     </modules>
 </project>

@@ -430,3 +430,13 @@ Tests: `tests/scope-module/` aggregator with 27 scenario sub-modules covering pe
 Coverage report includes the 27 new scenario modules. `mvn -P owb clean verify` and `mvn -P weld clean verify` both pass against the full reactor (105 scenario modules, all green).
 
 Architecture.md updated: new "scope-module additions" section + new row in the Adapters table for `TestModuleLifecyclePort` → `ScopeLifecycleAdapter` + `TestScopeCdiExtension`.
+
+## 2026-05-07 — TICKET-005 Phase 6 (pom scaffold)
+
+Scaffolded the jpa-module Maven structure on branch `10-jpa-module`:
+
+- Pinned JPA-related library versions in root `pom.xml` `<properties>` and `<dependencyManagement>`: `jakarta.persistence-api 3.2.0`, `jakarta.transaction-api 2.0.1`, Hibernate ORM `7.0.4.Final`, H2 `2.3.232`, ASM `9.7.1`. Persistence + transaction + ASM default to `provided` (consumers bring the runtime); Hibernate + H2 default to `test` (jpa-module's smoke tests bring them up).
+- Added internal cross-references for `jawelte-jpa-module-{api,impl}` to the root `<dependencyManagement>`.
+- Registered `<module>jpa-module</module>` in `modules/pom.xml`.
+- Created `modules/jpa-module/{pom.xml, api/pom.xml, impl/pom.xml}` following the scope-module shape: aggregator (packaging=pom) + api + impl (both jars, javadoc-jar bound to verify). api depends on `jawelte-core-api` plus jakarta cdi/persistence/tx APIs; impl additionally depends on api + microprofile-config-api + asm.
+- `./mvnw validate` green: 124-module reactor including the three new jpa-module rows; Enforcer + Checkstyle pass.
