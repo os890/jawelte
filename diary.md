@@ -477,3 +477,15 @@ Authored 17 jpa-module/impl Java types + 7 META-INF resources.
 Hit two Checkstyle bumps along the way: `TransactionScoped` import-order (uppercase precedes lowercase within `jakarta.transaction.*`); 122-char line on a multi-annotation observer parameter (split onto two lines).
 
 `./mvnw -pl modules/jpa-module/impl -am verify -DskipTests` green: RAT 25/25 approved, Checkstyle 0 violations, Javadoc strict mode clean, javadoc-jar built.
+
+## 2026-05-07 — TICKET-005 Phase 7c (tests/jpa-module scaffold)
+
+Reactor went from 124 → 168 modules. 44 scenario sub-modules created under `tests/jpa-module/scenario-NN-<slug>/`, plus the parent at `tests/jpa-module/pom.xml`.
+
+- `tests/pom.xml` now lists the new aggregator (`<module>jpa-module</module>`).
+- `tests/jpa-module/pom.xml` mirrors `tests/scope-module/pom.xml` shape: parent for every scenario, declares 44 module entries, ships the shared deps every scenario inherits at test scope (core/api+impl, cdi-module/api+impl, jpa-module/api+impl, jakarta.{enterprise.cdi,annotation,inject,persistence,transaction}-api, microprofile-config-api + smallrye-config, asm + hibernate-core + h2, mockito-core, junit-jupiter + junit-platform-testkit, assertj-core), and `-P owb` (default) / `-P weld` profiles.
+- Each scenario directory has: `pom.xml` (~30 lines, Apache header + parent ref + descriptive name), `src/test/resources/META-INF/persistence.xml` (Jakarta Persistence 3.2 schema, `transaction-type=RESOURCE_LOCAL`, Hibernate provider, `<exclude-unlisted-classes>false</exclude-unlisted-classes>`, unique PU name `testPU<NN>`), `src/test/resources/META-INF/beans.xml` (CDI 4.0, `bean-discovery-mode="all"`), `src/test/java/.../Scenario<NN>Test.java` (placeholder class with class-level Javadoc pointing at the ticket scenario number; no `@Test` methods yet).
+- Bulk generation done via a single bash heredoc loop driven by `/tmp/scenarios.txt`; Apache 2.0 license headers on every file (XML comment in pom / persistence.xml / beans.xml; Java comment in the Test class).
+- `./mvnw validate` green: 168 modules, all jpa-module scenario rows SUCCESS, RAT clean across the new files.
+
+Real test bodies for each scenario land in follow-up commits on this branch.
