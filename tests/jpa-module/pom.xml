@@ -91,6 +91,7 @@
         <module>scenario-55-readonly-inner-writable-outer</module>
         <module>scenario-56-inactive-pu-lazy-begin</module>
         <module>scenario-57-framework-owned-tx-events</module>
+        <module>scenario-58-vendor-bean-veto</module>
     </modules>
 
     <dependencies>

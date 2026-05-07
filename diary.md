@@ -713,3 +713,9 @@ Filled in `tests/jpa-module/scenario-25-file-mode-true` (was a placeholder). Dri
 Note: tested via the framework's URL-override hook (`microprofile-config.properties` setting `org.os890.jawelte.module.jpa.persistence-property.jakarta.persistence.jdbc.url` to an in-memory H2 URL). Hibernate 7's `DriverManagerConnectionProviderImpl` wouldn't bootstrap the framework's default `jdbc:h2:file:...;AUTO_SERVER=TRUE` URL inside the testkit-launched sub-container, throwing `Cannot get a connection as the driver manager is not properly initialized`. The lifecycle assertion is the test's actual point — the URL override keeps that surface in focus.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #112 done.
+
+## 2026-05-07 — scenario-58: vendor-bean veto (Narayana / Geronimo on classpath)
+
+Added `tests/jpa-module/scenario-58-vendor-bean-veto`. Two stand-in `@ApplicationScoped` beans live in vetoed packages — `com.arjuna.ats.jta.cdi.fake.FakeNarayanaBean` and `org.apache.geronimo.transaction.fake.FakeGeronimoBean` — plus a `RegularBean` in `org.os890.jawelte.tests.jpa.scenario58.*` as the sanity check. The test uses `CDI.current().select(...)` and asserts the two vetoed beans are `isUnsatisfied()` while `RegularBean.isResolvable()`. Confirms `JpaCdiExtension`'s `@Observes ProcessAnnotatedType` veto is targeted to the configured prefixes — a real Narayana/Geronimo jar on the test classpath would be filtered out before clashing with the synthetic `UserTransaction`/`TransactionStrategy` beans.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #110 done.
