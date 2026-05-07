@@ -580,3 +580,15 @@ Full reactor mvn -P owb verify green.
 This is best-effort cross-PU atomicity over independent RESOURCE_LOCAL transactions: a flush failure on any PU rolls every PU back before any commit happens, so nothing reaches the database. After phase 1 has succeeded, phase 2's commits are no-fail in practice (nothing left to validate), but defensive aggregation handles JDBC-level surprises.
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #83: TRUNCATE-with-RI-off cleanup strategy)
+
+New `JdbcTruncateDbCleanupStrategy` shipped under `…impl.adapter.cleanup`. Walks `INFORMATION_SCHEMA.TABLES` filtered to the `PUBLIC` schema, disables referential integrity (`SET REFERENTIAL_INTEGRITY FALSE`), `TRUNCATE TABLE`s every entry, then re-enables RI. Touches every table — including auto-generated `@JoinTable`s, `@ElementCollection` backing tables, and Hibernate sequence/hilo tables — that the JPQL-based default can't reach because it iterates only mapped `@Entity` types. Disabling FK checks during the truncate handles schemas with circular FKs without topological ordering.
+
+Per-table failures aggregate via primary + `addSuppressed` per TICKET-001; on a primary failure the whole truncate transaction rolls back. The strategy opens its own short-lived `EntityManager` from the EMF (cleanup runs after the user's tx is done, so no active EM exists on the per-thread stack); `em.unwrap(Connection.class)` retrieves the JDBC connection in a provider-agnostic way.
+
+`@Priority(Integer.MAX_VALUE - 1)` — one rank ahead of the JPQL default. With both impls registered in `META-INF/services/org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy`, the TRUNCATE strategy wins by default for the H2-shipped test setup. Consumers running against a non-H2 database can drop this jar from the test classpath or register an alternative impl at an even lower priority.
+
+H2-specific: `SET REFERENTIAL_INTEGRITY` is an H2 extension and the schema filter uses `'PUBLIC'`. Documented in the class Javadoc.
+
+Full reactor mvn -P owb verify green.
