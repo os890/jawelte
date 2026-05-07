@@ -15,17 +15,45 @@
  */
 package org.os890.jawelte.tests.jpa.scenario26;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManagerFactory;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.module.jpa.api.PersistenceConfig;
+
 /**
- * Test scenario #26 (file-mode-false) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Without {@code fileMode = true} the bootstrap properties resolve
+ * to an in-memory H2 URL keyed off the persistence-unit name —
+ * {@code jdbc:h2:mem:testPU26;DB_CLOSE_DELAY=-1}. The resolved URL
+ * is observable on the bootstrapped
+ * {@link EntityManagerFactory}'s property map, so a test can pin
+ * the format end-to-end.
  */
+@EnableTestBeans
+@PersistenceConfig
 public class Scenario26Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManagerFactory entityManagerFactory;
+
+    /** No-arg constructor for CDI. */
     public Scenario26Test() {
+    }
+
+    /** Default (no fileMode) bootstrap produces the in-memory H2 URL. */
+    @Test
+    public void noFileModeYieldsInMemoryH2Url() {
+        Object url = entityManagerFactory.getProperties().get("jakarta.persistence.jdbc.url");
+        assertThat(url)
+                .as("default bootstrap must produce an in-memory H2 URL keyed by PU name")
+                .isEqualTo("jdbc:h2:mem:testPU26;DB_CLOSE_DELAY=-1");
+
+        Object driver = entityManagerFactory.getProperties().get("jakarta.persistence.jdbc.driver");
+        assertThat(driver)
+                .as("driver class must be set explicitly so Hibernate's connection pool can resolve it")
+                .isEqualTo("org.h2.Driver");
     }
 }

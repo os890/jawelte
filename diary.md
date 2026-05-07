@@ -719,3 +719,11 @@ Result: Tests run: 1, Failures: 0, Errors: 0 — task #112 done.
 Added `tests/jpa-module/scenario-58-vendor-bean-veto`. Two stand-in `@ApplicationScoped` beans live in vetoed packages — `com.arjuna.ats.jta.cdi.fake.FakeNarayanaBean` and `org.apache.geronimo.transaction.fake.FakeGeronimoBean` — plus a `RegularBean` in `org.os890.jawelte.tests.jpa.scenario58.*` as the sanity check. The test uses `CDI.current().select(...)` and asserts the two vetoed beans are `isUnsatisfied()` while `RegularBean.isResolvable()`. Confirms `JpaCdiExtension`'s `@Observes ProcessAnnotatedType` veto is targeted to the configured prefixes — a real Narayana/Geronimo jar on the test classpath would be filtered out before clashing with the synthetic `UserTransaction`/`TransactionStrategy` beans.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #110 done.
+
+## 2026-05-07 — scenario-26: fileMode URL/path resolution (in-memory)
+
+Filled in `tests/jpa-module/scenario-26-file-mode-false` (was a placeholder). The test injects the bootstrapped `EntityManagerFactory` and pins the property map: `jakarta.persistence.jdbc.url == jdbc:h2:mem:testPU26;DB_CLOSE_DELAY=-1` and `jakarta.persistence.jdbc.driver == org.h2.Driver`. Confirms the default no-fileMode path produces the in-memory H2 URL keyed by PU name.
+
+The corresponding fileMode=true path is exercised structurally by scenario-25 (skip-after-first lifecycle); the file URL itself can't be pinned end-to-end in surefire-launched testkit subcontainers (Hibernate 7's connection pool rejects the AUTO_SERVER URL). Captured the gap implicitly — anything more granular belongs in a focused unit test against `JpaCdiExtension.computeProperties`.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #93 done.
