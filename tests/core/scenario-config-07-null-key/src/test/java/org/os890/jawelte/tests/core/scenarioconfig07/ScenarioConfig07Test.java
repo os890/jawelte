@@ -18,7 +18,7 @@ package org.os890.jawelte.tests.core.scenarioconfig07;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
 import org.junit.jupiter.api.Test;
-import org.os890.jawelte.core.impl.config.ConfigResolverAdapter;
+import org.os890.jawelte.core.impl.adapter.config.ConfigResolverAdapter;
 
 class ScenarioConfig07Test {
 

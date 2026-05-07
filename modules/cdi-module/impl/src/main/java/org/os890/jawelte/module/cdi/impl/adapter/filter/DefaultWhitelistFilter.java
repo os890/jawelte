@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.cdi.impl.filter;
+package org.os890.jawelte.module.cdi.impl.adapter.filter;
 
 import java.util.Optional;
 

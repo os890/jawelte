@@ -383,3 +383,22 @@ Six items from the local review notes (`tickets/003_review-findings.txt`) addres
 - **`SyntheticBeanUtil.qualifiersWithDefaults` is type-safe**: the `getSimpleName().equals("Named")` and `"jakarta.inject.Named"` string compares are gone; both checks now use `Named.class`.
 - **Method visibility ordering**: `TestBeansCdiExtension` was restructured so all package-private observer methods (`onBeforeBeanDiscovery`, `onProcessAnnotatedType`, `onProcessInjectionPoint`, `onAfterTypeDiscovery`, `onAfterBeanDiscovery`) precede every private helper, and the package-private test-only accessor sits with the package-private group. `SyntheticBeanUtil` got its public `named(...)` method moved above the private helpers. `ConfigResolverAdapter` got `init()` reordered after the public `resolve(...)`.
 - **Records placement**: `TestBeanScanner.StaticField` and `TestBeanScanner.Result` were already nested below the private methods inside the abstract class; no move needed.
+
+## 2026-05-07 — Hexagonal package layout: port impls under impl/adapter/<tech>
+
+Restructured both `core/impl` and `cdi-module/impl` so every port-implementation class lives under an `adapter` sub-package, with a per-tech sub-sub-package below it. Utility classes (`util`, `loader`) stay where they are.
+
+- `core/impl/config/ConfigResolverAdapter` → `core/impl/adapter/config/ConfigResolverAdapter`
+- `core/impl/context/TestContextImpl` → `core/impl/adapter/context/TestContextImpl`
+- `core/impl/extension/DelegatingJUnitExtension` → `core/impl/adapter/extension/DelegatingJUnitExtension`
+- `core/impl/spi/DefaultServicePriorityResolver` → `core/impl/adapter/spi/DefaultServicePriorityResolver`
+- `cdi-module/impl/CdiTestBeanContainer` → `cdi-module/impl/adapter/container/CdiTestBeanContainer`
+- `cdi-module/impl/container/SeContainerCdiContainerPort` → `cdi-module/impl/adapter/container/SeContainerCdiContainerPort`
+- `cdi-module/impl/extension/TestBeansCdiExtension` → `cdi-module/impl/adapter/extension/TestBeansCdiExtension`
+- `cdi-module/impl/filter/DefaultExcludedPackageFilter` → `cdi-module/impl/adapter/filter/DefaultExcludedPackageFilter`
+- `cdi-module/impl/filter/DefaultWhitelistFilter` → `cdi-module/impl/adapter/filter/DefaultWhitelistFilter`
+- `cdi-module/impl/mock/MockitoMockFactory` → `cdi-module/impl/adapter/mock/MockitoMockFactory`
+
+Files moved with `git mv` to preserve history. Package declarations in each moved file updated. All FQN references in `META-INF/services/*` (eight files), `META-INF/microprofile-config.properties` (two FQN values), and the eight test files that import these classes were updated in lockstep. Now-empty `config`, `context`, `extension`, `spi`, `filter`, `container`, `mock` source directories pruned.
+
+`mvn clean verify` passes under both `-Powb` and `-Pweld`.

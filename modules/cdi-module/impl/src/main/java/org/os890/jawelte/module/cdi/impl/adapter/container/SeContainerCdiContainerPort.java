@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.cdi.impl.container;
+package org.os890.jawelte.module.cdi.impl.adapter.container;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.se.SeContainer;
@@ -21,7 +21,7 @@ import jakarta.enterprise.inject.se.SeContainerInitializer;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.CdiContainerPort;
-import org.os890.jawelte.module.cdi.impl.extension.TestBeansCdiExtension;
+import org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension;
 
 /**
  * Default {@link CdiContainerPort} implementation. Wraps the Jakarta

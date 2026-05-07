@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
-import org.os890.jawelte.core.impl.spi.DefaultServicePriorityResolver;
+import org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver;
 
 class Scenario45Test {
 

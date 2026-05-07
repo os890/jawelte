@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.core.impl.context;
+package org.os890.jawelte.core.impl.adapter.context;
 
 import java.util.HashMap;
 import java.util.Map;

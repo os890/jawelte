@@ -20,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
-import org.os890.jawelte.core.impl.config.ConfigResolverAdapter;
+import org.os890.jawelte.core.impl.adapter.config.ConfigResolverAdapter;
 
 class ScenarioConfig01Test {
 

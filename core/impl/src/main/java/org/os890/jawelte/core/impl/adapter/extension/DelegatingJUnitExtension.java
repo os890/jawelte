@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.core.impl.extension;
+package org.os890.jawelte.core.impl.adapter.extension;
 
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
@@ -30,7 +30,7 @@ import org.os890.jawelte.core.api.port.TestBeanContainerPort;
 import org.os890.jawelte.core.api.port.TestBeansExtension;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
-import org.os890.jawelte.core.impl.context.TestContextImpl;
+import org.os890.jawelte.core.impl.adapter.context.TestContextImpl;
 import org.os890.jawelte.core.impl.loader.ServiceLoaderCache;
 
 /**

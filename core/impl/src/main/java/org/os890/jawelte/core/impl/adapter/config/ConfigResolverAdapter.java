@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.core.impl.config;
+package org.os890.jawelte.core.impl.adapter.config;
 
 import java.util.Objects;
 import java.util.Optional;
