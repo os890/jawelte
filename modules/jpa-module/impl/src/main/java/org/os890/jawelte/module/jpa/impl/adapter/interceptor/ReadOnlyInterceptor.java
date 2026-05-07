@@ -15,6 +15,9 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.interceptor;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import jakarta.annotation.Priority;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
@@ -47,6 +50,12 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  * places this interceptor inner of {@link TransactionalInterceptor}
  * (priority {@code +200}) so the transaction is already started
  * when the read-only setup runs.
+ *
+ * <p>The interceptor captures each touched
+ * {@link EntityManager}'s original {@link FlushModeType} before
+ * switching to {@code COMMIT} and restores it in the
+ * {@code finally} block, so a nested {@code @ReadOnly} call does
+ * not leave its enclosing level with the wrong flush mode.
  */
 @Interceptor
 @ReadOnly
@@ -71,34 +80,56 @@ public class ReadOnlyInterceptor {
         if (!strategy.isActive()) {
             return invocationContext.proceed();
         }
+        Map<String, FlushModeType> originalFlushModes = new LinkedHashMap<>();
         for (String persistenceUnitName : JpaActivePersistenceUnits.get()) {
             EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
             if (entityManager != null) {
+                originalFlushModes.put(persistenceUnitName, entityManager.getFlushMode());
                 entityManager.setFlushMode(FlushModeType.COMMIT);
             }
         }
         try {
-            Object result = invocationContext.proceed();
-            strategy.setRollbackOnly();
-            return result;
-        } catch (RuntimeException | Error throwable) {
             try {
-                if (strategy.isActive()) {
-                    strategy.setRollbackOnly();
-                }
-            } catch (RuntimeException ignored) {
-                // The original throwable remains the primary cause.
+                Object result = invocationContext.proceed();
+                strategy.setRollbackOnly();
+                return result;
+            } catch (RuntimeException | Error throwable) {
+                markRollbackOnlyQuietly(strategy);
+                throw throwable;
+            } catch (Exception checked) {
+                markRollbackOnlyQuietly(strategy);
+                throw checked;
             }
-            throw throwable;
-        } catch (Exception checked) {
+        } finally {
+            restoreFlushModes(originalFlushModes);
+        }
+    }
+
+    private static void markRollbackOnlyQuietly(TransactionStrategy strategy) {
+        try {
+            if (strategy.isActive()) {
+                strategy.setRollbackOnly();
+            }
+        } catch (RuntimeException ignored) {
+            // The intercepted method's throwable remains the primary
+            // cause; a setRollbackOnly failure is swallowed to preserve
+            // it for the caller.
+        }
+    }
+
+    private static void restoreFlushModes(Map<String, FlushModeType> originalFlushModes) {
+        for (Map.Entry<String, FlushModeType> entry : originalFlushModes.entrySet()) {
+            EntityManager entityManager = TransactionScopedEmHolder.peek(entry.getKey());
+            if (entityManager == null || !entityManager.isOpen()) {
+                continue;
+            }
             try {
-                if (strategy.isActive()) {
-                    strategy.setRollbackOnly();
-                }
+                entityManager.setFlushMode(entry.getValue());
             } catch (RuntimeException ignored) {
-                // Same as above for the checked-exception path.
+                // EM may already be in a state where setFlushMode is
+                // disallowed (e.g. mid-completion); ignore — the EM
+                // is about to close anyway.
             }
-            throw checked;
         }
     }
 }

@@ -526,3 +526,11 @@ Diff matched the user-approved preview verbatim.
 - **Default exclude list.** `EntityScanner.defaultExcludedPackagePrefixes()` returns an unmodifiable set covering the JDK, Jakarta APIs, the bundled Hibernate / H2 / CDI runtimes, common test-time libraries (Mockito, ByteBuddy, JUnit, OpenTest4J), and jawelte's own root package. `JpaCdiExtension.readProtectedPackagePrefixes` falls back to this when the `org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages` MP Config key is unset; setting the key still replaces the list verbatim (no append semantics, mirrors POC).
 
 Full reactor `mvn -P owb verify` green; no scenario regressions.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #77: ReadOnly flush-mode restore)
+
+`ReadOnlyInterceptor` now captures every touched `EntityManager`'s original `FlushModeType` before switching to `COMMIT` and restores them in a `finally` block. Previously a nested `@ReadOnly` on a thread that had its outer EM in `AUTO` mode would leak `COMMIT` mode out to the outer level after returning; now the outer level keeps its original mode regardless of how nested invocations toggle it.
+
+Restructured `aroundInvoke` so the catch chain (RuntimeException/Error vs checked) lives in an inner try, and the flush-mode restore is the only thing in the outer `finally`. Per-PU restore failures are caught individually because by the time `finally` runs the EM may already be mid-completion (`setFlushMode` would refuse) — the EM is about to close anyway, so the failure is swallowed and the primary throwable (if any) stays intact.
+
+mvn -pl modules/jpa-module/impl -am verify green.
