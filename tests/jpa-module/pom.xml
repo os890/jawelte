@@ -83,6 +83,7 @@
         <module>scenario-47-prod-shaped-persistence-xml</module>
         <module>scenario-48-nested-three-level-commit</module>
         <module>scenario-49-nested-midflight-jpql-read</module>
+        <module>scenario-50-cleanup-jointable</module>
     </modules>
 
     <dependencies>
