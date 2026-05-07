@@ -629,3 +629,13 @@ User decisions on the three open design points:
 3. **BeforeTestMethod / AfterTestMethod events**: not shipped. The `TestModuleLifecyclePort.beforeEach` / `afterEach` callbacks already cover the use case, per ticket-005 reasoning.
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (defensive ASM catch + scenario-45 rollback)
+
+**Defensive `IllegalArgumentException` catch in `EntityScanner`.** The shipped ASM 9.7.1 only recognises class-file major versions up to Java 23 (version 67); a Java 25 (version 69) class on the test classpath causes `ClassReader`'s constructor to throw `IllegalArgumentException("Unsupported class file major version 69")`, which on the previous code surfaced as a CDI bootstrap failure. Both `scanJar` and `readClassFile` now catch `IllegalArgumentException` alongside `IOException` and log + skip — newer class files cannot carry an `@Entity` ASM can read anyway, so the skip is correct.
+
+**Scenario-45 (ContainerStarted seeding) rolled back.** Adding the first real `@Test` body in our suite to a new scenario sub-module surfaced a foundational issue: OWB reports `AmbiguousResolutionException` with 3 `EntityManager` beans (all `THIRDPARTY` from synthetic registration, bean-class location reported as the `jakarta.persistence-api` jar). Root cause unclear from the stack trace — possibilities include `JpaCdiExtension.onAfterBeanDiscovery` firing 3 times, the extension being loaded thrice via duplicate `META-INF/services` entries on the classpath, or an OWB-specific synthetic-bean accounting interaction with our scope change to `@ApplicationScoped`. The 168-module reactor verify passes today because every existing scenario placeholder has no `@Test` methods — surefire never boots the CDI container for them, so the issue stays hidden until a real test arrives.
+
+This blocks all per-scenario `@Test` work (tasks #88, #89, #90, #91, …, #100, #107, #108, …, #112). Captured as task #117 ("Investigate OWB 3 EntityManager beans AmbiguousResolution") for the next session. Scenario-45 sub-module deleted; `tests/jpa-module/pom.xml` reverted to 44 modules. The ASM defensive catch stays because it's a genuine fix.
+
+mvn -P owb verify still green on the now-back-to-44-scenarios reactor.

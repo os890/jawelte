@@ -204,7 +204,12 @@ public abstract class EntityScanner {
                 }
                 try (InputStream stream = zip.getInputStream(zipEntry)) {
                     inspectClassBytes(stream, excludes, entities);
-                } catch (IOException ignored) {
+                } catch (IOException | IllegalArgumentException ignored) {
+                    // IllegalArgumentException covers the case where ASM
+                    // refuses a class-file major version newer than it
+                    // recognises (e.g. Java 25 bytecode against ASM 9.7).
+                    // Such files cannot carry @Entity that ASM can read,
+                    // so skipping is correct.
                     LOG.log(Level.WARNING,
                             "Skipping jar entry '" + zipEntry.getName() + "' in " + jar);
                 }
@@ -215,7 +220,9 @@ public abstract class EntityScanner {
     private static void readClassFile(Path classFile, Set<String> excludes, Set<String> entities) {
         try (InputStream stream = Files.newInputStream(classFile)) {
             inspectClassBytes(stream, excludes, entities);
-        } catch (IOException ignored) {
+        } catch (IOException | IllegalArgumentException ignored) {
+            // IllegalArgumentException covers ASM's refusal of
+            // newer-than-known class-file versions; safe to skip.
             LOG.log(Level.WARNING, "Skipping class file '" + classFile + "'");
         }
     }
