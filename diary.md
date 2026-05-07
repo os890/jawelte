@@ -811,3 +811,11 @@ When both keys are unset / empty, the whitelist is `Whitelist.empty()` and only 
 Added scenario-60 unit-style coverage of the `Whitelist` matcher (4 cases: empty, literal-only, regex-only, OR-combined). Bumped coverage-report to include scenario-60.
 
 Full reactor verify: BUILD SUCCESS under both `-P owb` and `-P weld`. Task #118 done.
+
+## 2026-05-08 — task #121: replace bean-discovery-mode="all" in scenario beans.xml files
+
+Global sed across `tests/jpa-module/**/META-INF/beans.xml`: 60 files swapped from `bean-discovery-mode="all"` to `bean-discovery-mode="annotated"`. The 83 files that were already `"annotated"` (mostly under `tests/scope-module` and `tests/cdi-module`) were untouched.
+
+This works because the framework injects test instance fields via `InjectFieldsHelper.inject(beanManager, testInstance)` — the test class doesn't need to be a CDI bean for `@Inject` to fire. Every scenario service / observer / tracker already had explicit `@ApplicationScoped`, `@TransactionScoped`, or `@Dependent` annotations, so they're still discovered under `"annotated"` mode.
+
+Verified: full reactor BUILD SUCCESS under both `-P owb` (default) and `-P weld`. No remaining `bean-discovery-mode="all"` occurrences anywhere in the repo. Task #121 done.
