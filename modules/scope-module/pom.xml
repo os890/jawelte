@@ -22,19 +22,19 @@
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
-        <artifactId>jawelte-parent</artifactId>
+        <artifactId>jawelte-modules</artifactId>
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-modules</artifactId>
+    <artifactId>jawelte-scope-module</artifactId>
     <packaging>pom</packaging>
 
-    <name>jawelte (modules aggregator)</name>
-    <description>Top-level aggregator for jawelte feature modules. Each feature module is a Maven aggregator with api / impl submodules.</description>
+    <name>jawelte (scope-module aggregator)</name>
+    <description>Test-lifecycle CDI scopes for jawelte. scope-module/api ships the @TestMethodScoped / @TestClassScoped annotations; scope-module/impl ships the Context implementations, the lifecycle adapter, and the CDI Extension that wires them in.</description>
 
     <modules>
-        <module>cdi-module</module>
-        <module>scope-module</module>
+        <module>api</module>
+        <module>impl</module>
     </modules>
 </project>
