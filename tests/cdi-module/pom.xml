@@ -83,6 +83,13 @@
         <module>scenario-47-config-bean-stereotype-scope</module>
         <module>scenario-48-config-resolver-injectable</module>
         <module>scenario-49-config-resolver-alternative</module>
+        <module>scenario-50-multi-alternative-same-type</module>
+        <module>scenario-51-stereotype-with-qualifier</module>
+        <module>scenario-52-typed-narrowed-with-testbean</module>
+        <module>scenario-53-multi-qualifier-jdk-type</module>
+        <module>scenario-54-binding-qualifier-member</module>
+        <module>scenario-55-deltaspike-partial-bean-binding-skip</module>
+        <module>scenario-56-deltaspike-whitelist-allow</module>
     </modules>
 
     <dependencies>

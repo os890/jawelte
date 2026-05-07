@@ -329,3 +329,24 @@ This commit lands the production-code part of that follow-up:
 - Reworked `DelegatingJUnitExtension.readManageContainer(...)` to also return `false` when the test class carries `io.quarkus.test.junit.QuarkusTest` or `io.quarkus.test.junit.QuarkusComponentTest` (FQN string comparison). Effect: a `@QuarkusTest` test class is treated as if `manageContainer=false` even when the user did not set the attribute. The Quarkus test framework already manages the bean container in that case, so jawelte must not boot a second one.
 
 All 49 existing cdi-module scenarios pass under both `-Powb` and `-Pweld`. New scenarios that exercise the DeltaSpike skip path, the DeltaSpike allowlist path, the Quarkus auto-skip path, and the gap-report items 3.2–3.6 will land in follow-up commits.
+
+## 2026-05-07 — POC gap follow-up: scenarios 3.2-3.6 + Quarkus auto-skip + IpKey rework
+
+Landed seven new test scenarios from `tickets/poc-gaps-tbd.html` and one production-code fix the new tests caught:
+
+- **scenario-50** (multi-alternative-same-type): two `@Alternative` impls of one interface on the classpath; `@TestBean` selects one; verify selected wins, other inactive. Closes report item 3.2.
+- **scenario-51** (stereotype-with-qualifier): class annotated with both a CDI stereotype (providing `@ApplicationScoped`) and a custom qualifier; verify the bean satisfies a qualifier-marked IP and carries the stereotype-applied scope. Closes 3.3.
+- **scenario-52** (typed-narrowed-with-testbean): `@Typed`-narrowed alternative implementing two interfaces, plus a `@TestBean` for an unrelated type; verify both resolve correctly with no false veto. Closes 3.4.
+- **scenario-53** (multi-qualifier-jdk-type): two distinct qualifier types on the same JDK type (`List<String>`); verify two independent synthetic mocks. Closes 3.5. **Caught a real production-code bug** — see below.
+- **scenario-54** (binding-qualifier-member): qualifier with a binding (non-`@Nonbinding`) `value()` member; verify two distinct member values produce two distinct mocks. Closes 3.6.
+- **scenario-55** (deltaspike-partial-bean-binding-skip): stub `@PartialBeanBinding` meta-annotation on a custom binding annotation applied to an unsatisfied IP type; verify auto-mock is skipped (container deployment fails as a result, observed via EngineTestKit).
+- **scenario-56** (deltaspike-whitelist-allow): test-classpath bean under `org.apache.deltaspike.` survives `@EnableTestBeans(limitToTestBeans=true)` via the bundled framework allowlist.
+- **tests/core/scenario-quarkus-auto-skip**: stub `@QuarkusTest` annotation on a subject test class; recording `TestBeanContainerPort` impl confirms `beforeAll` / `afterAll` are NOT called while `postProcessTestInstance` / `beforeEach` / `afterEach` still fire. A second sub-test (`PlainSubject`) confirms the recording port is wired correctly so the auto-skip case is genuinely opting out, not silently broken.
+
+**Production-code fix caught by scenario-53:**
+
+The cdi-module Extension's `unsatisfiedCandidateIps` map was previously keyed by `Type` only — different qualifier types on the same target type collapsed into a single entry, producing one synthetic bean carrying both qualifiers. With two such IPs in a test class, both queries returned the same merged bean.
+
+Refactored the field to `Set<IpKey>` where `IpKey` is `(targetType, qualifiers)` with `equals` / `hashCode` based on CDI qualifier equivalence (annotation-type identity plus binding-member-only value comparison). Two qualifier types on the same target → two distinct IpKeys → two distinct mocks. Two `@Nonbinding`-equivalent qualifiers (per scenario 7) → one IpKey → one mock. Two binding-different `@ServiceType("a")` / `@ServiceType("b")` (per scenario 54) → two distinct IpKeys → two mocks. The previous `mergeQualifiers` / map-merge helper is gone; `Set<IpKey>` natively dedupes.
+
+All 21 core scenarios + 56 cdi-module scenarios pass `mvn clean verify` under both `-Powb` (default) and `-Pweld`. Coverage report still aggregates clean.

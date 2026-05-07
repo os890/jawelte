@@ -21,11 +21,9 @@ import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -85,7 +83,7 @@ public class TestBeansCdiExtension implements Extension {
     private boolean limitToTestBeans;
     private WhitelistFilter whitelistFilter;
     private ExcludedPackageFilter excludedPackageFilter;
-    private final Map<Type, Set<Annotation>> unsatisfiedCandidateIps = new HashMap<>();
+    private final Set<IpKey> unsatisfiedCandidateIps = new LinkedHashSet<>();
 
     /** No-arg constructor required by the CDI runtime. */
     public TestBeansCdiExtension() {
@@ -177,30 +175,7 @@ public class TestBeansCdiExtension implements Extension {
         if (targetType == null) {
             return;
         }
-        unsatisfiedCandidateIps.merge(
-                targetType,
-                new LinkedHashSet<>(qualifiers),
-                TestBeansCdiExtension::mergeQualifiers);
-    }
-
-    /**
-     * Merge {@code additional} into {@code existing} using CDI qualifier
-     * equivalence: two annotations are considered the same when their
-     * annotation type matches and their non-{@code @Nonbinding} member
-     * values are equal. Qualifiers that differ only in {@code @Nonbinding}
-     * member values are equivalent for resolution and are deduplicated
-     * here so the synthetic bean ends up with at most one annotation per
-     * qualifier type.
-     */
-    private static Set<Annotation> mergeQualifiers(Set<Annotation> existing, Set<Annotation> additional) {
-        for (Annotation candidate : additional) {
-            boolean alreadyEquivalent = existing.stream()
-                    .anyMatch(present -> qualifiersEquivalent(present, candidate));
-            if (!alreadyEquivalent) {
-                existing.add(candidate);
-            }
-        }
-        return existing;
+        unsatisfiedCandidateIps.add(new IpKey(targetType, new LinkedHashSet<>(qualifiers)));
     }
 
     private static boolean qualifiersEquivalent(Annotation a, Annotation b) {
@@ -260,14 +235,19 @@ public class TestBeansCdiExtension implements Extension {
         // therefore no ProcessInjectionPoint events fire for it).
         addTestClassInjectionPoints(beanManager);
 
-        // Synthesise mocks for unsatisfied collected IPs.
-        for (Map.Entry<Type, Set<Annotation>> entry : unsatisfiedCandidateIps.entrySet()) {
-            Type targetType = entry.getKey();
+        // Synthesise mocks for unsatisfied collected IPs. Each
+        // (targetType, qualifier-set) pair gets its own bean so two
+        // distinct qualifier types (or two distinct binding qualifier
+        // member values) on the same target type produce two
+        // independent mocks. The IpKey set already deduplicated
+        // @Nonbinding-equivalent IPs at collection time.
+        for (IpKey key : unsatisfiedCandidateIps) {
+            Type targetType = key.targetType;
             Class<?> rawType = rawClassOf(targetType);
             if (rawType == null) {
                 continue;
             }
-            Set<Annotation> qualifiers = entry.getValue();
+            Set<Annotation> qualifiers = key.qualifiers;
             if (hasSyntheticBeanBinding(rawType)) {
                 continue;
             }
@@ -346,10 +326,7 @@ public class TestBeansCdiExtension implements Extension {
                     qualifiers.add(annotation);
                 }
             }
-            unsatisfiedCandidateIps.merge(
-                    targetType,
-                    qualifiers,
-                    TestBeansCdiExtension::mergeQualifiers);
+            unsatisfiedCandidateIps.add(new IpKey(targetType, qualifiers));
         }
     }
 
@@ -429,9 +406,97 @@ public class TestBeansCdiExtension implements Extension {
      * the Extension collected during bootstrap. Production users
      * should not depend on this surface.
      *
-     * @return the collected unsatisfied-IP candidates (target type → qualifiers)
+     * @return a defensive copy of the collected unsatisfied-IP candidates
      */
-    Map<Type, Set<Annotation>> unsatisfiedCandidateIpsForTests() {
-        return new HashMap<>(unsatisfiedCandidateIps);
+    Set<IpKey> unsatisfiedCandidateIpsForTests() {
+        return new LinkedHashSet<>(unsatisfiedCandidateIps);
+    }
+
+    /**
+     * Composite key for an unsatisfied injection point: target type plus
+     * its qualifier set. Equality and hashCode use CDI qualifier
+     * equivalence so two qualifier annotations of the same type whose
+     * non-{@code @Nonbinding} member values match collapse to a single
+     * key (matching CDI resolution), while two qualifiers of different
+     * types — or two qualifiers of the same type with different binding
+     * member values — stay distinct (so they get independent synthetic
+     * mocks).
+     */
+    static class IpKey {
+
+        private final Type targetType;
+        private final Set<Annotation> qualifiers;
+
+        IpKey(Type targetType, Set<Annotation> qualifiers) {
+            this.targetType = targetType;
+            this.qualifiers = qualifiers;
+        }
+
+        Type targetType() {
+            return targetType;
+        }
+
+        Set<Annotation> qualifiers() {
+            return qualifiers;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof IpKey other)) {
+                return false;
+            }
+            if (!targetType.equals(other.targetType)) {
+                return false;
+            }
+            if (qualifiers.size() != other.qualifiers.size()) {
+                return false;
+            }
+            for (Annotation mine : qualifiers) {
+                boolean matched = false;
+                for (Annotation theirs : other.qualifiers) {
+                    if (qualifiersEquivalent(mine, theirs)) {
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = targetType.hashCode();
+            for (Annotation q : qualifiers) {
+                h += qualifierHashCode(q);
+            }
+            return h;
+        }
+
+        private static int qualifierHashCode(Annotation annotation) {
+            int h = annotation.annotationType().hashCode();
+            for (Method member : annotation.annotationType().getDeclaredMethods()) {
+                if (member.isAnnotationPresent(Nonbinding.class)) {
+                    continue;
+                }
+                try {
+                    Object value = member.invoke(annotation);
+                    if (value != null) {
+                        h = 31 * h + value.hashCode();
+                    }
+                } catch (ReflectiveOperationException ignored) {
+                    // Fall through with the running accumulator; missing
+                    // member contribution is acceptable - equals() does
+                    // the authoritative comparison and treats reflection
+                    // failures as inequality.
+                }
+            }
+            return h;
+        }
     }
 }
