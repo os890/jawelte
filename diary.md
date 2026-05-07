@@ -211,3 +211,206 @@ Scope split between TICKET-002 and the future cdi-module ticket:
 
 Verification: `./mvnw verify` passes the now-22-module reactor in ~9s; all 14 TICKET-001 scenarios still pass; all 7 new config scenarios pass; aggregated coverage report includes the new modules.
 
+
+## 2026-05-06 — TICKET-003 Phase 1: TestContext addenda (TestContext.get + ServicePriorityResolver + loadService)
+
+Implemented the three TICKET-001 addenda from TICKET-003 as a foundational, purely-additive layer. Existing TICKET-001/002 scenarios untouched (still pass 21/21).
+
+- **`TestContext` interface (`core/api/port`)** — added two abstract SPI methods (`getCurrent()`, `reset()`) and two static method bodies:
+    - `static TestContext get()` — uncached MP-Config-based bootstrap that reads the FQCN of the accessor impl from the key `org.os890.jawelte.core.api.port.TestContext`, dot-then-underscore fallback, reflective `newInstance()`, then delegates to `getCurrent()` on the resulting accessor. Throws `IllegalStateException` when no `TestContext` is active on the calling thread.
+    - `static <T> T loadService(Class<T> targetType)` — single canonical SPI lookup. Two cases:
+        1. `targetType == ServicePriorityResolver`: read MP Config key whose name is `ServicePriorityResolver`'s own FQCN, `Class.forName`, try `CDI.current().select(configuredClass).get()`, fall back to reflective `newInstance()` (uncached) when CDI is not up.
+        2. any other target: route through case 1 to obtain the resolver, then `ServiceLoader.load(targetType)` + `resolver.resolve(...)`.
+- **`ServicePriorityResolver` port (NEW, `core/api/port`)** — `<T> List<T> sort(List<T>)` + default `<T> T resolve(List<T>)` (head of sort). Documents the project-wide ordering rule.
+- **`DefaultServicePriorityResolver` (NEW, `core/impl/spi`)** — `@ApplicationScoped`. Sorts by `@Priority` ascending; missing `@Priority` is treated as `Integer.MAX_VALUE` (sort last); ties broken by full class name ascending so the order is stable, deterministic, and independent of classpath enumeration.
+- **`TestContextImpl` (`core/impl/context`)** — refactored to play two roles. The new public no-arg constructor produces an "accessor" instance for `TestContext.get()`'s reflective bootstrap (per-test methods throw `IllegalStateException` on accessor instances). The existing `(Class<?>)` constructor produces a "per-test" instance that self-registers on a class-level static `ThreadLocal<TestContextImpl>` so `TestContext.get()` returns it from any caller on the same thread. `reset()` clears the `ThreadLocal` slot; calling on accessor instance is a no-op.
+- **`DelegatingJUnitExtension.beforeAll`** — wrapped the post-construction logic (containerPort.beforeAll + module-port iteration) in a try/finally with `testContext.reset()` in finally, per the addendum's lifecycle contract: ThreadLocal is cleared even if a port throws or a `ContainerStarted` listener throws. After `beforeAll` returns, `TestContext.get()` throws — bootstrap-only.
+- **Bootstrap config files in `core/impl`**:
+    - `META-INF/microprofile-config.properties`: defaults the two FQCN-keyed bootstraps (`...port.TestContext` → `TestContextImpl`; `...port.ServicePriorityResolver` → `DefaultServicePriorityResolver`).
+    - `META-INF/beans.xml` with `bean-discovery-mode="annotated"` so CDI runtimes pick up `DefaultServicePriorityResolver` automatically when the cdi-module ticket lands.
+- **`core/api/pom.xml`** — added `microprofile-config-api` (provided, inherited from parent dependencyManagement) so `TestContext`'s static method bodies can compile against `ConfigProvider` / `Config`.
+
+`ServiceLoaderCache` was NOT refactored to use `TestContext.loadService` in this phase — the unification would have required adding MP Config impl (SmallRye) to every existing TICKET-001 scenario module's classpath, which is a much wider change than the addenda need. Defer to a later phase or follow-up ticket; the new mechanism is in place for cdi-module's CDI Extension to use.
+
+Verification: `./mvnw verify` passes the full 22-module reactor; all 21 prior scenarios still pass (14 TICKET-001 + 7 TICKET-002).
+
+
+## 2026-05-06 — TICKET-003 Phase 2: cdi-module/api ports
+
+Bootstrapped the `modules/` aggregator and the cdi-module's api jar with the two pluggable ports.
+
+- `modules/pom.xml` — top-level `jawelte-modules` aggregator (packaging=pom). Added `<module>modules</module>` to the root pom; reactor order: core → modules → tests → coverage-report.
+- `modules/cdi-module/pom.xml` — `jawelte-cdi-module` aggregator. Lists `api` as a child; `impl` will be added in Phase 3.
+- `modules/cdi-module/api/pom.xml` — `jawelte-cdi-module-api` jar. Compile-deps: only `jawelte-core-api`. Deliberately no CDI / Mockito imports (the jar must load cleanly in JVMs that have neither). Strict Javadoc activated (mirroring core/api / core/impl).
+- `org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter` — single-method port `boolean isExcluded(Class<?> rawType)`. Documented as the auto-mocking exclude policy; consulted by cdi-module's CDI Extension during `AfterBeanDiscovery`.
+- `org.os890.jawelte.module.cdi.api.port.WhitelistFilter` — single-method port `boolean isAllowed(Class<?> rawType)`. Documented as the `limitToTestBeans=true` whitelist policy; consulted by the Extension during `ProcessAnnotatedType`.
+
+Both ports specify their `ServiceLoader` + `TestContext.loadService` selection in their Javadoc so future implementers don't reinvent the discovery contract.
+
+Verification: `./mvnw verify` passes the full 23-module reactor; all 21 prior scenarios still pass.
+
+
+## 2026-05-06 — TICKET-003 Phase 3: cdi-module/impl
+
+Built cdi-module/impl with the CDI SE adapter, the CDI Extension, the default filter implementations, and the helper utilities. Code compiles cleanly under all gates (Checkstyle, RAT, Javadoc strict, Enforcer). Behaviour verification arrives in Phase 4 via the 49 scenario sub-modules.
+
+Production classes (8):
+- `CdiTestBeanContainer` — `TestBeanContainerPort` impl. No instance fields; `SeContainer` and `RequestContextController` bound on `TestContext` metadata. Boots `SeContainerInitializer` with `TestBeansCdiExtension`, fires `ContainerStarted` while the container is live, manages `RequestContextController.activate/deactivate` per test method (with `BeforeScopeStarted` veto support), closes the container in `afterAll`.
+- `TestBeansCdiExtension` — CDI Extension. `BeforeBeanDiscovery` reads the active test class via `TestContext.get()`, scans `@TestBean` declarations + meta-annotations + superclass-walk + static fields (with the documented validation errors thrown synchronously), binds the scan result on `TestContext` metadata, loads `WhitelistFilter` + `ExcludedPackageFilter` via `TestContext.loadService(...)`. `ProcessAnnotatedType` applies the whitelist veto when `limitToTestBeans=true`. `ProcessInjectionPoint` collects unsatisfied IP candidate types (with `Provider<X>` / `Instance<X>` unwrap). `AfterTypeDiscovery` registers `@TestBean(bean=X)` and `@TestBean(beanProducer=X)` alternatives. `AfterBeanDiscovery` registers static-field synthetic beans, walks the test-class `@Inject` fields explicitly (since the test class is not a CDI bean and no `ProcessInjectionPoint` event fires for it), and synthesises Mockito mocks for unsatisfied non-excluded non-target types using `BeanManager.getBeans(...)` to confirm "unsatisfied".
+- `DefaultExcludedPackageFilter` (`@Priority(Integer.MAX_VALUE)`) — reads `org.os890.jawelte.module.cdi.auto-mock.exclude-packages` directly via `ConfigProvider.getConfig()` (the bean-injected `ConfigResolver` from TICKET-002 is unavailable while the container is bootstrapping). Walks the type's supertype hierarchy. Caches the parsed prefix list in a `volatile` field for the filter instance's lifetime.
+- `DefaultWhitelistFilter` (`@Priority(Integer.MAX_VALUE)`) — allows when `FrameworkAllowlist.isAllowlisted(rawType)` OR when `rawType` is a `@TestBean` target on the active test class (read via `TestContext.get().getMetadata(TestBeanScanner.Result.class)` with the `IllegalStateException`-no-active-context fall-through documented in the impl).
+- `FrameworkAllowlist` — abstract util. Reads the `org.os890.jawelte.module.cdi.framework-allowlist.packages` MP Config key (dot-then-underscore fallback). `volatile` cached prefix list. Walks supertypes recursively.
+- `TestBeanScanner` — abstract util. Walks class + superclasses + meta-annotations (cycle-safe; skips `java.*`/`jakarta.*` annotation-type packages). Returns an immutable `Result` record with bean targets, producer targets, and static-field entries. Throws `IllegalStateException` on the documented validation cases (instance-field, null field, dual `bean`+`beanProducer`, field-with-bean-attribute).
+- `SyntheticBeanUtil` — abstract util. `registerStaticFieldBean` (scope `@Singleton`) and `registerAutoMockBean` (scope `@RequestScoped` for non-JDK types, `@Dependent` for JDK types). Adds `@Default` (when no custom qualifier) and `@Any` automatically. Ships a `named(...)` helper that returns a `NamedLiteral`.
+- `InjectFieldsHelper` — abstract util. Single static `inject(BeanManager, Object)` using CDI 4.x's `createAnnotatedType` → `getInjectionTargetFactory` → `createInjectionTarget(null)` → `inject` chain. The cdi-module performs no per-field reflective walk of its own; the underlying CDI runtime handles inheritance, qualifiers, generic types, and `Provider`/`Instance` wrappers.
+- `MockitoMockFactory` — abstract util. Returns `null` from `Mockito.mock(...)` when Mockito throws (typical for unmockable bootstrap JDK classes); the Extension then leaves the IP unsatisfied so CDI's own deployment validation surfaces the offending type.
+
+All 6 util classes follow the new util-class shape from TICKET-003's coding guidelines: `public abstract class FooUtil` with an explicit Javadoc'd `protected` constructor (the `abstract` modifier prevents direct instantiation; the explicit constructor silences `javadoc -doclint:all` on the otherwise synthesised default).
+
+META-INF (6 files):
+- `META-INF/services/org.os890.jawelte.core.api.port.TestBeanContainerPort` → `CdiTestBeanContainer`
+- `META-INF/services/jakarta.enterprise.inject.spi.Extension` → `TestBeansCdiExtension`
+- `META-INF/services/org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter` → `DefaultExcludedPackageFilter`
+- `META-INF/services/org.os890.jawelte.module.cdi.api.port.WhitelistFilter` → `DefaultWhitelistFilter`
+- `META-INF/beans.xml` (`bean-discovery-mode="annotated"`)
+- `META-INF/microprofile-config.properties` ships the framework allowlist defaults (`java.`, `javax.`, `jakarta.`, `org.jboss.weld.`, `org.apache.webbeans.`, `org.os890.jawelte.`)
+
+Maven:
+- Root pom: added `mockito.version=5.14.2`, `openwebbeans.version=4.1.0`, `weld.version=6.0.4.Final` properties; added `mockito-core` (provided), `openwebbeans-se` (test), `weld-se-shaded` (test), and the internal `jawelte-cdi-module-{api,impl}` cross-references to `<dependencyManagement>` with appropriate default scopes.
+- `modules/cdi-module/impl/pom.xml` — declares the deps (compile cdi-module-api + core-api; provided cdi-api / annotation-api / mp-config-api / mockito-core; test owb/weld via profiles). Two profiles: `owb` (active by default) injects `openwebbeans-se`, `weld` injects `weld-se-shaded`. CI / local runs both via `mvn verify -Powb` and `mvn verify -Pweld`.
+- `modules/cdi-module/pom.xml` — adds `<module>impl</module>`.
+
+Verification: `./mvnw verify` passes the now-24-module reactor; all 21 prior scenarios still pass; cdi-module/impl jar produced (with javadoc jar) under default profile (OWB on classpath but no integration tests yet exercise it).
+
+
+## 2026-05-07 — TICKET-003: CDI SE Implementation (cdi-module) — completed
+
+Shipped the first integration module on top of the TICKET-001 / TICKET-002 foundation, plus three TICKET-001 addenda the cdi-module needed.
+
+**TICKET-001 addenda (Phase 1, additive):**
+- `TestContext.get()` static accessor, ThreadLocal-backed; active only inside `DelegatingJUnitExtension.beforeAll`'s bootstrap window. Cleared in a `finally` block so cleanup runs even when a port's `beforeAll` or a `ContainerStarted` observer throws.
+- `TestContext.loadService(Class)` SPI helper that combines MicroProfile Config selection, `ServicePriorityResolver` priority sort, and a CDI-first / reflection-fallback instantiation path.
+- `ServicePriorityResolver` port + `DefaultServicePriorityResolver` (ascending `@Priority`, missing → `MAX_VALUE`, class-name tiebreak).
+
+**cdi-module/api (Phase 2):**
+- `ExcludedPackageFilter` — auto-mock exclude policy (Maven shape: pure ports module, no CDI / Mockito imports).
+- `WhitelistFilter` — `limitToTestBeans=true` allow policy.
+
+**cdi-module/impl (Phase 3 + Phase 4 iterations):**
+- `CdiTestBeanContainer` — `TestBeanContainerPort` adapter that boots an `SeContainer` per test class, registers the framework Extension, fires `ContainerStarted`, and manages the per-method `RequestContextController`. Falls back to `CDI.current().getBeanManager()` when no `SeContainer` metadata is bound (manageContainer=false).
+- `TestBeansCdiExtension` — discovers `@TestBean` declarations, registers `@Alternative` and synthetic beans, applies whitelist veto, and synthesises Mockito mocks for unsatisfied IPs. Skips silently when no `TestContext` is active.
+- `DefaultExcludedPackageFilter` / `DefaultWhitelistFilter` — `@Priority(MAX_VALUE)` defaults; both overridable via `ServiceLoader` + `@Priority`.
+- Helper classes: `TestBeanScanner`, `SyntheticBeanUtil`, `MockitoMockFactory`, `InjectFieldsHelper`, `FrameworkAllowlist`.
+
+**Tests (Phase 4):** 49 scenario sub-modules under `tests/cdi-module/`. The same scenarios run under both `-Powb` (default) and `-Pweld` profiles, selected via the `tests/cdi-module/pom.xml` profiles. All scenarios pass on both profiles.
+
+**Iteration findings during Phase 4:**
+- `ProcessInjectionPoint<?, ?>` with raw wildcards causes OpenWebBeans to deliver only events for `spi.InjectionPoint`-typed IPs. Switched to a method-generic `<T, X> void onProcessInjectionPoint(@Observes ProcessInjectionPoint<T, X>)`.
+- `BeanConfigurator.createWith` did not appear to fire under OWB 4.1; switched to `produceWith` and added `.beanClass(rawType)`.
+- Weld is strict about generic-type assignability: a synthetic bean of type `Foo` (raw) does not match an `@Inject Foo<Bar>` IP. The Extension now records the full `java.lang.reflect.Type` per IP and registers it on the synthetic bean.
+- `Mockito.mock(...)` with the inline mock-maker can't dynamically attach byte-buddy on Java 25. Each scenario module ships `mockito-extensions/org.mockito.plugins.MockMaker = mock-maker-subclass`.
+- For `@TestBean(bean=X)` where `X` has `@Alternative` but no scope (scenario 34): the Extension uses `BeforeBeanDiscovery.addAnnotatedType(...)` to force discovery and adds `@Dependent` via the configurator. For non-`@Alternative` non-annotated `X` (scenario 35) the Extension does nothing — silent no-op per spec.
+- Qualifier-set merge follows CDI's `@Nonbinding`-aware equivalence (skip `@Nonbinding` members; compare bound members via `Objects.deepEquals`).
+
+**Cleanup (Phases 5 + 6):**
+- `ServiceLoaderCache` (core/impl) and the four `RecordedEvents` test holders converted to the project's standard `abstract class + protected ctor` shape.
+- `architecture.md` Hexagonal Architecture chapter rewritten: the abstract `JpaContainerPort` / `EclipseLinkAdapter` / etc. examples are replaced by the actual shipped ports (`TestBeansExtension`, `TestBeanContainerPort`, `TestModuleLifecyclePort`, `TestContext`, `ServicePriorityResolver`, `ConfigResolver`, `ExcludedPackageFilter`, `WhitelistFilter`) and adapters. The forward-looking JPA / JTA / JAX-RS / DB-Unit / WireMock examples are preserved as a "Planned" note.
+
+`./mvnw clean verify` passes under both `-Powb` and `-Pweld` with all gates (Enforcer, Checkstyle, RAT, Javadoc, JaCoCo).
+
+## 2026-05-07 — POC gap follow-up: DeltaSpike and Quarkus parity (production-code part)
+
+Compared `/Users/work/workspace/poc` against jawelte (one-way: only items where jawelte lacks something or diverges in a user-observable way) and produced `tickets/poc-gaps-tbd.html`. User selected the DeltaSpike + Quarkus differences plus scenarios 3.2–3.6 from that report for follow-up.
+
+This commit lands the production-code part of that follow-up:
+
+- Added `org.apache.deltaspike.` to the bundled framework-allowlist defaults in cdi-module/impl's MP Config, so DeltaSpike-internal types survive `@EnableTestBeans(limitToTestBeans=true)` without the user needing to extend the allowlist manually.
+- Added `hasSyntheticBeanBinding(Class<?>)` to `TestBeansCdiExtension`. When an unsatisfied IP's raw type carries an annotation that is itself meta-annotated with `org.apache.deltaspike.partialbean.api.PartialBeanBinding` (compared by FQN string — no compile-time DeltaSpike dependency), the Extension skips auto-mock registration. The third-party extension is then expected to register the bean. Mirrors the POC's same-name helper in `DynamicTestBeanExtension`.
+- Reworked `DelegatingJUnitExtension.readManageContainer(...)` to also return `false` when the test class carries `io.quarkus.test.junit.QuarkusTest` or `io.quarkus.test.junit.QuarkusComponentTest` (FQN string comparison). Effect: a `@QuarkusTest` test class is treated as if `manageContainer=false` even when the user did not set the attribute. The Quarkus test framework already manages the bean container in that case, so jawelte must not boot a second one.
+
+All 49 existing cdi-module scenarios pass under both `-Powb` and `-Pweld`. New scenarios that exercise the DeltaSpike skip path, the DeltaSpike allowlist path, the Quarkus auto-skip path, and the gap-report items 3.2–3.6 will land in follow-up commits.
+
+## 2026-05-07 — POC gap follow-up: scenarios 3.2-3.6 + Quarkus auto-skip + IpKey rework
+
+Landed seven new test scenarios from `tickets/poc-gaps-tbd.html` and one production-code fix the new tests caught:
+
+- **scenario-50** (multi-alternative-same-type): two `@Alternative` impls of one interface on the classpath; `@TestBean` selects one; verify selected wins, other inactive. Closes report item 3.2.
+- **scenario-51** (stereotype-with-qualifier): class annotated with both a CDI stereotype (providing `@ApplicationScoped`) and a custom qualifier; verify the bean satisfies a qualifier-marked IP and carries the stereotype-applied scope. Closes 3.3.
+- **scenario-52** (typed-narrowed-with-testbean): `@Typed`-narrowed alternative implementing two interfaces, plus a `@TestBean` for an unrelated type; verify both resolve correctly with no false veto. Closes 3.4.
+- **scenario-53** (multi-qualifier-jdk-type): two distinct qualifier types on the same JDK type (`List<String>`); verify two independent synthetic mocks. Closes 3.5. **Caught a real production-code bug** — see below.
+- **scenario-54** (binding-qualifier-member): qualifier with a binding (non-`@Nonbinding`) `value()` member; verify two distinct member values produce two distinct mocks. Closes 3.6.
+- **scenario-55** (deltaspike-partial-bean-binding-skip): stub `@PartialBeanBinding` meta-annotation on a custom binding annotation applied to an unsatisfied IP type; verify auto-mock is skipped (container deployment fails as a result, observed via EngineTestKit).
+- **scenario-56** (deltaspike-whitelist-allow): test-classpath bean under `org.apache.deltaspike.` survives `@EnableTestBeans(limitToTestBeans=true)` via the bundled framework allowlist.
+- **tests/core/scenario-quarkus-auto-skip**: stub `@QuarkusTest` annotation on a subject test class; recording `TestBeanContainerPort` impl confirms `beforeAll` / `afterAll` are NOT called while `postProcessTestInstance` / `beforeEach` / `afterEach` still fire. A second sub-test (`PlainSubject`) confirms the recording port is wired correctly so the auto-skip case is genuinely opting out, not silently broken.
+
+**Production-code fix caught by scenario-53:**
+
+The cdi-module Extension's `unsatisfiedCandidateIps` map was previously keyed by `Type` only — different qualifier types on the same target type collapsed into a single entry, producing one synthetic bean carrying both qualifiers. With two such IPs in a test class, both queries returned the same merged bean.
+
+Refactored the field to `Set<IpKey>` where `IpKey` is `(targetType, qualifiers)` with `equals` / `hashCode` based on CDI qualifier equivalence (annotation-type identity plus binding-member-only value comparison). Two qualifier types on the same target → two distinct IpKeys → two distinct mocks. Two `@Nonbinding`-equivalent qualifiers (per scenario 7) → one IpKey → one mock. Two binding-different `@ServiceType("a")` / `@ServiceType("b")` (per scenario 54) → two distinct IpKeys → two mocks. The previous `mergeQualifiers` / map-merge helper is gone; `Set<IpKey>` natively dedupes.
+
+All 21 core scenarios + 56 cdi-module scenarios pass `mvn clean verify` under both `-Powb` (default) and `-Pweld`. Coverage report still aggregates clean.
+
+## 2026-05-07 — Inline-merge POC parity items into TICKET-003 ticket and issue
+
+Added to `tickets/003-cdi-se-implementation.md` so the file reads as if these were always part of the initial scope (no POC / gap-audit references):
+
+- New section "TICKET-001 Addendum: `@QuarkusTest` auto-skip in `DelegatingJUnitExtension`" alongside the other TICKET-001 addendums, documenting the FQN-string detection of `io.quarkus.test.junit.QuarkusTest` / `QuarkusComponentTest` and the `manageContainer=false`-equivalent behaviour.
+- New subsections under § cdi-module Implementation Details:
+  - "Per-(type, qualifier-set) bucketing for unsatisfied IPs" describing the `Set<IpKey>` collection and the CDI qualifier equivalence rules (`@Nonbinding`-aware) that determine whether two IPs share or split mocks.
+  - "Synthetic-bean binding skip (Apache DeltaSpike `@PartialBeanBinding`)" describing the FQN-string skip for third-party-owned types.
+- Updated § Framework allowlist: bundled defaults now include `org.apache.deltaspike.`; the previously-recommended `auto-mock.exclude-packages` workaround paragraph is replaced with a description of the bundled prefix.
+- New scenarios 50–57 added to § Test Scenarios:
+  - 50: multi-`@Alternative` for the same type, one selected
+  - 51: stereotype-applied scope plus custom qualifier on a real bean
+  - 52: `@Typed`-narrowed alternative coexisting with `@TestBean` for an unrelated type
+  - 53: distinct qualifier types on the same JDK target type
+  - 54: binding qualifier member differentiates mocks
+  - 55: Apache DeltaSpike `@PartialBeanBinding` skip
+  - 56: DeltaSpike-internal type survives whitelist mode
+  - 57: `@QuarkusTest` auto-skips container management
+- Updated § Acceptance Criteria — runtime behaviour with bullets covering the IpKey bucketing rule, the `@PartialBeanBinding` skip, and the `@QuarkusTest` auto-skip; configuration-and-defaults bullet updated to mention DeltaSpike in the bundled prefixes; cross-cutting test count raised from 45 to 57.
+
+Issue #6 body re-derived from the local file by stripping the same brain-dump sections as before (`cdi-module Structure`, `cdi-module Overview`, `cdi-module Implementation Details`, `Object Lifecycle`, `Pre / Post conditions`, `Use Cases`). The new TICKET-001 Addendum, scenarios 50–57, and AC bullets all carry over to the issue body. Pushed via `gh issue edit 6 --body-file`.
+
+## 2026-05-07 — TICKET-003 review-findings refactor
+
+Six items from the local review notes (`tickets/003_review-findings.txt`) addressed in one pass; all 21 core scenarios + 56 cdi-module scenarios pass `mvn clean verify` under both `-Powb` and `-Pweld`.
+
+- **CdiContainerPort**: new port in `cdi-module/api` exposing `start(TestContext)` / `stop(TestContext)`. Default impl `SeContainerCdiContainerPort` (in `cdi-module/impl/container`) wraps `SeContainerInitializer` and binds the `SeContainer` on `TestContext` metadata exactly as the previous in-line code did. `CdiTestBeanContainer.beforeAll` / `afterAll` delegate to the port via `TestContext.loadService(...)`. The `ContainerStarted` event fires via `CDI.current()` so the firing path stays container-flavour-agnostic. A future quarkus-module ships its own `CdiContainerPort` impl at a lower `@Priority` and replaces the SE one without further code changes.
+- **MockFactory**: new port in `cdi-module/api` with `<T> T create(Class<T>)` returning `null` for unmockable types. Default impl `MockitoMockFactory` (in `cdi-module/impl/mock`) keeps the existing Mockito wrapper. The old `util/MockitoMockFactory` is deleted; `TestBeansCdiExtension` resolves the factory via `TestContext.loadService(MockFactory.class)` during `BeforeBeanDiscovery` and uses the resolved instance both to probe a candidate type and to back the per-injection mock supplier.
+- **Filters via ConfigResolver**: `DefaultExcludedPackageFilter` and `FrameworkAllowlist` no longer call `ConfigProvider` directly nor reimplement the dot/underscore fallback. They now resolve the active `ConfigResolver` via `TestContext.loadService(...)` and call `resolver.resolve(KEY)`. As a result `core/impl` ships a `META-INF/services/org.os890.jawelte.core.api.port.ConfigResolver` registration so the SPI lookup finds `ConfigResolverAdapter`. The dot-then-underscore fallback now lives in exactly one place — `ConfigResolverAdapter` itself.
+- **`SyntheticBeanUtil.qualifiersWithDefaults` is type-safe**: the `getSimpleName().equals("Named")` and `"jakarta.inject.Named"` string compares are gone; both checks now use `Named.class`.
+- **Method visibility ordering**: `TestBeansCdiExtension` was restructured so all package-private observer methods (`onBeforeBeanDiscovery`, `onProcessAnnotatedType`, `onProcessInjectionPoint`, `onAfterTypeDiscovery`, `onAfterBeanDiscovery`) precede every private helper, and the package-private test-only accessor sits with the package-private group. `SyntheticBeanUtil` got its public `named(...)` method moved above the private helpers. `ConfigResolverAdapter` got `init()` reordered after the public `resolve(...)`.
+- **Records placement**: `TestBeanScanner.StaticField` and `TestBeanScanner.Result` were already nested below the private methods inside the abstract class; no move needed.
+
+## 2026-05-07 — Hexagonal package layout: port impls under impl/adapter/<tech>
+
+Restructured both `core/impl` and `cdi-module/impl` so every port-implementation class lives under an `adapter` sub-package, with a per-tech sub-sub-package below it. Utility classes (`util`, `loader`) stay where they are.
+
+- `core/impl/config/ConfigResolverAdapter` → `core/impl/adapter/config/ConfigResolverAdapter`
+- `core/impl/context/TestContextImpl` → `core/impl/adapter/context/TestContextImpl`
+- `core/impl/extension/DelegatingJUnitExtension` → `core/impl/adapter/extension/DelegatingJUnitExtension`
+- `core/impl/spi/DefaultServicePriorityResolver` → `core/impl/adapter/spi/DefaultServicePriorityResolver`
+- `cdi-module/impl/CdiTestBeanContainer` → `cdi-module/impl/adapter/container/CdiTestBeanContainer`
+- `cdi-module/impl/container/SeContainerCdiContainerPort` → `cdi-module/impl/adapter/container/SeContainerCdiContainerPort`
+- `cdi-module/impl/extension/TestBeansCdiExtension` → `cdi-module/impl/adapter/extension/TestBeansCdiExtension`
+- `cdi-module/impl/filter/DefaultExcludedPackageFilter` → `cdi-module/impl/adapter/filter/DefaultExcludedPackageFilter`
+- `cdi-module/impl/filter/DefaultWhitelistFilter` → `cdi-module/impl/adapter/filter/DefaultWhitelistFilter`
+- `cdi-module/impl/mock/MockitoMockFactory` → `cdi-module/impl/adapter/mock/MockitoMockFactory`
+
+Files moved with `git mv` to preserve history. Package declarations in each moved file updated. All FQN references in `META-INF/services/*` (eight files), `META-INF/microprofile-config.properties` (two FQN values), and the eight test files that import these classes were updated in lockstep. Now-empty `config`, `context`, `extension`, `spi`, `filter`, `container`, `mock` source directories pruned.
+
+`mvn clean verify` passes under both `-Powb` and `-Pweld`.
+
+## 2026-05-07 — Refresh TICKET-003 ticket and issue for the new ports
+
+Updated `tickets/003-cdi-se-implementation.md` so the port enumeration and the structural references match the shipped code:
+
+- `Maven Module Layout` mermaid label and table row: `cdi-module/api` now lists four ports (`CdiContainerPort`, `ExcludedPackageFilter`, `MockFactory`, `WhitelistFilter`); `cdi-module/impl` row lists all four default impls and drops the stale "mock factory ships as a util" comment.
+- New `cdi-module Ports` subsections for `CdiContainerPort` and `MockFactory`, each with the API signature, the default-impl name, the discovery rule, and a one-line note on how a future quarkus-module / alternative mock library plugs in.
+- `cdi-module Port Implementations` gains entries for `SeContainerCdiContainerPort` and `MockitoMockFactory`; the existing entries for `CdiTestBeanContainer` and `TestBeansCdiExtension` got their `cdi-module/impl/adapter/<tech>` package paths added.
+- Acceptance Criteria — Module structure and registration: bullets now enumerate four ports + four default impls, all carrying `@Priority(Integer.MAX_VALUE)`.
+- Brain-dump-only sections (stripped from the issue body) also corrected for completeness: the `Package layout` mermaid uses the new `…adapter.<tech>` paths and shows the ConfigResolver-mediated MP Config flow; the `Hex view` mermaid adds `CdiContainerPort` and `MockFactory` ports plus their default impls and updates the MP Config caption ("read by ConfigResolver port impl" rather than "ConfigProvider — direct").
+
+Issue #6 body re-derived by stripping the same brain-dump sections as before (`cdi-module Structure / Overview / Implementation Details`, `Object Lifecycle`, `Pre / Post conditions`, `Use Cases`) and uploaded via `gh issue edit 6 --body-file`.

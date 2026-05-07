@@ -47,6 +47,13 @@
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
         </dependency>
+        <!-- MP Config is needed at compile time for TestContext's static
+             accessors (TICKET-003 addenda); kept at provided so consumers
+             bring their own MP Config impl. -->
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

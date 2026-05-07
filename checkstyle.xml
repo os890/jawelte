@@ -165,7 +165,7 @@
             <property name="protectedAllowed" value="false"/>
             <property name="packageAllowed" value="false"/>
             <property name="allowPublicFinalFields" value="true"/>
-            <property name="ignoreAnnotationCanonicalNames" value="java.lang.Deprecated"/>
+            <property name="ignoreAnnotationCanonicalNames" value="java.lang.Deprecated,jakarta.inject.Inject,jakarta.enterprise.inject.Produces,org.os890.jawelte.core.api.TestBean"/>
         </module>
         <module name="HideUtilityClassConstructor"/>
         <module name="OneTopLevelClass"/>

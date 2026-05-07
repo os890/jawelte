@@ -40,13 +40,18 @@ import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
  * {@code @Priority} order via {@link PriorityComparator}. Implementations
  * without {@code @Priority} sort last.
  */
-public class ServiceLoaderCache {
+public abstract class ServiceLoaderCache {
 
     private static volatile TestBeanContainerPort cachedContainerPort;
     private static volatile List<TestModuleLifecyclePort> cachedLifecyclePorts;
 
-    private ServiceLoaderCache() {
-        // utility class - no instances
+    /**
+     * Suppressed-instantiation constructor. The class is
+     * {@code abstract} so direct {@code new} is impossible; the
+     * explicit declaration silences {@code javadoc -doclint:all} on
+     * the otherwise synthesized default constructor.
+     */
+    protected ServiceLoaderCache() {
     }
 
     /**

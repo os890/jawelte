@@ -55,31 +55,37 @@ New integrations follow the same pattern and require no changes to the core.
 
 jawelte is structured around the hexagonal architecture (ports and adapters). The core contains the domain logic of the test framework and defines **ports** — technology-agnostic interfaces that describe what the framework needs. Each integration or extension provides an **adapter** that fulfills one or more of those ports for a specific technology.
 
-A port may be realized as a Java SPI (`ServiceLoader`), a CDI extension point, or a plain interface — the port definition is what matters, not the mechanism behind it.
+A port may be realized as a Java SPI (`ServiceLoader`), a CDI extension point, a CDI-injectable bean, or a plain interface — the port definition is what matters, not the mechanism behind it.
 
-Each port represents the integration boundary between jawelte's core and an external technology container. A technology container is any runtime that manages its own lifecycle and resources — a JPA persistence provider, a JTA transaction manager, a JAX-RS runtime, an H2 database engine, a WireMock HTTP server. The port defines what jawelte needs from that container; the adapter wires it up.
+Each port represents the integration boundary between jawelte's core and an external technology container. A technology container is any runtime that manages its own lifecycle and resources — a CDI SE container, a JPA persistence provider, a JTA transaction manager, a JAX-RS runtime, an H2 database engine, a WireMock HTTP server. The port defines what jawelte needs from that container; the adapter wires it up.
 
-**Core ports (examples):**
+**Core ports (in `core/api`):**
 
-- `JpaContainerPort` — integrates a JPA persistence provider; manages `EntityManagerFactory`, `EntityManager` and persistence context lifecycle around tests
-- `JtaContainerPort` — integrates a JTA transaction manager; controls transaction boundaries, commit and rollback per test
-- `JaxRsContainerPort` — integrates an embedded JAX-RS runtime; starts and stops the server, registers resources and providers
-- `DatasetContainerPort` — integrates a dataset engine (e.g. DB-Unit); loads, resets and verifies database state around tests
-- `HttpStubContainerPort` — integrates an HTTP stub server (e.g. WireMock); manages server lifecycle and stub registration
-- `ConfigContainerPort` — integrates a configuration runtime (e.g. MicroProfile Config); provides config values to the core and to test code
+- `TestBeansExtension` — JUnit-side driving port; the proxy meta-extension on `@EnableTestBeans` resolves the single SPI provider and forwards every JUnit lifecycle callback to it
+- `TestBeanContainerPort` — manages the bean container lifecycle around the test class (`beforeAll` / `afterAll`) and around each test method (`beforeEach` / `afterEach` / `postProcessTestInstance`); exactly one implementation must be on the classpath
+- `TestModuleLifecyclePort` — additional driven port that feature modules implement to participate in the lifecycle (zero-or-more, sorted by `@Priority`)
+- `TestContext` — in-flight test-state holder owned by the framework; offers `getTestClass()`, typed metadata binding, the static `get()` accessor (active only inside the bootstrap window), and the `loadService(...)` helper that resolves SPI instances via MicroProfile Config + `ServicePriorityResolver`
+- `ServicePriorityResolver` — drives prioritized SPI selection (lowest `@Priority` wins; missing `@Priority` sorts last; class-name tiebreak)
+- `ConfigResolver` — single-method SPI for raw `String` config-key lookup; the dot-then-underscore fallback lives here
 
-**Adapters (examples):**
+**Module ports (in `cdi-module/api`):**
 
-| Port | Adapter | Technology container |
-|---|---|---|
-| `JpaContainerPort` | `EclipseLinkAdapter` / `HibernateAdapter` | JPA provider |
-| `JtaContainerPort` | `NarayanaAdapter` / `AtomikosAdapter` | JTA transaction manager |
-| `JpaContainerPort` + `JtaContainerPort` | `JpaJtaAdapter` | JPA + JTA combined |
-| `JaxRsContainerPort` | `JerseyAdapter` / `RestEasyAdapter` | JAX-RS runtime |
-| `DatasetContainerPort` | `DbUnitAdapter` | DB-Unit |
-| `DatasetContainerPort` + `JpaContainerPort` | `H2Adapter` | H2 in-memory database |
-| `HttpStubContainerPort` | `WireMockAdapter` | WireMock |
-| `ConfigContainerPort` | `MicroProfileConfigAdapter` | MicroProfile Config |
+- `ExcludedPackageFilter` — auto-mock exclude policy; the default impl reads its prefix list from MicroProfile Config and is overridable via `@Priority`
+- `WhitelistFilter` — `limitToTestBeans=true` allow policy; the default impl combines the framework allowlist with the per-test `@TestBean` targets and is overridable via `@Priority`
+
+**Adapters:**
+
+| Port | Adapter | Technology container | Module |
+|---|---|---|---|
+| `TestBeansExtension` | `DelegatingJUnitExtension` | JUnit 6 | `core/impl` |
+| `TestContext` | `TestContextImpl` | (in-process holder) | `core/impl` |
+| `ServicePriorityResolver` | `DefaultServicePriorityResolver` | (in-process) | `core/impl` |
+| `ConfigResolver` | `ConfigResolverAdapter` | MicroProfile Config | `core/impl` |
+| `TestBeanContainerPort` | `CdiTestBeanContainer` (+ `TestBeansCdiExtension`) | CDI SE (OpenWebBeans / Weld) | `cdi-module/impl` |
+| `ExcludedPackageFilter` | `DefaultExcludedPackageFilter` | MicroProfile Config | `cdi-module/impl` |
+| `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
+
+**Planned (forward-looking, not yet shipped):** `JpaContainerPort` / `JtaContainerPort` (persistence + transactions), `JaxRsContainerPort` (embedded REST runtime), `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 
 New integrations are simply new adapters — the core remains untouched.
 

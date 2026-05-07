@@ -35,5 +35,6 @@
 
     <modules>
         <module>core</module>
+        <module>cdi-module</module>
     </modules>
 </project>
