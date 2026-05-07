@@ -20,8 +20,7 @@ import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
 import jakarta.enterprise.inject.spi.BeforeBeanDiscovery;
 import jakarta.enterprise.inject.spi.Extension;
 
-import org.os890.jawelte.core.api.port.AutoMockDefaultScope;
-import org.os890.jawelte.core.api.port.TestBeanDefaultScope;
+import org.os890.jawelte.core.api.port.ScopeBinding;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 import org.os890.jawelte.module.scope.api.TestMethodScoped;
@@ -36,9 +35,9 @@ import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopedConte
  * <ul>
  *   <li><strong>{@code BeforeBeanDiscovery}</strong>: bind the
  *       cross-module override records
- *       {@link TestBeanDefaultScope} (value
+ *       {@link ScopeBinding.TestBeanDefaultScope} (value
  *       {@link TestClassScoped TestClassScoped.class}) and
- *       {@link AutoMockDefaultScope} (value
+ *       {@link ScopeBinding.AutoMockDefaultScope} (value
  *       {@link TestMethodScoped TestMethodScoped.class}) on the
  *       active {@link TestContext}. cdi-module's CDI Extension
  *       reads these in {@code AfterBeanDiscovery} when synthesising
@@ -79,11 +78,11 @@ public class TestScopeCdiExtension implements Extension {
             return;
         }
         active.bindMetadata(
-                TestBeanDefaultScope.class,
-                new TestBeanDefaultScope(TestClassScoped.class));
+                ScopeBinding.TestBeanDefaultScope.class,
+                new ScopeBinding.TestBeanDefaultScope(TestClassScoped.class));
         active.bindMetadata(
-                AutoMockDefaultScope.class,
-                new AutoMockDefaultScope(TestMethodScoped.class));
+                ScopeBinding.AutoMockDefaultScope.class,
+                new ScopeBinding.AutoMockDefaultScope(TestMethodScoped.class));
     }
 
     void onAfterBeanDiscovery(@Observes AfterBeanDiscovery event) {

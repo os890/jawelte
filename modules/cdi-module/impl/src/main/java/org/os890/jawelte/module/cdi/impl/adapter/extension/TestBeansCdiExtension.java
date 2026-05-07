@@ -53,8 +53,7 @@ import jakarta.inject.Scope;
 import jakarta.inject.Singleton;
 
 import org.os890.jawelte.core.api.EnableTestBeans;
-import org.os890.jawelte.core.api.port.AutoMockDefaultScope;
-import org.os890.jawelte.core.api.port.TestBeanDefaultScope;
+import org.os890.jawelte.core.api.port.ScopeBinding;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 import org.os890.jawelte.module.cdi.api.port.MockFactory;
@@ -180,8 +179,8 @@ public class TestBeansCdiExtension implements Extension {
         //      BeforeBeanDiscovery, when scope-module is present).
         //   3. cdi-module's @Singleton fallback.
         Class<? extends Annotation> testBeanDefaultScope = activeContext
-                .getMetadata(TestBeanDefaultScope.class)
-                .map(TestBeanDefaultScope::scope)
+                .getMetadata(ScopeBinding.TestBeanDefaultScope.class)
+                .map(ScopeBinding.TestBeanDefaultScope::scope)
                 .orElse(Singleton.class);
         for (TestBeanScanner.StaticField staticField : scanResult.staticFields()) {
             Field field = staticField.field();
@@ -216,8 +215,8 @@ public class TestBeansCdiExtension implements Extension {
         //      scope-module's TestScopeCdiExtension when present).
         //   2. cdi-module's @RequestScoped fallback.
         Class<? extends Annotation> autoMockNonJdkScope = activeContext
-                .getMetadata(AutoMockDefaultScope.class)
-                .map(AutoMockDefaultScope::scope)
+                .getMetadata(ScopeBinding.AutoMockDefaultScope.class)
+                .map(ScopeBinding.AutoMockDefaultScope::scope)
                 .orElse(RequestScoped.class);
         for (IpKey key : unsatisfiedCandidateIps) {
             Type targetType = key.targetType;

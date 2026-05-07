@@ -54,7 +54,7 @@ public abstract class SyntheticBeanUtil {
      * {@link org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension}):
      * a CDI scope annotation declared by the test author on the
      * static field; the
-     * {@link org.os890.jawelte.core.api.port.TestBeanDefaultScope}
+     * {@link org.os890.jawelte.core.api.port.ScopeBinding.TestBeanDefaultScope}
      * record bound on {@code TestContext} (when scope-module is on
      * the classpath); cdi-module's {@code @Singleton} fallback.
      *
@@ -92,7 +92,7 @@ public abstract class SyntheticBeanUtil {
      *
      * <p>{@code nonJdkScope} is resolved by
      * {@link org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension}:
-     * the {@link org.os890.jawelte.core.api.port.AutoMockDefaultScope}
+     * the {@link org.os890.jawelte.core.api.port.ScopeBinding.AutoMockDefaultScope}
      * record bound on {@code TestContext} (when scope-module is on
      * the classpath); cdi-module's {@code @RequestScoped} fallback.
      *
