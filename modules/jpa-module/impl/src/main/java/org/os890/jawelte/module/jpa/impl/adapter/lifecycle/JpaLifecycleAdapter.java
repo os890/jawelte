@@ -15,9 +15,12 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.lifecycle;
 
+import java.lang.reflect.Method;
+
 import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.se.SeContainer;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.transaction.Transactional;
 
 import org.opentest4j.TestAbortedException;
 import org.os890.jawelte.core.api.event.AfterTestTransaction;
@@ -26,9 +29,12 @@ import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
+import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.FileModeState;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
+import org.os890.jawelte.module.jpa.impl.util.TestMethodTransactionMarker;
+import org.os890.jawelte.module.jpa.impl.util.TestMethodTransactionWrapping;
 import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 
 /**
@@ -105,11 +111,28 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
                             + "file state from the first method is preserved for inspection. "
                             + "DB file directory: " + fileModeState.getFilePath());
         }
+        beginTransactionForTransactionalTestMethod(testContext);
+    }
+
+    private static void beginTransactionForTransactionalTestMethod(TestContext testContext) {
+        Method testMethod = TestMethodTransactionWrapping.currentTestMethod(testContext).orElse(null);
+        if (testMethod == null || !testMethod.isAnnotationPresent(Transactional.class)) {
+            return;
+        }
+        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
+        TransactionScopedContext transactionScopedContext = TransactionScopedContext.current();
+        strategy.begin();
+        if (transactionScopedContext != null) {
+            transactionScopedContext.activate();
+        }
+        testContext.bindMetadata(TestMethodTransactionMarker.class, TestMethodTransactionMarker.INSTANCE);
     }
 
     @Override
     public void afterEach(TestContext testContext) {
         RuntimeException primary = null;
+
+        primary = completeTransactionForTransactionalTestMethod(testContext, primary);
 
         try {
             TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
@@ -117,7 +140,11 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
                 strategy.rollback();
             }
         } catch (RuntimeException orphanFailure) {
-            primary = orphanFailure;
+            if (primary == null) {
+                primary = orphanFailure;
+            } else {
+                primary.addSuppressed(orphanFailure);
+            }
         }
 
         try {
@@ -161,6 +188,47 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         }
         TransactionScopedEmHolder.clearForCurrentThread();
         JpaActivePersistenceUnits.reset();
+    }
+
+    private static RuntimeException completeTransactionForTransactionalTestMethod(
+            TestContext testContext, RuntimeException primaryIn) {
+        if (testContext.getMetadata(TestMethodTransactionMarker.class).isEmpty()) {
+            return primaryIn;
+        }
+        RuntimeException primary = primaryIn;
+        try {
+            TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
+            if (strategy.isActive()) {
+                Throwable executionException =
+                        TestMethodTransactionWrapping.currentExecutionException(testContext).orElse(null);
+                if (executionException != null) {
+                    strategy.rollback();
+                } else {
+                    strategy.commit();
+                }
+            }
+        } catch (RuntimeException completionFailure) {
+            if (primary == null) {
+                primary = completionFailure;
+            } else {
+                primary.addSuppressed(completionFailure);
+            }
+        } finally {
+            try {
+                TransactionScopedContext transactionScopedContext = TransactionScopedContext.current();
+                if (transactionScopedContext != null) {
+                    transactionScopedContext.deactivate();
+                }
+            } catch (RuntimeException deactivateFailure) {
+                if (primary == null) {
+                    primary = deactivateFailure;
+                } else {
+                    primary.addSuppressed(deactivateFailure);
+                }
+            }
+            testContext.unbindMetadata(TestMethodTransactionMarker.class);
+        }
+        return primary;
     }
 
     private static String resolveFileModePath(TestContext testContext) {

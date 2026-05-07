@@ -763,3 +763,21 @@ Cleaned the only two stale "POC" mentions in `modules/jpa-module/impl`:
 The `tickets/poc-gaps-tbd.html` file is intentionally a POC-vs-jawelte gap analysis — staying as-is. Other "POC" mentions in `tickets/005-jpa-module.md` and the issue-body draft are historical context and out of scope.
 
 Task #116 done.
+
+## 2026-05-08 — task #120: @Transactional on @Test method (lifecycle-adapter path)
+
+`JpaLifecycleAdapter` now wraps a `@Transactional`-annotated `@Test` method in a real transaction without relying on the CDI interceptor (JUnit invokes test methods reflectively, bypassing the CDI proxy, so `TransactionalInterceptor` never fires for them).
+
+New util classes:
+
+- `TestMethodTransactionWrapping` — reflectively reads the current test method and execution exception from the JUnit `ExtensionContext` already bound on the `TestContext` metadata by `DelegatingJUnitExtension`. Reflection avoids a hard `junit-jupiter-api` compile-time dependency on jpa-module/impl. **Critical detail**: invoke via the public `ExtensionContext` interface's `Method` object — JUnit's concrete `MethodExtensionContext` impl is package-private and rejects reflection despite the method itself being public on the interface.
+- `TestMethodTransactionMarker` — singleton bound on `TestContext` metadata when `beforeEach` opens the tx, so `afterEach` knows it owns the matching commit/rollback.
+
+Lifecycle adapter changes:
+
+- `beforeEach`: after the file-mode skip check, look up the `@Test` method; if `@Transactional` is present, `strategy.begin()` + `TransactionScopedContext.activate()` + bind marker.
+- `afterEach`: if marker bound, read `extensionContext.getExecutionException()`; rollback on present, commit on absent. Deactivate the context in `finally`. Then run the existing orphan-rollback / event-fire / cleanup path (which is now a no-op for the test-method-driven tx).
+
+Filled in scenario-09 (was a placeholder): two `@Transactional` `@Test` methods. The first asserts `strategy.isActive()` is true inside the body, persists a marker, queries it back. The second method (after per-method cleanup) verifies a `TxCommitObserver` recorded the first method's commit (TransactionCommitted event) AND that the table is empty (per-method cleanup wiped it). Both methods green.
+
+Full reactor verify: BUILD SUCCESS under both `-P owb` (default) and `-P weld`. Task #120 done; #90 unblocked and also done as part of scenario-09's first method.
