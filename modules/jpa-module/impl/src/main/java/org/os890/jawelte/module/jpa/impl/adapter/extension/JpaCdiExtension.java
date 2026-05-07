@@ -118,7 +118,33 @@ public class JpaCdiExtension implements Extension {
     private static final String PROTECTED_PACKAGES_KEY =
             "org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages";
 
+    /**
+     * MicroProfile Config key whose value (comma-separated) lists
+     * package prefixes that are <em>exempt</em> from the
+     * vendor-internal CDI-bean vetoing observer. Keep set when a
+     * downstream module legitimately ships beans in
+     * {@code com.arjuna.ats.jta.cdi.*} or
+     * {@code org.apache.geronimo.transaction.*} that the user wants
+     * registered.
+     */
+    private static final String VENDOR_VETO_ALLOWLIST_KEY =
+            "org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages";
+
+    /**
+     * Package prefixes whose CDI beans are vetoed at PAT to avoid
+     * duplicate-bean conflicts when JTA implementations land on the
+     * test classpath even though jawelte itself ships only
+     * RESOURCE_LOCAL. Defensive measure; an allowlist via
+     * {@link #VENDOR_VETO_ALLOWLIST_KEY} exempts specific packages
+     * when a downstream module actually wants them registered.
+     */
+    private static final Set<String> VENDOR_VETO_PACKAGE_PREFIXES = Set.of(
+            "com.arjuna.ats.jta.cdi.",
+            "org.apache.geronimo.transaction.");
+
     private boolean active;
+
+    private volatile Set<String> vendorVetoAllowlist;
 
     private Set<String> activePersistenceUnits = new LinkedHashSet<>();
 
@@ -180,6 +206,76 @@ public class JpaCdiExtension implements Extension {
                 rewriteField(field, persistenceUnit.unitName(), PersistenceUnit.class);
             }
         }
+    }
+
+    /**
+     * Vetoes types whose package matches one of the
+     * vendor-internal prefixes (Narayana / Geronimo JTA CDI beans)
+     * unless the user has allowlisted that prefix via
+     * {@link #VENDOR_VETO_ALLOWLIST_KEY}. Defensive against
+     * duplicate-bean conflicts when a JTA implementation lands on
+     * the test classpath even though jawelte itself ships only
+     * RESOURCE_LOCAL.
+     *
+     * @param event the {@code ProcessAnnotatedType} event
+     * @param <T>   the annotated type's class type parameter
+     */
+    <T> void onProcessAnnotatedTypeForVendorVeto(@Observes ProcessAnnotatedType<T> event) {
+        if (!active) {
+            return;
+        }
+        String className = event.getAnnotatedType().getJavaClass().getName();
+        if (!matchesVendorVetoTarget(className)) {
+            return;
+        }
+        if (matchesVendorVetoAllowlist(className)) {
+            return;
+        }
+        event.veto();
+    }
+
+    private static boolean matchesVendorVetoTarget(String className) {
+        for (String prefix : VENDOR_VETO_PACKAGE_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesVendorVetoAllowlist(String className) {
+        Set<String> allowlist = vendorVetoAllowlist;
+        if (allowlist == null) {
+            synchronized (this) {
+                if (vendorVetoAllowlist == null) {
+                    vendorVetoAllowlist = readVendorVetoAllowlist();
+                }
+                allowlist = vendorVetoAllowlist;
+            }
+        }
+        for (String prefix : allowlist) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> readVendorVetoAllowlist() {
+        Config config = ConfigProvider.getConfig();
+        return config.getOptionalValue(VENDOR_VETO_ALLOWLIST_KEY, String.class)
+                .or(() -> config.getOptionalValue(VENDOR_VETO_ALLOWLIST_KEY.replace('.', '_'), String.class))
+                .map(value -> {
+                    Set<String> prefixes = new LinkedHashSet<>();
+                    for (String entry : value.split(",")) {
+                        String trimmed = entry.trim();
+                        if (!trimmed.isEmpty()) {
+                            prefixes.add(trimmed);
+                        }
+                    }
+                    return prefixes;
+                })
+                .orElseGet(Collections::emptySet);
     }
 
     <X> void onProcessFactoryProducerMethod(

@@ -546,3 +546,11 @@ mvn -pl modules/jpa-module/impl -am verify green.
 Lets a project ship a production-shaped persistence.xml in a jar dependency (typical "JTA + PostgreSQL" shape) and override it for tests with a test-scope file. Without the preference the parser merged both, which would have duplicated persistence-unit names or booted the prod PU against test H2.
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #79: vendor-internal CDI bean veto)
+
+`JpaCdiExtension` now ships an additional `ProcessAnnotatedType` observer (`onProcessAnnotatedTypeForVendorVeto`) that vetoes types in `com.arjuna.ats.jta.cdi.*` (Narayana) and `org.apache.geronimo.transaction.*` (Geronimo) when our extension is active for the current test class. Defensive measure against duplicate-bean conflicts: even though jawelte itself ships only RESOURCE_LOCAL, downstream test classpaths sometimes pull in JTA jars whose CDI beans collide with ours.
+
+Allowlist via the new MP Config key `org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages` (dot-then-underscore fallback applies). Comma-separated prefix list; matched prefixes are exempt from the veto. The list is read once on first match and cached on the extension instance (per-test-class lifetime — extension is re-instantiated per `SeContainer`).
+
+Full reactor mvn -P owb verify green.
