@@ -79,6 +79,7 @@
         <module>scenario-43-user-produces-entity-manager-factory</module>
         <module>scenario-44-transaction-strategy-swap</module>
         <module>scenario-45-container-started-seeding</module>
+        <module>scenario-46-m1-relationship</module>
     </modules>
 
     <dependencies>

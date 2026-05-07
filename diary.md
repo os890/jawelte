@@ -655,3 +655,9 @@ Scenario 45 (ContainerStarted-driven data seeding) now passes both test methods.
 Captured during diagnosis as follow-up tasks: #117 (multi-EM-bean root cause confirmed + fixed), #119 (cross-check tx/em handling against POC), #120 (`@Transactional` on test methods support — JUnit invokes test methods directly bypassing CDI proxies).
 
 Full reactor mvn -P owb verify green on the 169-module reactor (added scenario-45).
+
+## 2026-05-07 — TICKET-005 follow-up (Task #89: M:1 relationship scenario)
+
+Scenario 46 (m1-relationship) added: `Customer` (parent) + `Order` (child, `@ManyToOne`); a `@Transactional` service persists both, walks the relationship from `Order.customer.name`, asserts row counts. Second method asserts per-method cleanup wiped both tables. Validates auto-discovery picks up multiple entities and Hibernate's `@ManyToOne` resolution works in our bootstrap path.
+
+`./mvnw -pl tests/jpa-module/scenario-46-m1-relationship -am test` green.
