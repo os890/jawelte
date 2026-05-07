@@ -699,3 +699,9 @@ Result: Tests run: 1, Failures: 0, Errors: 0 — task #96 done.
 Added `tests/jpa-module/scenario-56-inactive-pu-lazy-begin`. Two PUs declared in `persistence.xml` (`testPU56a`, `testPU56b`); the service injects only PU-A's `EntityManager` (qualified `@Named("testPU56a")`) and `getFlushMode()`s it inside `@Transactional`. A CDI-event observer records every `TransactionStarted` payload's PU name. The test asserts the recorded list is exactly `["testPU56a"]` — proves `lazy-begin` actually is lazy: a configured-but-unused PU never has its tx opened.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #107 done.
+
+## 2026-05-07 — scenario-57: framework-owned tx event filter
+
+Added `tests/jpa-module/scenario-57-framework-owned-tx-events`. Two persist paths to a real `Marker` entity: a `@Transactional` method (framework-driven), and a method that pulls a fresh `EntityManager` from the injected `EntityManagerFactory` and drives its `EntityTransaction` directly (user-driven, bypasses the strategy). A `TxEventRecorder` observer counts every `TransactionStarted` / `TransactionBeforeCompletion` / `TransactionCommitted` / `TransactionRolledBack`. After the framework path the counts are 1/1/1/0; after the user path the counts stay 1/1/1/0 — the strategy never saw the user-driven tx, so no events fired. Confirms the framework-owned filter ties events to the strategy's `begin/commit/rollback` boundaries.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #111 done.
