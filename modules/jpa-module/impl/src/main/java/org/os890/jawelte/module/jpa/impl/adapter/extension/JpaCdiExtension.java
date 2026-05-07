@@ -348,7 +348,7 @@ public class JpaCdiExtension implements Extension {
                     }
                     return prefixes;
                 })
-                .orElseGet(Collections::emptySet);
+                .orElseGet(EntityScanner::defaultExcludedPackagePrefixes);
     }
 
     private static String defaultFilePath(Class<?> testClass) {

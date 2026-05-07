@@ -517,3 +517,12 @@ Updated `architecture.md` with the four pre-approved changes for jpa-module:
 4. Planned section: removed the old `JpaContainerPort / JtaContainerPort` placeholder (replaced by the actual port set we shipped); added `JtaTransactionStrategy` as the future @Priority-substitution placeholder. JaxRs / Dataset / HttpStub planned items unchanged.
 
 Diff matched the user-approved preview verbatim.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #76: EntityScanner cache + default excludes)
+
+`EntityScanner` keeps the ASM-based scan (no `Class.forName`) and now adds two POC-suggested tweaks:
+
+- **Per-classloader cache.** A `WeakHashMap<ClassLoader, Set<String>>` caches the unfiltered scan result so repeat calls in the same JVM are O(1) after the first hit. Synchronised on the map itself (WeakHashMap isn't thread-safe). Excludes are applied at lookup time so a single cache entry serves any caller.
+- **Default exclude list.** `EntityScanner.defaultExcludedPackagePrefixes()` returns an unmodifiable set covering the JDK, Jakarta APIs, the bundled Hibernate / H2 / CDI runtimes, common test-time libraries (Mockito, ByteBuddy, JUnit, OpenTest4J), and jawelte's own root package. `JpaCdiExtension.readProtectedPackagePrefixes` falls back to this when the `org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages` MP Config key is unset; setting the key still replaces the list verbatim (no append semantics, mirrors POC).
+
+Full reactor `mvn -P owb verify` green; no scenario regressions.

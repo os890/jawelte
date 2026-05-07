@@ -27,6 +27,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -61,6 +62,40 @@ public abstract class EntityScanner {
     private static final String ENTITY_DESCRIPTOR = "Ljakarta/persistence/Entity;";
 
     /**
+     * Default exclude list returned by
+     * {@link #defaultExcludedPackagePrefixes()}. Covers the JDK,
+     * Jakarta APIs, the bundled Hibernate / H2 / CDI runtimes, and
+     * the common test-time libraries (Mockito, ByteBuddy, JUnit,
+     * OpenTest4J) plus jawelte's own root package — none of those
+     * carry user {@code @Entity} types and skipping them shaves
+     * measurable time off the first-method scan in a typical test
+     * classpath.
+     */
+    private static final Set<String> DEFAULT_EXCLUDED_PACKAGE_PREFIXES = Set.of(
+            "java.",
+            "javax.",
+            "jakarta.",
+            "org.hibernate.",
+            "org.h2.",
+            "org.jboss.weld.",
+            "org.apache.openwebbeans.",
+            "org.apache.webbeans.",
+            "org.mockito.",
+            "net.bytebuddy.",
+            "org.junit.",
+            "org.opentest4j.",
+            "org.os890.jawelte.");
+
+    /**
+     * Per-{@link ClassLoader} cache of the unfiltered scan result.
+     * Weak keys ensure no class loader is pinned by the cache. Reads
+     * and writes synchronise on the map itself ({@code WeakHashMap}
+     * is not thread-safe). Excludes are applied at lookup time so a
+     * single cache entry serves any caller exclude set.
+     */
+    private static final WeakHashMap<ClassLoader, Set<String>> SCAN_CACHE = new WeakHashMap<>();
+
+    /**
      * Suppressed-instantiation constructor. The class is
      * {@code abstract} so direct {@code new} is impossible; the
      * explicit declaration silences {@code javadoc -doclint:all} on
@@ -71,6 +106,8 @@ public abstract class EntityScanner {
 
     /**
      * Scan the JVM classpath for {@code @Entity}-annotated types.
+     * Cached per {@link Thread#getContextClassLoader()} so repeat
+     * calls from the same test JVM are O(1) after the first scan.
      *
      * @param excludedPackagePrefixes package prefixes (e.g.
      *                                {@code "java."}, {@code "org.junit."})
@@ -78,18 +115,59 @@ public abstract class EntityScanner {
      *                                empty but not {@code null}
      * @return the full class names of every {@code @Entity}-annotated
      *         type found on the classpath, in classpath traversal
-     *         order; never {@code null}
+     *         order, with prefix-matched names removed; never
+     *         {@code null}
      */
     public static Set<String> scan(Set<String> excludedPackagePrefixes) {
-        Set<String> entities = new LinkedHashSet<>();
-        String classpath = System.getProperty("java.class.path", "");
-        for (String entry : classpath.split(File.pathSeparator)) {
-            if (entry.isEmpty()) {
-                continue;
-            }
-            scanClasspathEntry(entry, excludedPackagePrefixes, entities);
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        Set<String> allFqcns = scanAllForClassLoader(classLoader);
+        if (excludedPackagePrefixes.isEmpty()) {
+            return allFqcns;
         }
-        return Collections.unmodifiableSet(entities);
+        Set<String> filtered = new LinkedHashSet<>();
+        for (String fqcn : allFqcns) {
+            if (!matchesExclude(fqcn, excludedPackagePrefixes)) {
+                filtered.add(fqcn);
+            }
+        }
+        return Collections.unmodifiableSet(filtered);
+    }
+
+    /**
+     * The recommended baseline list of package prefixes to exclude
+     * from the {@code @Entity} scan: the JDK, Jakarta APIs, the
+     * bundled Hibernate / H2 / CDI runtimes, common test-time
+     * libraries, and jawelte's own root package. Used as the
+     * fallback by {@code JpaCdiExtension} when the
+     * {@code org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages}
+     * MicroProfile Config key is unset; the user can replace this
+     * list verbatim by setting that key.
+     *
+     * @return an unmodifiable, insertion-ordered set of package
+     *         prefixes; never {@code null}
+     */
+    public static Set<String> defaultExcludedPackagePrefixes() {
+        return DEFAULT_EXCLUDED_PACKAGE_PREFIXES;
+    }
+
+    private static Set<String> scanAllForClassLoader(ClassLoader classLoader) {
+        synchronized (SCAN_CACHE) {
+            Set<String> cached = SCAN_CACHE.get(classLoader);
+            if (cached != null) {
+                return cached;
+            }
+            Set<String> entities = new LinkedHashSet<>();
+            String classpath = System.getProperty("java.class.path", "");
+            for (String entry : classpath.split(File.pathSeparator)) {
+                if (entry.isEmpty()) {
+                    continue;
+                }
+                scanClasspathEntry(entry, Collections.emptySet(), entities);
+            }
+            Set<String> result = Collections.unmodifiableSet(entities);
+            SCAN_CACHE.put(classLoader, result);
+            return result;
+        }
     }
 
     private static void scanClasspathEntry(String entry, Set<String> excludes, Set<String> entities) {
