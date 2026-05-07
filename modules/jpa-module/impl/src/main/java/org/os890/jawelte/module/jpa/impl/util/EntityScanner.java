@@ -15,61 +15,61 @@
  */
 package org.os890.jawelte.module.jpa.impl.util;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.net.URL;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.stream.Stream;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+import java.util.regex.Pattern;
 
-import org.objectweb.asm.AnnotationVisitor;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassVisitor;
-import org.objectweb.asm.Opcodes;
+import jakarta.persistence.Entity;
+
+import org.apache.xbean.finder.AnnotationFinder;
+import org.apache.xbean.finder.UrlSet;
+import org.apache.xbean.finder.archive.ClasspathArchive;
 
 /**
- * Bytecode-level scanner that walks the JVM's classpath, inspects
- * every {@code .class} file via ASM, and returns the full class
- * names of types annotated with {@code @jakarta.persistence.Entity}.
- * Avoids {@link Class#forName(String)} so static initialisers and
- * native library loads do not run for non-test code.
+ * Annotation scanner backed by Apache xbean-finder. Walks the
+ * given {@link ClassLoader}'s classpath via xbean's
+ * {@link ClasspathArchive} and {@link AnnotationFinder} (which
+ * scans bytecode without invoking {@link Class#forName(String)} for
+ * non-matching types) and returns the FQCNs of every type carrying
+ * {@code @jakarta.persistence.Entity}.
  *
- * <p>Honours a configurable list of excluded package prefixes so
- * the user can keep sensitive or expensive packages out of the
- * scan.
+ * <p>Honours two filter knobs:
  *
- * <p>The classpath is read from the {@code java.class.path} system
- * property, split on {@link File#pathSeparator}. Each entry is
- * either a directory (walked recursively) or a {@code .jar} file
- * (iterated via {@link ZipFile}). Read errors are logged at
- * {@link Level#WARNING} and skipped — a failed entry never breaks
- * the scan.
+ * <ul>
+ *   <li><strong>Excluded package prefixes</strong> — any FQCN
+ *       starting with one of these is dropped from the result.
+ *       Used to keep the JDK / Jakarta APIs / vendor runtimes /
+ *       jawelte's own packages out of the EMF's class list.</li>
+ *   <li><strong>Optional whitelist</strong> ({@link Whitelist}) —
+ *       when present, every returned FQCN must additionally match
+ *       at least one literal package prefix or compiled regex
+ *       pattern in the whitelist. An empty whitelist (the default)
+ *       means "no whitelist filtering" and the exclude-only
+ *       behaviour stands.</li>
+ * </ul>
+ *
+ * <p>Cached per {@link ClassLoader}: the unfiltered scan result is
+ * computed once and reused for any caller-supplied exclude/whitelist
+ * combination.
  */
 public abstract class EntityScanner {
 
     private static final Logger LOG = System.getLogger(EntityScanner.class.getName());
-
-    private static final String ENTITY_DESCRIPTOR = "Ljakarta/persistence/Entity;";
 
     /**
      * Default exclude list returned by
      * {@link #defaultExcludedPackagePrefixes()}. Covers the JDK,
      * Jakarta APIs, the bundled Hibernate / H2 / CDI runtimes, and
      * the common test-time libraries (Mockito, ByteBuddy, JUnit,
-     * OpenTest4J) plus jawelte's own root package — none of those
-     * carry user {@code @Entity} types and skipping them shaves
-     * measurable time off the first-method scan in a typical test
-     * classpath.
+     * OpenTest4J) plus jawelte's own internal packages — none of
+     * those carry user {@code @Entity} types and skipping them
+     * shaves measurable time off the first-method scan.
      */
     private static final Set<String> DEFAULT_EXCLUDED_PACKAGE_PREFIXES = Set.of(
             "java.",
@@ -80,6 +80,7 @@ public abstract class EntityScanner {
             "org.jboss.weld.",
             "org.apache.openwebbeans.",
             "org.apache.webbeans.",
+            "org.apache.xbean.",
             "org.mockito.",
             "net.bytebuddy.",
             "org.junit.",
@@ -87,65 +88,62 @@ public abstract class EntityScanner {
             "org.os890.jawelte.core.",
             "org.os890.jawelte.module.");
 
-    /**
-     * Per-{@link ClassLoader} cache of the unfiltered scan result.
-     * Weak keys ensure no class loader is pinned by the cache. Reads
-     * and writes synchronise on the map itself ({@code WeakHashMap}
-     * is not thread-safe). Excludes are applied at lookup time so a
-     * single cache entry serves any caller exclude set.
-     */
+    /** Cached scan result per {@link ClassLoader}; weak keys avoid pinning. */
     private static final WeakHashMap<ClassLoader, Set<String>> SCAN_CACHE = new WeakHashMap<>();
 
     /**
      * Suppressed-instantiation constructor. The class is
      * {@code abstract} so direct {@code new} is impossible; the
      * explicit declaration silences {@code javadoc -doclint:all} on
-     * the otherwise synthesized default constructor.
+     * the otherwise synthesised default constructor.
      */
     protected EntityScanner() {
     }
 
     /**
-     * Scan the JVM classpath for {@code @Entity}-annotated types.
-     * Cached per {@link Thread#getContextClassLoader()} so repeat
-     * calls from the same test JVM are O(1) after the first scan.
+     * Scan the calling thread's context classpath for
+     * {@code @Entity}-annotated types, with no whitelist filtering.
      *
-     * @param excludedPackagePrefixes package prefixes (e.g.
-     *                                {@code "java."}, {@code "org.junit."})
-     *                                whose types are skipped; may be
-     *                                empty but not {@code null}
-     * @return the full class names of every {@code @Entity}-annotated
-     *         type found on the classpath, in classpath traversal
-     *         order, with prefix-matched names removed; never
-     *         {@code null}
+     * @param excludedPackagePrefixes package prefixes to drop; never {@code null}
+     * @return entity FQCNs matching the exclude filter, in classpath
+     *         traversal order
      */
     public static Set<String> scan(Set<String> excludedPackagePrefixes) {
+        return scan(excludedPackagePrefixes, Whitelist.empty());
+    }
+
+    /**
+     * Scan with both an exclude filter and an optional whitelist.
+     *
+     * @param excludedPackagePrefixes package prefixes to drop
+     * @param whitelist               optional positive filter; entities not
+     *                                matching at least one literal prefix or
+     *                                regex pattern are dropped. An
+     *                                {@linkplain Whitelist#isEmpty() empty}
+     *                                whitelist means no whitelist filtering.
+     * @return entity FQCNs surviving both filters, in classpath order
+     */
+    public static Set<String> scan(Set<String> excludedPackagePrefixes, Whitelist whitelist) {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         Set<String> allFqcns = scanAllForClassLoader(classLoader);
-        if (excludedPackagePrefixes.isEmpty()) {
-            return allFqcns;
-        }
         Set<String> filtered = new LinkedHashSet<>();
         for (String fqcn : allFqcns) {
-            if (!matchesExclude(fqcn, excludedPackagePrefixes)) {
-                filtered.add(fqcn);
+            if (matchesExclude(fqcn, excludedPackagePrefixes)) {
+                continue;
             }
+            if (!whitelist.isEmpty() && !whitelist.matches(fqcn)) {
+                continue;
+            }
+            filtered.add(fqcn);
         }
         return Collections.unmodifiableSet(filtered);
     }
 
     /**
-     * The recommended baseline list of package prefixes to exclude
-     * from the {@code @Entity} scan: the JDK, Jakarta APIs, the
-     * bundled Hibernate / H2 / CDI runtimes, common test-time
-     * libraries, and jawelte's own root package. Used as the
-     * fallback by {@code JpaCdiExtension} when the
-     * {@code org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages}
-     * MicroProfile Config key is unset; the user can replace this
-     * list verbatim by setting that key.
+     * Recommended baseline list of excluded package prefixes —
+     * see {@link EntityScanner} class-level Javadoc for rationale.
      *
-     * @return an unmodifiable, insertion-ordered set of package
-     *         prefixes; never {@code null}
+     * @return an unmodifiable, insertion-ordered set; never {@code null}
      */
     public static Set<String> defaultExcludedPackagePrefixes() {
         return DEFAULT_EXCLUDED_PACKAGE_PREFIXES;
@@ -158,88 +156,22 @@ public abstract class EntityScanner {
                 return cached;
             }
             Set<String> entities = new LinkedHashSet<>();
-            String classpath = System.getProperty("java.class.path", "");
-            for (String entry : classpath.split(File.pathSeparator)) {
-                if (entry.isEmpty()) {
-                    continue;
+            try {
+                List<URL> urls = new UrlSet(classLoader).getUrls();
+                AnnotationFinder finder = new AnnotationFinder(new ClasspathArchive(classLoader, urls));
+                for (Class<?> entityClass : finder.findAnnotatedClasses(Entity.class)) {
+                    entities.add(entityClass.getName());
                 }
-                scanClasspathEntry(entry, Collections.emptySet(), entities);
+            } catch (RuntimeException | java.io.IOException scanFailure) {
+                // xbean wraps most archive-read errors in RuntimeException;
+                // UrlSet may surface raw IOException. Either way the scan
+                // is best-effort and a single bad classpath entry must
+                // not break the bootstrap.
+                LOG.log(Level.WARNING, "xbean-finder @Entity scan failed; returning partial result", scanFailure);
             }
             Set<String> result = Collections.unmodifiableSet(entities);
             SCAN_CACHE.put(classLoader, result);
             return result;
-        }
-    }
-
-    private static void scanClasspathEntry(String entry, Set<String> excludes, Set<String> entities) {
-        Path path = Paths.get(entry);
-        if (!Files.exists(path)) {
-            return;
-        }
-        try {
-            if (Files.isDirectory(path)) {
-                scanDirectory(path, excludes, entities);
-            } else if (entry.toLowerCase().endsWith(".jar")) {
-                scanJar(path, excludes, entities);
-            }
-        } catch (IOException io) {
-            LOG.log(Level.WARNING, "Skipping classpath entry '" + entry + "' due to I/O error", io);
-        }
-    }
-
-    private static void scanDirectory(Path root, Set<String> excludes, Set<String> entities) throws IOException {
-        try (Stream<Path> walk = Files.walk(root)) {
-            walk.filter(Files::isRegularFile)
-                    .filter(p -> p.toString().endsWith(".class"))
-                    .forEach(p -> readClassFile(p, excludes, entities));
-        }
-    }
-
-    private static void scanJar(Path jar, Set<String> excludes, Set<String> entities) throws IOException {
-        try (ZipFile zip = new ZipFile(jar.toFile())) {
-            Enumeration<? extends ZipEntry> entriesEnum = zip.entries();
-            while (entriesEnum.hasMoreElements()) {
-                ZipEntry zipEntry = entriesEnum.nextElement();
-                if (zipEntry.isDirectory() || !zipEntry.getName().endsWith(".class")) {
-                    continue;
-                }
-                try (InputStream stream = zip.getInputStream(zipEntry)) {
-                    inspectClassBytes(stream, excludes, entities);
-                } catch (IOException | IllegalArgumentException ignored) {
-                    // IllegalArgumentException covers the case where ASM
-                    // refuses a class-file major version newer than it
-                    // recognises (e.g. Java 25 bytecode against ASM 9.7).
-                    // Such files cannot carry @Entity that ASM can read,
-                    // so skipping is correct.
-                    LOG.log(Level.WARNING,
-                            "Skipping jar entry '" + zipEntry.getName() + "' in " + jar);
-                }
-            }
-        }
-    }
-
-    private static void readClassFile(Path classFile, Set<String> excludes, Set<String> entities) {
-        try (InputStream stream = Files.newInputStream(classFile)) {
-            inspectClassBytes(stream, excludes, entities);
-        } catch (IOException | IllegalArgumentException ignored) {
-            // IllegalArgumentException covers ASM's refusal of
-            // newer-than-known class-file versions; safe to skip.
-            LOG.log(Level.WARNING, "Skipping class file '" + classFile + "'");
-        }
-    }
-
-    private static void inspectClassBytes(InputStream stream, Set<String> excludes, Set<String> entities)
-            throws IOException {
-        ClassReader reader = new ClassReader(stream);
-        String internalName = reader.getClassName();
-        String fullClassName = internalName.replace('/', '.');
-        if (matchesExclude(fullClassName, excludes)) {
-            return;
-        }
-        EntityCheckVisitor visitor = new EntityCheckVisitor();
-        reader.accept(visitor, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-        if (visitor.isEntity) {
-            entities.add(fullClassName);
         }
     }
 
@@ -253,24 +185,62 @@ public abstract class EntityScanner {
     }
 
     /**
-     * ASM visitor that flags whether the class carries the
-     * {@code @jakarta.persistence.Entity} annotation. Stops at the
-     * class header so field / method bodies are not visited.
+     * Optional positive filter applied on top of the exclude list.
+     * Combines literal package-prefix matches with compiled regex
+     * patterns: an FQCN passes when at least one literal or one
+     * pattern matches it. An empty whitelist means "no whitelist
+     * filtering" and falls through.
+     *
+     * @param literalPackagePrefixes literal package prefixes (e.g.
+     *                               {@code "com.example.domain."}); each
+     *                               compared via {@link String#startsWith(String)}
+     * @param patterns               compiled regex patterns; each compared
+     *                               via {@link Pattern#matcher(CharSequence)}
+     *                               with {@code matches()}
      */
-    private static class EntityCheckVisitor extends ClassVisitor {
+    public record Whitelist(List<String> literalPackagePrefixes, List<Pattern> patterns) {
 
-        private boolean isEntity;
-
-        EntityCheckVisitor() {
-            super(Opcodes.ASM9);
+        /**
+         * Build the no-op whitelist (empty literal list, empty pattern
+         * list) — {@link #isEmpty()} returns {@code true} on it and
+         * {@link EntityScanner#scan(Set, Whitelist)} skips the
+         * whitelist filter pass entirely.
+         *
+         * @return a whitelist that matches nothing
+         */
+        public static Whitelist empty() {
+            return new Whitelist(List.of(), List.of());
         }
 
-        @Override
-        public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
-            if (ENTITY_DESCRIPTOR.equals(descriptor)) {
-                this.isEntity = true;
+        /**
+         * Whether this whitelist is "no whitelist" — i.e. both the
+         * literal list AND the pattern list are empty.
+         *
+         * @return {@code true} if no whitelist filtering should apply
+         */
+        public boolean isEmpty() {
+            return literalPackagePrefixes.isEmpty() && patterns.isEmpty();
+        }
+
+        /**
+         * Whether {@code fqcn} matches at least one literal prefix
+         * or one regex pattern in this whitelist.
+         *
+         * @param fqcn the candidate fully qualified class name
+         * @return {@code true} on a match; {@code false} if no rule fires
+         */
+        public boolean matches(String fqcn) {
+            for (String literal : literalPackagePrefixes) {
+                if (fqcn.startsWith(literal)) {
+                    return true;
+                }
             }
-            return null;
+            for (Pattern pattern : patterns) {
+                if (pattern.matcher(fqcn).matches()) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

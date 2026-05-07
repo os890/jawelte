@@ -93,6 +93,7 @@
         <module>scenario-57-framework-owned-tx-events</module>
         <module>scenario-58-vendor-bean-veto</module>
         <module>scenario-59-persistence-xml-parser</module>
+        <module>scenario-60-entity-scan-whitelist</module>
     </modules>
 
     <dependencies>
@@ -176,6 +177,11 @@
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

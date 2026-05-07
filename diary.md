@@ -796,3 +796,18 @@ Other divergences logged but not fixed:
 - Several smaller design choices (CALL_STACK guard, lazy holder fallback, plain Context vs AlterableContext) are intentional jawelte design choices.
 
 Full reactor verify still BUILD SUCCESS. Task #119 done.
+
+## 2026-05-08 — task #118: EntityScanner now uses xbean-finder + optional whitelist
+
+`EntityScanner` swapped from a hand-rolled ASM crawler to Apache xbean-finder's `AnnotationFinder` + `ClasspathArchive` (xbean-finder-shaded 4.30 added at provided scope to root pom dep mgmt + jpa-module/impl + tests/jpa-module). The new implementation walks `new UrlSet(classLoader).getUrls()` and asks xbean for every type carrying `@jakarta.persistence.Entity` — drops ~120 lines of ZipFile / ClassReader plumbing.
+
+New optional positive filter: `EntityScanner.Whitelist` record with `literalPackagePrefixes : List<String>` + `patterns : List<Pattern>`. Match is logical-OR: an FQCN passes if at least one literal `startsWith` matches OR one regex `matches`. Wired into `JpaCdiExtension` via two new MP Config keys:
+
+- `org.os890.jawelte.module.jpa.entity-scan.whitelist.packages` (comma-separated literal prefixes)
+- `org.os890.jawelte.module.jpa.entity-scan.whitelist.patterns` (comma-separated Java regex strings)
+
+When both keys are unset / empty, the whitelist is `Whitelist.empty()` and only the existing exclude-package filter applies — the existing 50+ scenarios still pass without any config change.
+
+Added scenario-60 unit-style coverage of the `Whitelist` matcher (4 cases: empty, literal-only, regex-only, OR-combined). Bumped coverage-report to include scenario-60.
+
+Full reactor verify: BUILD SUCCESS under both `-P owb` and `-P weld`. Task #118 done.

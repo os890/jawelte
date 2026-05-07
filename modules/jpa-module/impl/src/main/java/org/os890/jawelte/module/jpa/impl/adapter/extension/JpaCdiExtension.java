@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.jpa.impl.adapter.extension;
 
 import java.lang.annotation.Annotation;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -133,6 +135,19 @@ public class JpaCdiExtension implements Extension {
      */
     private static final String VENDOR_VETO_ALLOWLIST_KEY =
             "org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages";
+
+    /**
+     * MicroProfile Config keys for the optional entity-scan whitelist.
+     * When at least one of the two is set (and non-empty), the
+     * {@link EntityScanner} drops every FQCN that doesn't match a
+     * literal prefix or a regex pattern from the configured list.
+     * Both keys accept comma-separated values; an unset key defaults
+     * to "no entries". With both unset, no whitelist filtering applies.
+     */
+    private static final String ENTITY_SCAN_WHITELIST_PACKAGES_KEY =
+            "org.os890.jawelte.module.jpa.entity-scan.whitelist.packages";
+    private static final String ENTITY_SCAN_WHITELIST_PATTERNS_KEY =
+            "org.os890.jawelte.module.jpa.entity-scan.whitelist.patterns";
 
     /**
      * Package prefixes whose CDI beans are vetoed at PAT to avoid
@@ -440,7 +455,8 @@ public class JpaCdiExtension implements Extension {
         if (unit.hasClassElements()) {
             return Persistence.createEntityManagerFactory(unit.name(), properties);
         }
-        Set<String> scannedEntityNames = EntityScanner.scan(readProtectedPackagePrefixes());
+        Set<String> scannedEntityNames = EntityScanner.scan(
+                readProtectedPackagePrefixes(), readEntityScanWhitelist());
         java.util.LinkedHashSet<String> mergedEntities = new java.util.LinkedHashSet<>(unit.classes());
         mergedEntities.addAll(scannedEntityNames);
         Properties propertiesAsJavaProperties = new Properties();
@@ -452,6 +468,36 @@ public class JpaCdiExtension implements Extension {
                 propertiesAsJavaProperties,
                 PersistenceUnitTransactionType.RESOURCE_LOCAL);
         return new HibernatePersistenceProvider().createContainerEntityManagerFactory(unitInfo, properties);
+    }
+
+    private static EntityScanner.Whitelist readEntityScanWhitelist() {
+        Config config = ConfigProvider.getConfig();
+        List<String> literals = readCsvList(config, ENTITY_SCAN_WHITELIST_PACKAGES_KEY);
+        List<String> patternStrings = readCsvList(config, ENTITY_SCAN_WHITELIST_PATTERNS_KEY);
+        if (literals.isEmpty() && patternStrings.isEmpty()) {
+            return EntityScanner.Whitelist.empty();
+        }
+        List<Pattern> compiled = new ArrayList<>(patternStrings.size());
+        for (String regex : patternStrings) {
+            compiled.add(Pattern.compile(regex));
+        }
+        return new EntityScanner.Whitelist(List.copyOf(literals), List.copyOf(compiled));
+    }
+
+    private static List<String> readCsvList(Config config, String key) {
+        return config.getOptionalValue(key, String.class)
+                .or(() -> config.getOptionalValue(key.replace('.', '_'), String.class))
+                .map(value -> {
+                    List<String> entries = new ArrayList<>();
+                    for (String entry : value.split(",")) {
+                        String trimmed = entry.trim();
+                        if (!trimmed.isEmpty()) {
+                            entries.add(trimmed);
+                        }
+                    }
+                    return entries;
+                })
+                .orElseGet(List::of);
     }
 
     private static Set<String> readProtectedPackagePrefixes() {

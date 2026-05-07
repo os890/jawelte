@@ -902,6 +902,11 @@
             <artifactId>jawelte-tests-jpa-module-scenario-59-persistence-xml-parser</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-60-entity-scan-whitelist</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -76,6 +76,10 @@
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
+        </dependency>
 
         <!--
             Hibernate ORM is pulled in at provided scope so jpa-module
