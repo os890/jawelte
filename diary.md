@@ -693,3 +693,9 @@ Result: Tests run: 1, Failures: 0, Errors: 0 — task #95 done.
 Added `tests/jpa-module/scenario-55-readonly-inner-writable-outer`. Outer writable `@Transactional` persists `outer-write-before`, calls a nested `@Transactional @ReadOnly` that does `persist + setter`, then persists `outer-write-after`. Asserts: (a) the seeded note's text is unchanged — inner setter rolled back; (b) total note count = 3 (seed + 2 outer writes), so the inner `persist` was dropped while the two outer persists committed. Confirms nested transactions are isolated, not shared: inner's rollback never propagates to the outer.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #96 done.
+
+## 2026-05-07 — scenario-56: inactive PU configured-but-unused (lazy-begin)
+
+Added `tests/jpa-module/scenario-56-inactive-pu-lazy-begin`. Two PUs declared in `persistence.xml` (`testPU56a`, `testPU56b`); the service injects only PU-A's `EntityManager` (qualified `@Named("testPU56a")`) and `getFlushMode()`s it inside `@Transactional`. A CDI-event observer records every `TransactionStarted` payload's PU name. The test asserts the recorded list is exactly `["testPU56a"]` — proves `lazy-begin` actually is lazy: a configured-but-unused PU never has its tx opened.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #107 done.

@@ -89,6 +89,7 @@
         <module>scenario-53-tx-scoped-nested-isolation</module>
         <module>scenario-54-readonly-multi-modification</module>
         <module>scenario-55-readonly-inner-writable-outer</module>
+        <module>scenario-56-inactive-pu-lazy-begin</module>
     </modules>
 
     <dependencies>
