@@ -47,11 +47,42 @@ import jakarta.transaction.TransactionScoped;
  */
 public class TransactionScopedContext implements AlterableContext {
 
+    /**
+     * Singleton handle on the most recently registered instance.
+     * The CDI container wraps registered Contexts in its own internal
+     * passivating-capable wrappers (e.g. OWB's
+     * {@code CustomAlterablePassivatingContextImpl}); calling
+     * {@code BeanManager.getContext(TransactionScoped.class)} returns
+     * that wrapper, not our raw {@code TransactionScopedContext}, so
+     * the interceptor cannot reach {@link #activate()} /
+     * {@link #deactivate()} via the standard CDI API. Capturing
+     * {@code this} on construction lets the interceptor look up the
+     * concrete instance directly.
+     */
+    private static volatile TransactionScopedContext currentInstance;
+
     private final ThreadLocal<Deque<Map<Contextual<?>, TransactionScopedBeanInstance<?>>>> stacks =
             ThreadLocal.withInitial(ArrayDeque::new);
 
-    /** No-arg constructor used by {@code addContext}. */
+    /**
+     * No-arg constructor used by {@code addContext}. Captures
+     * {@code this} on the static {@link #currentInstance} handle so
+     * {@link #current()} returns the active context regardless of
+     * whether the CDI container wraps it.
+     */
     public TransactionScopedContext() {
+        currentInstance = this;
+    }
+
+    /**
+     * The most recently constructed {@link TransactionScopedContext},
+     * or {@code null} if no jpa-module CDI container has booted on
+     * this JVM.
+     *
+     * @return the current context, or {@code null}
+     */
+    public static TransactionScopedContext current() {
+        return currentInstance;
     }
 
     @Override
@@ -61,7 +92,15 @@ public class TransactionScopedContext implements AlterableContext {
 
     @Override
     public boolean isActive() {
-        return !stacks.get().isEmpty();
+        // Always-active Context (matches scope-module's pattern). The
+        // CDI Container's beanManager.getContext(TransactionScoped.class)
+        // is the only API that retrieves the Context object before any
+        // tx scope has been activated; it requires isActive() == true to
+        // succeed. The actual "is there a tx scope on this thread?"
+        // guard happens at lookup time: get(Contextual, ...) calls
+        // topOrThrow() which raises ContextNotActiveException when the
+        // per-thread frame stack is empty.
+        return true;
     }
 
     @Override

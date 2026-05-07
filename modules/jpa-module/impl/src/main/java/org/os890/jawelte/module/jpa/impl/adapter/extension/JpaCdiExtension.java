@@ -16,7 +16,6 @@
 package org.os890.jawelte.module.jpa.impl.adapter.extension;
 
 import java.lang.annotation.Annotation;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -24,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -45,13 +45,16 @@ import jakarta.enterprise.inject.spi.configurator.AnnotatedTypeConfigurator;
 import jakarta.inject.Named;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.Persistence;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceUnit;
+import jakarta.persistence.spi.PersistenceUnitTransactionType;
 import jakarta.transaction.Transactional;
 import jakarta.transaction.UserTransaction;
 
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.hibernate.jpa.HibernatePersistenceProvider;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.ReadOnly;
@@ -64,6 +67,7 @@ import org.os890.jawelte.module.jpa.impl.util.EntityScanner;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
 import org.os890.jawelte.module.jpa.impl.util.PersistenceXmlParser;
 import org.os890.jawelte.module.jpa.impl.util.PersistenceXmlParser.ParsedPersistenceUnit;
+import org.os890.jawelte.module.jpa.impl.util.TestPersistenceUnitInfo;
 
 /**
  * CDI Extension shipped by jpa-module. Wires the JPA test plumbing
@@ -179,7 +183,7 @@ public class JpaCdiExtension implements Extension {
             resolvedActivePersistenceUnits.add(unit.name());
             Map<String, Object> properties = computeProperties(unit, persistenceConfig, testClass, classLoader);
             persistenceUnitProperties.put(unit.name(), properties);
-            EmfCache.getOrCreate(unit.name(), properties);
+            EmfCache.getOrCreate(unit.name(), () -> bootstrapEntityManagerFactory(unit, properties, classLoader));
         }
         activePersistenceUnits = resolvedActivePersistenceUnits;
         JpaActivePersistenceUnits.set(activePersistenceUnits);
@@ -394,13 +398,6 @@ public class JpaCdiExtension implements Extension {
         properties.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
         properties.put("jakarta.persistence.schema-generation.database.action", "drop-and-create");
 
-        if (!unit.hasClassElements()) {
-            List<Class<?>> discovered = discoverEntityClasses(classLoader);
-            if (!discovered.isEmpty()) {
-                properties.put("hibernate.loaded.classes", discovered);
-            }
-        }
-
         Config config = ConfigProvider.getConfig();
         for (String key : config.getPropertyNames()) {
             if (!key.startsWith(PERSISTENCE_PROPERTY_PREFIX)) {
@@ -421,19 +418,40 @@ public class JpaCdiExtension implements Extension {
         return properties;
     }
 
-    private static List<Class<?>> discoverEntityClasses(ClassLoader classLoader) {
-        Set<String> excludes = readProtectedPackagePrefixes();
-        Set<String> entityNames = EntityScanner.scan(excludes);
-        List<Class<?>> classes = new ArrayList<>();
-        for (String name : entityNames) {
-            try {
-                classes.add(Class.forName(name, false, classLoader));
-            } catch (ClassNotFoundException ignored) {
-                // class file present on disk but not loadable through
-                // this classloader; skipped silently.
-            }
+    /**
+     * Decide between the standard JPA bootstrap path and the
+     * Hibernate-specific {@code createContainerEntityManagerFactory}
+     * path with a custom {@link TestPersistenceUnitInfo}: when the
+     * persistence unit declares no {@code <class>} elements,
+     * Hibernate cannot scan for {@code @Entity} types outside of an
+     * application server, so we run our own ASM scanner and feed the
+     * resulting class-name list through the {@code PersistenceUnitInfo}
+     * the container API accepts.
+     *
+     * @param unit         the parsed persistence unit
+     * @param properties   merged property bag (H2 + MP Config + resolver)
+     * @param classLoader  the classloader to use for entity discovery
+     * @return the bootstrapped {@link EntityManagerFactory}
+     */
+    private static EntityManagerFactory bootstrapEntityManagerFactory(
+            ParsedPersistenceUnit unit,
+            Map<String, Object> properties,
+            ClassLoader classLoader) {
+        if (unit.hasClassElements()) {
+            return Persistence.createEntityManagerFactory(unit.name(), properties);
         }
-        return classes;
+        Set<String> scannedEntityNames = EntityScanner.scan(readProtectedPackagePrefixes());
+        java.util.LinkedHashSet<String> mergedEntities = new java.util.LinkedHashSet<>(unit.classes());
+        mergedEntities.addAll(scannedEntityNames);
+        Properties propertiesAsJavaProperties = new Properties();
+        propertiesAsJavaProperties.putAll(properties);
+        TestPersistenceUnitInfo unitInfo = new TestPersistenceUnitInfo(
+                unit.name(),
+                List.copyOf(mergedEntities),
+                List.of(),
+                propertiesAsJavaProperties,
+                PersistenceUnitTransactionType.RESOURCE_LOCAL);
+        return new HibernatePersistenceProvider().createContainerEntityManagerFactory(unitInfo, properties);
     }
 
     private static Set<String> readProtectedPackagePrefixes() {

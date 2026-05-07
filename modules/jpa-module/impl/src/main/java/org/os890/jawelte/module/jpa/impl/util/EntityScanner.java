@@ -84,7 +84,8 @@ public abstract class EntityScanner {
             "net.bytebuddy.",
             "org.junit.",
             "org.opentest4j.",
-            "org.os890.jawelte.");
+            "org.os890.jawelte.core.",
+            "org.os890.jawelte.module.");
 
     /**
      * Per-{@link ClassLoader} cache of the unfiltered scan result.

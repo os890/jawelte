@@ -16,12 +16,9 @@
 package org.os890.jawelte.module.jpa.impl.adapter.interceptor;
 
 import jakarta.annotation.Priority;
-import jakarta.enterprise.inject.spi.BeanManager;
-import jakarta.inject.Inject;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
-import jakarta.transaction.TransactionScoped;
 import jakarta.transaction.Transactional;
 
 import org.os890.jawelte.core.api.port.TestContext;
@@ -64,9 +61,6 @@ import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContex
 @Priority(Interceptor.Priority.PLATFORM_BEFORE + 200)
 public class TransactionalInterceptor {
 
-    @Inject
-    private BeanManager beanManager;
-
     /** No-arg constructor required by CDI. */
     public TransactionalInterceptor() {
     }
@@ -86,8 +80,11 @@ public class TransactionalInterceptor {
     @AroundInvoke
     public Object aroundInvoke(InvocationContext invocationContext) throws Exception {
         TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
-        TransactionScopedContext transactionScopedContext =
-                (TransactionScopedContext) beanManager.getContext(TransactionScoped.class);
+        TransactionScopedContext transactionScopedContext = TransactionScopedContext.current();
+        if (transactionScopedContext == null) {
+            throw new IllegalStateException(
+                    "TransactionScopedContext is not registered. Was JpaCdiExtension.afterBeanDiscovery skipped?");
+        }
         strategy.begin();
         transactionScopedContext.activate();
         Object result;

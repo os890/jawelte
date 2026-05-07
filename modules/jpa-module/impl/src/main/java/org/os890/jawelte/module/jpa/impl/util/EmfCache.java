@@ -21,9 +21,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 
 import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.Persistence;
 
 /**
  * JVM-wide cache of {@link EntityManagerFactory} instances keyed by
@@ -32,10 +32,17 @@ import jakarta.persistence.Persistence;
  * warm-up); reusing the same instance across every test class is
  * the main jpa-module performance win.
  *
- * <p>{@link #getOrCreate(String, Map)} atomically returns the cached
- * instance or creates a new one via
- * {@link Persistence#createEntityManagerFactory(String, Map)} on
- * cache miss. A JVM shutdown hook is registered on first use; the
+ * <p>{@link #getOrCreate(String, Supplier)} atomically returns the
+ * cached instance or invokes the supplied factory function on cache
+ * miss; the caller chooses whether the new factory is built via the
+ * spec
+ * {@code Persistence.createEntityManagerFactory(name, props)} path
+ * or via Hibernate's
+ * {@code HibernatePersistenceProvider.createContainerEntityManagerFactory(unitInfo, props)}
+ * path with a custom {@code PersistenceUnitInfo} (the latter is
+ * required for our auto-discovery flow because Hibernate does not
+ * scan for {@code @Entity} classes outside of an application
+ * server). A JVM shutdown hook is registered on first use; the
  * hook closes every cached factory in an individual try/catch and
  * logs failures at {@link Level#WARNING} without propagating.
  */
@@ -58,22 +65,21 @@ public abstract class EmfCache {
 
     /**
      * Return the cached {@link EntityManagerFactory} for the given
-     * persistence unit, creating it on first call. Subsequent calls
-     * with the same {@code persistenceUnitName} return the same
-     * instance regardless of the {@code properties} argument — the
-     * cache is keyed by name only.
+     * persistence unit, invoking the supplied factory function on
+     * cache miss. Subsequent calls return the same instance
+     * regardless of the supplied function — the cache is keyed by
+     * name only.
      *
      * @param persistenceUnitName the persistence unit name
-     * @param properties          properties forwarded to
-     *                            {@link Persistence#createEntityManagerFactory(String, Map)}
-     *                            on cache miss only
+     * @param entityManagerFactorySupplier a function that builds the
+     *                            {@code EntityManagerFactory} on
+     *                            cache miss
      * @return the cached {@code EntityManagerFactory}
      */
-    public static EntityManagerFactory getOrCreate(String persistenceUnitName, Map<String, Object> properties) {
+    public static EntityManagerFactory getOrCreate(
+            String persistenceUnitName, Supplier<EntityManagerFactory> entityManagerFactorySupplier) {
         registerShutdownHookOnce();
-        return CACHE.computeIfAbsent(
-                persistenceUnitName,
-                name -> Persistence.createEntityManagerFactory(name, properties));
+        return CACHE.computeIfAbsent(persistenceUnitName, name -> entityManagerFactorySupplier.get());
     }
 
     /**

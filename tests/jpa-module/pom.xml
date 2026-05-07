@@ -78,6 +78,7 @@
         <module>scenario-42-test-bean-static-field-entity-manager</module>
         <module>scenario-43-user-produces-entity-manager-factory</module>
         <module>scenario-44-transaction-strategy-swap</module>
+        <module>scenario-45-container-started-seeding</module>
     </modules>
 
     <dependencies>

@@ -15,17 +15,18 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.cleanup;
 
-import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
+import org.hibernate.Session;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 
 /**
@@ -64,60 +65,46 @@ public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
     @Override
     public void cleanAllTables(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
         EntityManager entityManager = entityManagerFactory.createEntityManager();
-        RuntimeException primary = null;
+        AtomicReference<RuntimeException> primary = new AtomicReference<>();
         try {
-            entityManager.getTransaction().begin();
-            Connection connection = entityManager.unwrap(Connection.class);
-            try (Statement statement = connection.createStatement()) {
-                statement.execute("SET REFERENTIAL_INTEGRITY FALSE");
-                List<String> tableNames = listPublicTables(statement);
-                for (String tableName : tableNames) {
-                    try {
-                        statement.execute("TRUNCATE TABLE \"" + tableName + "\"");
-                    } catch (SQLException perTable) {
-                        if (primary == null) {
-                            primary = new RuntimeException(
-                                    "Truncate failed for table '" + tableName + "' of persistence unit '"
-                                            + persistenceUnitName + "'", perTable);
-                        } else {
-                            primary.addSuppressed(perTable);
-                        }
-                    }
-                }
-                statement.execute("SET REFERENTIAL_INTEGRITY TRUE");
-            }
-            if (primary == null) {
-                entityManager.getTransaction().commit();
-            } else {
+            Session session = entityManager.unwrap(Session.class);
+            session.doWork(connection -> {
+                boolean originalAutoCommit = connection.getAutoCommit();
                 try {
-                    entityManager.getTransaction().rollback();
-                } catch (RuntimeException rollbackFailure) {
-                    primary.addSuppressed(rollbackFailure);
+                    connection.setAutoCommit(true);
+                    try (Statement statement = connection.createStatement()) {
+                        statement.execute("SET REFERENTIAL_INTEGRITY FALSE");
+                        List<String> tableNames = listPublicTables(statement);
+                        for (String tableName : tableNames) {
+                            try {
+                                statement.execute("TRUNCATE TABLE \"" + tableName + "\"");
+                            } catch (SQLException perTable) {
+                                RuntimeException current = primary.get();
+                                RuntimeException wrapped = new RuntimeException(
+                                        "Truncate failed for table '" + tableName + "' of persistence unit '"
+                                                + persistenceUnitName + "'", perTable);
+                                if (current == null) {
+                                    primary.set(wrapped);
+                                } else {
+                                    current.addSuppressed(wrapped);
+                                }
+                            }
+                        }
+                        statement.execute("SET REFERENTIAL_INTEGRITY TRUE");
+                    }
+                } finally {
+                    connection.setAutoCommit(originalAutoCommit);
                 }
-                throw primary;
+            });
+            if (primary.get() != null) {
+                throw primary.get();
             }
-        } catch (SQLException sqlFailure) {
-            if (primary == null) {
-                primary = new RuntimeException(
-                        "JDBC truncate cleanup failed for persistence unit '"
-                                + persistenceUnitName + "'", sqlFailure);
-            } else {
-                primary.addSuppressed(sqlFailure);
-            }
-            try {
-                if (entityManager.getTransaction().isActive()) {
-                    entityManager.getTransaction().rollback();
-                }
-            } catch (RuntimeException rollbackFailure) {
-                primary.addSuppressed(rollbackFailure);
-            }
-            throw primary;
         } finally {
             try {
                 entityManager.close();
             } catch (RuntimeException closeFailure) {
-                if (primary != null) {
-                    primary.addSuppressed(closeFailure);
+                if (primary.get() != null) {
+                    primary.get().addSuppressed(closeFailure);
                 }
             }
         }

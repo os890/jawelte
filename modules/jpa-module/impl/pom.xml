@@ -36,10 +36,12 @@
     <dependencies>
         <!--
             Compile deps. All scopes inherited from jawelte-parent's
-            <dependencyManagement>. jpa-module/impl explicitly does NOT
-            compile-depend on cdi-module or scope-module — cross-module
-            wiring goes through TestContext / TestModuleLifecyclePort
-            and the CDI runtime.
+            <dependencyManagement>. jpa-module/impl compile-depends on
+            cdi-module/api so that JpaTypesExcludedPackageFilter can
+            implement the auto-mock exclude SPI cdi-module ships;
+            cross-module wiring otherwise goes through TestContext /
+            TestModuleLifecyclePort and the CDI runtime — no
+            compile-time dep on cdi-module/impl or scope-module.
         -->
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -48,6 +50,10 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
         </dependency>
 
         <dependency>
@@ -69,6 +75,19 @@
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
+        </dependency>
+
+        <!--
+            Hibernate ORM is pulled in at provided scope so jpa-module
+            can call HibernatePersistenceProvider.createContainerEntityManagerFactory
+            with a custom PersistenceUnitInfo when persistence.xml has
+            no <class> entries (auto-discovery path). Consumers running
+            against another JPA provider would need to swap this out.
+        -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!--
