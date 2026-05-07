@@ -667,3 +667,9 @@ Scenario 46 (m1-relationship) added: `Customer` (parent) + `Order` (child, `@Man
 Added `tests/jpa-module/scenario-52-tx-scoped-lifecycle-counts`. Verifies that two consecutive `@Transactional` calls each open and close their own transaction, so the `@TransactionScoped` audit-tracker bean goes through two complete CDI lifecycles — `POST_CONSTRUCT_COUNT` reaches 2, `PRE_DESTROY_COUNT` reaches 2. Static counters live on the bean class so the test can sample them after both invocations. The `touch()` proxy method materialises the contextual instance inside each tx (without that, the proxy never resolves and the lifecycle never fires).
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #99 done.
+
+## 2026-05-07 — scenario-53: @TransactionScoped nested-tx isolation w/ counts
+
+Added `tests/jpa-module/scenario-53-tx-scoped-nested-isolation`. Outer `@Transactional` calls inner `@Transactional`; each tx scope owns a distinct `NestedTxScopedTracker` instance (verified via per-instance UUID). Asserts: (a) outer's id sampled before and after the nested call is identical — outer's contextual instance survives the nested boundary; (b) inner's id differs from outer's — the inner tx opens its own scope; (c) PostConstruct=2 + PreDestroy=2 — both instances complete their lifecycle. Proves the tx scopes are stacked, not shared.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #100 done.

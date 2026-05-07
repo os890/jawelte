@@ -86,6 +86,7 @@
         <module>scenario-50-cleanup-jointable</module>
         <module>scenario-51-cleanup-self-fk</module>
         <module>scenario-52-tx-scoped-lifecycle-counts</module>
+        <module>scenario-53-tx-scoped-nested-isolation</module>
     </modules>
 
     <dependencies>
