@@ -454,3 +454,26 @@ Authored 11 jpa-module/api types under `org.os890.jawelte.module.jpa.api.*`:
 Hit one strict-Javadoc bump: documented `jakarta.transaction.RollbackException` (checked) on `TransactionStrategy.commit()` without a `throws` clause; switched to `jakarta.persistence.RollbackException` (unchecked) which matches what `EntityTransaction.commit()` actually throws.
 
 `./mvnw -pl modules/jpa-module/api -am verify -DskipTests` green. RAT 12/12 approved; Checkstyle clean; Javadoc strict mode clean.
+
+## 2026-05-07 — TICKET-005 Phase 7b (jpa-module/impl)
+
+Authored 17 jpa-module/impl Java types + 7 META-INF resources.
+
+**Util layer** (`…impl.util`, 6 files): `EmfCache` (JVM-wide EMF cache, ConcurrentHashMap, JVM shutdown hook); `TransactionScopedEmHolder` (per-thread `Map<puName, Deque<EntityManager>>` with push/pop/peek + `clearForCurrentThread()` for the orphan safety net); `EntityScanner` (ASM `ClassReader` walking `java.class.path` jars + dirs for `@jakarta.persistence.Entity` annotation refs without `Class.forName`); `EntityManagerProxy` (JDK `InvocationHandler` delegating to top-of-stack EM, with custom `equals`/`hashCode`/`toString`); `JpaActivePersistenceUnits` (atomic-reference registry of active PU names, set by extension, read by strategy); `PersistenceXmlParser` (DOM-based parse of every `META-INF/persistence.xml` reachable through a class loader, returning `(name, classes, hasClassElements)` records).
+
+**Adapter layer** (`…impl.adapter.*`, 11 files):
+- `adapter.cleanup.JpqlDeleteDbCleanupStrategy` — provider-agnostic JPQL `DELETE FROM <entity>` per resolved entity in reverse order, per-entity exception aggregation per TICKET-001;
+- `adapter.connection.DefaultPersistenceUnitConnectionResolver` — `EntityManager.unwrap(Connection.class)` over the active per-thread EM stack;
+- `adapter.context.TransactionScopedContext` (+ `TransactionScopedBeanInstance` record) — per-thread `Deque<Map<Contextual<?>, …>>` driven by `activate()` / `deactivate()` calls from the interceptor; `Contextual.destroy` aggregates failures;
+- `adapter.entity.JpaMetamodelEntityResolver` — wraps `EntityManagerFactory.getMetamodel().getEntities()`;
+- `adapter.extension.JpaCdiExtension` — observes BBD (parses persistence.xml, runs entity discovery, pre-warms EMFs, sets active-PU registry, registers interceptor bindings), PAT-with-`@WithAnnotations` (rewrites `@PersistenceContext`/`@PersistenceUnit` to `@Inject` + optional `@Named`), four `ProcessProducer{Method,Field}` observers (per-PU back-off detection for user `@Produces EntityManagerFactory` / `EntityManager`), and ABD (registers synthetic EMF + EM per active PU, synthetic UserTransaction, and `addContext(new TransactionScopedContext())`);
+- `adapter.interceptor.{Transactional,ReadOnly}Interceptor` — `@Priority(PLATFORM_BEFORE+200/+201)` nesting; checked-vs-unchecked rollback rules; flush-mode `COMMIT` + `setRollbackOnly` on `@ReadOnly`;
+- `adapter.lifecycle.JpaLifecycleAdapter` — `@Priority(200)`; `afterEach` runs orphan-rollback safety net → fires `AfterTestTransaction` → invokes active `DbCleanupStrategy` per active PU when `fileMode=false`; `afterAll` clears EM stack + resets active-PU registry;
+- `adapter.tx.DefaultResourceLocalTransactionStrategy` — JVM-wide singleton; per-thread `Deque<TransactionFrame>` for nested `@Transactional`; iterates active PUs from `JpaActivePersistenceUnits`; fires the four CDI events;
+- `adapter.tx.UserTransactionImpl` — delegates to `TestContext.loadService(TransactionStrategy.class)`; `setTransactionTimeout` is a documented no-op (RESOURCE_LOCAL has no native timeout).
+
+**META-INF resources**: `beans.xml` (annotated mode), 6 ServiceLoader registrations (`Extension`, `TestModuleLifecyclePort`, `TransactionStrategy`, `DbCleanupStrategy`, `EntityResolver`, `PersistenceUnitConnectionResolver`) — every services file with `#`-prefix Apache 2.0 header.
+
+Hit two Checkstyle bumps along the way: `TransactionScoped` import-order (uppercase precedes lowercase within `jakarta.transaction.*`); 122-char line on a multi-annotation observer parameter (split onto two lines).
+
+`./mvnw -pl modules/jpa-module/impl -am verify -DskipTests` green: RAT 25/25 approved, Checkstyle 0 violations, Javadoc strict mode clean, javadoc-jar built.
