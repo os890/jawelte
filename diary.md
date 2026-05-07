@@ -727,3 +727,14 @@ Filled in `tests/jpa-module/scenario-26-file-mode-false` (was a placeholder). Th
 The corresponding fileMode=true path is exercised structurally by scenario-25 (skip-after-first lifecycle); the file URL itself can't be pinned end-to-end in surefire-launched testkit subcontainers (Hibernate 7's connection pool rejects the AUTO_SERVER URL). Captured the gap implicitly — anything more granular belongs in a focused unit test against `JpaCdiExtension.computeProperties`.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #93 done.
+
+## 2026-05-07 — scenario-59: PersistenceXmlParser unit tests
+
+Added `tests/jpa-module/scenario-59-persistence-xml-parser`. Direct-call unit tests against `PersistenceXmlParser.parseAll(ClassLoader)`, each spinning up a `URLClassLoader` rooted at a JUnit `@TempDir` so the assertions don't see (or pollute) the reactor's own `persistence.xml` resources. Four cases:
+
+1. Single PU with `<class>` element → `hasClassElements()=true`, classes list contains the declared FQCN.
+2. Two PUs declared in one xml → both parsed in declaration order, no class elements.
+3. PU without `<class>` elements → `hasClassElements()=false` (drives ASM auto-discovery).
+4. Test-classpath-wins: a "prod" classpath root and a "test-classes" root both expose a `persistence.xml`; only the test one survives — confirms the `/test-classes/` filter in `PersistenceXmlParser.selectPreferred`.
+
+Result: Tests run: 4, Failures: 0, Errors: 0 — task #92 done.

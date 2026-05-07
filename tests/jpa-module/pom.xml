@@ -92,6 +92,7 @@
         <module>scenario-56-inactive-pu-lazy-begin</module>
         <module>scenario-57-framework-owned-tx-events</module>
         <module>scenario-58-vendor-bean-veto</module>
+        <module>scenario-59-persistence-xml-parser</module>
     </modules>
 
     <dependencies>
