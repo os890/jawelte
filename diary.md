@@ -440,3 +440,17 @@ Scaffolded the jpa-module Maven structure on branch `10-jpa-module`:
 - Registered `<module>jpa-module</module>` in `modules/pom.xml`.
 - Created `modules/jpa-module/{pom.xml, api/pom.xml, impl/pom.xml}` following the scope-module shape: aggregator (packaging=pom) + api + impl (both jars, javadoc-jar bound to verify). api depends on `jawelte-core-api` plus jakarta cdi/persistence/tx APIs; impl additionally depends on api + microprofile-config-api + asm.
 - `./mvnw validate` green: 124-module reactor including the three new jpa-module rows; Enforcer + Checkstyle pass.
+
+## 2026-05-07 — TICKET-005 Phase 7a (jpa-module/api)
+
+Authored 11 jpa-module/api types under `org.os890.jawelte.module.jpa.api.*`:
+
+- **Annotations** (2): `@PersistenceConfig` (TYPE, @Inherited) with `fileMode`/`filePath`/`persistenceUnits` attributes; `@ReadOnly` (TYPE+METHOD, `@InterceptorBinding`).
+- **Ports** (5, package `…api.port`): `TransactionStrategy` (10-method facade with prose-level pre/post/error contracts on every method), `DbCleanupStrategy`, `EntityResolver`, `PersistenceUnitConnectionResolver`, `PersistencePropertyResolver`. All five carry the project-wide note that consumers obtain the active impl through `TestContext.loadService(...)`.
+- **Events** (4, package `…api.event`): `TransactionStarted`, `TransactionBeforeCompletion`, `TransactionCommitted`, `TransactionRolledBack` — each carrying the active persistence unit name as a single `String` field with constructor + getter.
+
+`@Transactional` and `@TransactionScoped` are reused from `jakarta.transaction-api`; not redeclared.
+
+Hit one strict-Javadoc bump: documented `jakarta.transaction.RollbackException` (checked) on `TransactionStrategy.commit()` without a `throws` clause; switched to `jakarta.persistence.RollbackException` (unchecked) which matches what `EntityTransaction.commit()` actually throws.
+
+`./mvnw -pl modules/jpa-module/api -am verify -DskipTests` green. RAT 12/12 approved; Checkstyle clean; Javadoc strict mode clean.
