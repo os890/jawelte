@@ -220,6 +220,18 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal scope-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-scope-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-scope-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!--
                 Internal cross-module references default to compile.
                 Test sub-modules override to test scope at the leaf pom.

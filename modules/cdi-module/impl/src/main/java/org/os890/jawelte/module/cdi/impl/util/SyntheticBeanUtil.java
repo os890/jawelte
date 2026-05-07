@@ -23,13 +23,11 @@ import java.util.Set;
 import java.util.function.Supplier;
 
 import jakarta.enterprise.context.Dependent;
-import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.literal.NamedLiteral;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
 import jakarta.inject.Named;
-import jakarta.inject.Singleton;
 
 /**
  * Builds CDI synthetic beans for {@code @TestBean} static-field
@@ -48,25 +46,37 @@ public abstract class SyntheticBeanUtil {
     }
 
     /**
-     * Register a {@code @Singleton}-scoped synthetic bean whose
-     * instance is the value held by a {@code @TestBean} static field.
+     * Register a synthetic bean whose instance is the value held by a
+     * {@code @TestBean} static field. The caller resolves the bean's
+     * scope per the precedence rules and passes it in.
+     *
+     * <p>Precedence (resolved by
+     * {@link org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension}):
+     * a CDI scope annotation declared by the test author on the
+     * static field; the
+     * {@link org.os890.jawelte.core.api.port.ScopeBinding.TestBeanDefaultScope}
+     * record bound on {@code TestContext} (when scope-module is on
+     * the classpath); cdi-module's {@code @Singleton} fallback.
      *
      * @param event           the {@code AfterBeanDiscovery} event
      * @param fieldType       the declared type of the field
      * @param fieldValue      the field value (the bean instance)
      * @param qualifiers      qualifier annotations from the field plus
      *                        defaults; passed through verbatim
+     * @param scope           the resolved CDI scope to register the
+     *                        synthetic bean with
      */
     public static void registerStaticFieldBean(
             AfterBeanDiscovery event,
             Class<?> fieldType,
             Object fieldValue,
-            Set<Annotation> qualifiers) {
+            Set<Annotation> qualifiers,
+            Class<? extends Annotation> scope) {
         Set<Annotation> finalQualifiers = qualifiersWithDefaults(qualifiers);
         Set<Type> types = beanTypes(fieldType);
         event.addBean()
                 .beanClass(fieldType)
-                .scope(Singleton.class)
+                .scope(scope)
                 .types(types)
                 .qualifiers(finalQualifiers)
                 .produceWith(inst -> fieldValue);
@@ -74,10 +84,17 @@ public abstract class SyntheticBeanUtil {
 
     /**
      * Register an auto-mock synthetic bean for an unsatisfied
-     * injection-point type. JDK types (everything in {@code java.}
-     * packages) get {@link Dependent} scope because the CDI normal-scope
-     * proxy does not work on {@code final} JDK classes; everything
-     * else gets {@link RequestScoped}.
+     * injection-point type. JDK types (everything in {@code java.} /
+     * {@code javax.} packages) get {@link Dependent} scope
+     * unconditionally because the CDI normal-scope proxy does not
+     * work on {@code final} JDK classes; everything else uses the
+     * caller-supplied {@code nonJdkScope}.
+     *
+     * <p>{@code nonJdkScope} is resolved by
+     * {@link org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension}:
+     * the {@link org.os890.jawelte.core.api.port.ScopeBinding.AutoMockDefaultScope}
+     * record bound on {@code TestContext} (when scope-module is on
+     * the classpath); cdi-module's {@code @RequestScoped} fallback.
      *
      * @param event       the {@code AfterBeanDiscovery} event
      * @param rawType     the unsatisfied injection-point raw type
@@ -90,14 +107,17 @@ public abstract class SyntheticBeanUtil {
      * @param mockSupplier supplier that creates a fresh Mockito mock
      *                    on each invocation; called once per bean
      *                    instance lifecycle
+     * @param nonJdkScope the resolved scope to use when {@code rawType}
+     *                    is not a JDK type
      */
     public static void registerAutoMockBean(
             AfterBeanDiscovery event,
             Class<?> rawType,
             Type targetType,
             Set<Annotation> qualifiers,
-            Supplier<Object> mockSupplier) {
-        Class<? extends Annotation> scope = isJdkType(rawType) ? Dependent.class : RequestScoped.class;
+            Supplier<Object> mockSupplier,
+            Class<? extends Annotation> nonJdkScope) {
+        Class<? extends Annotation> scope = isJdkType(rawType) ? Dependent.class : nonJdkScope;
         Set<Annotation> finalQualifiers = qualifiersWithDefaults(qualifiers);
         Set<Type> types = beanTypes(targetType);
         event.addBean()

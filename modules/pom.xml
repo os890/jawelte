@@ -35,5 +35,6 @@
 
     <modules>
         <module>cdi-module</module>
+        <module>scope-module</module>
     </modules>
 </project>

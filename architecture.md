@@ -73,6 +73,13 @@ Each port represents the integration boundary between jawelte's core and an exte
 - `ExcludedPackageFilter` — auto-mock exclude policy; the default impl reads its prefix list from MicroProfile Config and is overridable via `@Priority`
 - `WhitelistFilter` — `limitToTestBeans=true` allow policy; the default impl combines the framework allowlist with the per-test `@TestBean` targets and is overridable via `@Priority`
 
+**scope-module additions (in `scope-module/api`):**
+
+- `@TestMethodScoped` — CDI normal scope (`@NormalScope(passivating=false)`); follows `@ApplicationScoped` semantics with a per-test-method bean lifetime. Contexts always report `isActive() == true`; `@PreDestroy` runs in `afterEach`.
+- `@TestClassScoped` — CDI normal scope (`@NormalScope(passivating=false)`); same shape, with a per-test-class bean lifetime. `@PreDestroy` runs after `@AfterAll`, before the CDI container shuts down.
+
+scope-module ships **no new ports of its own**. It implements the existing `TestModuleLifecyclePort` and the standard CDI `Extension` SPI. The sealed `ScopeBinding` interface in `core/api/port` groups the cross-module override records as nested types: `ScopeBinding.TestBeanDefaultScope` and `ScopeBinding.AutoMockDefaultScope`. scope-module binds them on `TestContext` during `BeforeBeanDiscovery`; cdi-module reads them in `AfterBeanDiscovery` to pick the scope of `@TestBean` static-field synthetic beans and auto-mocks. The records carry no behaviour — just a `Class<? extends Annotation>` token — so neither module compile-depends on the other. The sealed interface relies on implicit-permits (every direct subtype lives in the same compilation unit), so adding a new binding kind means editing `ScopeBinding.java` itself, which doubles as a code-review nudge for the cross-module contract.
+
 **Adapters:**
 
 | Port | Adapter | Technology container | Module |
@@ -84,6 +91,7 @@ Each port represents the integration boundary between jawelte's core and an exte
 | `TestBeanContainerPort` | `CdiTestBeanContainer` (+ `TestBeansCdiExtension`) | CDI SE (OpenWebBeans / Weld) | `cdi-module/impl` |
 | `ExcludedPackageFilter` | `DefaultExcludedPackageFilter` | MicroProfile Config | `cdi-module/impl` |
 | `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
+| `TestModuleLifecyclePort` | `ScopeLifecycleAdapter` (`@Priority(100)`) + `TestScopeCdiExtension` | CDI runtime (`BeanManager` from `SeContainer` on `TestContext`) | `scope-module/impl` |
 
 **Planned (forward-looking, not yet shipped):** `JpaContainerPort` / `JtaContainerPort` (persistence + transactions), `JaxRsContainerPort` (embedded REST runtime), `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 
