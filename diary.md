@@ -534,3 +534,15 @@ Full reactor `mvn -P owb verify` green; no scenario regressions.
 Restructured `aroundInvoke` so the catch chain (RuntimeException/Error vs checked) lives in an inner try, and the flush-mode restore is the only thing in the outer `finally`. Per-PU restore failures are caught individually because by the time `finally` runs the EM may already be mid-completion (`setFlushMode` would refuse) — the EM is about to close anyway, so the failure is swallowed and the primary throwable (if any) stays intact.
 
 mvn -pl modules/jpa-module/impl -am verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #78: persistence.xml test-classpath wins)
+
+`PersistenceXmlParser.parseAll(ClassLoader)` now prefers test-classpath URLs over jar-classpath URLs when both are reachable. Implementation:
+
+1. Collect every `META-INF/persistence.xml` URL from the classloader.
+2. Filter to those whose path contains `/test-classes/` or `/test/`.
+3. Parse only the filtered set if non-empty; otherwise fall back to parsing all (preserves current behaviour for jar-only classpaths).
+
+Lets a project ship a production-shaped persistence.xml in a jar dependency (typical "JTA + PostgreSQL" shape) and override it for tests with a test-scope file. Without the preference the parser merged both, which would have duplicated persistence-unit names or booted the prod PU against test H2.
+
+Full reactor mvn -P owb verify green.

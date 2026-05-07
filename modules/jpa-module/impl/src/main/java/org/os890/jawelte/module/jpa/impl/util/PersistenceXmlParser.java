@@ -62,29 +62,62 @@ public abstract class PersistenceXmlParser {
     }
 
     /**
-     * Parse every {@code META-INF/persistence.xml} resource visible
-     * to the given {@link ClassLoader}.
+     * Parse {@code META-INF/persistence.xml} resources visible to the
+     * given {@link ClassLoader}, with a "test classpath wins"
+     * preference: when at least one resource URL points at a path
+     * containing {@code /test-classes/} or {@code /test/}, only those
+     * URLs are parsed; otherwise every reachable URL is parsed.
+     *
+     * <p>The preference lets a project ship a production-shaped
+     * {@code persistence.xml} in a jar dependency (JTA + PostgreSQL)
+     * and override it for tests with a test-scope file. Without the
+     * preference the parser would merge both, possibly duplicating
+     * persistence-unit names or accidentally booting the prod PU
+     * against the test H2 database.
      *
      * @param classLoader the class loader whose resources to scan
      * @return the persistence units found, in classpath traversal
      *         order; never {@code null}
      */
     public static List<ParsedPersistenceUnit> parseAll(ClassLoader classLoader) {
-        List<ParsedPersistenceUnit> result = new ArrayList<>();
+        List<URL> allUrls = new ArrayList<>();
         try {
             Enumeration<URL> resources = classLoader.getResources("META-INF/persistence.xml");
             while (resources.hasMoreElements()) {
-                URL url = resources.nextElement();
-                try (InputStream stream = url.openStream()) {
-                    result.addAll(parseOne(stream));
-                } catch (Exception parseFailure) {
-                    LOG.log(Level.WARNING, "Failed to parse persistence.xml at " + url, parseFailure);
-                }
+                allUrls.add(resources.nextElement());
             }
         } catch (Exception scanFailure) {
             LOG.log(Level.WARNING, "Failed to scan classpath for persistence.xml", scanFailure);
+            return List.of();
+        }
+        List<URL> selectedUrls = selectPreferred(allUrls);
+        List<ParsedPersistenceUnit> result = new ArrayList<>();
+        for (URL url : selectedUrls) {
+            try (InputStream stream = url.openStream()) {
+                result.addAll(parseOne(stream));
+            } catch (Exception parseFailure) {
+                LOG.log(Level.WARNING, "Failed to parse persistence.xml at " + url, parseFailure);
+            }
         }
         return List.copyOf(result);
+    }
+
+    private static List<URL> selectPreferred(List<URL> urls) {
+        List<URL> testClasspathUrls = new ArrayList<>();
+        for (URL url : urls) {
+            if (isTestClasspath(url)) {
+                testClasspathUrls.add(url);
+            }
+        }
+        return testClasspathUrls.isEmpty() ? urls : testClasspathUrls;
+    }
+
+    private static boolean isTestClasspath(URL url) {
+        String path = url.getPath();
+        if (path == null) {
+            return false;
+        }
+        return path.contains("/test-classes/") || path.contains("/test/");
     }
 
     private static List<ParsedPersistenceUnit> parseOne(InputStream stream) throws Exception {
