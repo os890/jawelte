@@ -554,3 +554,18 @@ Full reactor mvn -P owb verify green.
 Allowlist via the new MP Config key `org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages` (dot-then-underscore fallback applies). Comma-separated prefix list; matched prefixes are exempt from the veto. The list is read once on first match and cached on the extension instance (per-test-class lifetime — extension is re-instantiated per `SeContainer`).
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #80: multi-PU lazy tx begin)
+
+`DefaultResourceLocalTransactionStrategy` no longer eagerly opens a transaction on every active persistence unit. Redesign:
+
+- **Strategy.begin()** picks the "managed" PU as the first entry of `JpaActivePersistenceUnits.get()` (insertion-ordered, mirrors persistence.xml document order). Creates an EM + opens tx for that one PU only, fires `TransactionStarted(managedPu)`, calls `TransactionScopedEmHolder.enterTransactionalScope(managedPu)` which seeds the per-frame join set with the managed PU.
+- **TransactionScopedEmHolder.peekOrAutoBegin(puName)** — new public method used by `EntityManagerProxy.invoke` instead of `peek`. When an EM exists on the per-PU stack it returns it; otherwise, if a transactional scope is active and the PU is in `JpaActivePersistenceUnits`, lazy-creates a fresh EM, opens a tx on it, pushes onto the per-PU stack, adds the PU to the current frame's join set, and fires `TransactionStarted(puName)`. Returns `null` only when no scope is active and no EM exists (caller throws as before).
+- **Strategy.commit() / rollback()** read the joined-PU set from `TransactionScopedEmHolder.currentFramePersistenceUnits()` (managed + lazy-joined) and complete each in turn, popping + closing each EM. Both call `exitTransactionalScope()` in their finally so the per-thread stacks unwind cleanly even on partial failure.
+- New `MANAGED_PU_STACK` and `FRAME_PUS_STACK` thread-locals on `TransactionScopedEmHolder` track per-frame state. `clearForCurrentThread()` (called by `JpaLifecycleAdapter.afterEach` as a safety net) wipes both.
+- `TransactionFrame` in the strategy simplified to just `rollbackOnly` — the per-PU set lives in the holder now.
+- The `TransactionStarted` event still fires once per PU that actually joins the tx, so observer counts remain meaningful even with multi-PU.
+
+Net effect: a `@Transactional` method that only touches the default PU pays exactly one EM-create / tx-begin / tx-commit. Inactive non-default PUs (e.g. configured but unreachable) are never dereferenced and never dragged into the tx.
+
+Full reactor mvn -P owb verify green.

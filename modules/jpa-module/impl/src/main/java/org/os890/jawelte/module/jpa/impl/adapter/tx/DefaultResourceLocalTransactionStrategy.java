@@ -17,7 +17,6 @@ package org.os890.jawelte.module.jpa.impl.adapter.tx;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -43,22 +42,25 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 
 /**
  * Default {@link TransactionStrategy} shipped by jpa-module: drives
- * RESOURCE_LOCAL transactions across every active persistence unit
- * for the calling thread. Pushes a fresh
- * {@link EntityManager} (per persistence unit) onto
- * {@link TransactionScopedEmHolder} on {@code begin()}, opens its
- * {@link EntityTransaction}, fires
- * {@link TransactionStarted} for each persistence unit; on
- * {@code commit()} / {@code rollback()}, fires
- * {@link TransactionBeforeCompletion}, then walks the active
- * persistence units, completes each transaction, pops the stack
- * frame, closes the manager, and fires the matching outcome event
- * ({@link TransactionCommitted} or {@link TransactionRolledBack}).
+ * RESOURCE_LOCAL transactions for the calling thread. On
+ * {@code begin()} it opens a transaction <em>only</em> on the
+ * "managed" persistence unit — the first entry in
+ * {@link JpaActivePersistenceUnits} (insertion order, mirrors
+ * {@code persistence.xml} order). Non-managed persistence units
+ * lazy-join the scope on first {@code EntityManager} dereference
+ * via
+ * {@link TransactionScopedEmHolder#peekOrAutoBegin(String)}.
  *
- * <p>Nested {@code @Transactional} invocations push a new frame
- * each call so inner transactions are independent of the outer
- * (each frame gets its own per-PU set, per-PU
- * {@code EntityTransaction} list, and rollback-only flag).
+ * <p>{@code commit()} and {@code rollback()} read the per-frame PU
+ * set from {@link TransactionScopedEmHolder} so they cover both
+ * the managed PU and any lazy-joined ones. Per-PU completion fires
+ * {@link TransactionBeforeCompletion} once per PU, then either
+ * {@link TransactionCommitted} or {@link TransactionRolledBack}.
+ *
+ * <p>Nested {@code @Transactional} invocations push a new frame so
+ * inner transactions are independent of the outer (each frame gets
+ * its own per-PU set, per-PU {@code EntityTransaction} list, and
+ * rollback-only flag).
  *
  * <p>{@code @Priority(Integer.MAX_VALUE)} so a future jta-module
  * (or any consumer-supplied strategy) can take over by registering
@@ -90,19 +92,18 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
             throw new IllegalStateException(
                     "No active persistence units. Was JpaCdiExtension.beforeBeanDiscovery skipped?");
         }
-        TransactionFrame frame = new TransactionFrame();
-        for (String persistenceUnitName : persistenceUnits) {
-            EntityManagerFactory emf = EmfCache.getCached(persistenceUnitName)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "No EntityManagerFactory cached for persistence unit '" + persistenceUnitName + "'."));
-            EntityManager entityManager = emf.createEntityManager();
-            EntityTransaction transaction = entityManager.getTransaction();
-            transaction.begin();
-            TransactionScopedEmHolder.push(persistenceUnitName, entityManager);
-            frame.persistenceUnits.add(persistenceUnitName);
-            fireEvent(new TransactionStarted(persistenceUnitName));
-        }
-        frames.get().push(frame);
+        String managedPersistenceUnitName = persistenceUnits.iterator().next();
+        EntityManagerFactory emf = EmfCache.getCached(managedPersistenceUnitName)
+                .orElseThrow(() -> new IllegalStateException(
+                        "No EntityManagerFactory cached for persistence unit '"
+                                + managedPersistenceUnitName + "'."));
+        EntityManager entityManager = emf.createEntityManager();
+        EntityTransaction transaction = entityManager.getTransaction();
+        transaction.begin();
+        TransactionScopedEmHolder.push(managedPersistenceUnitName, entityManager);
+        TransactionScopedEmHolder.enterTransactionalScope(managedPersistenceUnitName);
+        frames.get().push(new TransactionFrame());
+        fireEvent(new TransactionStarted(managedPersistenceUnitName));
     }
 
     @Override
@@ -117,41 +118,57 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
             }
             throw new RollbackException("Transaction marked rollback-only");
         }
-        for (String persistenceUnitName : frame.persistenceUnits) {
+        Set<String> framePersistenceUnits = TransactionScopedEmHolder.currentFramePersistenceUnits();
+        for (String persistenceUnitName : framePersistenceUnits) {
             fireEvent(new TransactionBeforeCompletion(persistenceUnitName));
         }
-        for (String persistenceUnitName : frame.persistenceUnits) {
-            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
-            try {
-                entityManager.getTransaction().commit();
-                fireEvent(new TransactionCommitted(persistenceUnitName));
-            } finally {
-                TransactionScopedEmHolder.pop(persistenceUnitName);
-                entityManager.close();
+        try {
+            for (String persistenceUnitName : framePersistenceUnits) {
+                EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
+                if (entityManager == null) {
+                    continue;
+                }
+                try {
+                    entityManager.getTransaction().commit();
+                    fireEvent(new TransactionCommitted(persistenceUnitName));
+                } finally {
+                    TransactionScopedEmHolder.pop(persistenceUnitName);
+                    entityManager.close();
+                }
             }
+        } finally {
+            frames.get().pop();
+            TransactionScopedEmHolder.exitTransactionalScope();
         }
-        frames.get().pop();
     }
 
     @Override
     public void rollback() {
-        TransactionFrame frame = activeFrameOrThrow();
-        for (String persistenceUnitName : frame.persistenceUnits) {
+        activeFrameOrThrow();
+        Set<String> framePersistenceUnits = TransactionScopedEmHolder.currentFramePersistenceUnits();
+        for (String persistenceUnitName : framePersistenceUnits) {
             fireEvent(new TransactionBeforeCompletion(persistenceUnitName));
         }
-        for (String persistenceUnitName : frame.persistenceUnits) {
-            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
-            try {
-                if (entityManager.getTransaction().isActive()) {
-                    entityManager.getTransaction().rollback();
+        try {
+            for (String persistenceUnitName : framePersistenceUnits) {
+                EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
+                if (entityManager == null) {
+                    continue;
                 }
-                fireEvent(new TransactionRolledBack(persistenceUnitName));
-            } finally {
-                TransactionScopedEmHolder.pop(persistenceUnitName);
-                entityManager.close();
+                try {
+                    if (entityManager.getTransaction().isActive()) {
+                        entityManager.getTransaction().rollback();
+                    }
+                    fireEvent(new TransactionRolledBack(persistenceUnitName));
+                } finally {
+                    TransactionScopedEmHolder.pop(persistenceUnitName);
+                    entityManager.close();
+                }
             }
+        } finally {
+            frames.get().pop();
+            TransactionScopedEmHolder.exitTransactionalScope();
         }
-        frames.get().pop();
     }
 
     @Override
@@ -163,9 +180,11 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
     public void setRollbackOnly() {
         TransactionFrame frame = activeFrameOrThrow();
         frame.rollbackOnly = true;
-        for (String persistenceUnitName : frame.persistenceUnits) {
+        for (String persistenceUnitName : TransactionScopedEmHolder.currentFramePersistenceUnits()) {
             EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
-            entityManager.getTransaction().setRollbackOnly();
+            if (entityManager != null) {
+                entityManager.getTransaction().setRollbackOnly();
+            }
         }
     }
 
@@ -208,14 +227,12 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
     }
 
     /**
-     * Per-nesting-level state for a single {@code begin()} call:
-     * the persistence units that participated, and the rollback-only
-     * flag. Independent stacks for nested {@code @Transactional}
-     * invocations.
+     * Per-nesting-level state for a single {@code begin()} call —
+     * just the rollback-only flag now that the per-PU set lives in
+     * {@link TransactionScopedEmHolder}'s frame stack. Independent
+     * stacks for nested {@code @Transactional} invocations.
      */
     private static class TransactionFrame {
-
-        private final Set<String> persistenceUnits = new LinkedHashSet<>();
 
         private boolean rollbackOnly;
 

@@ -88,7 +88,7 @@ public class EntityManagerProxy implements InvocationHandler {
         if (method.getDeclaringClass() == Object.class) {
             return invokeObjectMethod(proxy, method, args);
         }
-        EntityManager active = TransactionScopedEmHolder.peek(persistenceUnitName);
+        EntityManager active = TransactionScopedEmHolder.peekOrAutoBegin(persistenceUnitName);
         if (active == null) {
             throw new IllegalStateException(
                     "No active EntityManager for persistence unit '" + persistenceUnitName
