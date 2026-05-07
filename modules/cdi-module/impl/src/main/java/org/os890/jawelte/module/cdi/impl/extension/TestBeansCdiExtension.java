@@ -268,6 +268,9 @@ public class TestBeansCdiExtension implements Extension {
                 continue;
             }
             Set<Annotation> qualifiers = entry.getValue();
+            if (hasSyntheticBeanBinding(rawType)) {
+                continue;
+            }
             if (excludedPackageFilter != null && excludedPackageFilter.isExcluded(rawType)) {
                 continue;
             }
@@ -299,6 +302,31 @@ public class TestBeansCdiExtension implements Extension {
             return cls;
         }
         return null;
+    }
+
+    /**
+     * Whether the type carries an annotation that is itself
+     * meta-annotated with a third-party "synthetic-bean binding"
+     * marker. Currently recognized: Apache DeltaSpike's
+     * {@code org.apache.deltaspike.partialbean.api.PartialBeanBinding}
+     * (compared by FQN string so cdi-module incurs no compile-time
+     * dependency on DeltaSpike). When this returns {@code true} the
+     * Extension skips auto-mock registration; the third-party
+     * extension is expected to register the bean itself.
+     *
+     * @param rawType the unsatisfied IP raw type
+     * @return {@code true} if a third-party extension owns this type
+     */
+    private static boolean hasSyntheticBeanBinding(Class<?> rawType) {
+        for (Annotation directAnnotation : rawType.getAnnotations()) {
+            for (Annotation metaAnnotation : directAnnotation.annotationType().getAnnotations()) {
+                if ("org.apache.deltaspike.partialbean.api.PartialBeanBinding"
+                        .equals(metaAnnotation.annotationType().getName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void addTestClassInjectionPoints(BeanManager beanManager) {

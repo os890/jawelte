@@ -317,3 +317,15 @@ Shipped the first integration module on top of the TICKET-001 / TICKET-002 found
 - `architecture.md` Hexagonal Architecture chapter rewritten: the abstract `JpaContainerPort` / `EclipseLinkAdapter` / etc. examples are replaced by the actual shipped ports (`TestBeansExtension`, `TestBeanContainerPort`, `TestModuleLifecyclePort`, `TestContext`, `ServicePriorityResolver`, `ConfigResolver`, `ExcludedPackageFilter`, `WhitelistFilter`) and adapters. The forward-looking JPA / JTA / JAX-RS / DB-Unit / WireMock examples are preserved as a "Planned" note.
 
 `./mvnw clean verify` passes under both `-Powb` and `-Pweld` with all gates (Enforcer, Checkstyle, RAT, Javadoc, JaCoCo).
+
+## 2026-05-07 — POC gap follow-up: DeltaSpike and Quarkus parity (production-code part)
+
+Compared `/Users/work/workspace/poc` against jawelte (one-way: only items where jawelte lacks something or diverges in a user-observable way) and produced `tickets/poc-gaps-tbd.html`. User selected the DeltaSpike + Quarkus differences plus scenarios 3.2–3.6 from that report for follow-up.
+
+This commit lands the production-code part of that follow-up:
+
+- Added `org.apache.deltaspike.` to the bundled framework-allowlist defaults in cdi-module/impl's MP Config, so DeltaSpike-internal types survive `@EnableTestBeans(limitToTestBeans=true)` without the user needing to extend the allowlist manually.
+- Added `hasSyntheticBeanBinding(Class<?>)` to `TestBeansCdiExtension`. When an unsatisfied IP's raw type carries an annotation that is itself meta-annotated with `org.apache.deltaspike.partialbean.api.PartialBeanBinding` (compared by FQN string — no compile-time DeltaSpike dependency), the Extension skips auto-mock registration. The third-party extension is then expected to register the bean. Mirrors the POC's same-name helper in `DynamicTestBeanExtension`.
+- Reworked `DelegatingJUnitExtension.readManageContainer(...)` to also return `false` when the test class carries `io.quarkus.test.junit.QuarkusTest` or `io.quarkus.test.junit.QuarkusComponentTest` (FQN string comparison). Effect: a `@QuarkusTest` test class is treated as if `manageContainer=false` even when the user did not set the attribute. The Quarkus test framework already manages the bean container in that case, so jawelte must not boot a second one.
+
+All 49 existing cdi-module scenarios pass under both `-Powb` and `-Pweld`. New scenarios that exercise the DeltaSpike skip path, the DeltaSpike allowlist path, the Quarkus auto-skip path, and the gap-report items 3.2–3.6 will land in follow-up commits.

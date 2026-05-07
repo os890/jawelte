@@ -15,9 +15,11 @@
  */
 package org.os890.jawelte.core.impl.extension;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
@@ -73,6 +75,10 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
     private static final String COMPLETED_BEFORE_ALL_KEY = "completedBeforeAll";
     private static final String COMPLETED_BEFORE_EACH_KEY = "completedBeforeEach";
     private static final String MANAGE_CONTAINER_KEY = "manageContainer";
+
+    private static final Set<String> QUARKUS_TEST_ANNOTATIONS = Set.of(
+            "io.quarkus.test.junit.QuarkusTest",
+            "io.quarkus.test.junit.QuarkusComponentTest");
 
     /**
      * No-arg constructor used by {@code ServiceLoader}.
@@ -205,10 +211,40 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
         return extensionContext.getStore(NAMESPACE);
     }
 
+    /**
+     * Resolves the effective {@code manageContainer} flag for the
+     * given test class. Returns {@code false} when:
+     * <ul>
+     *   <li>{@code @EnableTestBeans(manageContainer=false)} is set, or</li>
+     *   <li>the test class carries
+     *       {@code io.quarkus.test.junit.QuarkusTest} or
+     *       {@code io.quarkus.test.junit.QuarkusComponentTest} (compared
+     *       by FQN string so core/impl incurs no compile-time dependency
+     *       on Quarkus). The Quarkus test framework already manages a
+     *       bean container for the test class, so jawelte must not
+     *       boot a second one.</li>
+     * </ul>
+     *
+     * @param testClass the JUnit test class
+     * @return {@code true} if jawelte should boot/shut down the
+     *         container; {@code false} otherwise
+     */
     private static boolean readManageContainer(Class<?> testClass) {
+        if (hasQuarkusTestAnnotation(testClass)) {
+            return false;
+        }
         Optional<EnableTestBeans> config =
                 AnnotationSupport.findAnnotation(testClass, EnableTestBeans.class);
         return config.map(EnableTestBeans::manageContainer).orElse(true);
+    }
+
+    private static boolean hasQuarkusTestAnnotation(Class<?> testClass) {
+        for (Annotation annotation : testClass.getAnnotations()) {
+            if (QUARKUS_TEST_ANNOTATIONS.contains(annotation.annotationType().getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void rethrowAggregated(List<Throwable> collected) throws Exception {
