@@ -28,6 +28,7 @@ import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.literal.NamedLiteral;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 
 /**
@@ -107,13 +108,25 @@ public abstract class SyntheticBeanUtil {
                 .produceWith(inst -> mockSupplier.get());
     }
 
+    /**
+     * Build a {@link NamedLiteral} for the given name, used by
+     * callers that need to construct a synthetic {@code @Named}
+     * qualifier programmatically.
+     *
+     * @param name the name to embed in the qualifier
+     * @return a runtime {@code @Named} annotation literal
+     */
+    public static Annotation named(String name) {
+        return NamedLiteral.of(name);
+    }
+
     private static Set<Annotation> qualifiersWithDefaults(Set<Annotation> qualifiers) {
         Set<Annotation> result = new HashSet<>(qualifiers);
-        boolean hasNamed = result.stream().anyMatch(q -> q.annotationType().getSimpleName().equals("Named"));
+        boolean hasNamed = result.stream().anyMatch(q -> q.annotationType().equals(Named.class));
         boolean hasCustom = result.stream()
                 .anyMatch(q -> !q.annotationType().equals(Default.class)
                         && !q.annotationType().equals(Any.class)
-                        && !q.annotationType().getName().equals("jakarta.inject.Named"));
+                        && !q.annotationType().equals(Named.class));
         if (!hasCustom && !hasNamed) {
             result.add(Default.Literal.INSTANCE);
         }
@@ -131,17 +144,5 @@ public abstract class SyntheticBeanUtil {
     private static boolean isJdkType(Class<?> rawType) {
         String packageName = rawType.getPackageName();
         return packageName.startsWith("java.") || packageName.startsWith("javax.");
-    }
-
-    /**
-     * Build a {@link NamedLiteral} for the given name, used by
-     * callers that need to construct a synthetic {@code @Named}
-     * qualifier programmatically.
-     *
-     * @param name the name to embed in the qualifier
-     * @return a runtime {@code @Named} annotation literal
-     */
-    public static Annotation named(String name) {
-        return NamedLiteral.of(name);
     }
 }

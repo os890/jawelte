@@ -68,17 +68,6 @@ public class ConfigResolverAdapter implements ConfigResolver {
     public ConfigResolverAdapter() {
     }
 
-    /**
-     * Populates the cached {@link Config} reference when the bean is
-     * managed by a CDI container.
-     */
-    @PostConstruct
-    void init() {
-        if (this.config == null) {
-            this.config = ConfigProvider.getConfig();
-        }
-    }
-
     @Override
     public Optional<String> resolve(String dotKey) {
         Objects.requireNonNull(dotKey, "dotKey");
@@ -91,6 +80,17 @@ public class ConfigResolverAdapter implements ConfigResolver {
             return Optional.empty();
         }
         return resolved.getOptionalValue(dotKey.replace('.', '_'), String.class);
+    }
+
+    /**
+     * Populates the cached {@link Config} reference when the bean is
+     * managed by a CDI container.
+     */
+    @PostConstruct
+    void init() {
+        if (this.config == null) {
+            this.config = ConfigProvider.getConfig();
+        }
     }
 
     private Config cachedConfig() {

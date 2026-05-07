@@ -18,31 +18,28 @@ package org.os890.jawelte.module.cdi.impl.filter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 import jakarta.annotation.Priority;
 
-import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.ConfigProvider;
+import org.os890.jawelte.core.api.port.ConfigResolver;
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 
 /**
  * Default {@link ExcludedPackageFilter}. Reads the comma-separated
  * package-prefix list from the MicroProfile Config key
  * {@code org.os890.jawelte.module.cdi.auto-mock.exclude-packages}
- * (with the standard dot-then-underscore fallback). A type is
- * excluded when any class in its supertype hierarchy lives under one
- * of the configured prefixes.
+ * via the active {@link ConfigResolver} (resolved through
+ * {@link TestContext#loadService(Class)}, so the dot-then-underscore
+ * fallback and any user-supplied {@code @Alternative ConfigResolver}
+ * apply uniformly). A type is excluded when any class in its
+ * supertype hierarchy lives under one of the configured prefixes.
  *
  * <p>Annotated {@code @Priority(Integer.MAX_VALUE)} so any user-supplied
  * implementation with a lower priority value automatically wins via
  * the project-wide {@code ServicePriorityResolver}.
  *
- * <p>Loaded via {@code ServiceLoader} during CDI bootstrap, BEFORE
- * any CDI bean is available — so this class deliberately reads MP
- * Config directly via {@code ConfigProvider.getConfig()} rather than
- * routing through the {@code @Inject ConfigResolver} from TICKET-002.
- * The parsed list is cached in a {@code volatile} field for the
+ * <p>The parsed list is cached in a {@code volatile} field for the
  * filter instance's lifetime; never re-read per injection point.
  */
 @Priority(Integer.MAX_VALUE)
@@ -50,8 +47,6 @@ public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
 
     /** MP Config key that lists the excluded package prefixes. */
     public static final String DOT_KEY = "org.os890.jawelte.module.cdi.auto-mock.exclude-packages";
-
-    private static final String UNDERSCORE_KEY = DOT_KEY.replace('.', '_');
 
     private volatile List<String> cachedPrefixes;
 
@@ -85,16 +80,13 @@ public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
     }
 
     private static List<String> readPrefixes() {
-        Config config = ConfigProvider.getConfig();
-        Optional<String> value = config.getOptionalValue(DOT_KEY, String.class)
-                .or(() -> config.getOptionalValue(UNDERSCORE_KEY, String.class));
-        if (value.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return Arrays.stream(value.get().split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .toList();
+        ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
+        return resolver.resolve(DOT_KEY)
+                .map(value -> Arrays.stream(value.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList())
+                .orElseGet(Collections::emptyList);
     }
 
     private static boolean supertypeMatches(Class<?> rawType, List<String> prefixes) {

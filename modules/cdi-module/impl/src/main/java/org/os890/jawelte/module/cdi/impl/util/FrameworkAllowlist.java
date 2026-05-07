@@ -18,22 +18,24 @@ package org.os890.jawelte.module.cdi.impl.util;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
-import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.ConfigProvider;
+import org.os890.jawelte.core.api.port.ConfigResolver;
+import org.os890.jawelte.core.api.port.TestContext;
 
 /**
  * Identifies "framework-internal" types that are never vetoed and
  * never auto-mocked. Driven by a comma-separated package-prefix list
  * read from MicroProfile Config under the key
  * {@code org.os890.jawelte.module.cdi.framework-allowlist.packages}
- * (with the standard dot-then-underscore fallback).
+ * via the active {@link ConfigResolver} (resolved through
+ * {@link TestContext#loadService(Class)}, so the dot-then-underscore
+ * fallback and any user-supplied {@code @Alternative ConfigResolver}
+ * apply uniformly).
  *
  * <p>Bundled defaults ship in cdi-module/impl's
  * {@code META-INF/microprofile-config.properties} and cover
  * {@code java.}, {@code javax.}, {@code jakarta.}, OWB / Weld
- * internals, and the framework root package
+ * internals, Apache DeltaSpike, and the framework root package
  * ({@code org.os890.jawelte.}). Downstream applications override or
  * extend the list by setting the same key in a higher-priority MP
  * Config source.
@@ -42,8 +44,6 @@ public abstract class FrameworkAllowlist {
 
     /** MP Config key whose value lists the allowlist's package prefixes. */
     public static final String DOT_KEY = "org.os890.jawelte.module.cdi.framework-allowlist.packages";
-
-    private static final String UNDERSCORE_KEY = DOT_KEY.replace('.', '_');
 
     private static volatile List<String> cachedPrefixes;
 
@@ -88,16 +88,13 @@ public abstract class FrameworkAllowlist {
     }
 
     private static List<String> readPrefixes() {
-        Config config = ConfigProvider.getConfig();
-        Optional<String> value = config.getOptionalValue(DOT_KEY, String.class)
-                .or(() -> config.getOptionalValue(UNDERSCORE_KEY, String.class));
-        if (value.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return Arrays.stream(value.get().split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .toList();
+        ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
+        return resolver.resolve(DOT_KEY)
+                .map(value -> Arrays.stream(value.split(","))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .toList())
+                .orElseGet(Collections::emptyList);
     }
 
     private static boolean supertypeHasPrefix(Class<?> rawType, List<String> prefixes) {

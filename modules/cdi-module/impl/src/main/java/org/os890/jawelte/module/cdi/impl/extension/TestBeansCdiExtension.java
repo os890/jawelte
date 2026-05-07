@@ -54,8 +54,8 @@ import jakarta.inject.Singleton;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
+import org.os890.jawelte.module.cdi.api.port.MockFactory;
 import org.os890.jawelte.module.cdi.api.port.WhitelistFilter;
-import org.os890.jawelte.module.cdi.impl.util.MockitoMockFactory;
 import org.os890.jawelte.module.cdi.impl.util.SyntheticBeanUtil;
 import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
 
@@ -83,6 +83,7 @@ public class TestBeansCdiExtension implements Extension {
     private boolean limitToTestBeans;
     private WhitelistFilter whitelistFilter;
     private ExcludedPackageFilter excludedPackageFilter;
+    private MockFactory mockFactory;
     private final Set<IpKey> unsatisfiedCandidateIps = new LinkedHashSet<>();
 
     /** No-arg constructor required by the CDI runtime. */
@@ -111,6 +112,7 @@ public class TestBeansCdiExtension implements Extension {
 
         this.whitelistFilter = TestContext.loadService(WhitelistFilter.class);
         this.excludedPackageFilter = TestContext.loadService(ExcludedPackageFilter.class);
+        this.mockFactory = TestContext.loadService(MockFactory.class);
 
         // Force discovery of @TestBean target classes that lack a
         // bean-defining annotation (e.g. @Alternative without an explicit
@@ -122,39 +124,6 @@ public class TestBeansCdiExtension implements Extension {
         for (Class<?> producerType : scanResult.producerTypes()) {
             forceDiscoveryWithDependentFallback(event, producerType);
         }
-    }
-
-    private static void forceDiscoveryWithDependentFallback(BeforeBeanDiscovery event, Class<?> target) {
-        if (hasBeanDefiningAnnotation(target)) {
-            return;
-        }
-        if (!target.isAnnotationPresent(Alternative.class)) {
-            // Spec: @TestBean(bean=X) where X has no @Alternative is a
-            // silent no-op (per scenario 35). Don't promote it to a
-            // @Dependent bean.
-            return;
-        }
-        event.addAnnotatedType(target, target.getName())
-                .add(Dependent.Literal.INSTANCE);
-    }
-
-    private static boolean hasBeanDefiningAnnotation(Class<?> target) {
-        for (Annotation a : target.getAnnotations()) {
-            Class<? extends Annotation> at = a.annotationType();
-            if (at.isAnnotationPresent(NormalScope.class)) {
-                return true;
-            }
-            if (at.isAnnotationPresent(Scope.class)) {
-                return true;
-            }
-            if (at.isAnnotationPresent(Stereotype.class)) {
-                return true;
-            }
-            if (at.equals(Dependent.class) || at.equals(Singleton.class)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     void onProcessAnnotatedType(@Observes ProcessAnnotatedType<?> event) {
@@ -176,25 +145,6 @@ public class TestBeansCdiExtension implements Extension {
             return;
         }
         unsatisfiedCandidateIps.add(new IpKey(targetType, new LinkedHashSet<>(qualifiers)));
-    }
-
-    private static boolean qualifiersEquivalent(Annotation a, Annotation b) {
-        if (!a.annotationType().equals(b.annotationType())) {
-            return false;
-        }
-        for (Method member : a.annotationType().getDeclaredMethods()) {
-            if (member.isAnnotationPresent(Nonbinding.class)) {
-                continue;
-            }
-            try {
-                if (!Objects.deepEquals(member.invoke(a), member.invoke(b))) {
-                    return false;
-                }
-            } catch (ReflectiveOperationException e) {
-                return false;
-            }
-        }
-        return true;
     }
 
     void onAfterTypeDiscovery(@Observes AfterTypeDiscovery event) {
@@ -262,7 +212,7 @@ public class TestBeansCdiExtension implements Extension {
             if (!isUnsatisfied(beanManager, targetType, qualifiers)) {
                 continue;
             }
-            Object mockSample = MockitoMockFactory.create(rawType);
+            Object mockSample = mockFactory.create(rawType);
             if (mockSample == null) {
                 continue;
             }
@@ -270,8 +220,71 @@ public class TestBeansCdiExtension implements Extension {
             // per @RequestScoped activation.
             SyntheticBeanUtil.registerAutoMockBean(
                     event, rawType, targetType, qualifiers,
-                    () -> MockitoMockFactory.create(rawType));
+                    () -> mockFactory.create(rawType));
         }
+    }
+
+    /**
+     * Test-only accessor exposed for tests that need to inspect what
+     * the Extension collected during bootstrap. Production users
+     * should not depend on this surface.
+     *
+     * @return a defensive copy of the collected unsatisfied-IP candidates
+     */
+    Set<IpKey> unsatisfiedCandidateIpsForTests() {
+        return new LinkedHashSet<>(unsatisfiedCandidateIps);
+    }
+
+    private static void forceDiscoveryWithDependentFallback(BeforeBeanDiscovery event, Class<?> target) {
+        if (hasBeanDefiningAnnotation(target)) {
+            return;
+        }
+        if (!target.isAnnotationPresent(Alternative.class)) {
+            // Spec: @TestBean(bean=X) where X has no @Alternative is a
+            // silent no-op (per scenario 35). Don't promote it to a
+            // @Dependent bean.
+            return;
+        }
+        event.addAnnotatedType(target, target.getName())
+                .add(Dependent.Literal.INSTANCE);
+    }
+
+    private static boolean hasBeanDefiningAnnotation(Class<?> target) {
+        for (Annotation a : target.getAnnotations()) {
+            Class<? extends Annotation> at = a.annotationType();
+            if (at.isAnnotationPresent(NormalScope.class)) {
+                return true;
+            }
+            if (at.isAnnotationPresent(Scope.class)) {
+                return true;
+            }
+            if (at.isAnnotationPresent(Stereotype.class)) {
+                return true;
+            }
+            if (at.equals(Dependent.class) || at.equals(Singleton.class)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean qualifiersEquivalent(Annotation a, Annotation b) {
+        if (!a.annotationType().equals(b.annotationType())) {
+            return false;
+        }
+        for (Method member : a.annotationType().getDeclaredMethods()) {
+            if (member.isAnnotationPresent(Nonbinding.class)) {
+                continue;
+            }
+            try {
+                if (!Objects.deepEquals(member.invoke(a), member.invoke(b))) {
+                    return false;
+                }
+            } catch (ReflectiveOperationException e) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Class<?> rawClassOf(Type type) {
@@ -399,17 +412,6 @@ public class TestBeansCdiExtension implements Extension {
             }
         }
         return null;
-    }
-
-    /**
-     * Test-only accessor exposed for tests that need to inspect what
-     * the Extension collected during bootstrap. Production users
-     * should not depend on this surface.
-     *
-     * @return a defensive copy of the collected unsatisfied-IP candidates
-     */
-    Set<IpKey> unsatisfiedCandidateIpsForTests() {
-        return new LinkedHashSet<>(unsatisfiedCandidateIps);
     }
 
     /**

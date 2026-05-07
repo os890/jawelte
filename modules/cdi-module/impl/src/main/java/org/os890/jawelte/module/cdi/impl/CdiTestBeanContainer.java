@@ -19,7 +19,6 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.context.control.RequestContextController;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.se.SeContainerInitializer;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 
@@ -27,20 +26,26 @@ import org.os890.jawelte.core.api.event.BeforeScopeStarted;
 import org.os890.jawelte.core.api.event.ContainerStarted;
 import org.os890.jawelte.core.api.port.TestBeanContainerPort;
 import org.os890.jawelte.core.api.port.TestContext;
-import org.os890.jawelte.module.cdi.impl.extension.TestBeansCdiExtension;
+import org.os890.jawelte.module.cdi.api.port.CdiContainerPort;
 import org.os890.jawelte.module.cdi.impl.util.InjectFieldsHelper;
 
 /**
- * CDI SE adapter for {@link TestBeanContainerPort}. Boots a
- * {@link SeContainer} per test class, registers
- * {@link TestBeansCdiExtension}, fires {@link ContainerStarted}, and
- * manages the per-method {@link RequestContextController}.
+ * Adapter for {@link TestBeanContainerPort} that delegates the bean
+ * container lifecycle to the active {@link CdiContainerPort}. The
+ * default {@code CdiContainerPort} (in {@code cdi-module/impl}) is
+ * SE-based; a future quarkus-module ships its own
+ * {@code CdiContainerPort} implementation that wins via a lower
+ * {@code @Priority} value, and {@code CdiTestBeanContainer} continues
+ * to coordinate the rest of the per-test-class lifecycle (firing
+ * {@link ContainerStarted}, activating / deactivating the request
+ * scope, populating {@code @Inject} fields on the JUnit-provided test
+ * instance) regardless of which CDI flavour is in play.
  *
  * <p>Has <strong>no instance fields</strong> — per-test-class state
- * (the {@code SeContainer}, the {@code RequestContextController})
- * is bound on the {@link TestContext} via {@code bindMetadata}, so
- * the same provider instance is safe to reuse across test classes
- * and is unaffected by parallel test-class execution.
+ * (the container handle, the {@code RequestContextController}) is
+ * bound on the {@link TestContext} via {@code bindMetadata}, so the
+ * same provider instance is safe to reuse across test classes and is
+ * unaffected by parallel test-class execution.
  *
  * <p>Discovered via {@code ServiceLoader} (the registration ships in
  * cdi-module/impl's
@@ -54,17 +59,17 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     @Override
     public void beforeAll(TestContext testContext) {
-        SeContainerInitializer initializer = SeContainerInitializer.newInstance()
-                .addExtensions(TestBeansCdiExtension.class);
-        SeContainer container = initializer.initialize();
-        testContext.bindMetadata(SeContainer.class, container);
+        CdiContainerPort containerPort = TestContext.loadService(CdiContainerPort.class);
+        containerPort.start(testContext);
 
-        // Fire ContainerStarted while the container is still up,
-        // before returning to DelegatingJUnitExtension. Module
-        // lifecycle ports' beforeAll runs after this, so they are
-        // guaranteed to observe ContainerStarted before their own
-        // beforeAll is invoked.
-        container.getBeanManager()
+        // Fire ContainerStarted while the container is up, before
+        // returning to DelegatingJUnitExtension. Module lifecycle
+        // ports' beforeAll runs after this, so they are guaranteed
+        // to observe ContainerStarted before their own beforeAll is
+        // invoked. Uses CDI.current() so the firing path stays
+        // container-flavour-agnostic.
+        CDI.current()
+                .getBeanManager()
                 .getEvent()
                 .fire(new ContainerStarted(testContext.getTestClass()));
     }
@@ -100,13 +105,7 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     @Override
     public void afterAll(TestContext testContext) {
-        testContext.getMetadata(SeContainer.class).ifPresent(container -> {
-            try {
-                container.close();
-            } finally {
-                testContext.unbindMetadata(SeContainer.class);
-            }
-        });
+        TestContext.loadService(CdiContainerPort.class).stop(testContext);
     }
 
     private static BeanManager beanManager(TestContext testContext) {
