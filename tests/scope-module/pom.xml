@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-scope-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/scope-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-scope-module. Each scenario boots a CDI container (via cdi-module) so scope-module's lifecycle adapter and CDI Extension run end-to-end. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld).</description>
+
+    <modules>
+        <module>scenario-01-method-scope-state-resets-between-methods</module>
+        <module>scenario-02-method-scope-postconstruct-per-method</module>
+        <module>scenario-03-method-scope-predestroy-per-method</module>
+        <module>scenario-04-method-scope-same-instance-within-method</module>
+        <module>scenario-05-method-scope-provider-same-instance</module>
+        <module>scenario-06-before-scope-veto-does-not-alter-activation</module>
+        <module>scenario-07-before-scope-event-fired</module>
+        <module>scenario-08-method-scope-predestroy-aggregates-exceptions</module>
+        <module>scenario-09-method-scope-same-instance-across-threads</module>
+        <module>scenario-10-method-scope-concurrent-first-access</module>
+        <module>scenario-11-method-scope-independent-of-request-scope</module>
+        <module>scenario-12-class-scope-state-survives-across-methods</module>
+        <module>scenario-13-class-scope-same-instance-across-threads</module>
+        <module>scenario-14-class-scope-postconstruct-once-per-class</module>
+        <module>scenario-15-class-scope-predestroy-after-afterall</module>
+        <module>scenario-16-class-scope-destroy-aggregates-exceptions</module>
+        <module>scenario-17-class-scope-no-before-scope-event</module>
+        <module>scenario-18-adapter-ordering-beforeeach</module>
+        <module>scenario-19-adapter-ordering-aftereach-lifo</module>
+        <module>scenario-20-aftereach-runs-when-sibling-throws</module>
+        <module>scenario-21-both-contexts-registered</module>
+        <module>scenario-22-stateless-adapter-no-leakage</module>
+        <module>scenario-23-parallel-test-classes-isolated</module>
+        <module>scenario-24-scope-aware-testbean-static-field-default</module>
+        <module>scenario-25-user-declared-scope-on-testbean-wins</module>
+        <module>scenario-26-scope-aware-auto-mock-default</module>
+        <module>scenario-27-no-scope-module-fallbacks-apply</module>
+    </modules>
+
+    <dependencies>
+        <!--
+            Same dep shape as tests/cdi-module: every scenario brings up a
+            CDI container via cdi-module and exercises scope-module on top
+            of it. core-api / core-impl / cdi-module-api / cdi-module-impl
+            are the base; scope-module-api / scope-module-impl are the
+            module under test (test scope on impl so jacoco indexes the
+            production classes for coverage).
+
+            jakarta.* default to provided in dependencyManagement; tests
+            need them on the test classpath, hence the explicit test scope.
+            JUnit / AssertJ / Mockito default to test scope.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-testkit</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-se</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.weld.se</groupId>
+                    <artifactId>weld-se-shaded</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>
