@@ -414,3 +414,19 @@ Updated `tickets/003-cdi-se-implementation.md` so the port enumeration and the s
 - Brain-dump-only sections (stripped from the issue body) also corrected for completeness: the `Package layout` mermaid uses the new `…adapter.<tech>` paths and shows the ConfigResolver-mediated MP Config flow; the `Hex view` mermaid adds `CdiContainerPort` and `MockFactory` ports plus their default impls and updates the MP Config caption ("read by ConfigResolver port impl" rather than "ConfigProvider — direct").
 
 Issue #6 body re-derived by stripping the same brain-dump sections as before (`cdi-module Structure / Overview / Implementation Details`, `Object Lifecycle`, `Pre / Post conditions`, `Use Cases`) and uploaded via `gh issue edit 6 --body-file`.
+
+## 2026-05-07 — TICKET-004 (scope-module) shipped
+
+Built `scope-module` end-to-end. Branch `8-scope-module`, 16 commits. PR pending.
+
+Production code:
+- `core/api/port` — two new records `TestBeanDefaultScope` and `AutoMockDefaultScope` for the cross-module scope-default override (no behaviour, just a `Class<? extends Annotation>` token).
+- `modules/scope-module/api` — `@TestMethodScoped` and `@TestClassScoped`, both `@NormalScope(passivating=false)`. Designed as `@ApplicationScoped`-with-shorter-lifetime: `isActive()` is always `true`, lazy first-access creation, single managed instance shared across threads.
+- `modules/scope-module/impl` — `ScopeStore` + per-scope subclasses, `ScopedBeanInstance` record, `TestMethodScopedContext` and `TestClassScopedContext` (both `AlterableContext` impls), `TestScopeCdiExtension` (binds the override records in `BeforeBeanDiscovery`, registers contexts in `AfterBeanDiscovery`), `ScopeLifecycleAdapter` (`@Priority(100)` `TestModuleLifecyclePort` impl). Lives under `impl.adapter.{context,extension,lifecycle}` per the project rule.
+- `cdi-module/impl` — modified `TestBeansCdiExtension` and `SyntheticBeanUtil` to read the override records and apply the precedence rules: user-declared CDI scope on a `@TestBean` field > `TestBeanDefaultScope` record > `@Singleton` fallback; auto-mock takes `AutoMockDefaultScope` record > `@RequestScoped` fallback (JDK types stay `@Dependent` regardless).
+
+Tests: `tests/scope-module/` aggregator with 27 scenario sub-modules covering per-method scope behaviour (1–11), per-class scope behaviour (12–17), lifecycle adapter / extension / threading (18–23), and TICKET-003 addendum integration (24–27). Two scenarios (08, 16) became direct unit tests of `ScopeStore.destroyAll`'s aggregation contract because OWB swallows `@PreDestroy` exceptions inside `InjectionTargetImpl.preDestroy`; scenario 23 became a direct unit test of store isolation because parallel `SeContainer` boots are governed by the underlying CDI runtime's parallel-safety, not scope-module's.
+
+Coverage report includes the 27 new scenario modules. `mvn -P owb clean verify` and `mvn -P weld clean verify` both pass against the full reactor (105 scenario modules, all green).
+
+Architecture.md updated: new "scope-module additions" section + new row in the Adapters table for `TestModuleLifecyclePort` → `ScopeLifecycleAdapter` + `TestScopeCdiExtension`.
