@@ -350,3 +350,25 @@ The cdi-module Extension's `unsatisfiedCandidateIps` map was previously keyed by
 Refactored the field to `Set<IpKey>` where `IpKey` is `(targetType, qualifiers)` with `equals` / `hashCode` based on CDI qualifier equivalence (annotation-type identity plus binding-member-only value comparison). Two qualifier types on the same target → two distinct IpKeys → two distinct mocks. Two `@Nonbinding`-equivalent qualifiers (per scenario 7) → one IpKey → one mock. Two binding-different `@ServiceType("a")` / `@ServiceType("b")` (per scenario 54) → two distinct IpKeys → two mocks. The previous `mergeQualifiers` / map-merge helper is gone; `Set<IpKey>` natively dedupes.
 
 All 21 core scenarios + 56 cdi-module scenarios pass `mvn clean verify` under both `-Powb` (default) and `-Pweld`. Coverage report still aggregates clean.
+
+## 2026-05-07 — Inline-merge POC parity items into TICKET-003 ticket and issue
+
+Added to `tickets/003-cdi-se-implementation.md` so the file reads as if these were always part of the initial scope (no POC / gap-audit references):
+
+- New section "TICKET-001 Addendum: `@QuarkusTest` auto-skip in `DelegatingJUnitExtension`" alongside the other TICKET-001 addendums, documenting the FQN-string detection of `io.quarkus.test.junit.QuarkusTest` / `QuarkusComponentTest` and the `manageContainer=false`-equivalent behaviour.
+- New subsections under § cdi-module Implementation Details:
+  - "Per-(type, qualifier-set) bucketing for unsatisfied IPs" describing the `Set<IpKey>` collection and the CDI qualifier equivalence rules (`@Nonbinding`-aware) that determine whether two IPs share or split mocks.
+  - "Synthetic-bean binding skip (Apache DeltaSpike `@PartialBeanBinding`)" describing the FQN-string skip for third-party-owned types.
+- Updated § Framework allowlist: bundled defaults now include `org.apache.deltaspike.`; the previously-recommended `auto-mock.exclude-packages` workaround paragraph is replaced with a description of the bundled prefix.
+- New scenarios 50–57 added to § Test Scenarios:
+  - 50: multi-`@Alternative` for the same type, one selected
+  - 51: stereotype-applied scope plus custom qualifier on a real bean
+  - 52: `@Typed`-narrowed alternative coexisting with `@TestBean` for an unrelated type
+  - 53: distinct qualifier types on the same JDK target type
+  - 54: binding qualifier member differentiates mocks
+  - 55: Apache DeltaSpike `@PartialBeanBinding` skip
+  - 56: DeltaSpike-internal type survives whitelist mode
+  - 57: `@QuarkusTest` auto-skips container management
+- Updated § Acceptance Criteria — runtime behaviour with bullets covering the IpKey bucketing rule, the `@PartialBeanBinding` skip, and the `@QuarkusTest` auto-skip; configuration-and-defaults bullet updated to mention DeltaSpike in the bundled prefixes; cross-cutting test count raised from 45 to 57.
+
+Issue #6 body re-derived from the local file by stripping the same brain-dump sections as before (`cdi-module Structure`, `cdi-module Overview`, `cdi-module Implementation Details`, `Object Lifecycle`, `Pre / Post conditions`, `Use Cases`). The new TICKET-001 Addendum, scenarios 50–57, and AC bullets all carry over to the issue body. Pushed via `gh issue edit 6 --body-file`.
