@@ -92,13 +92,13 @@ public class TransactionalInterceptor {
             try {
                 result = invocationContext.proceed();
             } catch (RuntimeException unchecked) {
-                rollbackQuietly(strategy);
+                rollbackAndSuppress(strategy, unchecked);
                 throw unchecked;
             } catch (Error error) {
-                rollbackQuietly(strategy);
+                rollbackAndSuppress(strategy, error);
                 throw error;
             } catch (Exception checked) {
-                rollbackQuietly(strategy);
+                rollbackAndSuppress(strategy, checked);
                 throw checked;
             }
             if (strategy.getRollbackOnly()) {
@@ -112,16 +112,18 @@ public class TransactionalInterceptor {
         }
     }
 
-    private static void rollbackQuietly(TransactionStrategy strategy) {
+    private static void rollbackAndSuppress(TransactionStrategy strategy, Throwable primary) {
         if (!strategy.isActive()) {
             return;
         }
         try {
             strategy.rollback();
-        } catch (RuntimeException ignored) {
-            // primary failure (the intercepted method's throwable)
-            // takes precedence; rollback failure is swallowed here
-            // to preserve the original cause for the caller.
+        } catch (RuntimeException rollbackFailure) {
+            // primary failure (the intercepted method's throwable) takes
+            // precedence; the rollback failure rides along as a suppressed
+            // exception so post-mortems still see both causes (TICKET-001
+            // aggregation rule).
+            primary.addSuppressed(rollbackFailure);
         }
     }
 

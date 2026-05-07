@@ -781,3 +781,18 @@ Lifecycle adapter changes:
 Filled in scenario-09 (was a placeholder): two `@Transactional` `@Test` methods. The first asserts `strategy.isActive()` is true inside the body, persists a marker, queries it back. The second method (after per-method cleanup) verifies a `TxCommitObserver` recorded the first method's commit (TransactionCommitted event) AND that the table is empty (per-method cleanup wiped it). Both methods green.
 
 Full reactor verify: BUILD SUCCESS under both `-P owb` (default) and `-P weld`. Task #120 done; #90 unblocked and also done as part of scenario-09's first method.
+
+## 2026-05-08 — task #119: cross-check tx/em handling against POC
+
+Did a full punch-list comparison against `~/workspace/poc/jpa-module/...` (POC's `ResourceLocalTransactionStrategy`, `ResourceLocalTransactionalInterceptor`, `ResourceLocalTransactionScopedContext`, `TransactionScopedEmHolder`) and the matching jawelte adapters.
+
+Most divergences are intentional design improvements in jawelte (per-frame PU sets, framework-owned event filter, AlterableContext, exception aggregation, static FRAMES because ServiceLoader returns fresh strategy instances). One genuine bug surfaced and is now fixed:
+
+**Suppressed-exception aggregation in interceptor rollback paths** — `TransactionalInterceptor.rollbackQuietly` and `ReadOnlyInterceptor.markRollbackOnlyQuietly` were swallowing rollback / setRollbackOnly failures with `RuntimeException ignored`. Per TICKET-001 aggregation, the secondary cleanup failure should ride along as `primary.addSuppressed(...)` so post-mortems see both causes. Renamed both helpers to `*AndSuppress(strategy, primary)` and wired the `addSuppressed` call.
+
+Other divergences logged but not fixed:
+- POC's `outerEm.clear()` after popping a nested frame is a different model (POC reuses one EM with tx-scoping); jawelte creates a fresh EM per `begin()`, so the L1 cache concern doesn't apply (scenario-49 already verifies mid-flight read).
+- Strategy's internal `commit()`-rebound-rollbackOnly path is defensive (handles direct UserTransaction.commit()), not a double-rollback bug for the interceptor flow.
+- Several smaller design choices (CALL_STACK guard, lazy holder fallback, plain Context vs AlterableContext) are intentional jawelte design choices.
+
+Full reactor verify still BUILD SUCCESS. Task #119 done.

@@ -94,10 +94,10 @@ public class ReadOnlyInterceptor {
                 strategy.setRollbackOnly();
                 return result;
             } catch (RuntimeException | Error throwable) {
-                markRollbackOnlyQuietly(strategy);
+                markRollbackOnlyAndSuppress(strategy, throwable);
                 throw throwable;
             } catch (Exception checked) {
-                markRollbackOnlyQuietly(strategy);
+                markRollbackOnlyAndSuppress(strategy, checked);
                 throw checked;
             }
         } finally {
@@ -105,15 +105,17 @@ public class ReadOnlyInterceptor {
         }
     }
 
-    private static void markRollbackOnlyQuietly(TransactionStrategy strategy) {
+    private static void markRollbackOnlyAndSuppress(TransactionStrategy strategy, Throwable primary) {
         try {
             if (strategy.isActive()) {
                 strategy.setRollbackOnly();
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException markFailure) {
             // The intercepted method's throwable remains the primary
-            // cause; a setRollbackOnly failure is swallowed to preserve
-            // it for the caller.
+            // cause; a setRollbackOnly failure rides along as a
+            // suppressed exception so post-mortems see both causes
+            // (TICKET-001 aggregation rule).
+            primary.addSuppressed(markFailure);
         }
     }
 
