@@ -744,3 +744,11 @@ Result: Tests run: 4, Failures: 0, Errors: 0 — task #92 done.
 Added the 15 new jpa-module scenario sub-modules (45–59) to `coverage-report/pom.xml` so the aggregated JaCoCo report includes their exec data. Also brought all per-scenario `beans.xml` / `persistence.xml` / `microprofile-config.properties` headers into RAT compliance — abbreviated `Copyright 2026 os890` + `Licensed under the Apache License, Version 2.0 (the "License")` + `...` form, matching the pre-existing scenario style. Verified `./mvnw -pl coverage-report -am verify -DskipTests` is BUILD SUCCESS.
 
 Task #113 done.
+
+## 2026-05-08 — Phase 8b: full reactor verify under both CDI profiles
+
+`./mvnw verify` (default: `-P owb`) — BUILD SUCCESS in 2:11. All 130+ modules build, every scenario test passes including the 15 newly-filled scenarios (25–27, 45–59) and the static-FRAMES + RAT/Checkstyle gates.
+
+`./mvnw verify -Pweld` — BUILD SUCCESS in 2:44. Same module set runs against Weld 6.0.4; identical green status. The static `FRAMES` ThreadLocal change in `DefaultResourceLocalTransactionStrategy` works under both CDI implementations (no instance-field assumptions baked into Weld's bean lifecycle).
+
+Task #114 done.
