@@ -402,3 +402,15 @@ Restructured both `core/impl` and `cdi-module/impl` so every port-implementation
 Files moved with `git mv` to preserve history. Package declarations in each moved file updated. All FQN references in `META-INF/services/*` (eight files), `META-INF/microprofile-config.properties` (two FQN values), and the eight test files that import these classes were updated in lockstep. Now-empty `config`, `context`, `extension`, `spi`, `filter`, `container`, `mock` source directories pruned.
 
 `mvn clean verify` passes under both `-Powb` and `-Pweld`.
+
+## 2026-05-07 — Refresh TICKET-003 ticket and issue for the new ports
+
+Updated `tickets/003-cdi-se-implementation.md` so the port enumeration and the structural references match the shipped code:
+
+- `Maven Module Layout` mermaid label and table row: `cdi-module/api` now lists four ports (`CdiContainerPort`, `ExcludedPackageFilter`, `MockFactory`, `WhitelistFilter`); `cdi-module/impl` row lists all four default impls and drops the stale "mock factory ships as a util" comment.
+- New `cdi-module Ports` subsections for `CdiContainerPort` and `MockFactory`, each with the API signature, the default-impl name, the discovery rule, and a one-line note on how a future quarkus-module / alternative mock library plugs in.
+- `cdi-module Port Implementations` gains entries for `SeContainerCdiContainerPort` and `MockitoMockFactory`; the existing entries for `CdiTestBeanContainer` and `TestBeansCdiExtension` got their `cdi-module/impl/adapter/<tech>` package paths added.
+- Acceptance Criteria — Module structure and registration: bullets now enumerate four ports + four default impls, all carrying `@Priority(Integer.MAX_VALUE)`.
+- Brain-dump-only sections (stripped from the issue body) also corrected for completeness: the `Package layout` mermaid uses the new `…adapter.<tech>` paths and shows the ConfigResolver-mediated MP Config flow; the `Hex view` mermaid adds `CdiContainerPort` and `MockFactory` ports plus their default impls and updates the MP Config caption ("read by ConfigResolver port impl" rather than "ConfigProvider — direct").
+
+Issue #6 body re-derived by stripping the same brain-dump sections as before (`cdi-module Structure / Overview / Implementation Details`, `Object Lifecycle`, `Pre / Post conditions`, `Use Cases`) and uploaded via `gh issue edit 6 --body-file`.
