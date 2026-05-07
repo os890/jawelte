@@ -35,28 +35,29 @@ import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContex
  * {@link TransactionScopedContext} for the duration of the
  * transaction.
  *
- * <p>Rollback rules (matching the Jakarta EE default):
+ * <p>Rollback rule (project-wide decision, simpler than the
+ * Jakarta EE default):
  *
  * <ul>
  *   <li>Method returns normally → commit.</li>
- *   <li>Method throws an unchecked exception
- *       ({@link RuntimeException} or {@link Error}) → rollback,
- *       then re-throw.</li>
- *   <li>Method throws a checked {@link Exception} (anything that
- *       is not a {@code RuntimeException}) → commit, then
- *       re-throw.</li>
+ *   <li>Method throws <em>any</em> exception
+ *       ({@link RuntimeException}, checked {@link Exception}, or
+ *       {@link Error}) → rollback, then re-throw.</li>
  * </ul>
+ *
+ * <p>The Jakarta EE convention (commit on checked, rollback on
+ * unchecked) is intentionally NOT followed: a thrown exception
+ * almost always means "this work should not persist", regardless
+ * of whether it's checked. The {@code rollbackOn} /
+ * {@code dontRollbackOn} attributes on {@code @Transactional} are
+ * accepted on the source level (they are on the standard
+ * annotation) but not interpreted by this POC interceptor.
  *
  * <p>{@code @Priority(Interceptor.Priority.PLATFORM_BEFORE + 200)}
  * places this interceptor outer of the {@code ReadOnlyInterceptor}
  * (priority {@code +201}) so the transaction is already active
  * when read-only setup runs.
  *
- * <p>{@code @Transactional}'s {@code rollbackOn} /
- * {@code dontRollbackOn} attributes are accepted on the source
- * level (the standard annotation defines them) but
- * <strong>not interpreted</strong> by this POC interceptor — the
- * simple unchecked-rollback / checked-commit rule above wins.
  */
 @Interceptor
 @Transactional
@@ -100,7 +101,7 @@ public class TransactionalInterceptor {
                 rollbackQuietly(strategy);
                 throw error;
             } catch (Exception checked) {
-                commitQuietly(strategy);
+                rollbackQuietly(strategy);
                 throw checked;
             }
             if (strategy.getRollbackOnly()) {
@@ -127,16 +128,4 @@ public class TransactionalInterceptor {
         }
     }
 
-    private static void commitQuietly(TransactionStrategy strategy) {
-        if (!strategy.isActive()) {
-            return;
-        }
-        try {
-            strategy.commit();
-        } catch (RuntimeException ignored) {
-            // checked-exception path keeps the user's exception as
-            // primary; commit failure is swallowed for the same
-            // reason as rollbackQuietly.
-        }
-    }
 }

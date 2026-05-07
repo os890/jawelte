@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Default;
@@ -42,7 +43,6 @@ import jakarta.enterprise.inject.spi.WithAnnotations;
 import jakarta.enterprise.inject.spi.configurator.AnnotatedFieldConfigurator;
 import jakarta.enterprise.inject.spi.configurator.AnnotatedTypeConfigurator;
 import jakarta.inject.Named;
-import jakarta.inject.Singleton;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.PersistenceContext;
@@ -325,7 +325,7 @@ public class JpaCdiExtension implements Extension {
             if (!userProducedFactoryQualifiers.contains(backoffKey)) {
                 event.addBean()
                         .beanClass(EntityManagerFactory.class)
-                        .scope(Singleton.class)
+                        .scope(ApplicationScoped.class)
                         .types(EntityManagerFactory.class, Object.class)
                         .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
                         .produceWith(instance -> factory);
@@ -334,7 +334,7 @@ public class JpaCdiExtension implements Extension {
             if (!userProducedManagerQualifiers.contains(backoffKey)) {
                 event.addBean()
                         .beanClass(EntityManager.class)
-                        .scope(Singleton.class)
+                        .scope(ApplicationScoped.class)
                         .types(EntityManager.class, Object.class)
                         .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
                         .produceWith(instance -> managerProxy);
@@ -343,7 +343,7 @@ public class JpaCdiExtension implements Extension {
 
         event.addBean()
                 .beanClass(UserTransaction.class)
-                .scope(Singleton.class)
+                .scope(ApplicationScoped.class)
                 .types(UserTransaction.class, Object.class)
                 .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
                 .produceWith(instance -> new UserTransactionImpl());

@@ -619,3 +619,13 @@ Full reactor mvn -P owb verify green.
 **opentest4j dep**: `jpa-module/impl` now declares `org.opentest4j:opentest4j` at `provided` scope (version `1.3.0` pinned in root `<dependencyManagement>`). `TestAbortedException` is a JUnit-spec marker for "this method was skipped"; consumers always have it transitively via `junit-jupiter-api`.
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Tasks #85/#86/#87: decisions applied)
+
+User decisions on the three open design points:
+
+1. **Rollback rule on checked exceptions**: switched to "rollback on any exception" (deviates from Jakarta EE convention but simpler — a thrown exception almost always means "this work should not persist"). `TransactionalInterceptor.aroundInvoke` now calls `rollbackQuietly` for the checked-exception catch as well; the previous `commitQuietly` helper is dropped. Class-level Javadoc updated to call out the deliberate divergence and to note that `rollbackOn` / `dontRollbackOn` attributes on `@Transactional` are still source-level accepted but ignored at runtime.
+2. **Synthetic bean scope**: switched EMF / EM proxy / UserTransaction synthetic beans from `@Singleton` (pseudo-scope) to `@ApplicationScoped` (CDI normal-scope proxy). Better Spring Data / extension-aware compatibility; minor cost is the proxy wrapper around each injection point. `JpaCdiExtension` now imports `jakarta.enterprise.context.ApplicationScoped` and the previous `jakarta.inject.Singleton` import is gone.
+3. **BeforeTestMethod / AfterTestMethod events**: not shipped. The `TestModuleLifecyclePort.beforeEach` / `afterEach` callbacks already cover the use case, per ticket-005 reasoning.
+
+Full reactor mvn -P owb verify green.
