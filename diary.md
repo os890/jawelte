@@ -673,3 +673,11 @@ Result: Tests run: 1, Failures: 0, Errors: 0 — task #99 done.
 Added `tests/jpa-module/scenario-53-tx-scoped-nested-isolation`. Outer `@Transactional` calls inner `@Transactional`; each tx scope owns a distinct `NestedTxScopedTracker` instance (verified via per-instance UUID). Asserts: (a) outer's id sampled before and after the nested call is identical — outer's contextual instance survives the nested boundary; (b) inner's id differs from outer's — the inner tx opens its own scope; (c) PostConstruct=2 + PreDestroy=2 — both instances complete their lifecycle. Proves the tx scopes are stacked, not shared.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #100 done.
+
+## 2026-05-07 — scenario-16: @ReadOnly setter-modification rolled back + tx-strategy state fix
+
+Filled in `tests/jpa-module/scenario-16-readonly-discards-writes` (was a placeholder). Seed an `Item` with `name="original"`, run an `@Transactional @ReadOnly` method that calls `item.setName("modified")` on the managed entity, then read back. The setter dirty-mark must not reach the database — `@ReadOnly` switches `FlushMode` to `COMMIT` and marks the tx rollback-only, so the dirty change is dropped.
+
+Bug found while wiring this scenario: `DefaultResourceLocalTransactionStrategy.frames` was an instance ThreadLocal, but `TestContext.loadService(...)` returns a fresh strategy instance per call. `TransactionalInterceptor` and `ReadOnlyInterceptor` ended up on different strategies, so `@ReadOnly`'s `setRollbackOnly()` set the flag on a stack the outer interceptor never read — net effect: rollback-only was lost and the tx committed. Fixed by promoting `FRAMES` to a static field. Existing nested-tx and tx-scoped scenarios still pass.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #94 done.

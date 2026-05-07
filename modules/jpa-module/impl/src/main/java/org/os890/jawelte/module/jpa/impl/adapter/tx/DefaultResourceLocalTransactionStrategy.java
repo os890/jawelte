@@ -72,7 +72,16 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
 
     private final AtomicBoolean initialized = new AtomicBoolean(false);
 
-    private final ThreadLocal<Deque<TransactionFrame>> frames = ThreadLocal.withInitial(ArrayDeque::new);
+    /**
+     * Per-thread frame stack. Static so multiple
+     * {@code TestContext.loadService(...)} calls (e.g. from
+     * {@code TransactionalInterceptor} and
+     * {@code ReadOnlyInterceptor} on the same call site) share state
+     * — {@code ServiceLoader} returns a fresh strategy instance per
+     * call, but the active transaction must be visible to whichever
+     * caller asks for it.
+     */
+    private static final ThreadLocal<Deque<TransactionFrame>> FRAMES = ThreadLocal.withInitial(ArrayDeque::new);
 
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public DefaultResourceLocalTransactionStrategy() {
@@ -102,7 +111,7 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
         transaction.begin();
         TransactionScopedEmHolder.push(managedPersistenceUnitName, entityManager);
         TransactionScopedEmHolder.enterTransactionalScope(managedPersistenceUnitName);
-        frames.get().push(new TransactionFrame());
+        FRAMES.get().push(new TransactionFrame());
         fireEvent(new TransactionStarted(managedPersistenceUnitName));
     }
 
@@ -133,7 +142,7 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
             // commit so partial failure doesn't leave EMs open.
             commitAllAggregated(framePersistenceUnits);
         } finally {
-            frames.get().pop();
+            FRAMES.get().pop();
             TransactionScopedEmHolder.exitTransactionalScope();
         }
     }
@@ -246,14 +255,14 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
                 }
             }
         } finally {
-            frames.get().pop();
+            FRAMES.get().pop();
             TransactionScopedEmHolder.exitTransactionalScope();
         }
     }
 
     @Override
     public boolean isActive() {
-        return !frames.get().isEmpty();
+        return !FRAMES.get().isEmpty();
     }
 
     @Override
@@ -285,11 +294,11 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
 
     @Override
     public void shutdown() {
-        frames.remove();
+        FRAMES.remove();
     }
 
     private TransactionFrame activeFrameOrThrow() {
-        Deque<TransactionFrame> stack = frames.get();
+        Deque<TransactionFrame> stack = FRAMES.get();
         if (stack.isEmpty()) {
             throw new IllegalStateException("No active transaction");
         }

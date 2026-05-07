@@ -15,17 +15,42 @@
  */
 package org.os890.jawelte.tests.jpa.scenario16;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #16 (readonly-discards-writes) for jpa-module — placeholder.
+ * Verifies that an {@code @ReadOnly @Transactional} method
+ * discards setter-driven dirty mutations on a managed entity.
  *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * <p>Inside the read-only block, {@code item.setName("modified")}
+ * marks the managed entity dirty but the interceptor sets
+ * {@code FlushMode.COMMIT} and marks the tx rollback-only — the
+ * change is never flushed and never committed. A follow-up read
+ * outside the block must observe the original value.
  */
+@EnableTestBeans
 public class Scenario16Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private ItemService itemService;
+
+    /** No-arg constructor for CDI. */
     public Scenario16Test() {
+    }
+
+    /** Setter-driven dirty mutation under @ReadOnly is rolled back. */
+    @Test
+    public void readOnlyDiscardsSetterDrivenWrites() {
+        Long id = itemService.seed("original");
+
+        itemService.mutateViaSetterUnderReadOnly(id, "modified");
+
+        assertThat(itemService.currentName(id))
+                .as("setter mutation under @ReadOnly must not reach the database")
+                .isEqualTo("original");
     }
 }
