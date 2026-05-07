@@ -88,6 +88,7 @@
         <module>scenario-52-tx-scoped-lifecycle-counts</module>
         <module>scenario-53-tx-scoped-nested-isolation</module>
         <module>scenario-54-readonly-multi-modification</module>
+        <module>scenario-55-readonly-inner-writable-outer</module>
     </modules>
 
     <dependencies>
