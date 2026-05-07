@@ -48,7 +48,7 @@ import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContex
  * of whether it's checked. The {@code rollbackOn} /
  * {@code dontRollbackOn} attributes on {@code @Transactional} are
  * accepted on the source level (they are on the standard
- * annotation) but not interpreted by this POC interceptor.
+ * annotation) but not interpreted by this interceptor.
  *
  * <p>{@code @Priority(Interceptor.Priority.PLATFORM_BEFORE + 200)}
  * places this interceptor outer of the {@code ReadOnlyInterceptor}

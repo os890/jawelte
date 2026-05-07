@@ -82,10 +82,10 @@ public class UserTransactionImpl implements UserTransaction {
     @Override
     public void setTransactionTimeout(int seconds) {
         // RESOURCE_LOCAL has no native transaction-timeout concept;
-        // the standard EntityTransaction API does not expose one. The
-        // POC accepts the call as a no-op so that user code written
-        // against the standard UserTransaction interface still
-        // compiles and runs.
+        // the standard EntityTransaction API does not expose one.
+        // jpa-module accepts the call as a no-op so that user code
+        // written against the standard UserTransaction interface
+        // still compiles and runs.
     }
 
     private static TransactionStrategy strategy() {

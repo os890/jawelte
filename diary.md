@@ -752,3 +752,14 @@ Task #113 done.
 `./mvnw verify -Pweld` — BUILD SUCCESS in 2:44. Same module set runs against Weld 6.0.4; identical green status. The static `FRAMES` ThreadLocal change in `DefaultResourceLocalTransactionStrategy` works under both CDI implementations (no instance-field assumptions baked into Weld's bean lifecycle).
 
 Task #114 done.
+
+## 2026-05-08 — task #116: remove POC references from source
+
+Cleaned the only two stale "POC" mentions in `modules/jpa-module/impl`:
+
+- `UserTransactionImpl.setTransactionTimeout(...)` Javadoc — "The POC accepts the call as a no-op" → "jpa-module accepts the call as a no-op".
+- `TransactionalInterceptor` Javadoc — "this POC interceptor" → "this interceptor".
+
+The `tickets/poc-gaps-tbd.html` file is intentionally a POC-vs-jawelte gap analysis — staying as-is. Other "POC" mentions in `tickets/005-jpa-module.md` and the issue-body draft are historical context and out of scope.
+
+Task #116 done.
