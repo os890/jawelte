@@ -30,6 +30,7 @@ import java.util.Set;
 
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.context.NormalScope;
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Alternative;
 import jakarta.enterprise.inject.Instance;
@@ -52,6 +53,8 @@ import jakarta.inject.Scope;
 import jakarta.inject.Singleton;
 
 import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.port.AutoMockDefaultScope;
+import org.os890.jawelte.core.api.port.TestBeanDefaultScope;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 import org.os890.jawelte.module.cdi.api.port.MockFactory;
@@ -167,12 +170,26 @@ public class TestBeansCdiExtension implements Extension {
             return;
         }
 
-        // Static-field synthetic beans
+        // Static-field synthetic beans. Scope precedence:
+        //   1. CDI scope annotation declared by the user on the field
+        //      (any annotation meta-annotated with @NormalScope or
+        //      @Scope - covers @TestClassScoped, @RequestScoped,
+        //      @Singleton, @Dependent, custom user scopes, ...).
+        //   2. TestBeanDefaultScope record on TestContext (bound by
+        //      scope-module's TestScopeCdiExtension during
+        //      BeforeBeanDiscovery, when scope-module is present).
+        //   3. cdi-module's @Singleton fallback.
+        Class<? extends Annotation> testBeanDefaultScope = activeContext
+                .getMetadata(TestBeanDefaultScope.class)
+                .map(TestBeanDefaultScope::scope)
+                .orElse(Singleton.class);
         for (TestBeanScanner.StaticField staticField : scanResult.staticFields()) {
             Field field = staticField.field();
             Set<Annotation> qualifiers = collectFieldQualifiers(field);
+            Class<? extends Annotation> scope = userDeclaredScopeOnField(field)
+                    .orElse(testBeanDefaultScope);
             SyntheticBeanUtil.registerStaticFieldBean(
-                    event, field.getType(), staticField.value(), qualifiers);
+                    event, field.getType(), staticField.value(), qualifiers, scope);
         }
 
         if (limitToTestBeans) {
@@ -191,6 +208,17 @@ public class TestBeansCdiExtension implements Extension {
         // member values) on the same target type produce two
         // independent mocks. The IpKey set already deduplicated
         // @Nonbinding-equivalent IPs at collection time.
+        //
+        // Auto-mock scope precedence (only applies to non-JDK types;
+        // JDK types are always @Dependent because the normal-scope
+        // proxy cannot subclass final JDK classes):
+        //   1. AutoMockDefaultScope record on TestContext (bound by
+        //      scope-module's TestScopeCdiExtension when present).
+        //   2. cdi-module's @RequestScoped fallback.
+        Class<? extends Annotation> autoMockNonJdkScope = activeContext
+                .getMetadata(AutoMockDefaultScope.class)
+                .map(AutoMockDefaultScope::scope)
+                .orElse(RequestScoped.class);
         for (IpKey key : unsatisfiedCandidateIps) {
             Type targetType = key.targetType;
             Class<?> rawType = rawClassOf(targetType);
@@ -217,10 +245,11 @@ public class TestBeansCdiExtension implements Extension {
                 continue;
             }
             // Supplier indirection so each bean lookup gets a fresh mock
-            // per @RequestScoped activation.
+            // per scope activation.
             SyntheticBeanUtil.registerAutoMockBean(
                     event, rawType, targetType, qualifiers,
-                    () -> mockFactory.create(rawType));
+                    () -> mockFactory.create(rawType),
+                    autoMockNonJdkScope);
         }
     }
 
@@ -375,6 +404,30 @@ public class TestBeansCdiExtension implements Extension {
             }
         }
         return Collections.unmodifiableSet(qualifiers);
+    }
+
+    /**
+     * Whether the field carries a CDI scope annotation declared by
+     * the test author. Recognises any annotation type meta-annotated
+     * with {@link NormalScope} or {@link Scope} — covers
+     * {@code @RequestScoped}, {@code @ApplicationScoped},
+     * {@code @Singleton}, {@code @Dependent}, scope-module's
+     * {@code @TestMethodScoped} / {@code @TestClassScoped}, and any
+     * custom user scope.
+     *
+     * @param field the static field declaring a {@code @TestBean}
+     * @return the user-declared CDI scope annotation type, or empty
+     *         when the field has no scope annotation
+     */
+    private static Optional<Class<? extends Annotation>> userDeclaredScopeOnField(Field field) {
+        for (Annotation annotation : field.getAnnotations()) {
+            Class<? extends Annotation> annotationType = annotation.annotationType();
+            if (annotationType.isAnnotationPresent(NormalScope.class)
+                    || annotationType.isAnnotationPresent(Scope.class)) {
+                return Optional.of(annotationType);
+            }
+        }
+        return Optional.empty();
     }
 
     private static Optional<EnableTestBeans> findEnableTestBeans(Class<?> testClass) {
