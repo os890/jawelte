@@ -85,6 +85,7 @@
         <module>scenario-49-nested-midflight-jpql-read</module>
         <module>scenario-50-cleanup-jointable</module>
         <module>scenario-51-cleanup-self-fk</module>
+        <module>scenario-52-tx-scoped-lifecycle-counts</module>
     </modules>
 
     <dependencies>
