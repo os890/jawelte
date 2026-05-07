@@ -123,22 +123,102 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
             fireEvent(new TransactionBeforeCompletion(persistenceUnitName));
         }
         try {
-            for (String persistenceUnitName : framePersistenceUnits) {
-                EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
-                if (entityManager == null) {
-                    continue;
-                }
-                try {
-                    entityManager.getTransaction().commit();
-                    fireEvent(new TransactionCommitted(persistenceUnitName));
-                } finally {
-                    TransactionScopedEmHolder.pop(persistenceUnitName);
-                    entityManager.close();
-                }
-            }
+            // Phase 1: flush every active EM. If any flush fails,
+            // roll every PU back (best-effort multi-PU atomicity over
+            // independent RESOURCE_LOCAL transactions) and re-throw.
+            flushAllOrRollback(framePersistenceUnits);
+            // Phase 2: every flush succeeded, commit each EM. Per-PU
+            // commit failures aggregate via primary + addSuppressed
+            // per TICKET-001; remaining PUs still get the chance to
+            // commit so partial failure doesn't leave EMs open.
+            commitAllAggregated(framePersistenceUnits);
         } finally {
             frames.get().pop();
             TransactionScopedEmHolder.exitTransactionalScope();
+        }
+    }
+
+    private void flushAllOrRollback(Set<String> framePersistenceUnits) {
+        RuntimeException flushFailure = null;
+        for (String persistenceUnitName : framePersistenceUnits) {
+            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
+            if (entityManager == null) {
+                continue;
+            }
+            try {
+                entityManager.flush();
+            } catch (RuntimeException failure) {
+                flushFailure = failure;
+                break;
+            }
+        }
+        if (flushFailure == null) {
+            return;
+        }
+        for (String persistenceUnitName : framePersistenceUnits) {
+            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
+            if (entityManager == null) {
+                continue;
+            }
+            try {
+                if (entityManager.getTransaction().isActive()) {
+                    entityManager.getTransaction().rollback();
+                }
+                fireEvent(new TransactionRolledBack(persistenceUnitName));
+            } catch (RuntimeException rollbackFailure) {
+                flushFailure.addSuppressed(rollbackFailure);
+            } finally {
+                try {
+                    TransactionScopedEmHolder.pop(persistenceUnitName);
+                } catch (RuntimeException ignored) {
+                    // pop after a rollback that already drained the deque;
+                    // primary failure stays in flushFailure.
+                }
+                try {
+                    entityManager.close();
+                } catch (RuntimeException closeFailure) {
+                    flushFailure.addSuppressed(closeFailure);
+                }
+            }
+        }
+        throw flushFailure;
+    }
+
+    private void commitAllAggregated(Set<String> framePersistenceUnits) {
+        RuntimeException primary = null;
+        for (String persistenceUnitName : framePersistenceUnits) {
+            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
+            if (entityManager == null) {
+                continue;
+            }
+            try {
+                entityManager.getTransaction().commit();
+                fireEvent(new TransactionCommitted(persistenceUnitName));
+            } catch (RuntimeException commitFailure) {
+                if (primary == null) {
+                    primary = commitFailure;
+                } else {
+                    primary.addSuppressed(commitFailure);
+                }
+            } finally {
+                try {
+                    TransactionScopedEmHolder.pop(persistenceUnitName);
+                } catch (RuntimeException ignored) {
+                    // already popped or never pushed; primary keeps its cause.
+                }
+                try {
+                    entityManager.close();
+                } catch (RuntimeException closeFailure) {
+                    if (primary == null) {
+                        primary = closeFailure;
+                    } else {
+                        primary.addSuppressed(closeFailure);
+                    }
+                }
+            }
+        }
+        if (primary != null) {
+            throw primary;
         }
     }
 

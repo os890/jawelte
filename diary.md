@@ -569,3 +569,14 @@ Full reactor mvn -P owb verify green.
 Net effect: a `@Transactional` method that only touches the default PU pays exactly one EM-create / tx-begin / tx-commit. Inactive non-default PUs (e.g. configured but unreachable) are never dereferenced and never dragged into the tx.
 
 Full reactor mvn -P owb verify green.
+
+## 2026-05-07 — TICKET-005 follow-up (Task #81: multi-PU flush-all/commit-all)
+
+`DefaultResourceLocalTransactionStrategy.commit()` now does a two-phase commit across the frame's joined PU set:
+
+1. **flushAllOrRollback** — iterate the joined PUs in insertion order, `em.flush()` each. On the first failure: roll every PU back, fire `TransactionRolledBack` per PU, pop + close each EM, throw the flush failure. Per-PU rollback / pop / close failures are aggregated onto the flush exception via `addSuppressed`.
+2. **commitAllAggregated** — every flush succeeded, so commit each EM. Per-PU commit failures aggregate via primary + `addSuppressed` (TICKET-001 policy); the loop still pops + closes every EM so a late failure doesn't leak open EMs. Throws the aggregated exception at the end.
+
+This is best-effort cross-PU atomicity over independent RESOURCE_LOCAL transactions: a flush failure on any PU rolls every PU back before any commit happens, so nothing reaches the database. After phase 1 has succeeded, phase 2's commits are no-fail in practice (nothing left to validate), but defensive aggregation handles JDBC-level surprises.
+
+Full reactor mvn -P owb verify green.
