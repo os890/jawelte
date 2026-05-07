@@ -87,6 +87,7 @@
         <module>scenario-51-cleanup-self-fk</module>
         <module>scenario-52-tx-scoped-lifecycle-counts</module>
         <module>scenario-53-tx-scoped-nested-isolation</module>
+        <module>scenario-54-readonly-multi-modification</module>
     </modules>
 
     <dependencies>

@@ -681,3 +681,9 @@ Filled in `tests/jpa-module/scenario-16-readonly-discards-writes` (was a placeho
 Bug found while wiring this scenario: `DefaultResourceLocalTransactionStrategy.frames` was an instance ThreadLocal, but `TestContext.loadService(...)` returns a fresh strategy instance per call. `TransactionalInterceptor` and `ReadOnlyInterceptor` ended up on different strategies, so `@ReadOnly`'s `setRollbackOnly()` set the flag on a stack the outer interceptor never read — net effect: rollback-only was lost and the tx committed. Fixed by promoting `FRAMES` to a static field. Existing nested-tx and tx-scoped scenarios still pass.
 
 Result: Tests run: 1, Failures: 0, Errors: 0 — task #94 done.
+
+## 2026-05-07 — scenario-54: @ReadOnly multi-modification rolled back
+
+Added `tests/jpa-module/scenario-54-readonly-multi-modification`. A single `@Transactional @ReadOnly` body packs three heterogeneous mutations — `em.persist(new Item(...))`, `existing.setName(...)` (setter-driven dirty mark), and `em.remove(...)`. The test asserts all three are discarded together: count stays 2, the targeted "preexisting-A" name is unchanged, and the supposedly-removed "preexisting-B" still exists. Confirms `@ReadOnly`'s `FlushMode.COMMIT` + `setRollbackOnly()` is rollback-symmetric across insert / update / delete.
+
+Result: Tests run: 1, Failures: 0, Errors: 0 — task #95 done.
