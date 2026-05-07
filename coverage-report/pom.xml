@@ -55,6 +55,16 @@
             <artifactId>jawelte-cdi-module-impl</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-impl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             Test scenario modules: their jacoco.exec files contain the
