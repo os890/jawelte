@@ -282,3 +282,38 @@ Maven:
 
 Verification: `./mvnw verify` passes the now-24-module reactor; all 21 prior scenarios still pass; cdi-module/impl jar produced (with javadoc jar) under default profile (OWB on classpath but no integration tests yet exercise it).
 
+
+## 2026-05-07 — TICKET-003: CDI SE Implementation (cdi-module) — completed
+
+Shipped the first integration module on top of the TICKET-001 / TICKET-002 foundation, plus three TICKET-001 addenda the cdi-module needed.
+
+**TICKET-001 addenda (Phase 1, additive):**
+- `TestContext.get()` static accessor, ThreadLocal-backed; active only inside `DelegatingJUnitExtension.beforeAll`'s bootstrap window. Cleared in a `finally` block so cleanup runs even when a port's `beforeAll` or a `ContainerStarted` observer throws.
+- `TestContext.loadService(Class)` SPI helper that combines MicroProfile Config selection, `ServicePriorityResolver` priority sort, and a CDI-first / reflection-fallback instantiation path.
+- `ServicePriorityResolver` port + `DefaultServicePriorityResolver` (ascending `@Priority`, missing → `MAX_VALUE`, class-name tiebreak).
+
+**cdi-module/api (Phase 2):**
+- `ExcludedPackageFilter` — auto-mock exclude policy (Maven shape: pure ports module, no CDI / Mockito imports).
+- `WhitelistFilter` — `limitToTestBeans=true` allow policy.
+
+**cdi-module/impl (Phase 3 + Phase 4 iterations):**
+- `CdiTestBeanContainer` — `TestBeanContainerPort` adapter that boots an `SeContainer` per test class, registers the framework Extension, fires `ContainerStarted`, and manages the per-method `RequestContextController`. Falls back to `CDI.current().getBeanManager()` when no `SeContainer` metadata is bound (manageContainer=false).
+- `TestBeansCdiExtension` — discovers `@TestBean` declarations, registers `@Alternative` and synthetic beans, applies whitelist veto, and synthesises Mockito mocks for unsatisfied IPs. Skips silently when no `TestContext` is active.
+- `DefaultExcludedPackageFilter` / `DefaultWhitelistFilter` — `@Priority(MAX_VALUE)` defaults; both overridable via `ServiceLoader` + `@Priority`.
+- Helper classes: `TestBeanScanner`, `SyntheticBeanUtil`, `MockitoMockFactory`, `InjectFieldsHelper`, `FrameworkAllowlist`.
+
+**Tests (Phase 4):** 49 scenario sub-modules under `tests/cdi-module/`. The same scenarios run under both `-Powb` (default) and `-Pweld` profiles, selected via the `tests/cdi-module/pom.xml` profiles. All scenarios pass on both profiles.
+
+**Iteration findings during Phase 4:**
+- `ProcessInjectionPoint<?, ?>` with raw wildcards causes OpenWebBeans to deliver only events for `spi.InjectionPoint`-typed IPs. Switched to a method-generic `<T, X> void onProcessInjectionPoint(@Observes ProcessInjectionPoint<T, X>)`.
+- `BeanConfigurator.createWith` did not appear to fire under OWB 4.1; switched to `produceWith` and added `.beanClass(rawType)`.
+- Weld is strict about generic-type assignability: a synthetic bean of type `Foo` (raw) does not match an `@Inject Foo<Bar>` IP. The Extension now records the full `java.lang.reflect.Type` per IP and registers it on the synthetic bean.
+- `Mockito.mock(...)` with the inline mock-maker can't dynamically attach byte-buddy on Java 25. Each scenario module ships `mockito-extensions/org.mockito.plugins.MockMaker = mock-maker-subclass`.
+- For `@TestBean(bean=X)` where `X` has `@Alternative` but no scope (scenario 34): the Extension uses `BeforeBeanDiscovery.addAnnotatedType(...)` to force discovery and adds `@Dependent` via the configurator. For non-`@Alternative` non-annotated `X` (scenario 35) the Extension does nothing — silent no-op per spec.
+- Qualifier-set merge follows CDI's `@Nonbinding`-aware equivalence (skip `@Nonbinding` members; compare bound members via `Objects.deepEquals`).
+
+**Cleanup (Phases 5 + 6):**
+- `ServiceLoaderCache` (core/impl) and the four `RecordedEvents` test holders converted to the project's standard `abstract class + protected ctor` shape.
+- `architecture.md` Hexagonal Architecture chapter rewritten: the abstract `JpaContainerPort` / `EclipseLinkAdapter` / etc. examples are replaced by the actual shipped ports (`TestBeansExtension`, `TestBeanContainerPort`, `TestModuleLifecyclePort`, `TestContext`, `ServicePriorityResolver`, `ConfigResolver`, `ExcludedPackageFilter`, `WhitelistFilter`) and adapters. The forward-looking JPA / JTA / JAX-RS / DB-Unit / WireMock examples are preserved as a "Planned" note.
+
+`./mvnw clean verify` passes under both `-Powb` and `-Pweld` with all gates (Enforcer, Checkstyle, RAT, Javadoc, JaCoCo).
