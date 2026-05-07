@@ -819,3 +819,13 @@ Global sed across `tests/jpa-module/**/META-INF/beans.xml`: 60 files swapped fro
 This works because the framework injects test instance fields via `InjectFieldsHelper.inject(beanManager, testInstance)` — the test class doesn't need to be a CDI bean for `@Inject` to fire. Every scenario service / observer / tracker already had explicit `@ApplicationScoped`, `@TransactionScoped`, or `@Dependent` annotations, so they're still discovered under `"annotated"` mode.
 
 Verified: full reactor BUILD SUCCESS under both `-P owb` (default) and `-P weld`. No remaining `bean-discovery-mode="all"` occurrences anywhere in the repo. Task #121 done.
+
+## 2026-05-08 — task #115: route config reads through the ConfigResolver port (no port changes)
+
+Two-layer change. `ConfigResolver` and `TestContext` ports are **unchanged** (you flagged any port edit needs explicit approval).
+
+**Layer 1 — `JpaConfig` `@ConfigBean` (forward-looking).** New `modules/jpa-module/impl/.../adapter/config/JpaConfig.java`. CDI consumers `@Inject JpaConfig` and call `protectedPackages(...)`, `vendorVetoAllowlist()`, `entityScanWhitelist()`, `appLabel()`, `additionalPersistenceProperties()`. Each method owns its key spelling + parsing + default. Internally the bean uses the injected `ConfigResolver` port. Today there are zero CDI-side consumers in jpa-module — this seeds the convention so the next module-side caller has the typed bean ready.
+
+**Layer 2 — `JpaCdiExtension` dedup against the port (existing pattern).** The Extension can't `@Inject` (CDI is still bootstrapping at `BeforeBeanDiscovery`), so it accesses the active resolver via `TestContext.loadService(ConfigResolver.class)` — the same channel `JpaTypesExcludedPackageFilter` already uses. Replaced four `ConfigProvider.getConfig().getOptionalValue(KEY).or(() -> getOptionalValue(KEY.replace('.', '_')))` blocks with one shared `resolver()` helper + `resolver.resolve(KEY)` calls. The dot-or-underscore fallback now lives only in `ConfigResolverAdapter` — gone from the Extension. The one prefix-walk case (`PERSISTENCE_PROPERTY_PREFIX`) keeps `ConfigProvider.getConfig()` directly because key enumeration isn't on the port.
+
+Reactor green under both `-P owb` and `-P weld`. Task #115 done.

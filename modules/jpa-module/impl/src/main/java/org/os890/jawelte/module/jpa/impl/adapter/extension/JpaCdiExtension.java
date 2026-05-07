@@ -57,6 +57,7 @@ import jakarta.transaction.UserTransaction;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.hibernate.jpa.HibernatePersistenceProvider;
+import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.ReadOnly;
@@ -281,9 +282,7 @@ public class JpaCdiExtension implements Extension {
     }
 
     private static Set<String> readVendorVetoAllowlist() {
-        Config config = ConfigProvider.getConfig();
-        return config.getOptionalValue(VENDOR_VETO_ALLOWLIST_KEY, String.class)
-                .or(() -> config.getOptionalValue(VENDOR_VETO_ALLOWLIST_KEY.replace('.', '_'), String.class))
+        return resolver().resolve(VENDOR_VETO_ALLOWLIST_KEY)
                 .map(value -> {
                     Set<String> prefixes = new LinkedHashSet<>();
                     for (String entry : value.split(",")) {
@@ -295,6 +294,21 @@ public class JpaCdiExtension implements Extension {
                     return prefixes;
                 })
                 .orElseGet(Collections::emptySet);
+    }
+
+    /**
+     * Pre-CDI lookup of the active {@link ConfigResolver}. CDI is
+     * still in {@code BeforeBeanDiscovery} when this Extension's
+     * observers fire, so the standard {@code @Inject ConfigResolver}
+     * channel isn't available yet — we route through
+     * {@link TestContext#loadService(Class)}, which uses the same
+     * prioritized SPI lookup the rest of the framework uses for
+     * pre-CDI port resolution. The returned resolver applies the
+     * dot-or-underscore key fallback internally, so callers feed it
+     * a single canonical dot-key per config-key constant.
+     */
+    private static ConfigResolver resolver() {
+        return TestContext.loadService(ConfigResolver.class);
     }
 
     <X> void onProcessFactoryProducerMethod(
@@ -471,9 +485,9 @@ public class JpaCdiExtension implements Extension {
     }
 
     private static EntityScanner.Whitelist readEntityScanWhitelist() {
-        Config config = ConfigProvider.getConfig();
-        List<String> literals = readCsvList(config, ENTITY_SCAN_WHITELIST_PACKAGES_KEY);
-        List<String> patternStrings = readCsvList(config, ENTITY_SCAN_WHITELIST_PATTERNS_KEY);
+        ConfigResolver resolver = resolver();
+        List<String> literals = readCsvList(resolver, ENTITY_SCAN_WHITELIST_PACKAGES_KEY);
+        List<String> patternStrings = readCsvList(resolver, ENTITY_SCAN_WHITELIST_PATTERNS_KEY);
         if (literals.isEmpty() && patternStrings.isEmpty()) {
             return EntityScanner.Whitelist.empty();
         }
@@ -484,9 +498,8 @@ public class JpaCdiExtension implements Extension {
         return new EntityScanner.Whitelist(List.copyOf(literals), List.copyOf(compiled));
     }
 
-    private static List<String> readCsvList(Config config, String key) {
-        return config.getOptionalValue(key, String.class)
-                .or(() -> config.getOptionalValue(key.replace('.', '_'), String.class))
+    private static List<String> readCsvList(ConfigResolver resolver, String key) {
+        return resolver.resolve(key)
                 .map(value -> {
                     List<String> entries = new ArrayList<>();
                     for (String entry : value.split(",")) {
@@ -501,9 +514,7 @@ public class JpaCdiExtension implements Extension {
     }
 
     private static Set<String> readProtectedPackagePrefixes() {
-        Config config = ConfigProvider.getConfig();
-        return config.getOptionalValue(PROTECTED_PACKAGES_KEY, String.class)
-                .or(() -> config.getOptionalValue(PROTECTED_PACKAGES_KEY.replace('.', '_'), String.class))
+        return resolver().resolve(PROTECTED_PACKAGES_KEY)
                 .map(value -> {
                     Set<String> prefixes = new LinkedHashSet<>();
                     for (String entry : value.split(",")) {
@@ -518,10 +529,7 @@ public class JpaCdiExtension implements Extension {
     }
 
     private static String defaultFilePath(Class<?> testClass) {
-        Config config = ConfigProvider.getConfig();
-        String appLabel = config.getOptionalValue(APP_LABEL_KEY, String.class)
-                .or(() -> config.getOptionalValue(APP_LABEL_KEY.replace('.', '_'), String.class))
-                .orElseGet(testClass::getSimpleName);
+        String appLabel = resolver().resolve(APP_LABEL_KEY).orElseGet(testClass::getSimpleName);
         return System.getProperty("user.home") + "/" + appLabel + "_db";
     }
 
