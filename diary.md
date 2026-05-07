@@ -738,3 +738,9 @@ Added `tests/jpa-module/scenario-59-persistence-xml-parser`. Direct-call unit te
 4. Test-classpath-wins: a "prod" classpath root and a "test-classes" root both expose a `persistence.xml`; only the test one survives — confirms the `/test-classes/` filter in `PersistenceXmlParser.selectPreferred`.
 
 Result: Tests run: 4, Failures: 0, Errors: 0 — task #92 done.
+
+## 2026-05-08 — coverage-report: pull in scenarios 45–59
+
+Added the 15 new jpa-module scenario sub-modules (45–59) to `coverage-report/pom.xml` so the aggregated JaCoCo report includes their exec data. Also brought all per-scenario `beans.xml` / `persistence.xml` / `microprofile-config.properties` headers into RAT compliance — abbreviated `Copyright 2026 os890` + `Licensed under the Apache License, Version 2.0 (the "License")` + `...` form, matching the pre-existing scenario style. Verified `./mvnw -pl coverage-report -am verify -DskipTests` is BUILD SUCCESS.
+
+Task #113 done.
