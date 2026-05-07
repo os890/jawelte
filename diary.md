@@ -495,3 +495,15 @@ Real test bodies for each scenario land in follow-up commits on this branch.
 `coverage-report/pom.xml` now lists `jawelte-jpa-module-{api,impl}` as production-class deps (so `report-aggregate` analyzes them) and every one of the 44 new jpa-module scenarios as test-execution-data deps. The aggregator entries were inserted in deterministic order via an `awk` splice keyed on the last scope-module entry; total line count went from 634 to 864.
 
 `./mvnw -pl coverage-report validate` green.
+
+## 2026-05-07 — TICKET-005 Phase 8 (verify under owb + weld)
+
+`./mvnw -P owb verify` and `./mvnw -P weld verify` both green end-to-end on the 168-module reactor.
+
+- All 56 cdi-module + 27 scope-module + 22 core scenarios continue to pass on both profiles (no regressions).
+- 44 jpa-module scenarios compile + run as placeholder Test classes (no `@Test` methods); surefire skips them with no failures.
+- Coverage gates (Checkstyle / Maven Enforcer / Apache RAT / JaCoCo / Javadoc strict mode) all clean under both profiles.
+- jpa-module/api + jpa-module/impl currently report 0% line coverage in `coverage-report/target/site/jacoco-aggregate/jacoco.csv` because no `@Test` body invokes them yet — that delta closes as the 44 scenario `@Test` bodies land in follow-up commits on this branch.
+- Both profiles complete in roughly 1m54s on the local machine; per-scenario runtime is ~0.35-0.40s for the placeholders.
+
+Build is in a clean, reviewable state for PR. The scaffold + jpa-module/api + jpa-module/impl + coverage-report integration are reviewable independently of the per-scenario `@Test` bodies that follow.
