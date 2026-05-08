@@ -96,6 +96,7 @@
         <module>scenario-60-entity-scan-whitelist</module>
         <module>scenario-61-native-sql-delete-circular-fk</module>
         <module>scenario-62-after-test-transaction-payload</module>
+        <module>scenario-63-config-resolver-prefix-walk</module>
     </modules>
 
     <dependencies>

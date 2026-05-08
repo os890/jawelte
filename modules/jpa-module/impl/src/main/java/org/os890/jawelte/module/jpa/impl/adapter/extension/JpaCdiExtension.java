@@ -54,8 +54,6 @@ import jakarta.persistence.spi.PersistenceUnitTransactionType;
 import jakarta.transaction.Transactional;
 import jakarta.transaction.UserTransaction;
 
-import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.ConfigProvider;
 import org.hibernate.jpa.HibernatePersistenceProvider;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
@@ -65,6 +63,7 @@ import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
 import org.os890.jawelte.module.jpa.impl.adapter.tx.UserTransactionImpl;
+import org.os890.jawelte.module.jpa.impl.config.JpaConfig;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.EntityManagerProxy;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
@@ -117,8 +116,6 @@ import org.os890.jawelte.module.jpa.impl.util.TestPersistenceUnitInfo;
  * is per-test-class.
  */
 public class JpaCdiExtension implements Extension {
-
-    private static final String PERSISTENCE_PROPERTY_PREFIX = "org.os890.jawelte.module.jpa.persistence-property.";
 
     private static final String APP_LABEL_KEY = "org.os890.jawelte.module.jpa.app-label";
 
@@ -427,14 +424,11 @@ public class JpaCdiExtension implements Extension {
         properties.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
         properties.put("jakarta.persistence.schema-generation.database.action", "drop-and-create");
 
-        Config config = ConfigProvider.getConfig();
-        for (String key : config.getPropertyNames()) {
-            if (!key.startsWith(PERSISTENCE_PROPERTY_PREFIX)) {
-                continue;
-            }
-            String propertyName = key.substring(PERSISTENCE_PROPERTY_PREFIX.length());
-            config.getOptionalValue(key, String.class).ifPresent(value -> properties.put(propertyName, value));
-        }
+        // Route the persistence-property prefix walk through JpaConfig (and
+        // therefore through the active ConfigResolver) so a consumer-supplied
+        // resolver controls every key jpa-module reads — including this prefix
+        // (punch-list §5.4).
+        properties.putAll(new JpaConfig().additionalPersistenceProperties());
 
         PersistencePropertyResolver resolver = TestContext.loadService(PersistencePropertyResolver.class);
         if (resolver != null) {

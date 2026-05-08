@@ -26,8 +26,6 @@ import java.util.regex.Pattern;
 
 import jakarta.annotation.PostConstruct;
 
-import org.eclipse.microprofile.config.Config;
-import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.core.api.ConfigBean;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
@@ -142,30 +140,29 @@ public class JpaConfig {
     }
 
     /**
-     * Snapshot of every MP Config entry whose key starts with
+     * Snapshot of every config entry whose key starts with
      * {@link #PERSISTENCE_PROPERTY_PREFIX}; the prefix is stripped
      * so the resulting map keys are JPA property names suitable for
      * direct merge into the bootstrap property bag.
      *
-     * <p>The walk goes through {@link ConfigProvider#getConfig()}
-     * directly: {@code ConfigResolver.resolve} is single-key, and
-     * exposing prefix iteration on the port would force every
-     * user-supplied alternative {@code ConfigResolver} to support
-     * key enumeration. The semantics ("walk the active MP Config
-     * sources") are uniform enough that this concession lives
-     * inside the typed facade.
+     * <p>Goes through the active {@link ConfigResolver} — uses
+     * {@link ConfigResolver#resolveKeys()} to enumerate the
+     * universe and {@link ConfigResolver#resolve(String)} to fetch
+     * each value — so a consumer-supplied resolver controls the
+     * full set of keys jpa-module reads, including this prefix
+     * walk (closes punch-list §5.4).
      *
      * @return an unmodifiable, insertion-ordered map; never {@code null}
      */
     public Map<String, String> additionalPersistenceProperties() {
-        Config config = ConfigProvider.getConfig();
+        ConfigResolver resolver = lookupResolver();
         Map<String, String> properties = new LinkedHashMap<>();
-        for (String key : config.getPropertyNames()) {
+        for (String key : resolver.resolveKeys()) {
             if (!key.startsWith(PERSISTENCE_PROPERTY_PREFIX)) {
                 continue;
             }
             String propertyName = key.substring(PERSISTENCE_PROPERTY_PREFIX.length());
-            config.getOptionalValue(key, String.class).ifPresent(value -> properties.put(propertyName, value));
+            resolver.resolve(key).ifPresent(value -> properties.put(propertyName, value));
         }
         return Map.copyOf(properties);
     }

@@ -82,6 +82,11 @@ public class ConfigResolverAdapter implements ConfigResolver {
         return resolved.getOptionalValue(dotKey.replace('.', '_'), String.class);
     }
 
+    @Override
+    public Iterable<String> resolveKeys() {
+        return cachedConfig().getPropertyNames();
+    }
+
     /**
      * Populates the cached {@link Config} reference when the bean is
      * managed by a CDI container.

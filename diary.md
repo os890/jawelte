@@ -999,3 +999,27 @@ Both helpers existed already (`TestMethodTransactionWrapping`) — they were use
 New scenario-62-after-test-transaction-payload empirically verifies both branches via `EngineTestKit`: a subject class has two `@Transactional @Test` methods (one passing, one throwing); a recorder bean captures every fired event; the outer test asserts the recorded `(committed, testMethodName)` pairs are `(true, "aPassingTransactional")` and `(false, "bThrowingTransactional")`.
 
 Mutation re-verify: with the pre-§5.1 hardcoded `committed=true` + class-name path, scenario-62 fails 1/1 (the rollback case is reported as committed=true). With the fix, 1/1 passes. Full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`.
+
+## 2026-05-08 — FIXED §5.4: ConfigBean always reads through ConfigResolver
+
+Punch-list §5.4 (DESIGN, LOW): `JpaConfig.additionalPersistenceProperties()` and `JpaCdiExtension.computeProperties()` walked `ConfigProvider.getConfig().getPropertyNames()` directly to find every key under `org.os890.jawelte.module.jpa.persistence-property.`. A consumer-supplied `ConfigResolver` (registered via `META-INF/services` at lower `@Priority`) controlled every other key the framework read but was silently bypassed for this one prefix.
+
+Port change: added a second method to `ConfigResolver`:
+
+```java
+Iterable<String> resolveKeys();   // every configured key
+```
+
+Naming chosen for symmetry with `Optional<String> resolve(String dotKey)`. Generic — any future caller that needs prefix matches, regex filters, or hand-curated allowlists composes it with `resolve(...)`. Keeps the port "atomic" (one key resolve + all-keys list) rather than carrying domain-specific iteration helpers.
+
+`ConfigResolverAdapter` (default impl in core/impl) implements `resolveKeys()` via `Config.getPropertyNames()` from MicroProfile Config.
+
+Refactors:
+- `JpaConfig.additionalPersistenceProperties()` now uses `lookupResolver().resolveKeys()` to enumerate, filters by prefix, calls `resolver.resolve(key)` for each match. Drops the `org.eclipse.microprofile.config.Config` / `ConfigProvider` imports — the typed facade is fully port-driven.
+- `JpaCdiExtension.computeProperties()` now calls `new JpaConfig().additionalPersistenceProperties()` instead of duplicating the prefix-walk logic. Drops the local `PERSISTENCE_PROPERTY_PREFIX` constant + the `Config` / `ConfigProvider` imports.
+
+New scenario-63-config-resolver-prefix-walk verifies empirically:
+- A test-only `InjectingConfigResolver` extends `ConfigResolverAdapter` at `@Priority(50)`, registered through `META-INF/services`. It adds one synthetic key (`…persistence-property.hibernate.format_sql`) to `resolveKeys()` and returns `"true"` for it via `resolve(...)`.
+- The test asserts `entityManagerFactory.getProperties().get("hibernate.format_sql")` equals `"true"` — proving the synthetic property reached Hibernate's bootstrap by going through the consumer-supplied resolver.
+
+Mutation re-verify: revert the `JpaCdiExtension` refactor (back to the direct `ConfigProvider.getConfig().getPropertyNames()` walk) → scenario-63 fails 1/1 (`hibernate.format_sql` is null because the consumer resolver was bypassed). With the fix → 1/1 passes. Full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`.
