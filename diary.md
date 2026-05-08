@@ -835,3 +835,15 @@ Reactor green under both `-P owb` and `-P weld`. Task #115 done.
 Punch-list §9.4 finding: `assertThat(COUNT_AT_PREDESTROY.get()).isNotNull()` accepts both 0L and 1L, so a regression where jpa-module-afterEach (cleanup) and scope-module-afterEach (@PreDestroy) flip ordering would not have been caught. Tightened to `.isEqualTo(0L)` after empirically observing the actual ordering: cleanup runs BEFORE @PreDestroy. The prior `isNotNull()` was accidentally lax.
 
 Mutation re-test: with `runCleanup()` removed from `JpaLifecycleAdapter.afterEach`, count is 1L and the new assertion fails — empirically confirming the tightened test now catches what it claims to.
+
+## 2026-05-08 — FIXED: scenario-23 deployment-failure assertion (§8.4)
+
+Punch-list §8.4: the `isInstanceOf(Throwable.class)` matcher accepts any thrown exception, so a regression where the deployment failure shifts to a different mode (e.g. ambiguous resolution instead of unsatisfied) would still be green.
+
+Probed both runtimes for the actual exception type + message:
+- OWB: `WebBeansDeploymentException` with message starting "Api type [jakarta.persistence.EntityManager] is not found with the qualifiers"
+- Weld: `org.jboss.weld.exceptions.DeploymentException` with message "WELD-001408: Unsatisfied dependencies for type EntityManager with qualifiers @Default"
+
+Tightened to a `.satisfies(...)` block that requires the message to contain "EntityManager" AND one of {"Unsatisfied", "not found"} — portable across both profiles, defensive against the failure mode shifting.
+
+Caveat: empirically, the §8.4 mutation (multi-PU `Default` qualifier) didn't actually produce a different failure mode in OWB — the synthetic-bean registration still surfaced as Unsatisfied. So the original test wasn't catching a currently-present regression; the tightened assertion is forward-looking against future runtime / CDI changes.

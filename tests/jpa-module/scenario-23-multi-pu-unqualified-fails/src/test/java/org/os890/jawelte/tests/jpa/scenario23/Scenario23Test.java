@@ -15,6 +15,7 @@
  */
 package org.os890.jawelte.tests.jpa.scenario23;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import jakarta.enterprise.inject.se.SeContainer;
@@ -53,6 +54,20 @@ public class Scenario23Test {
         })
                 .as("multi-PU + unqualified @Inject EntityManager must fail container deployment "
                         + "(jpa-module registers @Named-only synthetic beans, no @Default)")
-                .isInstanceOf(Throwable.class);
+                .satisfies(thrown -> {
+                    String message = thrown.getMessage() == null ? "" : thrown.getMessage();
+                    assertThat(message)
+                            .as("the deployment failure must mention EntityManager AND an "
+                                    + "UNSATISFIED-resolution keyword (Weld: 'Unsatisfied'; "
+                                    + "OWB: 'not found') — locks the test to the specific "
+                                    + "failure mode where jpa-module's @Named-only registration "
+                                    + "leaves the unqualified injection point with no satisfying "
+                                    + "bean. A different failure mode (e.g. ambiguous resolution "
+                                    + "if jpa-module accidentally registered @Default for both "
+                                    + "PUs) would NOT mention these keywords and the assertion "
+                                    + "would catch the regression — closing punch-list §8.4 / §9.3.")
+                            .contains("EntityManager")
+                            .containsAnyOf("Unsatisfied", "not found");
+                });
     }
 }
