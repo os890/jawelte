@@ -15,17 +15,62 @@
  */
 package org.os890.jawelte.tests.jpa.scenario33;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Status;
+import jakarta.transaction.UserTransaction;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #33 (user-transaction-injectable) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code UserTransaction} is injectable; in resting state it reports
+ * {@link Status#STATUS_NO_TRANSACTION}; {@code begin()} + persist +
+ * {@code commit()} produces a row that is visible from a fresh tx.
  */
+@EnableTestBeans
 public class Scenario33Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private UserTransaction userTransaction;
+
+    @Inject
+    private EntityManager entityManager;
+
+    /** No-arg constructor for CDI. */
     public Scenario33Test() {
+    }
+
+    /** Inject + begin/persist/commit + verify row visible. */
+    @Test
+    public void injectableUserTransactionRunsCommit() throws Exception {
+        assertThat(userTransaction)
+                .as("@Inject UserTransaction must resolve to a non-null bean")
+                .isNotNull();
+        assertThat(userTransaction.getStatus())
+                .as("freshly looked-up UserTransaction must report STATUS_NO_TRANSACTION")
+                .isEqualTo(Status.STATUS_NO_TRANSACTION);
+
+        userTransaction.begin();
+        try {
+            entityManager.persist(new Marker());
+            entityManager.flush();
+        } finally {
+            userTransaction.commit();
+        }
+
+        userTransaction.begin();
+        try {
+            long count = entityManager
+                    .createQuery("SELECT COUNT(m) FROM Marker m", Long.class)
+                    .getSingleResult();
+            assertThat(count)
+                    .as("the row persisted under UserTransaction must be visible from a fresh tx")
+                    .isEqualTo(1L);
+        } finally {
+            userTransaction.commit();
+        }
     }
 }

@@ -15,17 +15,42 @@
  */
 package org.os890.jawelte.tests.jpa.scenario36;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import jakarta.inject.Inject;
+import jakarta.transaction.UserTransaction;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #36 (user-transaction-commit-no-active-tx) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code UserTransaction.commit()} called when no transaction is active raises
+ * {@link IllegalStateException} (per {@code UserTransactionImpl} contract). The
+ * same goes for {@code rollback()}.
  */
+@EnableTestBeans
 public class Scenario36Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private UserTransaction userTransaction;
+
+    /** No-arg constructor for CDI. */
     public Scenario36Test() {
+    }
+
+    /** commit() with no active tx → IllegalStateException. */
+    @Test
+    public void commitWithoutBeginRaisesIllegalState() {
+        assertThatThrownBy(userTransaction::commit)
+                .as("UserTransaction.commit() must reject when no transaction is active")
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    /** rollback() with no active tx → IllegalStateException. */
+    @Test
+    public void rollbackWithoutBeginRaisesIllegalState() {
+        assertThatThrownBy(userTransaction::rollback)
+                .as("UserTransaction.rollback() must reject when no transaction is active")
+                .isInstanceOf(IllegalStateException.class);
     }
 }

@@ -15,17 +15,37 @@
  */
 package org.os890.jawelte.tests.jpa.scenario35;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #35 (user-transaction-inside-transactional) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Calling {@code UserTransaction.begin()} inside an active
+ * {@code @Transactional} method composes like nested {@code @Transactional}:
+ * a new EntityManager frame is pushed on {@code TransactionScopedEmHolder};
+ * inner persist + UT.commit lands its row independently of the outer tx.
+ * Outer's @Transactional commit then lands the outer row. Both visible.
  */
+@EnableTestBeans
 public class Scenario35Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private MarkerService markerService;
+
+    /** No-arg constructor for CDI. */
     public Scenario35Test() {
+    }
+
+    /** Outer @Transactional + inner UT both commit → 2 rows. */
+    @Test
+    public void userTransactionInsideTransactionalCommitsBoth() throws Exception {
+        markerService.outerTransactionalWithInnerUserTransaction("outer", "inner-via-ut");
+
+        assertThat(markerService.countMarkers())
+                .as("outer @Transactional row + inner UT row both reach the DB")
+                .isEqualTo(2L);
     }
 }

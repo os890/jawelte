@@ -15,17 +15,50 @@
  */
 package org.os890.jawelte.tests.jpa.scenario34;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.UserTransaction;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #34 (user-transaction-rollback) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code UserTransaction.rollback()} discards a row that was persisted +
+ * flushed before the rollback. A subsequent fresh tx sees an empty table.
  */
+@EnableTestBeans
 public class Scenario34Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private UserTransaction userTransaction;
+
+    @Inject
+    private EntityManager entityManager;
+
+    /** No-arg constructor for CDI. */
     public Scenario34Test() {
+    }
+
+    /** persist + flush + rollback → row count is zero. */
+    @Test
+    public void rollbackDiscardsThePersist() throws Exception {
+        userTransaction.begin();
+        entityManager.persist(new Marker());
+        entityManager.flush();
+        userTransaction.rollback();
+
+        userTransaction.begin();
+        try {
+            long count = entityManager
+                    .createQuery("SELECT COUNT(m) FROM Marker m", Long.class)
+                    .getSingleResult();
+            assertThat(count)
+                    .as("UserTransaction.rollback() must discard the row that was persisted before it")
+                    .isZero();
+        } finally {
+            userTransaction.commit();
+        }
     }
 }
