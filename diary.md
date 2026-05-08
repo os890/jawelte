@@ -847,3 +847,11 @@ Probed both runtimes for the actual exception type + message:
 Tightened to a `.satisfies(...)` block that requires the message to contain "EntityManager" AND one of {"Unsatisfied", "not found"} — portable across both profiles, defensive against the failure mode shifting.
 
 Caveat: empirically, the §8.4 mutation (multi-PU `Default` qualifier) didn't actually produce a different failure mode in OWB — the synthetic-bean registration still surfaced as Unsatisfied. So the original test wasn't catching a currently-present regression; the tightened assertion is forward-looking against future runtime / CDI changes.
+
+## 2026-05-08 — FIXED: scenario-30 method 3 binds to raw-JPA event-bypass (§8.3)
+
+Punch-list §8.3: `thirdMethodManualRollbackDiscardsThePersist` exercises raw `EntityTransaction.rollback()` — pure Hibernate semantics with no jpa-module path involved. The `countAfterRollback == 0` assertion is what JPA itself guarantees, so the test would pass against a vanilla Hibernate setup with no jpa-module wiring at all.
+
+Added a `TxEventRecorder` and post-rollback assertions that the raw path fires NO `TransactionStarted` / `TransactionCommitted` / `TransactionRolledBack` events. This binds the test to jpa-module's specific contract: events flow only from the strategy, never from a user-driven `EntityTransaction`. Mirrors scenario-57's "framework-driven vs user-driven" claim but at a different angle (here the user-driven path is JPA-native, not via @Inject UserTransaction).
+
+Empirical caveat: the new assertions hold trivially on current prod code because jpa-module never wires CDI events from JPA's own event listeners. The fix is forward-looking — a regression where jpa-module's strategy hooks into Hibernate's PreInsertEventListener / PostCommitEventListener stack would surface here.

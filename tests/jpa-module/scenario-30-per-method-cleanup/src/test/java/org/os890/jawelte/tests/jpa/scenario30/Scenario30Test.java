@@ -45,6 +45,9 @@ public class Scenario30Test {
     @Inject
     private EntityManagerFactory entityManagerFactory;
 
+    @Inject
+    private TxEventRecorder txEventRecorder;
+
     /** No-arg constructor for CDI. */
     public Scenario30Test() {
     }
@@ -85,10 +88,21 @@ public class Scenario30Test {
      * The rolled-back row must not survive — a follow-up read in a
      * second begin/commit cycle returns zero. Mirrors POC's
      * {@code JpaTestExtensionTest.manualRollback} (Order 11).
+     *
+     * <p>Adds a "framework stayed out of the way" assertion: the raw
+     * {@code EntityTransaction} path must NOT fire any of jpa-module's
+     * tx events ({@code TransactionStarted} / {@code TransactionCommitted}
+     * / {@code TransactionRolledBack}). Without this assertion, the JPA
+     * rollback half of the test would still pass against a vanilla
+     * Hibernate setup (the §8.3 finding) — adding the event-count check
+     * binds the test to jpa-module's specific contract that raw-JPA
+     * callers bypass the strategy.
      */
     @Test
     @Order(3)
     public void thirdMethodManualRollbackDiscardsThePersist() {
+        txEventRecorder.reset();
+
         EntityManager freshEntityManager = entityManagerFactory.createEntityManager();
         try {
             freshEntityManager.getTransaction().begin();
@@ -111,5 +125,17 @@ public class Scenario30Test {
         } finally {
             freshEntityManager.close();
         }
+
+        assertThat(txEventRecorder.started())
+                .as("raw EntityTransaction path must NOT fire TransactionStarted — "
+                        + "jpa-module fires events only from its own strategy, never from a "
+                        + "user-driven EntityTransaction. Closes punch-list §8.3.")
+                .isZero();
+        assertThat(txEventRecorder.committed())
+                .as("raw EntityTransaction path must NOT fire TransactionCommitted")
+                .isZero();
+        assertThat(txEventRecorder.rolledBack())
+                .as("raw EntityTransaction path must NOT fire TransactionRolledBack")
+                .isZero();
     }
 }
