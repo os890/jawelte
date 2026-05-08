@@ -15,17 +15,41 @@
  */
 package org.os890.jawelte.tests.jpa.scenario29;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.enterprise.inject.Instance;
+import jakarta.enterprise.inject.literal.NamedLiteral;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManagerFactory;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.module.jpa.api.PersistenceConfig;
+
 /**
- * Test scenario #29 (persistence-units-empty) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code @PersistenceConfig} with no {@code persistenceUnits} attribute set
+ * (defaults to an empty array) means "all PUs in {@code persistence.xml}
+ * bootstrap" — both {@code testPU29a} and {@code testPU29b} get registered.
  */
+@EnableTestBeans
+@PersistenceConfig
 public class Scenario29Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private Instance<EntityManagerFactory> entityManagerFactories;
+
+    /** No-arg constructor for CDI. */
     public Scenario29Test() {
+    }
+
+    /** Empty filter → both PUs bootstrap as @Named synthetic beans. */
+    @Test
+    public void emptyPersistenceUnitsFilterBootstrapsAllDeclaredPus() {
+        assertThat(entityManagerFactories.select(NamedLiteral.of("testPU29a")).isResolvable())
+                .as("empty filter must bootstrap testPU29a")
+                .isTrue();
+        assertThat(entityManagerFactories.select(NamedLiteral.of("testPU29b")).isResolvable())
+                .as("empty filter must bootstrap testPU29b")
+                .isTrue();
     }
 }

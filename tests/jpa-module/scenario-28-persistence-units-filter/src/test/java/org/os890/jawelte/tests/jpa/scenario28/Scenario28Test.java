@@ -15,17 +15,52 @@
  */
 package org.os890.jawelte.tests.jpa.scenario28;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.enterprise.inject.Instance;
+import jakarta.enterprise.inject.literal.NamedLiteral;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManagerFactory;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.module.jpa.api.PersistenceConfig;
+
 /**
- * Test scenario #28 (persistence-units-filter) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code @PersistenceConfig(persistenceUnits = {"testPU28a", "testPU28b"})}
+ * restricts jpa-module's bootstrap to two of the three PUs declared in
+ * {@code persistence.xml}. The two filtered-in PUs each get their
+ * {@code @Named} synthetic EMF; the third is absent.
  */
+@EnableTestBeans
+@PersistenceConfig(persistenceUnits = {"testPU28a", "testPU28b"})
 public class Scenario28Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private Instance<EntityManagerFactory> entityManagerFactories;
+
+    /** No-arg constructor for CDI. */
     public Scenario28Test() {
+    }
+
+    /** Filtered-in PUs resolve; the third PU's @Named EMF is absent. */
+    @Test
+    public void persistenceUnitsFilterRestrictsBootstrapToTheNamedPus() {
+        Instance<EntityManagerFactory> filteredInA =
+                entityManagerFactories.select(NamedLiteral.of("testPU28a"));
+        Instance<EntityManagerFactory> filteredInB =
+                entityManagerFactories.select(NamedLiteral.of("testPU28b"));
+        Instance<EntityManagerFactory> filteredOutC =
+                entityManagerFactories.select(NamedLiteral.of("testPU28c"));
+
+        assertThat(filteredInA.isResolvable())
+                .as("@Named(\"testPU28a\") EMF must be registered — it is on the filter list")
+                .isTrue();
+        assertThat(filteredInB.isResolvable())
+                .as("@Named(\"testPU28b\") EMF must be registered — it is on the filter list")
+                .isTrue();
+        assertThat(filteredOutC.isUnsatisfied())
+                .as("@Named(\"testPU28c\") EMF must be absent — filter excluded it")
+                .isTrue();
     }
 }

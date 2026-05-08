@@ -15,17 +15,36 @@
  */
 package org.os890.jawelte.tests.jpa.scenario44;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
+
 /**
- * Test scenario #44 (transaction-strategy-swap) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A test-only {@link CountingTransactionStrategy} at {@code @Priority(100)}
+ * registered through {@code META-INF/services} wins the
+ * {@code TestContext.loadService} priority sort over jpa-module's
+ * default {@code DefaultResourceLocalTransactionStrategy} — locking in
+ * the swappability claim for the transaction-strategy port (the same
+ * mechanism a future jta-module will use to plug in a JTA strategy).
  */
+@EnableTestBeans
 public class Scenario44Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    /** No-arg constructor for CDI. */
     public Scenario44Test() {
+    }
+
+    /** TestContext.loadService returns the @Priority(100) test-only impl. */
+    @Test
+    public void customTransactionStrategyWinsThePrioritySort() {
+        TransactionStrategy active = TestContext.loadService(TransactionStrategy.class);
+
+        assertThat(active)
+                .as("a test-only TransactionStrategy at @Priority(100) must win over the "
+                        + "addon's @Priority(MAX_VALUE) DefaultResourceLocalTransactionStrategy")
+                .isInstanceOf(CountingTransactionStrategy.class);
     }
 }

@@ -15,17 +15,44 @@
  */
 package org.os890.jawelte.tests.jpa.scenario38;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #38 (cdi-events-on-commit) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * jpa-module fires {@code TransactionStarted} → {@code TransactionBeforeCompletion}
+ * → {@code TransactionCommitted} for a successful {@code @Transactional} commit.
+ * Each event carries the active persistence-unit name.
  */
+@EnableTestBeans
 public class Scenario38Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private CommittingService committingService;
+
+    @Inject
+    private CommitEventRecorder commitEventRecorder;
+
+    /** No-arg constructor for CDI. */
     public Scenario38Test() {
+    }
+
+    /** A successful commit fires Started → BeforeCompletion → Committed in order. */
+    @Test
+    public void commitFiresThreeEventsInOrderWithPuName() {
+        commitEventRecorder.reset();
+
+        committingService.persistAndCommit();
+
+        assertThat(commitEventRecorder.events())
+                .as("commit must fire TransactionStarted → TransactionBeforeCompletion "
+                        + "→ TransactionCommitted, each carrying the testPU38 name")
+                .containsExactly(
+                        "started:testPU38",
+                        "before:testPU38",
+                        "committed:testPU38");
     }
 }

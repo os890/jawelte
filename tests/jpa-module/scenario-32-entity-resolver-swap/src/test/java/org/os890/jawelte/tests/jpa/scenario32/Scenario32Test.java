@@ -15,17 +15,34 @@
  */
 package org.os890.jawelte.tests.jpa.scenario32;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jpa.api.port.EntityResolver;
+
 /**
- * Test scenario #32 (entity-resolver-swap) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A test-only {@link CountingEntityResolver} at {@code @Priority(100)}
+ * registered through {@code META-INF/services} wins the
+ * {@code TestContext.loadService} priority sort over jpa-module's
+ * default impl — locks in the swappability claim for the entity-resolution port.
  */
+@EnableTestBeans
 public class Scenario32Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    /** No-arg constructor for CDI. */
     public Scenario32Test() {
+    }
+
+    /** TestContext.loadService returns the @Priority(100) test-only impl. */
+    @Test
+    public void customEntityResolverWinsThePrioritySort() {
+        EntityResolver active = TestContext.loadService(EntityResolver.class);
+
+        assertThat(active)
+                .as("a test-only EntityResolver at @Priority(100) must win over the "
+                        + "addon's @Priority(MAX_VALUE) JpaMetamodelEntityResolver")
+                .isInstanceOf(CountingEntityResolver.class);
     }
 }

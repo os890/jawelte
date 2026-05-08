@@ -15,17 +15,35 @@
  */
 package org.os890.jawelte.tests.jpa.scenario31;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
+
 /**
- * Test scenario #31 (db-cleanup-strategy-swap) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A test-only {@link CountingDbCleanupStrategy} at {@code @Priority(100)}
+ * registered through {@code META-INF/services} wins the
+ * {@code TestContext.loadService} priority sort over jpa-module's
+ * default impls — locking in the project-wide swappability claim for the
+ * cleanup port.
  */
+@EnableTestBeans
 public class Scenario31Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    /** No-arg constructor for CDI. */
     public Scenario31Test() {
+    }
+
+    /** TestContext.loadService returns the @Priority(100) test-only impl. */
+    @Test
+    public void customDbCleanupStrategyWinsThePrioritySort() {
+        DbCleanupStrategy active = TestContext.loadService(DbCleanupStrategy.class);
+
+        assertThat(active)
+                .as("a test-only DbCleanupStrategy at @Priority(100) must win over the "
+                        + "addon's @Priority(MAX_VALUE - 1) JdbcTruncate / @Priority(MAX_VALUE) JpqlDelete")
+                .isInstanceOf(CountingDbCleanupStrategy.class);
     }
 }

@@ -15,17 +15,47 @@
  */
 package org.os890.jawelte.tests.jpa.scenario39;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #39 (cdi-events-on-rollback) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * jpa-module fires {@code TransactionStarted} → {@code TransactionBeforeCompletion}
+ * → {@code TransactionRolledBack} when a {@code @Transactional} method throws.
+ * Each event carries the active persistence-unit name.
  */
+@EnableTestBeans
 public class Scenario39Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private RollbackingService rollbackingService;
+
+    @Inject
+    private RollbackEventRecorder rollbackEventRecorder;
+
+    /** No-arg constructor for CDI. */
     public Scenario39Test() {
+    }
+
+    /** A rollback fires Started → BeforeCompletion → RolledBack in order. */
+    @Test
+    public void rollbackFiresThreeEventsInOrderWithPuName() {
+        rollbackEventRecorder.reset();
+
+        assertThatThrownBy(rollbackingService::persistAndThrow)
+                .as("the service's RuntimeException must propagate")
+                .isInstanceOf(RuntimeException.class);
+
+        assertThat(rollbackEventRecorder.events())
+                .as("rollback must fire TransactionStarted → TransactionBeforeCompletion "
+                        + "→ TransactionRolledBack, each carrying the testPU39 name")
+                .containsExactly(
+                        "started:testPU39",
+                        "before:testPU39",
+                        "rolledBack:testPU39");
     }
 }
