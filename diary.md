@@ -928,3 +928,18 @@ Added a "Limitation — circular foreign keys" section to the strategy's Javadoc
 - Reference to punch-list §2.3 + verdict.
 
 No code change; doc-only. Full jpa-module suite still green under `mvn -P owb`.
+
+## 2026-05-08 — FIXED §2.3: NativeSqlDelete two-pass null-update + delete (real fix)
+
+Punch-list §2.3: previous DOCS-only commit (149dfa5) added a limitation paragraph; user asked for a real fix. Replaced the strategy's reverse-order DELETE with a two-pass approach:
+
+- **Pass 1**: walk `DatabaseMetaData.getImportedKeys` for each table; for every FK column whose `IS_NULLABLE = YES`, issue `UPDATE "<table>" SET "<fkCol>" = NULL`. Breaks circular references for nullable FKs.
+- **Pass 2**: issue `DELETE FROM "<table>"` in reverse table-list order (acyclic shapes still benefit from reverse iteration).
+
+Pure JDBC; no vendor-specific RI-disable primitives needed. Limitation: cycles where every FK column is `NOT NULL` still need vendor-specific handling — `JdbcTruncateDbCleanupStrategy` covers the H2 case via `SET REFERENTIAL_INTEGRITY`.
+
+Demonstrated empirically with new scenario-61 (two-table cycle Foo.bar_id ↔ Bar.foo_id). H2 single-table self-FK (scenario-51's shape) was already handled by H2's "DELETE FROM table" end-of-statement deferred FK check — that's why scenario-51 passed pre-fix. The two-table cycle is the canonical case that breaks reverse-order alone.
+
+Mutation re-verify: pre-fix code → scenario-61 fails with 1 failure + 1 error. Fix restored → all 3 pass. Full suite green under both `mvn -P owb` and `mvn -P weld`.
+
+Updated Javadoc on `NativeSqlDeleteDbCleanupStrategy` to describe the two-pass behavior and the residual NOT-NULL-cycle limitation (subsumes the limitation paragraph from 149dfa5).

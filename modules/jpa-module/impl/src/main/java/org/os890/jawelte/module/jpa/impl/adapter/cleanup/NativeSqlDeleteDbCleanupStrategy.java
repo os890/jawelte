@@ -15,22 +15,36 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.cleanup;
 
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
+import org.hibernate.Session;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 
 /**
- * Fallback {@link DbCleanupStrategy}: issues native-SQL
- * {@code DELETE FROM "<table>"} for every table returned by the active
- * {@link TableNameResolver}, in <strong>reverse</strong> iteration
+ * Fallback {@link DbCleanupStrategy}: two-pass cleanup using portable
+ * SQL only. <em>Pass 1</em> walks {@link java.sql.DatabaseMetaData#getImportedKeys}
+ * for every table returned by the active {@link TableNameResolver} and
+ * issues {@code UPDATE "<table>" SET "<fkCol>" = NULL} for each
+ * <em>nullable</em> foreign-key column — breaking circular references
+ * (self-referencing parent/child shapes, two-table cycles) without
+ * relying on database-specific {@code SET REFERENTIAL_INTEGRITY} or
+ * {@code SET FOREIGN_KEY_CHECKS} primitives. <em>Pass 2</em> issues
+ * {@code DELETE FROM "<table>"} in <strong>reverse</strong> table-list
  * order so child rows go before their parents in the common acyclic-FK
- * case. Per-table failures aggregate per the project exception policy
+ * case.
+ *
+ * <p>Per-table failures aggregate per the project exception policy
  * (TICKET-001): the first failure becomes the primary, subsequent
  * failures (and any rollback failure) attach via
  * {@link Throwable#addSuppressed(Throwable)}.
@@ -47,32 +61,16 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
  * {@code @ElementCollection}, sequence, and trigger-populated tables
  * that have no JPA {@code @Entity} mapping.
  *
- * <p><strong>Limitation — circular foreign keys.</strong> Reverse-order
- * deletion handles the common parent→child→grandchild acyclic FK shape,
- * but it cannot resolve <em>circular</em> FKs (e.g. a self-referencing
- * {@code person.parent_id → person.id} or two tables that point at each
- * other). The first {@code DELETE} fails because rows still reference
- * each other, every subsequent table-delete also fails (cascading), and
- * the aggregated failure rethrows from {@link #cleanAllTables}. Mitigation
- * options for consumers running against a database without
- * {@code SET REFERENTIAL_INTEGRITY} (or equivalent referential-integrity
- * disable + truncate primitives):
- * <ul>
- *   <li>Keep the {@link JdbcTruncateDbCleanupStrategy} on the classpath
- *       — it sits one priority rank ahead and handles circular FKs by
- *       toggling H2's {@code REFERENTIAL_INTEGRITY} off / on around
- *       the truncate. (Default for H2-backed test runs.)</li>
- *   <li>Ship a custom {@link DbCleanupStrategy} at a lower
- *       {@code @Priority} that performs a topological sort or a
- *       two-pass null-update + delete sequence appropriate for the
- *       target database. The strategy port is swappable through
- *       {@code META-INF/services} with no jpa-module changes.</li>
- *   <li>Map the circular FKs as nullable + ON DELETE SET NULL at the
- *       schema level so reverse-order deletion succeeds.</li>
- * </ul>
- * Documented limitation per punch-list §2.3 (verdict: equal — POC's
- * fallback has the same shape; the JdbcTruncate default covers the
- * common case).
+ * <p><strong>Circular-FK scope.</strong> The Pass 1 null-update
+ * handles every cycle in which at least one FK column on each cycle
+ * edge is nullable — which is the JPA default for {@code @ManyToOne}
+ * and the typical shape for self-referencing parent/child hierarchies
+ * (punch-list §2.3). Cycles where every FK column is {@code NOT NULL}
+ * still cannot be resolved without database-specific RI-disable
+ * primitives — those consumers should keep
+ * {@link JdbcTruncateDbCleanupStrategy} on the classpath (its
+ * {@code SET REFERENTIAL_INTEGRITY FALSE} approach handles NOT NULL
+ * cycles on H2) or ship a vendor-specific custom strategy.
  */
 @Priority(Integer.MAX_VALUE)
 public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
@@ -89,41 +87,108 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
             return;
         }
         EntityManager entityManager = entityManagerFactory.createEntityManager();
-        RuntimeException primary = null;
+        AtomicReference<RuntimeException> primary = new AtomicReference<>();
         try {
             entityManager.getTransaction().begin();
-            for (int index = tableNames.size() - 1; index >= 0; index--) {
-                String tableName = tableNames.get(index);
-                try {
-                    entityManager.createNativeQuery("DELETE FROM \"" + tableName + "\"").executeUpdate();
-                } catch (RuntimeException perTable) {
-                    if (primary == null) {
-                        primary = new RuntimeException(
-                                "Cleanup failed for table '" + tableName + "' of persistence unit '"
-                                        + persistenceUnitName + "'", perTable);
-                    } else {
-                        primary.addSuppressed(perTable);
+            Session session = entityManager.unwrap(Session.class);
+            session.doWork(connection -> {
+                try (Statement statement = connection.createStatement()) {
+                    // Pass 1: null out every nullable FK column so circular references
+                    // (self-FK or two-table cycles) don't block Pass 2's deletes.
+                    for (String tableName : tableNames) {
+                        nullNullableForeignKeys(connection, statement, tableName, persistenceUnitName, primary);
+                    }
+                    // Pass 2: delete in reverse table-list order.
+                    for (int index = tableNames.size() - 1; index >= 0; index--) {
+                        String tableName = tableNames.get(index);
+                        try {
+                            statement.execute("DELETE FROM \"" + tableName + "\"");
+                        } catch (SQLException perTable) {
+                            aggregateFailure(
+                                    primary,
+                                    "Cleanup failed for table '" + tableName + "' of persistence unit '"
+                                            + persistenceUnitName + "'",
+                                    perTable);
+                        }
                     }
                 }
-            }
-            if (primary == null) {
+            });
+            if (primary.get() == null) {
                 entityManager.getTransaction().commit();
             } else {
                 try {
                     entityManager.getTransaction().rollback();
                 } catch (RuntimeException rollbackFailure) {
-                    primary.addSuppressed(rollbackFailure);
+                    primary.get().addSuppressed(rollbackFailure);
                 }
-                throw primary;
+                throw primary.get();
             }
         } finally {
             try {
                 entityManager.close();
             } catch (RuntimeException closeFailure) {
-                if (primary != null) {
-                    primary.addSuppressed(closeFailure);
+                if (primary.get() != null) {
+                    primary.get().addSuppressed(closeFailure);
                 }
             }
+        }
+    }
+
+    /**
+     * Pass-1 helper: for every imported key on {@code tableName} whose
+     * FK column is nullable, run {@code UPDATE "<table>" SET "<fkCol>" = NULL}.
+     * Aggregates per-column failures (e.g. metadata says nullable but a
+     * deferrable constraint refuses the update) so Pass 2 still gets a
+     * chance to attempt the delete.
+     */
+    private static void nullNullableForeignKeys(
+            Connection connection,
+            Statement statement,
+            String tableName,
+            String persistenceUnitName,
+            AtomicReference<RuntimeException> primary) throws SQLException {
+        try (ResultSet importedKeys = connection.getMetaData().getImportedKeys(null, null, tableName)) {
+            while (importedKeys.next()) {
+                String fkColumn = importedKeys.getString("FKCOLUMN_NAME");
+                if (!isColumnNullable(connection, tableName, fkColumn)) {
+                    continue;
+                }
+                try {
+                    statement.executeUpdate("UPDATE \"" + tableName + "\" SET \"" + fkColumn + "\" = NULL");
+                } catch (SQLException nullFailure) {
+                    aggregateFailure(
+                            primary,
+                            "Failed to null FK column '" + fkColumn + "' on table '" + tableName
+                                    + "' of persistence unit '" + persistenceUnitName + "'",
+                            nullFailure);
+                }
+            }
+        }
+    }
+
+    /**
+     * @return {@code true} when JDBC metadata reports the column as
+     *     {@code IS_NULLABLE = 'YES'}; {@code false} for NOT NULL or
+     *     when the column doesn't surface in metadata at all.
+     */
+    private static boolean isColumnNullable(Connection connection, String tableName, String columnName)
+            throws SQLException {
+        try (ResultSet columns = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
+            if (columns.next()) {
+                return "YES".equalsIgnoreCase(columns.getString("IS_NULLABLE"));
+            }
+        }
+        return false;
+    }
+
+    private static void aggregateFailure(
+            AtomicReference<RuntimeException> primary, String message, SQLException cause) {
+        RuntimeException current = primary.get();
+        RuntimeException wrapped = new RuntimeException(message, cause);
+        if (current == null) {
+            primary.set(wrapped);
+        } else {
+            current.addSuppressed(wrapped);
         }
     }
 }
