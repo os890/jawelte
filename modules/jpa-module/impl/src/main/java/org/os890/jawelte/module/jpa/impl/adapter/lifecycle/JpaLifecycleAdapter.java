@@ -259,9 +259,24 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
     }
 
     private static void fireAfterTestTransaction(TestContext testContext) {
+        // committed = "the test method body completed normally". When the
+        // current test method threw, the wrapping @Transactional rolls back
+        // (and so do orphan UTs); committed is false. When no exception is
+        // captured (test passed, or JUnit's ExtensionContext isn't bindable
+        // for this run), default to true — matches the pre-§5.1 behaviour
+        // for the no-info path.
+        boolean committed = TestMethodTransactionWrapping.currentExecutionException(testContext).isEmpty();
+        // Prefer the actual test method name; fall back to the test class
+        // simple name when JUnit's ExtensionContext isn't accessible (e.g.
+        // a non-JUnit driver). The pre-§5.1 code passed the class name in
+        // both cases — the field's contract said "test method name", so
+        // the fallback is the regression-safe path, not the canonical one.
+        String methodName = TestMethodTransactionWrapping.currentTestMethod(testContext)
+                .map(Method::getName)
+                .orElseGet(() -> testContext.getTestClass().getSimpleName());
         testContext.getMetadata(SeContainer.class).ifPresent(seContainer ->
                 seContainer.getBeanManager().getEvent().fire(
-                        new AfterTestTransaction(true, testContext.getTestClass().getSimpleName())));
+                        new AfterTestTransaction(committed, methodName)));
     }
 
     private static boolean isFileMode(TestContext testContext) {

@@ -985,3 +985,17 @@ Refactored three call sites:
 Hibernate-SPI coupling: the helper unwraps to `SessionFactoryImplementor` and asks `JdbcServices` for the bootstrap `JdbcConnectionAccess`. The strategies were already Hibernate-aware (`Session.doWork`); no new coupling is introduced.
 
 Verified: full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`. Cost saved per cleanup × every test method × every active PU is bounded but real — the §2.4 verdict moves from "equal" to "jawelte better" in the cleanup-overhead axis.
+
+## 2026-05-08 — FIXED §5.1: AfterTestTransaction payload reflects actual outcome
+
+Punch-list §5.1 (MEDIUM, POC better): `JpaLifecycleAdapter.fireAfterTestTransaction` constructed the event with `committed=true` (always) and `testContext.getTestClass().getSimpleName()` as the method name (always the class, not the method). Observers couldn't distinguish a passing @Transactional test method from a rolled-back one, and the field documented as "test method name" carried the wrong identifier.
+
+Fix in `JpaLifecycleAdapter.fireAfterTestTransaction`:
+- `committed = TestMethodTransactionWrapping.currentExecutionException(testContext).isEmpty()` — true when JUnit captured no exception for the body, false when it threw.
+- `methodName = TestMethodTransactionWrapping.currentTestMethod(testContext).map(Method::getName).orElseGet(() -> testContext.getTestClass().getSimpleName())` — actual method name when JUnit's `ExtensionContext` is bindable; class name as the regression-safe fallback.
+
+Both helpers existed already (`TestMethodTransactionWrapping`) — they were used by other lifecycle paths, just not by the AfterTestTransaction firing site.
+
+New scenario-62-after-test-transaction-payload empirically verifies both branches via `EngineTestKit`: a subject class has two `@Transactional @Test` methods (one passing, one throwing); a recorder bean captures every fired event; the outer test asserts the recorded `(committed, testMethodName)` pairs are `(true, "aPassingTransactional")` and `(false, "bThrowingTransactional")`.
+
+Mutation re-verify: with the pre-§5.1 hardcoded `committed=true` + class-name path, scenario-62 fails 1/1 (the rollback case is reported as committed=true). With the fix, 1/1 passes. Full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`.
