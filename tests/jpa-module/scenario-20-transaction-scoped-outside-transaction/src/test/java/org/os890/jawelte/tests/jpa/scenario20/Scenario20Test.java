@@ -15,17 +15,36 @@
  */
 package org.os890.jawelte.tests.jpa.scenario20;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import jakarta.enterprise.context.ContextNotActiveException;
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #20 (transaction-scoped-outside-transaction) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Dereferencing a {@code @TransactionScoped} bean outside any
+ * {@code @Transactional} (or {@code UserTransaction.begin()}) raises
+ * {@link ContextNotActiveException}. The test method itself is NOT
+ * {@code @Transactional} so the calling thread has no active tx scope.
  */
+@EnableTestBeans
 public class Scenario20Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private OutsideTxTracker tracker;
+
+    /** No-arg constructor for CDI. */
     public Scenario20Test() {
+    }
+
+    /** Touching a @TransactionScoped bean outside any tx → ContextNotActiveException. */
+    @Test
+    public void dereferenceOutsideTxRaisesContextNotActiveException() {
+        assertThatThrownBy(tracker::touch)
+                .as("with no @Transactional on the calling thread, the tx scope is inactive "
+                        + "and any proxy method must surface ContextNotActiveException")
+                .isInstanceOf(ContextNotActiveException.class);
     }
 }

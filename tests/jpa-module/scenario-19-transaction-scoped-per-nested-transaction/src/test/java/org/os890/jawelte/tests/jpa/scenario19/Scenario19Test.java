@@ -15,17 +15,42 @@
  */
 package org.os890.jawelte.tests.jpa.scenario19;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #19 (transaction-scoped-per-nested-transaction) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Each nested {@code @Transactional} pushes a fresh tx-scope frame. Outer +
+ * inner therefore each receive their own {@code @TransactionScoped} contextual
+ * instance — two {@code @PostConstruct} fires, two {@code @PreDestroy} fires
+ * across one outer call. Scenario 53 verifies the identity-distinctness angle;
+ * this scenario locks in the lifecycle-count angle.
  */
+@EnableTestBeans
 public class Scenario19Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private NestedOuterService outerService;
+
+    /** No-arg constructor for CDI. */
     public Scenario19Test() {
+    }
+
+    /** Outer + inner each contribute one full lifecycle pair. */
+    @Test
+    public void nestedTxYieldsTwoLifecycles() {
+        NestedTracker.reset();
+
+        outerService.outerTouchThenInnerTx();
+
+        assertThat(NestedTracker.POST_CONSTRUCT_COUNT)
+                .as("outer creates its own tracker; inner creates a separate one — 2 PostConstructs")
+                .hasValue(2);
+        assertThat(NestedTracker.PRE_DESTROY_COUNT)
+                .as("inner's tracker is destroyed when inner commits; outer's when outer commits")
+                .hasValue(2);
     }
 }

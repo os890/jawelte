@@ -15,17 +15,44 @@
  */
 package org.os890.jawelte.tests.jpa.scenario18;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #18 (transaction-scoped-happy-path) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code @TransactionScoped} happy path: a bean dereferenced inside an active
+ * {@code @Transactional} is created on first touch, retains its state across
+ * subsequent touches in the same tx, and is destroyed on commit.
  */
+@EnableTestBeans
 public class Scenario18Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private HappyPathService service;
+
+    /** No-arg constructor for CDI. */
     public Scenario18Test() {
+    }
+
+    /** One @PostConstruct + one @PreDestroy per @Transactional invocation. */
+    @Test
+    public void txScopedBeanLifecycleAndStatePersistAcrossTwoTouches() {
+        HappyPathTracker.reset();
+
+        int touchCountAfterTwoCalls = service.touchTwiceInOneTx();
+
+        assertThat(touchCountAfterTwoCalls)
+                .as("the same @TransactionScoped instance must be returned for two "
+                        + "lookups within the same tx — its per-instance counter must reflect both touches")
+                .isEqualTo(2);
+        assertThat(HappyPathTracker.POST_CONSTRUCT_COUNT)
+                .as("@PostConstruct fires exactly once on first dereference inside the tx")
+                .hasValue(1);
+        assertThat(HappyPathTracker.PRE_DESTROY_COUNT)
+                .as("@PreDestroy fires exactly once when the tx commits")
+                .hasValue(1);
     }
 }
