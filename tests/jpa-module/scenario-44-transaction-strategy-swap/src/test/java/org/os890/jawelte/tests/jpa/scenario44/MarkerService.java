@@ -20,7 +20,11 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 
-/** Service-bean wrapper so the @Transactional CDI interceptor fires (it doesn't fire on @Test methods through this path). */
+/**
+ * Service-bean wrapper so the @Transactional CDI interceptor fires
+ * — the test-method path goes through {@code JpaLifecycleAdapter},
+ * not through the interceptor (the §9.5 nuance).
+ */
 @ApplicationScoped
 public class MarkerService {
 

@@ -325,7 +325,7 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
     }
 
     /** Mutable accumulator for a single FK as its multi-column metadata rows arrive. */
-    private static final class ForeignKeyBuilder {
+    private static class ForeignKeyBuilder {
 
         private final String tableName;
         private final String constraintName;

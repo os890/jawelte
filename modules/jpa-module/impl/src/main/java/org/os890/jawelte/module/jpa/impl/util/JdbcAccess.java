@@ -53,7 +53,7 @@ import org.hibernate.engine.spi.SessionFactoryImplementor;
  * already (they use {@code Session.doWork} pre-refactor), so no new
  * coupling is introduced.
  */
-public final class JdbcAccess {
+public class JdbcAccess {
 
     private JdbcAccess() {
     }

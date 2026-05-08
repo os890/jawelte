@@ -1023,3 +1023,13 @@ New scenario-63-config-resolver-prefix-walk verifies empirically:
 - The test asserts `entityManagerFactory.getProperties().get("hibernate.format_sql")` equals `"true"` — proving the synthetic property reached Hibernate's bootstrap by going through the consumer-supplied resolver.
 
 Mutation re-verify: revert the `JpaCdiExtension` refactor (back to the direct `ConfigProvider.getConfig().getPropertyNames()` walk) → scenario-63 fails 1/1 (`hibernate.format_sql` is null because the consumer resolver was bypassed). With the fix → 1/1 passes. Full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`.
+
+## 2026-05-08 — FIXED: quality gates on the new code
+
+Pre-existing slip during the §8 / §2 / §5 fix pass: I'd been running the suite with `-Drat.skip -Dcheckstyle.skip` to keep the mutation-testing workflow snappy, and that masked gate violations on the new files. Caught on a final pre-handoff `mvn -P owb verify` (no skips):
+
+- `JdbcAccess` (§2.4 helper) and the inner `ForeignKeyBuilder` in `NativeSqlDeleteDbCleanupStrategy` (§2.3) were declared `final` — Checkstyle's project-wide "no final classes (CDI proxy compatibility)" rule rejects that. Dropped `final` on both.
+- 5 `META-INF/services` files added during the §8.2 trio + §2.3 + §5.4 + §5.1 work (scenarios 31, 32, 44, 61, 63 — §62 didn't add a services file) shipped without an Apache-2.0 license header. RAT rejected. Prepended the standard `#`-prefixed header to all five.
+- `Scenario44Test.java` had two unused imports left over from when I lifted the persist into `MarkerService` (`jakarta.persistence.EntityManager`, `jakarta.transaction.Transactional`); `MarkerService.java`'s class Javadoc was a single 125-char line. Cleaned both.
+
+Verified `mvn -P owb verify` and `mvn -P weld verify` clean on the full reactor — RAT, Checkstyle, Enforcer, Javadoc, JaCoCo all happy.
