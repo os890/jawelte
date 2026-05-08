@@ -77,8 +77,12 @@ public class Scenario41Test {
                 .as("the @TestMethodScoped @PreDestroy must execute its JPQL query without error")
                 .isNull();
         assertThat(PreDestroyDbReader.COUNT_AT_PREDESTROY.get())
-                .as("@PreDestroy ran a SELECT COUNT and got a non-null result — the EMF was still "
-                        + "open and the schema was reachable")
-                .isNotNull();
+                .as("@PreDestroy fires AFTER jpa-module's per-method cleanup, so the JPQL count "
+                        + "must be 0 — locks in the actual extension ordering. This binds to "
+                        + "(a) EMF still open + schema reachable AND (b) jpa-module-afterEach-"
+                        + "then-scope-module-afterEach ordering. The prior `isNotNull()` accepted "
+                        + "either 0 or 1 and would have hidden a regression where the ordering "
+                        + "flipped to make @PreDestroy fire before cleanup.")
+                .isEqualTo(0L);
     }
 }

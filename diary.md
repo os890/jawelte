@@ -829,3 +829,9 @@ Two-layer change. `ConfigResolver` and `TestContext` ports are **unchanged** (yo
 **Layer 2 — `JpaCdiExtension` dedup against the port (existing pattern).** The Extension can't `@Inject` (CDI is still bootstrapping at `BeforeBeanDiscovery`), so it accesses the active resolver via `TestContext.loadService(ConfigResolver.class)` — the same channel `JpaTypesExcludedPackageFilter` already uses. Replaced four `ConfigProvider.getConfig().getOptionalValue(KEY).or(() -> getOptionalValue(KEY.replace('.', '_')))` blocks with one shared `resolver()` helper + `resolver.resolve(KEY)` calls. The dot-or-underscore fallback now lives only in `ConfigResolverAdapter` — gone from the Extension. The one prefix-walk case (`PERSISTENCE_PROPERTY_PREFIX`) keeps `ConfigProvider.getConfig()` directly because key enumeration isn't on the port.
 
 Reactor green under both `-P owb` and `-P weld`. Task #115 done.
+
+## 2026-05-08 — FIXED: scenario-41 PreDestroy assertion (§9.4)
+
+Punch-list §9.4 finding: `assertThat(COUNT_AT_PREDESTROY.get()).isNotNull()` accepts both 0L and 1L, so a regression where jpa-module-afterEach (cleanup) and scope-module-afterEach (@PreDestroy) flip ordering would not have been caught. Tightened to `.isEqualTo(0L)` after empirically observing the actual ordering: cleanup runs BEFORE @PreDestroy. The prior `isNotNull()` was accidentally lax.
+
+Mutation re-test: with `runCleanup()` removed from `JpaLifecycleAdapter.afterEach`, count is 1L and the new assertion fails — empirically confirming the tightened test now catches what it claims to.
