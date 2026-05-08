@@ -164,10 +164,20 @@ public abstract class EntityScanner {
                 }
             } catch (RuntimeException | java.io.IOException scanFailure) {
                 // xbean wraps most archive-read errors in RuntimeException;
-                // UrlSet may surface raw IOException. Either way the scan
-                // is best-effort and a single bad classpath entry must
-                // not break the bootstrap.
-                LOG.log(Level.WARNING, "xbean-finder @Entity scan failed; returning partial result", scanFailure);
+                // UrlSet may surface raw IOException. Fail-fast at scan time
+                // rather than returning a partial entity set: a missing
+                // @Entity surfaces later as an opaque "not a managed type"
+                // when the test calls em.persist, which is much harder to
+                // diagnose than the underlying classpath problem here.
+                LOG.log(Level.ERROR,
+                        "xbean-finder @Entity scan failed; jpa-module bootstrap aborts because "
+                                + "a partial entity set would silently mask the problem",
+                        scanFailure);
+                throw new RuntimeException(
+                        "@Entity classpath scan failed; bootstrap aborted to surface the underlying "
+                                + "classpath problem (a partial entity set would otherwise lead to "
+                                + "opaque \"not a managed type\" errors at em.persist time)",
+                        scanFailure);
             }
             Set<String> result = Collections.unmodifiableSet(entities);
             SCAN_CACHE.put(classLoader, result);

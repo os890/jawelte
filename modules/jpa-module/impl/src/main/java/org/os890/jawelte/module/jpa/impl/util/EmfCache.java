@@ -128,15 +128,29 @@ public abstract class EmfCache {
     }
 
     private static void closeAll() {
+        RuntimeException primary = null;
         for (Map.Entry<String, EntityManagerFactory> entry : CACHE.entrySet()) {
             try {
                 entry.getValue().close();
-            } catch (RuntimeException loggedAndIgnored) {
-                LOG.log(Level.WARNING,
+            } catch (RuntimeException closeFailure) {
+                RuntimeException wrapped = new RuntimeException(
                         "Failed to close EntityManagerFactory for persistence unit '"
                                 + entry.getKey() + "' on shutdown",
-                        loggedAndIgnored);
+                        closeFailure);
+                if (primary == null) {
+                    primary = wrapped;
+                } else {
+                    primary.addSuppressed(wrapped);
+                }
             }
+        }
+        if (primary != null) {
+            // Aggregate per the project-wide TICKET-001 exception policy:
+            // first failure is the primary cause, every subsequent failure
+            // rides along as a suppressed exception. Logged once instead of
+            // one WARNING per failure so log readers see one trace + chain.
+            // Not rethrown — JVM shutdown hooks swallow throwables.
+            LOG.log(Level.WARNING, "EntityManagerFactory close failures during JVM shutdown", primary);
         }
     }
 }
