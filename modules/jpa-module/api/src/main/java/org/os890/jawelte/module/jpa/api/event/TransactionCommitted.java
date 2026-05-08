@@ -22,9 +22,7 @@ package org.os890.jawelte.module.jpa.api.event;
  * chain on the commit outcome (the commit itself remains the primary
  * result).
  */
-public class TransactionCommitted {
-
-    private final String persistenceUnitName;
+public class TransactionCommitted extends PersistenceUnitTransactionEvent {
 
     /**
      * Construct a {@code TransactionCommitted} event.
@@ -33,15 +31,6 @@ public class TransactionCommitted {
      *                            transaction has just committed
      */
     public TransactionCommitted(String persistenceUnitName) {
-        this.persistenceUnitName = persistenceUnitName;
-    }
-
-    /**
-     * Get the persistence unit whose transaction has just committed.
-     *
-     * @return the persistence unit name
-     */
-    public String getPersistenceUnitName() {
-        return persistenceUnitName;
+        super(persistenceUnitName);
     }
 }

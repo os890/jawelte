@@ -22,9 +22,7 @@ package org.os890.jawelte.module.jpa.api.event;
  * a failing observer is caught and added to the suppressed-exception
  * chain on the eventual commit/rollback outcome.
  */
-public class TransactionStarted {
-
-    private final String persistenceUnitName;
+public class TransactionStarted extends PersistenceUnitTransactionEvent {
 
     /**
      * Construct a {@code TransactionStarted} event.
@@ -33,15 +31,6 @@ public class TransactionStarted {
      *                            transaction has just started
      */
     public TransactionStarted(String persistenceUnitName) {
-        this.persistenceUnitName = persistenceUnitName;
-    }
-
-    /**
-     * Get the persistence unit whose transaction has just started.
-     *
-     * @return the persistence unit name
-     */
-    public String getPersistenceUnitName() {
-        return persistenceUnitName;
+        super(persistenceUnitName);
     }
 }

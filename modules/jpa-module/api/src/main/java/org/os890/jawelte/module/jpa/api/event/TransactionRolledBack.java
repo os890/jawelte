@@ -23,9 +23,7 @@ package org.os890.jawelte.module.jpa.api.event;
  * name; a failing observer is caught and added to the
  * suppressed-exception chain on the rollback outcome.
  */
-public class TransactionRolledBack {
-
-    private final String persistenceUnitName;
+public class TransactionRolledBack extends PersistenceUnitTransactionEvent {
 
     /**
      * Construct a {@code TransactionRolledBack} event.
@@ -34,16 +32,6 @@ public class TransactionRolledBack {
      *                            transaction has just rolled back
      */
     public TransactionRolledBack(String persistenceUnitName) {
-        this.persistenceUnitName = persistenceUnitName;
-    }
-
-    /**
-     * Get the persistence unit whose transaction has just rolled
-     * back.
-     *
-     * @return the persistence unit name
-     */
-    public String getPersistenceUnitName() {
-        return persistenceUnitName;
+        super(persistenceUnitName);
     }
 }

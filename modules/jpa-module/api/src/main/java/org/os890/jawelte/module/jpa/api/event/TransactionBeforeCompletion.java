@@ -23,9 +23,7 @@ package org.os890.jawelte.module.jpa.api.event;
  * setRollbackOnly decisions). A failing observer is caught and added
  * to the suppressed-exception chain on the eventual outcome.
  */
-public class TransactionBeforeCompletion {
-
-    private final String persistenceUnitName;
+public class TransactionBeforeCompletion extends PersistenceUnitTransactionEvent {
 
     /**
      * Construct a {@code TransactionBeforeCompletion} event.
@@ -34,16 +32,6 @@ public class TransactionBeforeCompletion {
      *                            transaction is about to complete
      */
     public TransactionBeforeCompletion(String persistenceUnitName) {
-        this.persistenceUnitName = persistenceUnitName;
-    }
-
-    /**
-     * Get the persistence unit whose transaction is about to
-     * complete.
-     *
-     * @return the persistence unit name
-     */
-    public String getPersistenceUnitName() {
-        return persistenceUnitName;
+        super(persistenceUnitName);
     }
 }

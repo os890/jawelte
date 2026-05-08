@@ -110,17 +110,16 @@ public class ReadOnlyInterceptor {
         }
         ACTIVE.set(Boolean.TRUE);
         try {
-            try {
-                Object result = invocationContext.proceed();
-                strategy.setRollbackOnly();
-                return result;
-            } catch (RuntimeException | Error throwable) {
-                markRollbackOnlyAndSuppress(strategy, throwable);
-                throw throwable;
-            } catch (Exception checked) {
-                markRollbackOnlyAndSuppress(strategy, checked);
-                throw checked;
-            }
+            Object result = invocationContext.proceed();
+            strategy.setRollbackOnly();
+            return result;
+        } catch (Exception | Error throwable) {
+            // Multi-catch with Java's "more precise rethrow": the
+            // interceptor's `throws Exception` declaration covers Exception
+            // subtypes; Error doesn't need declaration. Both branches
+            // collapse onto a single mark-rollback + rethrow.
+            markRollbackOnlyAndSuppress(strategy, throwable);
+            throw throwable;
         } finally {
             ACTIVE.set(Boolean.FALSE);
             restoreFlushModes(originalFlushModes);

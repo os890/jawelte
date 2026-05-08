@@ -117,19 +117,17 @@ public class TransactionalInterceptor {
         callStack.push(currentMethod);
         strategy.begin();
         transactionScopedContext.activate();
-        Object result;
         try {
+            Object result;
             try {
                 result = invocationContext.proceed();
-            } catch (RuntimeException unchecked) {
-                rollbackAndSuppress(strategy, unchecked);
-                throw unchecked;
-            } catch (Error error) {
-                rollbackAndSuppress(strategy, error);
-                throw error;
-            } catch (Exception checked) {
-                rollbackAndSuppress(strategy, checked);
-                throw checked;
+            } catch (Exception | Error throwable) {
+                // Multi-catch with Java's "more precise rethrow": Exception
+                // subtypes (RuntimeException + checked Exception) and Error
+                // collapse onto a single rollback path. The original throwable
+                // re-throws unchanged so callers see the exact cause.
+                rollbackAndSuppress(strategy, throwable);
+                throw throwable;
             }
             if (strategy.getRollbackOnly()) {
                 strategy.rollback();
