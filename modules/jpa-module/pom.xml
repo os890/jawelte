@@ -31,7 +31,7 @@
     <packaging>pom</packaging>
 
     <name>jawelte (jpa-module aggregator)</name>
-    <description>JPA testing primitives for jawelte. jpa-module/api ships @PersistenceConfig, @ReadOnly, the prioritized SPIs (TransactionStrategy, DbCleanupStrategy, EntityResolver, PersistenceUnitConnectionResolver, PersistencePropertyResolver) and the four JPA-specific CDI events. jpa-module/impl ships the lifecycle adapter, the CDI Extension, the @Transactional / @ReadOnly interceptors, the @TransactionScoped Context, the EMF cache, the EntityManager proxy, the per-thread EM stack, the table cleaner, and the default RESOURCE_LOCAL TransactionStrategy.</description>
+    <description>JPA testing primitives for jawelte. jpa-module/api ships @PersistenceConfig, @ReadOnly, the prioritized SPIs (TransactionStrategy, DbCleanupStrategy, TableNameResolver, EntityScanner, PersistenceUnitConnectionResolver, PersistencePropertyResolver) and the four JPA-specific CDI events. jpa-module/impl ships the lifecycle adapter, the CDI Extension, the @Transactional / @ReadOnly interceptors, the @TransactionScoped Context, the EMF cache, the EntityManager proxy, the per-thread EM stack, the table cleaners, and the default RESOURCE_LOCAL TransactionStrategy.</description>
 
     <modules>
         <module>api</module>

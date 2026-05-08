@@ -20,13 +20,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
-import org.os890.jawelte.module.jpa.api.port.EntityResolver;
+import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 
 /**
- * A test-only {@link CountingEntityResolver} at {@code @Priority(100)}
+ * A test-only {@link CountingTableNameResolver} at {@code @Priority(100)}
  * registered through {@code META-INF/services} wins the
  * {@code TestContext.loadService} priority sort over jpa-module's
- * default impl — locks in the swappability claim for the entity-resolution port.
+ * default impl — locks in the swappability claim for the table-name
+ * resolution port that drives per-method cleanup. (The directory name
+ * keeps the original "entity-resolver-swap" label for branch
+ * traceability; the port itself is now {@code TableNameResolver}.)
  */
 @EnableTestBeans
 public class Scenario32Test {
@@ -37,12 +40,12 @@ public class Scenario32Test {
 
     /** TestContext.loadService returns the @Priority(100) test-only impl. */
     @Test
-    public void customEntityResolverWinsThePrioritySort() {
-        EntityResolver active = TestContext.loadService(EntityResolver.class);
+    public void customTableNameResolverWinsThePrioritySort() {
+        TableNameResolver active = TestContext.loadService(TableNameResolver.class);
 
         assertThat(active)
-                .as("a test-only EntityResolver at @Priority(100) must win over the "
-                        + "addon's @Priority(MAX_VALUE) JpaMetamodelEntityResolver")
-                .isInstanceOf(CountingEntityResolver.class);
+                .as("a test-only TableNameResolver at @Priority(100) must win over the "
+                        + "addon's @Priority(MAX_VALUE) InformationSchemaTableNameResolver")
+                .isInstanceOf(CountingTableNameResolver.class);
     }
 }

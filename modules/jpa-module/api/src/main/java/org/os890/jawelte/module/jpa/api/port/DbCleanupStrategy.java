@@ -24,12 +24,12 @@ import jakarta.persistence.EntityManagerFactory;
  * fired, and skipped when
  * {@code @PersistenceConfig.fileMode=true}.
  *
- * <p>The default implementation issues provider-agnostic JPQL
- * {@code DELETE FROM <entity>} for every entity returned by the
- * active {@link EntityResolver}, in reverse-iteration order. Common
- * alternatives consumers might want: truncate-based via JDBC for
- * speed; "disable referential integrity, truncate, re-enable" for
- * schemas with circular FKs; snapshot / restore.
+ * <p>The default implementation shipped by jpa-module/impl is a
+ * JDBC {@code TRUNCATE TABLE}-based strategy that disables referential
+ * integrity, truncates every table returned by the active
+ * {@link TableNameResolver}, and re-enables referential integrity. A
+ * native-SQL {@code DELETE} fallback ({@code NativeSqlDeleteDbCleanupStrategy})
+ * sits at the lowest priority for non-H2 setups.
  *
  * <p>Consumers obtain the active impl through
  * {@code TestContext.loadService(DbCleanupStrategy.class)} — the

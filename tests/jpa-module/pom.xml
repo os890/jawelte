@@ -102,8 +102,8 @@
             H2, and ASM at test scope so every scenario can bootstrap
             a real EntityManagerFactory and exercise jpa-module's
             adapters end-to-end. Scenarios that need to opt out of a
-            shared dep (e.g. scenario 27 swaps in a custom
-            EntityResolver and may want to drop the default) do so
+            shared dep (e.g. scenario 32 swaps in a custom
+            TableNameResolver and may want to drop the default) do so
             at the leaf pom by overriding scope to `provided` or by
             replacing transitively.
         -->

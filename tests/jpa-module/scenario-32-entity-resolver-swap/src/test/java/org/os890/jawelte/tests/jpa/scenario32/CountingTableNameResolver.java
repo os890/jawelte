@@ -19,25 +19,24 @@ import java.util.List;
 
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.metamodel.EntityType;
 
-import org.os890.jawelte.module.jpa.api.port.EntityResolver;
+import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 
 /**
- * Test-only {@link EntityResolver} at {@code @Priority(100)} — wins over the
- * addon's metamodel-backed impl. Returns an empty list (the cleanup-via-JPQL
- * path treats that as "nothing to delete"); the test only cares that
- * {@code TestContext.loadService} routes to this impl.
+ * Test-only {@link TableNameResolver} at {@code @Priority(100)} — wins over
+ * the addon's INFORMATION_SCHEMA-backed default. Returns an empty list (the
+ * cleanup strategies treat that as "nothing to clean"); the test only cares
+ * that {@code TestContext.loadService} routes to this impl.
  */
 @Priority(100)
-public class CountingEntityResolver implements EntityResolver {
+public class CountingTableNameResolver implements TableNameResolver {
 
     /** No-arg constructor required by ServiceLoader. */
-    public CountingEntityResolver() {
+    public CountingTableNameResolver() {
     }
 
     @Override
-    public List<EntityType<?>> resolveEntities(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
+    public List<String> resolveTableNames(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
         return List.of();
     }
 }

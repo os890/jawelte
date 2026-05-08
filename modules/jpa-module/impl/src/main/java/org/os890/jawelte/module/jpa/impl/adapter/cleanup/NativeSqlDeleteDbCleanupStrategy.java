@@ -20,60 +20,62 @@ import java.util.List;
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
-import jakarta.persistence.metamodel.EntityType;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
-import org.os890.jawelte.module.jpa.api.port.EntityResolver;
+import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 
 /**
- * Default {@link DbCleanupStrategy} shipped by jpa-module: issues
- * provider-agnostic {@code DELETE FROM <entity-name>} JPQL for
- * every entity returned by the active {@link EntityResolver}, in
- * <strong>reverse</strong> iteration order so child rows are
- * deleted before their parents in the common acyclic-FK case.
+ * Fallback {@link DbCleanupStrategy}: issues native-SQL
+ * {@code DELETE FROM "<table>"} for every table returned by the active
+ * {@link TableNameResolver}, in <strong>reverse</strong> iteration
+ * order so child rows go before their parents in the common acyclic-FK
+ * case. Per-table failures aggregate per the project exception policy
+ * (TICKET-001): the first failure becomes the primary, subsequent
+ * failures (and any rollback failure) attach via
+ * {@link Throwable#addSuppressed(Throwable)}.
  *
- * <p>Per-entity failures aggregate per the project exception
- * policy (TICKET-001): the first failure becomes the primary,
- * subsequent failures (and any rollback failure) are attached via
- * {@link Throwable#addSuppressed(Throwable)}. The aggregate
- * propagates from
- * {@link #cleanAllTables(String, EntityManagerFactory)}.
+ * <p>{@code @Priority(Integer.MAX_VALUE)} — absolute fallback. The
+ * H2-targeted {@link JdbcTruncateDbCleanupStrategy} sits one priority
+ * rank ahead and wins by default; consumers running against a non-H2
+ * database that lacks {@code TRUNCATE} or {@code SET REFERENTIAL_INTEGRITY}
+ * drop the JdbcTruncate jar from the test classpath and let this
+ * native-DELETE fallback take over.
  *
- * <p>{@code @Priority(Integer.MAX_VALUE)} so a consumer-supplied
- * strategy at a lower priority takes over. Schemas with circular
- * FKs or large data volumes typically swap in a JDBC-truncate
- * impl that uses {@code PersistenceUnitConnectionResolver}.
+ * <p>Native SQL (rather than JPQL) so the strategy can target
+ * <em>any</em> table — including {@code @JoinTable},
+ * {@code @ElementCollection}, sequence, and trigger-populated tables
+ * that have no JPA {@code @Entity} mapping.
  */
 @Priority(Integer.MAX_VALUE)
-public class JpqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
+public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
 
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
-    public JpqlDeleteDbCleanupStrategy() {
+    public NativeSqlDeleteDbCleanupStrategy() {
     }
 
     @Override
     public void cleanAllTables(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
-        EntityResolver resolver = TestContext.loadService(EntityResolver.class);
-        List<EntityType<?>> entities = resolver.resolveEntities(persistenceUnitName, entityManagerFactory);
-        if (entities.isEmpty()) {
+        TableNameResolver tableNameResolver = TestContext.loadService(TableNameResolver.class);
+        List<String> tableNames = tableNameResolver.resolveTableNames(persistenceUnitName, entityManagerFactory);
+        if (tableNames.isEmpty()) {
             return;
         }
         EntityManager entityManager = entityManagerFactory.createEntityManager();
         RuntimeException primary = null;
         try {
             entityManager.getTransaction().begin();
-            for (int index = entities.size() - 1; index >= 0; index--) {
-                String entityName = entities.get(index).getName();
+            for (int index = tableNames.size() - 1; index >= 0; index--) {
+                String tableName = tableNames.get(index);
                 try {
-                    entityManager.createQuery("DELETE FROM " + entityName).executeUpdate();
-                } catch (RuntimeException perEntity) {
+                    entityManager.createNativeQuery("DELETE FROM \"" + tableName + "\"").executeUpdate();
+                } catch (RuntimeException perTable) {
                     if (primary == null) {
                         primary = new RuntimeException(
-                                "Cleanup failed for entity '" + entityName + "' of persistence unit '"
-                                        + persistenceUnitName + "'", perEntity);
+                                "Cleanup failed for table '" + tableName + "' of persistence unit '"
+                                        + persistenceUnitName + "'", perTable);
                     } else {
-                        primary.addSuppressed(perEntity);
+                        primary.addSuppressed(perTable);
                     }
                 }
             }

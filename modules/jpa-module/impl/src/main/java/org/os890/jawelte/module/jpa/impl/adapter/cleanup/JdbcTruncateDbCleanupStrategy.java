@@ -15,10 +15,8 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.cleanup;
 
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -27,33 +25,33 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
 import org.hibernate.Session;
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
+import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 
 /**
- * JDBC-level {@link DbCleanupStrategy} for H2: walks
- * {@code INFORMATION_SCHEMA.TABLES}, disables referential integrity,
- * issues a {@code TRUNCATE TABLE} per public-schema table, then
- * re-enables referential integrity. Touches every table in the
- * {@code PUBLIC} schema — including auto-generated
- * {@code @JoinTable}s, {@code @ElementCollection} backing tables,
- * and Hibernate sequence/hilo tables — which the JPQL-based
- * default cannot reach because it iterates only mapped
+ * JDBC-level {@link DbCleanupStrategy} for H2: takes the table list
+ * from the active {@link TableNameResolver}, disables referential
+ * integrity, issues {@code TRUNCATE TABLE} per table, then re-enables
+ * referential integrity. With the default
+ * {@code InformationSchemaTableNameResolver} this touches every table
+ * in the {@code PUBLIC} schema — including auto-generated
+ * {@code @JoinTable}s, {@code @ElementCollection} backing tables, and
+ * Hibernate sequence/hilo tables — which the previous JPQL-based
+ * default could not reach because it iterated only mapped
  * {@code @Entity} types.
  *
- * <p>Disabling foreign-key checks during the truncate handles
- * schemas with circular FKs without requiring topological
- * ordering.
+ * <p>Disabling foreign-key checks during the truncate handles schemas
+ * with circular FKs without requiring topological ordering.
  *
  * <p>{@code @Priority(Integer.MAX_VALUE - 1)} — one rank ahead of
- * {@link JpqlDeleteDbCleanupStrategy} (which sits at
+ * {@link NativeSqlDeleteDbCleanupStrategy} (which sits at
  * {@code Integer.MAX_VALUE}). Consumers running against a non-H2
  * database can either drop this jar from the test classpath or
  * register an alternative strategy at an even lower priority.
  *
  * <p>H2-specific. The {@code SET REFERENTIAL_INTEGRITY} statement
- * is an H2 extension; the {@code INFORMATION_SCHEMA.TABLES} query
- * uses H2-style {@code TABLE_SCHEMA = 'PUBLIC'} filtering. Other
- * providers will throw on either step.
+ * is an H2 extension; other providers will throw on it.
  */
 @Priority(Integer.MAX_VALUE - 1)
 public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
@@ -64,6 +62,11 @@ public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
 
     @Override
     public void cleanAllTables(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
+        TableNameResolver tableNameResolver = TestContext.loadService(TableNameResolver.class);
+        List<String> tableNames = tableNameResolver.resolveTableNames(persistenceUnitName, entityManagerFactory);
+        if (tableNames.isEmpty()) {
+            return;
+        }
         EntityManager entityManager = entityManagerFactory.createEntityManager();
         AtomicReference<RuntimeException> primary = new AtomicReference<>();
         try {
@@ -74,7 +77,6 @@ public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
                     connection.setAutoCommit(true);
                     try (Statement statement = connection.createStatement()) {
                         statement.execute("SET REFERENTIAL_INTEGRITY FALSE");
-                        List<String> tableNames = listPublicTables(statement);
                         for (String tableName : tableNames) {
                             try {
                                 statement.execute("TRUNCATE TABLE \"" + tableName + "\"");
@@ -108,16 +110,5 @@ public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
                 }
             }
         }
-    }
-
-    private static List<String> listPublicTables(Statement statement) throws SQLException {
-        List<String> tableNames = new ArrayList<>();
-        try (ResultSet resultSet = statement.executeQuery(
-                "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'PUBLIC'")) {
-            while (resultSet.next()) {
-                tableNames.add(resultSet.getString(1));
-            }
-        }
-        return tableNames;
     }
 }
