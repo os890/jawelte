@@ -877,3 +877,18 @@ Strengthened:
 - @Order(3) method asserts `INVOCATION_COUNT >= 1`.
 
 Mutation re-verify: hardcoding `new InformationSchemaTableNameResolver()` in `JdbcTruncateDbCleanupStrategy` now produces `Failures: 1`. Closes §8.2 / §9.2 for scenario-32.
+
+## 2026-05-08 — FIXED: scenario-44 strategy-swap delegation (§8.2 / §9.2 part 3)
+
+Same shape as scenarios 31 / 32. Prior assertion only verified `TestContext.loadService(TransactionStrategy.class)` returned the @Priority(100) impl; it never proved that `TransactionalInterceptor` actually used the resolved strategy.
+
+Strengthened:
+- `CountingTransactionStrategy` overrides `begin()` and `commit()` to bump `BEGIN_COUNT` and `COMMIT_COUNT` before calling super.
+- Added `Marker` entity + `MarkerService.persistMarker()` (a `@Transactional` service bean call).
+- @Order(2) test invokes the @Transactional method, @Order(3) asserts both counters are ≥ 1.
+
+The service-bean indirection is intentional: a `@Transactional` annotation on a JUnit `@Test` method runs through `JpaLifecycleAdapter`, not `TransactionalInterceptor` (the §9.5 nuance). Routing through a service bean exercises the interceptor path.
+
+Mutation re-verify: hardcoding `new DefaultResourceLocalTransactionStrategy()` in `TransactionalInterceptor.aroundInvoke` produces `Failures: 1`. Closes §8.2 / §9.2 for scenario-44.
+
+§8.2 trio fully closed.

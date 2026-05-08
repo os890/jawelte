@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.tests.jpa.scenario44;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import jakarta.annotation.Priority;
 
 import org.os890.jawelte.module.jpa.impl.adapter.tx.DefaultResourceLocalTransactionStrategy;
@@ -24,13 +26,39 @@ import org.os890.jawelte.module.jpa.impl.adapter.tx.DefaultResourceLocalTransact
  * over the addon's {@link DefaultResourceLocalTransactionStrategy}
  * ({@code @Priority(Integer.MAX_VALUE)}). Inherits the default's
  * RESOURCE_LOCAL behaviour so any test that bootstraps a CDI container
- * with this strategy active still works end-to-end; the test only checks
- * which class {@code TestContext.loadService} returns.
+ * with this strategy active still works end-to-end. Overrides
+ * {@link #begin()} and {@link #commit()} to bump a static counter — the
+ * test asserts the counter is non-zero after a real {@code @Transactional}
+ * call, proving the framework's interceptor / lifecycle actually
+ * delegates to the SPI-resolved strategy, not just that the SPI
+ * returns this class.
  */
 @Priority(100)
 public class CountingTransactionStrategy extends DefaultResourceLocalTransactionStrategy {
 
+    /**
+     * Static so the test can read it across the
+     * {@code TestContext.loadService} pattern, which may instantiate
+     * a fresh strategy on every call. Each {@code begin()} bumps it.
+     */
+    public static final AtomicInteger BEGIN_COUNT = new AtomicInteger();
+
+    /** Each {@code commit()} bumps it. */
+    public static final AtomicInteger COMMIT_COUNT = new AtomicInteger();
+
     /** No-arg constructor required by ServiceLoader. */
     public CountingTransactionStrategy() {
+    }
+
+    @Override
+    public void begin() {
+        BEGIN_COUNT.incrementAndGet();
+        super.begin();
+    }
+
+    @Override
+    public void commit() {
+        COMMIT_COUNT.incrementAndGet();
+        super.commit();
     }
 }
