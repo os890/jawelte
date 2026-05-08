@@ -61,12 +61,12 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.ReadOnly;
+import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
 import org.os890.jawelte.module.jpa.impl.adapter.tx.UserTransactionImpl;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.EntityManagerProxy;
-import org.os890.jawelte.module.jpa.impl.util.EntityScanner;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
 import org.os890.jawelte.module.jpa.impl.util.PersistenceXmlParser;
 import org.os890.jawelte.module.jpa.impl.util.PersistenceXmlParser.ParsedPersistenceUnit;
@@ -469,8 +469,9 @@ public class JpaCdiExtension implements Extension {
         if (unit.hasClassElements()) {
             return Persistence.createEntityManagerFactory(unit.name(), properties);
         }
-        Set<String> scannedEntityNames = EntityScanner.scan(
-                readProtectedPackagePrefixes(), readEntityScanWhitelist());
+        EntityScanner entityScanner = TestContext.loadService(EntityScanner.class);
+        Set<String> scannedEntityNames = entityScanner.scan(
+                readProtectedPackagePrefixes(entityScanner), readEntityScanWhitelist());
         java.util.LinkedHashSet<String> mergedEntities = new java.util.LinkedHashSet<>(unit.classes());
         mergedEntities.addAll(scannedEntityNames);
         Properties propertiesAsJavaProperties = new Properties();
@@ -513,7 +514,7 @@ public class JpaCdiExtension implements Extension {
                 .orElseGet(List::of);
     }
 
-    private static Set<String> readProtectedPackagePrefixes() {
+    private static Set<String> readProtectedPackagePrefixes(EntityScanner entityScanner) {
         return resolver().resolve(PROTECTED_PACKAGES_KEY)
                 .map(value -> {
                     Set<String> prefixes = new LinkedHashSet<>();
@@ -525,7 +526,7 @@ public class JpaCdiExtension implements Extension {
                     }
                     return prefixes;
                 })
-                .orElseGet(EntityScanner::defaultExcludedPackagePrefixes);
+                .orElseGet(entityScanner::defaultExcludedPackagePrefixes);
     }
 
     private static String defaultFilePath(Class<?> testClass) {

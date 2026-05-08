@@ -21,8 +21,8 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
-import org.os890.jawelte.module.jpa.impl.util.EntityScanner;
-import org.os890.jawelte.module.jpa.impl.util.EntityScanner.Whitelist;
+import org.os890.jawelte.module.jpa.api.port.EntityScanner;
+import org.os890.jawelte.module.jpa.api.port.EntityScanner.Whitelist;
 
 /**
  * Direct unit tests against

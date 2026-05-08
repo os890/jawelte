@@ -31,7 +31,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.core.api.ConfigBean;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
-import org.os890.jawelte.module.jpa.impl.util.EntityScanner;
+import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 
 /**
  * Type-safe facade over jpa-module's MicroProfile Config keys.
