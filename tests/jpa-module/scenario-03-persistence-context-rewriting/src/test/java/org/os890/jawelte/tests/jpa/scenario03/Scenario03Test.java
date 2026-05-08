@@ -15,17 +15,34 @@
  */
 package org.os890.jawelte.tests.jpa.scenario03;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #03 (persistence-context-rewriting) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A field annotated only with {@code @PersistenceContext} (no {@code @Inject})
+ * is rewritten by jpa-module's {@code JpaCdiExtension} to {@code @Inject}.
+ * The rewritten field receives jpa-module's transaction-scoped EM proxy.
  */
+@EnableTestBeans
 public class Scenario03Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private RewriteSubject rewriteSubject;
+
+    /** No-arg constructor for CDI. */
     public Scenario03Test() {
+    }
+
+    /** @PersistenceContext-only field is non-null after CDI bean construction. */
+    @Test
+    public void persistenceContextFieldIsRewrittenAndPopulated() {
+        assertThat(rewriteSubject.getEntityManager())
+                .as("@PersistenceContext field must be populated by jpa-module's "
+                        + "ProcessAnnotatedType rewriting (adds @Inject)")
+                .isNotNull();
     }
 }

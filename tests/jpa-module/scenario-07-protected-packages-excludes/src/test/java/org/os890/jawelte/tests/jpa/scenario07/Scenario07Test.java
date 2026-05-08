@@ -15,17 +15,45 @@
  */
 package org.os890.jawelte.tests.jpa.scenario07;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManagerFactory;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.tests.jpa.scenario07.exclude.ExcludedMarker;
+import org.os890.jawelte.tests.jpa.scenario07.included.IncludedMarker;
+
 /**
- * Test scenario #07 (protected-packages-excludes) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * The MP Config key
+ * {@code org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages}
+ * (set in {@code microprofile-config.properties}) excludes the
+ * {@code …scenario07.exclude.} sub-package from {@code EntityScanner}'s
+ * auto-discovery on top of the default exclude baseline.
  */
+@EnableTestBeans
 public class Scenario07Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManagerFactory entityManagerFactory;
+
+    /** No-arg constructor for CDI. */
     public Scenario07Test() {
+    }
+
+    /** Included entity reaches the metamodel; excluded entity is dropped. */
+    @Test
+    public void protectedPackagesFilterDropsTheExcludedEntity() {
+        var managedEntityNames = entityManagerFactory.getMetamodel().getEntities().stream()
+                .map(entityType -> entityType.getJavaType().getName())
+                .toList();
+
+        assertThat(managedEntityNames)
+                .as("entities outside the protected package must remain auto-discovered")
+                .contains(IncludedMarker.class.getName());
+        assertThat(managedEntityNames)
+                .as("the @Entity in the protected package must be filtered out by EntityScanner")
+                .doesNotContain(ExcludedMarker.class.getName());
     }
 }

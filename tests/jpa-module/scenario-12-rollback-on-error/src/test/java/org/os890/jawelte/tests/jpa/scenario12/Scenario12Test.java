@@ -15,17 +15,39 @@
  */
 package org.os890.jawelte.tests.jpa.scenario12;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #12 (rollback-on-error) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A {@code @Transactional} method that throws an {@link Error} must roll back:
+ * the persisted row never reaches the DB. Locks in the interceptor's
+ * {@code catch (Error)} branch.
  */
+@EnableTestBeans
 public class Scenario12Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private CustomerService customerService;
+
+    /** No-arg constructor for CDI. */
     public Scenario12Test() {
+    }
+
+    /** Error → rollback → row count is zero. */
+    @Test
+    public void errorAlsoRollsBack() {
+        assertThatThrownBy(() -> customerService.persistAndThrowError("Alice"))
+                .as("the service's Error must propagate to the caller")
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("scenario-12");
+
+        assertThat(customerService.countCustomers())
+                .as("rollback on Error must discard the persisted row")
+                .isZero();
     }
 }

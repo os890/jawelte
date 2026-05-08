@@ -15,17 +15,42 @@
  */
 package org.os890.jawelte.tests.jpa.scenario04;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #04 (persistence-context-named-rewriting) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code @PersistenceContext(unitName="testPU04a")} is rewritten to
+ * {@code @Inject @Named("testPU04a")}. With two PUs declared, jpa-module's
+ * synthetic beans are {@code @Named}-only; the {@code @Named} qualifier added
+ * during rewriting is what makes the field resolve.
  */
+@EnableTestBeans
 public class Scenario04Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private RewriteSubject rewriteSubject;
+
+    /** No-arg constructor for CDI. */
     public Scenario04Test() {
+    }
+
+    /** Both @PersistenceContext(unitName=…) fields route to distinct PU-specific beans. */
+    @Test
+    public void namedPersistenceContextRewritingRoutesToCorrectPu() {
+        assertThat(rewriteSubject.getEntityManagerA())
+                .as("@PersistenceContext(unitName=\"testPU04a\") must be rewritten to "
+                        + "@Inject @Named(\"testPU04a\") and resolve")
+                .isNotNull();
+        assertThat(rewriteSubject.getEntityManagerB())
+                .as("@PersistenceContext(unitName=\"testPU04b\") must be rewritten to "
+                        + "@Inject @Named(\"testPU04b\") and resolve")
+                .isNotNull();
+        assertThat(rewriteSubject.getEntityManagerA())
+                .as("the two @Named-rewritten EMs must be distinct proxies (different PUs)")
+                .isNotSameAs(rewriteSubject.getEntityManagerB());
     }
 }

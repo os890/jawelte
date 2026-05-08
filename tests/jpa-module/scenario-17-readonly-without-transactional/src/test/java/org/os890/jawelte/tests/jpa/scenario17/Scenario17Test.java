@@ -15,17 +15,34 @@
  */
 package org.os890.jawelte.tests.jpa.scenario17;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #17 (readonly-without-transactional) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A {@code @ReadOnly} method declared without {@code @Transactional} sees the
+ * {@code ReadOnlyInterceptor} fire, observe that no tx is active, and proceed
+ * as a documented no-op. The body's return value reaches the caller unchanged.
  */
+@EnableTestBeans
 public class Scenario17Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private ReadOnlyOnlyService readOnlyOnlyService;
+
+    /** No-arg constructor for CDI. */
     public Scenario17Test() {
+    }
+
+    /** @ReadOnly without @Transactional → body runs, value returned unchanged. */
+    @Test
+    public void readOnlyWithoutTransactionalIsDocumentedNoOp() {
+        assertThat(readOnlyOnlyService.computeWithoutTx("hello"))
+                .as("ReadOnlyInterceptor must proceed unchanged when no tx is active — "
+                        + "the body's return value reaches the caller")
+                .isEqualTo("readonly:hello");
     }
 }

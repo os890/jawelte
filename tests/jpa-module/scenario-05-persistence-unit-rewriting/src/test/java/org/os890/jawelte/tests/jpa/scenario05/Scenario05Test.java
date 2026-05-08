@@ -15,17 +15,37 @@
  */
 package org.os890.jawelte.tests.jpa.scenario05;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #05 (persistence-unit-rewriting) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A field annotated only with {@code @PersistenceUnit} (no {@code @Inject})
+ * is rewritten by jpa-module's {@code JpaCdiExtension} to {@code @Inject}.
+ * The rewritten field receives jpa-module's synthetic EntityManagerFactory.
  */
+@EnableTestBeans
 public class Scenario05Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private RewriteSubject rewriteSubject;
+
+    /** No-arg constructor for CDI. */
     public Scenario05Test() {
+    }
+
+    /** @PersistenceUnit-only field is non-null and reports an open EMF. */
+    @Test
+    public void persistenceUnitFieldIsRewrittenAndPopulated() {
+        assertThat(rewriteSubject.getEntityManagerFactory())
+                .as("@PersistenceUnit field must be populated by jpa-module's "
+                        + "ProcessAnnotatedType rewriting (adds @Inject)")
+                .isNotNull();
+        assertThat(rewriteSubject.getEntityManagerFactory().isOpen())
+                .as("the rewritten EMF must be the framework-managed JVM-cached one (open)")
+                .isTrue();
     }
 }
