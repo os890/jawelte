@@ -15,17 +15,54 @@
  */
 package org.os890.jawelte.tests.jpa.scenario21;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.enterprise.inject.Default;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #21 (single-pu-default-qualifier) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * With a single persistence unit declared, jpa-module's {@code JpaCdiExtension}
+ * registers the synthetic EMF + EM beans as {@code @Default} so an unqualified
+ * {@code @Inject EntityManager} resolves to that PU's bean. The explicit
+ * {@code @Default} qualifier resolves to the same bean.
  */
+@EnableTestBeans
 public class Scenario21Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManager unqualifiedEntityManager;
+
+    @Inject
+    @Default
+    private EntityManager defaultEntityManager;
+
+    @Inject
+    @Default
+    private EntityManagerFactory defaultEntityManagerFactory;
+
+    /** No-arg constructor for CDI. */
     public Scenario21Test() {
+    }
+
+    /** Unqualified inject + @Default-qualified inject both resolve in the single-PU shape. */
+    @Test
+    public void singlePuResolvesUnqualifiedAndDefaultInjections() {
+        assertThat(unqualifiedEntityManager)
+                .as("unqualified @Inject EntityManager must resolve in the single-PU shape")
+                .isNotNull();
+        assertThat(defaultEntityManager)
+                .as("@Default EntityManager must resolve to the same proxy as unqualified")
+                .isSameAs(unqualifiedEntityManager);
+        assertThat(defaultEntityManagerFactory)
+                .as("@Default EntityManagerFactory must resolve in the single-PU shape")
+                .isNotNull();
+        assertThat(defaultEntityManagerFactory.isOpen())
+                .as("the @Default EMF must be open across the test class")
+                .isTrue();
     }
 }

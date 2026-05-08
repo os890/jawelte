@@ -15,17 +15,40 @@
  */
 package org.os890.jawelte.tests.jpa.scenario24;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #24 (multi-pu-cross-pu-writes) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * One {@code @Transactional} method writes into two persistence units. Both
+ * per-PU {@code EntityTransaction}s commit independently when the method
+ * returns; both rows are visible from a fresh tx afterwards. Locks in
+ * jpa-module's multi-PU lazy-join + flush-all-then-commit-all path
+ * ({@code DefaultResourceLocalTransactionStrategy}).
  */
+@EnableTestBeans
 public class Scenario24Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private CrossPuService crossPuService;
+
+    /** No-arg constructor for CDI. */
     public Scenario24Test() {
+    }
+
+    /** Persisting into both PUs from one tx leaves one row in each. */
+    @Test
+    public void crossPuTransactionalPersistsBothRows() {
+        crossPuService.persistIntoBothPus();
+
+        assertThat(crossPuService.countInPuA())
+                .as("PU 'a' must have one row after the cross-PU @Transactional commits")
+                .isEqualTo(1L);
+        assertThat(crossPuService.countInPuB())
+                .as("PU 'b' must have one row after the cross-PU @Transactional commits")
+                .isEqualTo(1L);
     }
 }
