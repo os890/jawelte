@@ -15,17 +15,38 @@
  */
 package org.os890.jawelte.tests.jpa.scenario10;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #10 (rollback-on-runtime-exception) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A {@code @Transactional} method that throws a {@code RuntimeException} must roll
+ * back: the persisted row never makes it to the DB.
  */
+@EnableTestBeans
 public class Scenario10Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private CustomerService customerService;
+
+    /** No-arg constructor for CDI. */
     public Scenario10Test() {
+    }
+
+    /** RuntimeException → rollback → row count is zero. */
+    @Test
+    public void runtimeExceptionRollsBackThePersist() {
+        assertThatThrownBy(() -> customerService.persistAndThrowRuntime("Alice"))
+                .as("the service's RuntimeException must propagate to the caller")
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("scenario-10");
+
+        assertThat(customerService.countCustomers())
+                .as("rollback on RuntimeException must discard the persisted row")
+                .isZero();
     }
 }

@@ -15,17 +15,58 @@
  */
 package org.os890.jawelte.tests.jpa.scenario01;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #01 (entity-manager-injectable) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code @Inject EntityManager} resolves to a non-null transaction-scoped proxy that
+ * can run JPQL. Two lookups in the same test method return the same proxy instance —
+ * the contract POC's {@code JpaTestExtensionTest.emIsInjectableAndTransactionScoped}
+ * locks in via {@code assertSame(em1, em2)}.
  */
+@EnableTestBeans
 public class Scenario01Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManager entityManager;
+
+    @Inject
+    private Instance<EntityManager> entityManagerInstance;
+
+    /** No-arg constructor for CDI. */
     public Scenario01Test() {
+    }
+
+    /** The injected EntityManager is non-null and can run JPQL inside a tx. */
+    @Test
+    @Transactional
+    public void entityManagerIsInjectableAndUsable() {
+        assertThat(entityManager)
+                .as("@Inject EntityManager must resolve to a non-null bean")
+                .isNotNull();
+
+        long count = entityManager
+                .createQuery("SELECT COUNT(m) FROM Marker m", Long.class)
+                .getSingleResult();
+        assertThat(count)
+                .as("a fresh PU should have zero rows in the Marker table")
+                .isZero();
+    }
+
+    /** Two CDI lookups in one method return the same proxy — transaction-scoped contract. */
+    @Test
+    public void twoLookupsReturnSameProxy() {
+        EntityManager firstLookup = entityManagerInstance.get();
+        EntityManager secondLookup = entityManagerInstance.get();
+        assertThat(firstLookup)
+                .as("CDI must return the same EntityManager proxy on repeated lookups")
+                .isSameAs(secondLookup);
     }
 }

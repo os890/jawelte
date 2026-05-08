@@ -15,17 +15,55 @@
  */
 package org.os890.jawelte.tests.jpa.scenario02;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #02 (entity-manager-factory-injectable) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * {@code @Inject EntityManagerFactory} resolves to the JVM-cached EMF for the
+ * scenario's PU; it is open and can create fresh EntityManagers.
  */
+@EnableTestBeans
 public class Scenario02Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManagerFactory entityManagerFactory;
+
+    /** No-arg constructor for CDI. */
     public Scenario02Test() {
+    }
+
+    /** The injected EMF is non-null, open, and can create EMs. */
+    @Test
+    public void entityManagerFactoryIsInjectableOpenAndUsable() {
+        assertThat(entityManagerFactory)
+                .as("@Inject EntityManagerFactory must resolve to a non-null bean")
+                .isNotNull();
+        assertThat(entityManagerFactory.isOpen())
+                .as("the framework-managed EMF must be open across the test class")
+                .isTrue();
+
+        EntityManager freshEntityManager = entityManagerFactory.createEntityManager();
+        try {
+            assertThat(freshEntityManager.isOpen())
+                    .as("EMF.createEntityManager() must return an open EntityManager")
+                    .isTrue();
+        } finally {
+            freshEntityManager.close();
+        }
+    }
+
+    /** The Marker entity is registered with the EMF metamodel — proves entity scan ran. */
+    @Test
+    public void emfMetamodelKnowsTheEntity() {
+        assertThat(entityManagerFactory.getMetamodel().getEntities())
+                .as("the EMF's metamodel must include the auto-discovered Marker entity")
+                .extracting(entityType -> entityType.getJavaType().getName())
+                .contains(Marker.class.getName());
     }
 }

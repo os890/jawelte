@@ -15,17 +15,43 @@
  */
 package org.os890.jawelte.tests.jpa.scenario11;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #11 (commit-on-checked-exception) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Project-wide rollback rule: a {@code @Transactional} method that throws a
+ * <em>checked</em> {@link BusinessException} must also roll back. This is the
+ * intentional divergence from Jakarta EE's commit-on-checked default — the
+ * scenario directory keeps the POC-era "commit-on-checked-exception" label,
+ * but the assertion locks in jawelte's actual behaviour.
  */
+@EnableTestBeans
 public class Scenario11Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private CustomerService customerService;
+
+    /** No-arg constructor for CDI. */
     public Scenario11Test() {
+    }
+
+    /** Checked exception → rollback → row count is zero (jawelte rule). */
+    @Test
+    public void checkedExceptionAlsoRollsBack() {
+        assertThatThrownBy(() -> customerService.persistAndThrowChecked("Alice"))
+                .as("the service's checked exception must propagate to the caller")
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("scenario-11");
+
+        assertThat(customerService.countCustomers())
+                .as("jawelte's project-wide rule rolls back on every thrown exception "
+                        + "— including checked ones — diverging intentionally from "
+                        + "Jakarta EE's commit-on-checked default")
+                .isZero();
     }
 }
