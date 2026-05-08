@@ -905,3 +905,15 @@ what's verified) and added a class-level Javadoc caveat that documents
 the inherent gap. The assertion's `as(...)` clause now explicitly
 warns that the test would also pass against a stripped-to-no-op
 interceptor.
+
+## 2026-05-08 — FIXED §2.2: drain TransactionScopedEmHolder per-thread stacks in afterEach
+
+Punch-list §2.2 (MEDIUM, POC better): `JpaLifecycleAdapter.afterEach` ran cleanup but did NOT call `TransactionScopedEmHolder.clearForCurrentThread()` — that lived only in `afterAll`. POC's lifecycle drains every per-PU stack in afterEach's finally block.
+
+Risk: if a test method threw before reaching the strategy's commit/rollback AND the orphan-rollback safety net itself threw (rare but possible), the per-thread `STACKS` / `MANAGED_PU_STACK` / `FRAME_PUS_STACK` / `FRAMEWORK_OWNED` would remain populated for the NEXT test method on the same thread (JUnit same-thread mode). Memory: previous test's `EntityManager` retained until afterAll.
+
+Fix: added a try/catch block in `JpaLifecycleAdapter.afterEach` (after cleanup, before the primary throw) calling `TransactionScopedEmHolder.clearForCurrentThread()`, with the same exception-aggregation pattern as the rest of afterEach (TICKET-001 rule).
+
+The Javadoc on `clearForCurrentThread` already claimed it was called from `afterEach` — the comment was correct, the wiring just hadn't landed. Now matches.
+
+Verified: full `tests/jpa-module` suite green under `mvn -P owb`.

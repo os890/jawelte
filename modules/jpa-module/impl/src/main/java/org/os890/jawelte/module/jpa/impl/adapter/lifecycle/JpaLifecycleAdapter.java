@@ -172,6 +172,22 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
             fileModeState.markFirstMethodExecuted();
         }
 
+        try {
+            // Defense-in-depth: drain TransactionScopedEmHolder's per-thread stacks
+            // so a stray test method that pushed but never popped (e.g. an
+            // exception path that bypassed both completion paths AND the
+            // orphan-rollback try block above) does not leak EntityManager
+            // state into the next test method on the same thread. Mirrors POC's
+            // afterEach drain (punch-list §2.2).
+            TransactionScopedEmHolder.clearForCurrentThread();
+        } catch (RuntimeException clearFailure) {
+            if (primary == null) {
+                primary = clearFailure;
+            } else {
+                primary.addSuppressed(clearFailure);
+            }
+        }
+
         if (primary != null) {
             throw primary;
         }
