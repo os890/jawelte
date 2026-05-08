@@ -15,17 +15,35 @@
  */
 package org.os890.jawelte.tests.jpa.scenario13;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #13 (nested-commit-commit) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Nested {@code @Transactional}: outer + inner each persist on their own
+ * EntityManager / EntityTransaction; both commit; both rows are visible
+ * afterwards (mirrors POC's {@code NestedTransactionalTest.nestedBothCommit}).
  */
+@EnableTestBeans
 public class Scenario13Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private OuterService outerService;
+
+    /** No-arg constructor for CDI. */
     public Scenario13Test() {
+    }
+
+    /** Outer + inner both commit → 2 rows visible from a fresh tx. */
+    @Test
+    public void outerAndInnerBothCommitProducesTwoRows() {
+        outerService.outerPersistsAndCallsInner("outer", "inner");
+
+        assertThat(outerService.countCustomers())
+                .as("nested commit/commit must leave both customers in the DB")
+                .isEqualTo(2L);
     }
 }

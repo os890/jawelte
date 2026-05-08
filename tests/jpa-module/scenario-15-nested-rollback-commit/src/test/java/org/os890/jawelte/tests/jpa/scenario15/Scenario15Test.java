@@ -15,17 +15,39 @@
  */
 package org.os890.jawelte.tests.jpa.scenario15;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #15 (nested-rollback-commit) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * Nested {@code @Transactional}: inner rolls back; outer catches the inner
+ * exception and commits. Inner's row was discarded by the inner interceptor;
+ * outer's row survives. Mirrors POC's
+ * {@code NestedTransactionalTest.innerThrowsOuterCatches}.
  */
+@EnableTestBeans
 public class Scenario15Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private OuterService outerService;
+
+    /** No-arg constructor for CDI. */
     public Scenario15Test() {
+    }
+
+    /** Outer survives inner rollback — only outer's row remains. */
+    @Test
+    public void outerCommitSurvivesInnerRollback() {
+        outerService.outerPersistsCatchesInnerRollback("outer-survives", "inner-discarded");
+
+        assertThat(outerService.countCustomers())
+                .as("inner's persist was rolled back; outer's persist committed")
+                .isEqualTo(1L);
+        assertThat(outerService.singleSurvivorName())
+                .as("the single surviving row is outer's, not inner's")
+                .isEqualTo("outer-survives");
     }
 }
