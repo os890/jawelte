@@ -23,9 +23,24 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 /**
- * A {@code @ReadOnly} method declared without {@code @Transactional} sees the
- * {@code ReadOnlyInterceptor} fire, observe that no tx is active, and proceed
- * as a documented no-op. The body's return value reaches the caller unchanged.
+ * A {@code @ReadOnly} method declared without {@code @Transactional} is
+ * a documented no-op: the body runs and its return value reaches the
+ * caller unchanged.
+ *
+ * <p><strong>Coverage caveat (punch-list §8.1).</strong> The "no-op" path
+ * is inherently un-testable through black-box assertions — by definition
+ * it leaves no observable state change. A pure pass-through replacement
+ * of {@code ReadOnlyInterceptor.aroundInvoke} would also satisfy the
+ * assertion below; a missing interceptor binding entirely would too.
+ * <strong>This test does NOT prove that {@code ReadOnlyInterceptor}
+ * specifically fired</strong> — it only proves that calling a
+ * {@code @ReadOnly}-only method returns the body's value, which is the
+ * documented contract. Strengthening would require a side-channel
+ * (e.g. firing a CDI event from the interceptor for test observation),
+ * which would expand prod surface area solely to make this case
+ * verifiable. Decision (2026-05-08): keep the test, label it honestly,
+ * and document the inherent gap rather than add prod-only-for-tests
+ * machinery.
  */
 @EnableTestBeans
 public class Scenario17Test {
@@ -37,12 +52,18 @@ public class Scenario17Test {
     public Scenario17Test() {
     }
 
-    /** @ReadOnly without @Transactional → body runs, value returned unchanged. */
+    /**
+     * @ReadOnly without @Transactional → body runs, return value reaches
+     * the caller. <strong>Does not verify the interceptor specifically
+     * fired</strong> — see the class-level §8.1 caveat.
+     */
     @Test
-    public void readOnlyWithoutTransactionalIsDocumentedNoOp() {
+    public void readOnlyWithoutTransactionalReturnsBodyValueUnchanged() {
         assertThat(readOnlyOnlyService.computeWithoutTx("hello"))
-                .as("ReadOnlyInterceptor must proceed unchanged when no tx is active — "
-                        + "the body's return value reaches the caller")
+                .as("the body's return value must reach the caller — verifies the documented "
+                        + "contract that a @ReadOnly-only method is a no-op pass-through. "
+                        + "NB: this assertion would also pass against a stripped-to-no-op "
+                        + "ReadOnlyInterceptor or even no interceptor at all (§8.1).")
                 .isEqualTo("readonly:hello");
     }
 }

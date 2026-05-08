@@ -892,3 +892,16 @@ The service-bean indirection is intentional: a `@Transactional` annotation on a 
 Mutation re-verify: hardcoding `new DefaultResourceLocalTransactionStrategy()` in `TransactionalInterceptor.aroundInvoke` produces `Failures: 1`. Closes §8.2 / §9.2 for scenario-44.
 
 §8.2 trio fully closed.
+
+## 2026-05-08 — DOCS: scenario-17 honest labelling for the §8.1 inherent gap
+
+Punch-list §8.1: scenario-17 verifies that `@ReadOnly` without `@Transactional` is a documented no-op. Empirically (§9.1), a pure-pass-through replacement of `ReadOnlyInterceptor.aroundInvoke` left the test green — the test does not bind to "the interceptor specifically fired", only to "the body's return value passes through".
+
+Decision: KEEP the test (it does verify the documented contract), but label it honestly. Strengthening would require firing a CDI event from `ReadOnlyInterceptor` solely for test observation — that would expand prod surface area for a test-only purpose, and the no-op path is fundamentally un-testable through black-box assertions.
+
+Renamed the method `readOnlyWithoutTransactionalIsDocumentedNoOp` →
+`readOnlyWithoutTransactionalReturnsBodyValueUnchanged` (precise about
+what's verified) and added a class-level Javadoc caveat that documents
+the inherent gap. The assertion's `as(...)` clause now explicitly
+warns that the test would also pass against a stripped-to-no-op
+interceptor.
