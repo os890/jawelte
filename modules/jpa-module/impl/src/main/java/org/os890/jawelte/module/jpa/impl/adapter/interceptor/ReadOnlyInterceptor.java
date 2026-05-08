@@ -56,11 +56,28 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  * switching to {@code COMMIT} and restores it in the
  * {@code finally} block, so a nested {@code @ReadOnly} call does
  * not leave its enclosing level with the wrong flush mode.
+ *
+ * <p>A re-entrance guard ({@link #ACTIVE}) shields against double
+ * registration (programmatic + auto-discovery) on the same call
+ * site: when the interceptor fires a second time on the same thread
+ * before the first invocation has unwound, the inner call simply
+ * proceeds without re-applying the flush-mode swap or scheduling a
+ * second {@code setRollbackOnly}. Without this guard the inner
+ * call's {@code finally} block would restore the flush mode to
+ * what it was before the first invocation captured it — mid-method.
  */
 @Interceptor
 @ReadOnly
 @Priority(Interceptor.Priority.PLATFORM_BEFORE + 201)
 public class ReadOnlyInterceptor {
+
+    /**
+     * Per-thread re-entrance flag. {@code true} while a
+     * {@code @ReadOnly} invocation is mid-flight on the calling
+     * thread; the interceptor short-circuits to
+     * {@link InvocationContext#proceed()} on any nested fire.
+     */
+    private static final ThreadLocal<Boolean> ACTIVE = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     /** No-arg constructor required by CDI. */
     public ReadOnlyInterceptor() {
@@ -76,6 +93,9 @@ public class ReadOnlyInterceptor {
      */
     @AroundInvoke
     public Object aroundInvoke(InvocationContext invocationContext) throws Exception {
+        if (Boolean.TRUE.equals(ACTIVE.get())) {
+            return invocationContext.proceed();
+        }
         TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
         if (!strategy.isActive()) {
             return invocationContext.proceed();
@@ -88,6 +108,7 @@ public class ReadOnlyInterceptor {
                 entityManager.setFlushMode(FlushModeType.COMMIT);
             }
         }
+        ACTIVE.set(Boolean.TRUE);
         try {
             try {
                 Object result = invocationContext.proceed();
@@ -101,6 +122,7 @@ public class ReadOnlyInterceptor {
                 throw checked;
             }
         } finally {
+            ACTIVE.set(Boolean.FALSE);
             restoreFlushModes(originalFlushModes);
         }
     }
