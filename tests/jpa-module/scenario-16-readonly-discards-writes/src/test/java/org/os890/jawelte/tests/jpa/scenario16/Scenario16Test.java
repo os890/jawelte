@@ -53,4 +53,25 @@ public class Scenario16Test {
                 .as("setter mutation under @ReadOnly must not reach the database")
                 .isEqualTo("original");
     }
+
+    /**
+     * A {@code @ReadOnly @Transactional} JPQL query returns the
+     * expected entity unchanged — the read-only path does not
+     * interfere with normal lookups. Mirrors POC's
+     * {@code ReadOnlyTest.readOnlyFindWorks} (Order 2).
+     */
+    @Test
+    public void readOnlyFindByNameReturnsTheRow() {
+        itemService.seed("Bob");
+
+        Item found = itemService.findByName("Bob");
+
+        assertThat(found)
+                .as("@ReadOnly findByName must return the seeded item — read-only mode does "
+                        + "not affect query results")
+                .isNotNull();
+        assertThat(found.getName())
+                .as("the returned item carries the seeded name")
+                .isEqualTo("Bob");
+    }
 }

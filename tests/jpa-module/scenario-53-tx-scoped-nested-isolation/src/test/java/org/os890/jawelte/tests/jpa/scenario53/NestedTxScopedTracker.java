@@ -41,6 +41,8 @@ public class NestedTxScopedTracker implements Serializable {
 
     private final UUID instanceId = UUID.randomUUID();
 
+    private String value;
+
     /** Reset both counters to zero. */
     public static void reset() {
         POST_CONSTRUCT_COUNT.set(0);
@@ -59,6 +61,27 @@ public class NestedTxScopedTracker implements Serializable {
      */
     public UUID getInstanceId() {
         return instanceId;
+    }
+
+    /**
+     * Per-instance state used by the state-isolation test: outer
+     * sets one value, inner sets another on its own instance, and
+     * outer reads its value back to verify the inner write did not
+     * leak across the tx-scope boundary.
+     *
+     * @return the value, or {@code null} when never set
+     */
+    public String getValue() {
+        return value;
+    }
+
+    /**
+     * Set the per-instance value.
+     *
+     * @param newValue the new value
+     */
+    public void setValue(String newValue) {
+        this.value = newValue;
     }
 
     @PostConstruct

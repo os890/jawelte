@@ -55,4 +55,26 @@ public class Scenario49Test {
                 .as("after outer commits, only inner's row is in the table — outer didn't persist anything")
                 .isEqualTo(1L);
     }
+
+    /**
+     * Three-level flow with a tail persist. L1-A lands on outer's EM,
+     * inner persists + commits L2-B on its own EM frame, outer reads
+     * the JPQL count mid-flight, then outer persists L1-C. After the
+     * outer commit, all three rows are in the DB. Mirrors POC's
+     * {@code NestedTransactionalTest.threeLevelWithMidRead} (Order 10).
+     */
+    @Test
+    public void threeLevelMidFlightCountAndOuterCommitTotal() {
+        long midFlightCount = outerReaderService.threeLevelMidFlightThenTailPersist();
+
+        assertThat(midFlightCount)
+                .as("mid-flight JPQL count between L2-B's commit and outer's L1-C persist "
+                        + "must see at least the inner's already-committed L2-B row")
+                .isGreaterThanOrEqualTo(1L);
+
+        assertThat(outerReaderService.countPeople())
+                .as("after the outer @Transactional commits, all three rows (L1-A, L2-B, L1-C) "
+                        + "must be present in the DB")
+                .isEqualTo(3L);
+    }
 }

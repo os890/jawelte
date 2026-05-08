@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
 import jakarta.transaction.Transactional;
 
 import org.junit.jupiter.api.MethodOrderer;
@@ -40,6 +41,9 @@ public class Scenario30Test {
 
     @Inject
     private EntityManager entityManager;
+
+    @Inject
+    private EntityManagerFactory entityManagerFactory;
 
     /** No-arg constructor for CDI. */
     public Scenario30Test() {
@@ -72,5 +76,40 @@ public class Scenario30Test {
         assertThat(count)
                 .as("per-method cleanup must wipe the row method 1 persisted")
                 .isZero();
+    }
+
+    /**
+     * Manual rollback: open a fresh EntityManager directly off the
+     * EMF (bypassing the framework's @Transactional path), persist +
+     * flush a row, then explicitly call {@code getTransaction().rollback()}.
+     * The rolled-back row must not survive — a follow-up read in a
+     * second begin/commit cycle returns zero. Mirrors POC's
+     * {@code JpaTestExtensionTest.manualRollback} (Order 11).
+     */
+    @Test
+    @Order(3)
+    public void thirdMethodManualRollbackDiscardsThePersist() {
+        EntityManager freshEntityManager = entityManagerFactory.createEntityManager();
+        try {
+            freshEntityManager.getTransaction().begin();
+            freshEntityManager.persist(new Marker());
+            freshEntityManager.flush();
+            freshEntityManager.getTransaction().rollback();
+
+            freshEntityManager.getTransaction().begin();
+            try {
+                long countAfterRollback = freshEntityManager
+                        .createQuery("SELECT COUNT(m) FROM Marker m", Long.class)
+                        .getSingleResult();
+                assertThat(countAfterRollback)
+                        .as("manual em.getTransaction().rollback() must discard the persisted row "
+                                + "even though no @Transactional interceptor was involved")
+                        .isZero();
+            } finally {
+                freshEntityManager.getTransaction().commit();
+            }
+        } finally {
+            freshEntityManager.close();
+        }
     }
 }

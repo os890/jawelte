@@ -73,4 +73,24 @@ public class ItemService {
     public String currentName(Long id) {
         return entityManager.find(Item.class, id).getName();
     }
+
+    /**
+     * Read-only JPQL lookup by name. Mirrors POC's
+     * {@code ReadOnlyService.findByName} (used in Order 2): a
+     * {@code @ReadOnly @Transactional} query path proves that
+     * read-only mode does not interfere with normal queries.
+     *
+     * @param name the item name to look up
+     * @return the matching item, or {@code null} if none
+     */
+    @Transactional
+    @ReadOnly
+    public Item findByName(String name) {
+        return entityManager
+                .createQuery("SELECT i FROM Item i WHERE i.name = :name", Item.class)
+                .setParameter("name", name)
+                .getResultStream()
+                .findFirst()
+                .orElse(null);
+    }
 }

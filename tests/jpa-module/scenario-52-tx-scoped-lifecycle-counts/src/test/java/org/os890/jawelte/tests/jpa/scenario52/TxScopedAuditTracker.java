@@ -39,6 +39,8 @@ public class TxScopedAuditTracker implements Serializable {
     /** Incremented on every {@code @PreDestroy}. */
     public static final AtomicInteger PRE_DESTROY_COUNT = new AtomicInteger();
 
+    private String mark;
+
     /** Reset both counters to zero. */
     public static void reset() {
         POST_CONSTRUCT_COUNT.set(0);
@@ -64,5 +66,26 @@ public class TxScopedAuditTracker implements Serializable {
      * proxy method materialises the bean inside the active scope.
      */
     public void touch() {
+    }
+
+    /**
+     * Per-instance state. {@code null} on a freshly-constructed
+     * instance — used by the test to prove a second
+     * {@code @Transactional} invocation gets a fresh bean rather
+     * than the previous tx's instance.
+     *
+     * @return the mark, or {@code null} when never set
+     */
+    public String getMark() {
+        return mark;
+    }
+
+    /**
+     * Set the per-instance mark.
+     *
+     * @param newMark the new mark
+     */
+    public void setMark(String newMark) {
+        this.mark = newMark;
     }
 }

@@ -54,4 +54,23 @@ public class Scenario52Test {
                 .as("one @PreDestroy per @Transactional invocation")
                 .hasValue(2);
     }
+
+    /**
+     * A second {@code @Transactional} call gets a freshly-constructed
+     * tracker — the previous tx's instance was destroyed on commit, so
+     * its per-instance state is gone (mirrors POC's Order 5 assertion).
+     */
+    @Test
+    public void secondTransactionalCallSeesFreshInstanceWithNullState() {
+        TxScopedAuditTracker.reset();
+
+        auditService.setMarkInTx("first-tx-value");
+        String observedMark = auditService.readMarkInTx();
+
+        assertThat(observedMark)
+                .as("the second @Transactional invocation must see a freshly-constructed "
+                        + "@TransactionScoped tracker — its per-instance mark is null even "
+                        + "though the first invocation set it")
+                .isNull();
+    }
 }

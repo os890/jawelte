@@ -105,6 +105,51 @@ public class Scenario59Test {
         }
     }
 
+    /** An empty &lt;persistence/&gt; root with no PUs returns an empty list. */
+    @Test
+    public void emptyPersistenceRootReturnsEmptyList(@TempDir Path tempDir) throws IOException {
+        Path metaInf = Files.createDirectories(tempDir.resolve("META-INF"));
+        Files.writeString(metaInf.resolve("persistence.xml"), """
+                <persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.2"/>
+                """);
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[] {tempDir.toUri().toURL()}, null)) {
+            List<ParsedPersistenceUnit> units = PersistenceXmlParser.parseAll(classLoader);
+
+            assertThat(units)
+                    .as("an empty <persistence/> root must return an empty list "
+                            + "(no PU declarations to surface)")
+                    .isEmpty();
+        }
+    }
+
+    /** Multiple &lt;class&gt; elements on one PU collect into the classes list in order. */
+    @Test
+    public void multipleClassElementsAreCollectedInOrder(@TempDir Path tempDir) throws IOException {
+        Path metaInf = Files.createDirectories(tempDir.resolve("META-INF"));
+        Files.writeString(metaInf.resolve("persistence.xml"), """
+                <persistence xmlns="https://jakarta.ee/xml/ns/persistence" version="3.2">
+                  <persistence-unit name="multiClassPu" transaction-type="RESOURCE_LOCAL">
+                    <class>com.example.Order</class>
+                    <class>com.example.Customer</class>
+                    <class>com.example.LineItem</class>
+                  </persistence-unit>
+                </persistence>
+                """);
+
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[] {tempDir.toUri().toURL()}, null)) {
+            List<ParsedPersistenceUnit> units = PersistenceXmlParser.parseAll(classLoader);
+
+            assertThat(units).hasSize(1);
+            assertThat(units.get(0).classes())
+                    .as("every <class> element under a PU must be collected, in declaration order")
+                    .containsExactly("com.example.Order", "com.example.Customer", "com.example.LineItem");
+            assertThat(units.get(0).hasClassElements())
+                    .as("explicit <class> elements drive hasClassElements()=true")
+                    .isTrue();
+        }
+    }
+
     /** When prod and test xmls are both visible, only the test-classpath one wins. */
     @Test
     public void testClasspathWinsOverProdJarPersistenceXml(@TempDir Path tempDir) throws IOException {

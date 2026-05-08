@@ -38,4 +38,29 @@ public class TxScopedAuditService {
     public void invokeOnceWithinTx() {
         tracker.touch();
     }
+
+    /**
+     * Open a tx, set the tracker's per-instance mark, commit. The
+     * tracker instance is destroyed on commit; a subsequent
+     * {@code @Transactional} call gets a freshly-constructed tracker
+     * whose mark is {@code null}.
+     *
+     * @param mark the mark to set on this tx's tracker instance
+     */
+    @Transactional
+    public void setMarkInTx(String mark) {
+        tracker.setMark(mark);
+    }
+
+    /**
+     * Open a tx and read the tracker's mark. When this is the FIRST
+     * dereference of the tracker in the current tx, CDI constructs a
+     * fresh instance — its mark is {@code null}.
+     *
+     * @return the mark observed by the tx's freshly-constructed tracker
+     */
+    @Transactional
+    public String readMarkInTx() {
+        return tracker.getMark();
+    }
 }

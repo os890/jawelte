@@ -48,4 +48,22 @@ public class NestedOuterService {
         UUID outerAfter = tracker.getInstanceId();
         return new NestedTxResult(outerBefore, innerId, outerAfter);
     }
+
+    /**
+     * Set the outer-scope tracker's value, dispatch to inner (which
+     * sets a different value on its own scope's tracker), then read
+     * the outer value back. The inner write must not leak: the read
+     * here returns the outer's original value, proving each tx-scope
+     * frame owns an independent contextual instance.
+     *
+     * @param outerValue value set on the outer-scope tracker
+     * @param innerValue value the inner tx sets on its own tracker
+     * @return the outer-scope tracker's value AFTER the nested call
+     */
+    @Transactional
+    public String outerSetsThenInnerSetsThenOuterReads(String outerValue, String innerValue) {
+        tracker.setValue(outerValue);
+        innerService.setInnerScopeValue(innerValue);
+        return tracker.getValue();
+    }
 }

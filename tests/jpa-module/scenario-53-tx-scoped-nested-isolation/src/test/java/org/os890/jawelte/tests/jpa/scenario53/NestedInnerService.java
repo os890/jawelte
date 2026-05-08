@@ -42,4 +42,16 @@ public class NestedInnerService {
     public UUID captureInnerTrackerId() {
         return tracker.getInstanceId();
     }
+
+    /**
+     * Open a nested tx, set the inner-scope tracker's value, commit.
+     * The inner instance is destroyed on commit; the outer's tracker
+     * is untouched because it lives on a separate scope frame.
+     *
+     * @param innerValue the value to set on the inner-scope tracker
+     */
+    @Transactional
+    public void setInnerScopeValue(String innerValue) {
+        tracker.setValue(innerValue);
+    }
 }

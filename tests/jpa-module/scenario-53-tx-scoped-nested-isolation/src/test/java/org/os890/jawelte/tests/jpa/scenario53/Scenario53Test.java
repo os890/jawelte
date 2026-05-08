@@ -60,4 +60,25 @@ public class Scenario53Test {
                 .as("both instances are destroyed when their tx ended")
                 .hasValue(2);
     }
+
+    /**
+     * Outer sets its tracker's value, inner sets its OWN tracker's
+     * value to something different, outer reads its tracker back —
+     * the read returns outer's original value, proving inner's write
+     * did not leak across the scope boundary (mirrors POC's Order 8
+     * "outer's @TxScoped value unchanged after inner sets a different
+     * value on its own instance").
+     */
+    @Test
+    public void nestedTxScopeYieldsIsolatedState() {
+        NestedTxScopedTracker.reset();
+
+        String outerObservedAfterInner =
+                outerService.outerSetsThenInnerSetsThenOuterReads("outer-val", "inner-val");
+
+        assertThat(outerObservedAfterInner)
+                .as("the outer-scope tracker's value must NOT be overwritten by the inner tx — "
+                        + "each tx-scope frame holds its own contextual instance")
+                .isEqualTo("outer-val");
+    }
 }
