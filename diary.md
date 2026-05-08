@@ -943,3 +943,24 @@ Demonstrated empirically with new scenario-61 (two-table cycle Foo.bar_id ↔ Ba
 Mutation re-verify: pre-fix code → scenario-61 fails with 1 failure + 1 error. Fix restored → all 3 pass. Full suite green under both `mvn -P owb` and `mvn -P weld`.
 
 Updated Javadoc on `NativeSqlDeleteDbCleanupStrategy` to describe the two-pass behavior and the residual NOT-NULL-cycle limitation (subsumes the limitation paragraph from 149dfa5).
+
+## 2026-05-08 — IMPROVED §2.3: drop-and-readd FKs (faster than null-update)
+
+User feedback on the prior §2.3 fix (commit 04fe86b, two-pass null-update + delete): the per-FK-column UPDATE pass touches every row in every table, so cleanup cost scales with O(rows × FK columns) write traffic — slow when seed data is non-trivial.
+
+Replaced with **drop-and-readd**:
+1. Walk `getImportedKeys` for each table; capture full FK definition (constraint name, FK columns, referenced table + columns, ON DELETE / ON UPDATE rules).
+2. `ALTER TABLE … DROP CONSTRAINT` for each captured FK.
+3. `DELETE FROM "<t>"` for each table in reverse order — runs unconstrained because FKs are gone.
+4. `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY (…) REFERENCES … ON DELETE … ON UPDATE …` for each captured FK. Wrapped in `finally` so the schema is restored even if step 3 throws (important on databases where DDL implicitly commits, e.g. MySQL).
+
+**Cost comparison.** Old: O(tables × FKs × rows) UPDATE writes — every row touched once per FK column. New: O(tables × FKs) metadata-only DDL + O(tables) DELETE — independent of row count. Strictly more capable too: handles NOT NULL FK cycles (which the null-update couldn't, since UPDATE … = NULL on a NOT NULL column fails).
+
+Implementation details:
+- Composite FKs surface as multiple `getImportedKeys` rows sharing one `FK_NAME`; collapsed via `ForeignKeyBuilder` keyed on the constraint name, accumulating columns by `KEY_SEQ`.
+- JDBC's `DELETE_RULE` / `UPDATE_RULE` int constants mapped back to SQL clauses (`CASCADE`, `RESTRICT`, `SET NULL`, `NO ACTION`, `SET DEFAULT`) so the re-emitted constraint preserves semantics verbatim.
+- Anonymous FKs (no `FK_NAME` in metadata) aggregate as a warning and are skipped — drop-by-name needs a name. Hibernate's auto-DDL always names FKs.
+- Aggregation pattern unchanged (TICKET-001 rule).
+- Standard-SQL `DROP CONSTRAINT` syntax; documented portability: works on H2 / PostgreSQL / Oracle. MySQL/MariaDB use the non-standard `DROP FOREIGN KEY` keyword and need a vendor-specific strategy.
+
+Verified: scenario-61 (two-table FK cycle) still passes 3/3 with the new impl. Full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`.

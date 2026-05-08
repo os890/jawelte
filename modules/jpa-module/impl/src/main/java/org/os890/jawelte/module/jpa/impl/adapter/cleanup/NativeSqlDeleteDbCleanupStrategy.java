@@ -16,10 +16,15 @@
 package org.os890.jawelte.module.jpa.impl.adapter.cleanup;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.Priority;
@@ -32,19 +37,39 @@ import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 
 /**
- * Fallback {@link DbCleanupStrategy}: two-pass cleanup using portable
- * SQL only. <em>Pass 1</em> walks {@link java.sql.DatabaseMetaData#getImportedKeys}
- * for every table returned by the active {@link TableNameResolver} and
- * issues {@code UPDATE "<table>" SET "<fkCol>" = NULL} for each
- * <em>nullable</em> foreign-key column — breaking circular references
- * (self-referencing parent/child shapes, two-table cycles) without
- * relying on database-specific {@code SET REFERENTIAL_INTEGRITY} or
- * {@code SET FOREIGN_KEY_CHECKS} primitives. <em>Pass 2</em> issues
- * {@code DELETE FROM "<table>"} in <strong>reverse</strong> table-list
- * order so child rows go before their parents in the common acyclic-FK
- * case.
+ * Fallback {@link DbCleanupStrategy}: drops every foreign-key
+ * constraint, deletes all rows, then re-adds the constraints. The
+ * drop / re-add pair is metadata-level — no row scans, no
+ * row-by-row constraint checks during the DELETEs — so cleanup
+ * cost stays bounded by table count even when the test seeded
+ * thousands of rows. Resolves circular FKs (single-table self-FK
+ * AND multi-table cycles) without relying on database-specific
+ * primitives like {@code SET REFERENTIAL_INTEGRITY} (H2) or
+ * {@code SET FOREIGN_KEY_CHECKS} (MySQL).
  *
- * <p>Per-table failures aggregate per the project exception policy
+ * <p><strong>Flow</strong> per {@link #cleanAllTables}:
+ * <ol>
+ *   <li>Walk {@link DatabaseMetaData#getImportedKeys} for every
+ *       table returned by the active {@link TableNameResolver};
+ *       capture each FK constraint's full definition (name, FK
+ *       columns, referenced table + columns, ON DELETE / ON UPDATE
+ *       rules) so it can be re-emitted verbatim.</li>
+ *   <li>Issue {@code ALTER TABLE "<t>" DROP CONSTRAINT "<fk>"}
+ *       for every captured FK.</li>
+ *   <li>Issue {@code DELETE FROM "<t>"} for every table in
+ *       reverse table-list order. With the FKs gone, the deletes
+ *       run unconstrained and are independent of declaration
+ *       order.</li>
+ *   <li>Re-add every captured FK via
+ *       {@code ALTER TABLE "<t>" ADD CONSTRAINT "<fk>" FOREIGN KEY (...)
+ *       REFERENCES "<r>" (...) ON DELETE <rule> ON UPDATE <rule>}.
+ *       Wrapped in a {@code finally} so the schema gets restored
+ *       even if step 3 throws — important on databases where DDL
+ *       implicitly commits (e.g. MySQL) and the surrounding
+ *       transaction's rollback would NOT undo the drops.</li>
+ * </ol>
+ *
+ * <p>Per-step failures aggregate per the project exception policy
  * (TICKET-001): the first failure becomes the primary, subsequent
  * failures (and any rollback failure) attach via
  * {@link Throwable#addSuppressed(Throwable)}.
@@ -61,16 +86,12 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
  * {@code @ElementCollection}, sequence, and trigger-populated tables
  * that have no JPA {@code @Entity} mapping.
  *
- * <p><strong>Circular-FK scope.</strong> The Pass 1 null-update
- * handles every cycle in which at least one FK column on each cycle
- * edge is nullable — which is the JPA default for {@code @ManyToOne}
- * and the typical shape for self-referencing parent/child hierarchies
- * (punch-list §2.3). Cycles where every FK column is {@code NOT NULL}
- * still cannot be resolved without database-specific RI-disable
- * primitives — those consumers should keep
- * {@link JdbcTruncateDbCleanupStrategy} on the classpath (its
- * {@code SET REFERENTIAL_INTEGRITY FALSE} approach handles NOT NULL
- * cycles on H2) or ship a vendor-specific custom strategy.
+ * <p><strong>Portability.</strong> The {@code ALTER TABLE … DROP
+ * CONSTRAINT} / {@code ADD CONSTRAINT} syntax used here is standard
+ * SQL — verified against H2, PostgreSQL, and Oracle. MySQL/MariaDB
+ * use the non-standard {@code DROP FOREIGN KEY} keyword instead;
+ * consumers running tests against MySQL ship a vendor-specific
+ * {@code DbCleanupStrategy} at a lower {@code @Priority}.
  */
 @Priority(Integer.MAX_VALUE)
 public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
@@ -92,24 +113,16 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
             entityManager.getTransaction().begin();
             Session session = entityManager.unwrap(Session.class);
             session.doWork(connection -> {
+                List<ForeignKeyDefinition> capturedForeignKeys =
+                        captureForeignKeys(connection, tableNames, persistenceUnitName, primary);
                 try (Statement statement = connection.createStatement()) {
-                    // Pass 1: null out every nullable FK column so circular references
-                    // (self-FK or two-table cycles) don't block Pass 2's deletes.
-                    for (String tableName : tableNames) {
-                        nullNullableForeignKeys(connection, statement, tableName, persistenceUnitName, primary);
-                    }
-                    // Pass 2: delete in reverse table-list order.
-                    for (int index = tableNames.size() - 1; index >= 0; index--) {
-                        String tableName = tableNames.get(index);
-                        try {
-                            statement.execute("DELETE FROM \"" + tableName + "\"");
-                        } catch (SQLException perTable) {
-                            aggregateFailure(
-                                    primary,
-                                    "Cleanup failed for table '" + tableName + "' of persistence unit '"
-                                            + persistenceUnitName + "'",
-                                    perTable);
-                        }
+                    dropForeignKeys(statement, capturedForeignKeys, persistenceUnitName, primary);
+                    try {
+                        deleteAllRows(statement, tableNames, persistenceUnitName, primary);
+                    } finally {
+                        // Re-add FKs even if the DELETE phase threw, so the schema is
+                        // restored on databases where DDL implicitly commits.
+                        addForeignKeys(statement, capturedForeignKeys, persistenceUnitName, primary);
                     }
                 }
             });
@@ -134,61 +147,207 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
         }
     }
 
-    /**
-     * Pass-1 helper: for every imported key on {@code tableName} whose
-     * FK column is nullable, run {@code UPDATE "<table>" SET "<fkCol>" = NULL}.
-     * Aggregates per-column failures (e.g. metadata says nullable but a
-     * deferrable constraint refuses the update) so Pass 2 still gets a
-     * chance to attempt the delete.
-     */
-    private static void nullNullableForeignKeys(
+    private static List<ForeignKeyDefinition> captureForeignKeys(
             Connection connection,
-            Statement statement,
-            String tableName,
+            List<String> tableNames,
             String persistenceUnitName,
             AtomicReference<RuntimeException> primary) throws SQLException {
-        try (ResultSet importedKeys = connection.getMetaData().getImportedKeys(null, null, tableName)) {
-            while (importedKeys.next()) {
-                String fkColumn = importedKeys.getString("FKCOLUMN_NAME");
-                if (!isColumnNullable(connection, tableName, fkColumn)) {
-                    continue;
+        // FKs that span multiple columns surface as multiple metadata rows
+        // sharing the same FK_NAME — group by name to collapse them into one
+        // ADD CONSTRAINT statement with the column lists in KEY_SEQ order.
+        Map<String, ForeignKeyBuilder> byName = new LinkedHashMap<>();
+        DatabaseMetaData metaData = connection.getMetaData();
+        for (String tableName : tableNames) {
+            try (ResultSet importedKeys = metaData.getImportedKeys(null, null, tableName)) {
+                while (importedKeys.next()) {
+                    String fkName = importedKeys.getString("FK_NAME");
+                    if (fkName == null) {
+                        // Anonymous FK — can't drop by name; record + skip.
+                        aggregateFailure(
+                                primary,
+                                "Skipping anonymous foreign key on table '" + tableName
+                                        + "' of persistence unit '" + persistenceUnitName
+                                        + "' — drop-and-readd requires a named constraint",
+                                null);
+                        continue;
+                    }
+                    ForeignKeyBuilder builder = byName.computeIfAbsent(
+                            fkName, key -> new ForeignKeyBuilder(tableName, key));
+                    builder.addColumn(
+                            importedKeys.getShort("KEY_SEQ"),
+                            importedKeys.getString("FKCOLUMN_NAME"),
+                            importedKeys.getString("PKTABLE_NAME"),
+                            importedKeys.getString("PKCOLUMN_NAME"),
+                            importedKeys.getInt("DELETE_RULE"),
+                            importedKeys.getInt("UPDATE_RULE"));
                 }
-                try {
-                    statement.executeUpdate("UPDATE \"" + tableName + "\" SET \"" + fkColumn + "\" = NULL");
-                } catch (SQLException nullFailure) {
-                    aggregateFailure(
-                            primary,
-                            "Failed to null FK column '" + fkColumn + "' on table '" + tableName
-                                    + "' of persistence unit '" + persistenceUnitName + "'",
-                            nullFailure);
-                }
+            }
+        }
+        List<ForeignKeyDefinition> definitions = new ArrayList<>(byName.size());
+        for (ForeignKeyBuilder builder : byName.values()) {
+            definitions.add(builder.build());
+        }
+        return definitions;
+    }
+
+    private static void dropForeignKeys(
+            Statement statement,
+            List<ForeignKeyDefinition> foreignKeys,
+            String persistenceUnitName,
+            AtomicReference<RuntimeException> primary) {
+        for (ForeignKeyDefinition fk : foreignKeys) {
+            try {
+                statement.execute(fk.toDropSql());
+            } catch (SQLException dropFailure) {
+                aggregateFailure(
+                        primary,
+                        "Failed to drop foreign key '" + fk.constraintName() + "' on table '"
+                                + fk.tableName() + "' of persistence unit '" + persistenceUnitName + "'",
+                        dropFailure);
             }
         }
     }
 
-    /**
-     * @return {@code true} when JDBC metadata reports the column as
-     *     {@code IS_NULLABLE = 'YES'}; {@code false} for NOT NULL or
-     *     when the column doesn't surface in metadata at all.
-     */
-    private static boolean isColumnNullable(Connection connection, String tableName, String columnName)
-            throws SQLException {
-        try (ResultSet columns = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
-            if (columns.next()) {
-                return "YES".equalsIgnoreCase(columns.getString("IS_NULLABLE"));
+    private static void deleteAllRows(
+            Statement statement,
+            List<String> tableNames,
+            String persistenceUnitName,
+            AtomicReference<RuntimeException> primary) {
+        for (int index = tableNames.size() - 1; index >= 0; index--) {
+            String tableName = tableNames.get(index);
+            try {
+                statement.execute("DELETE FROM \"" + tableName + "\"");
+            } catch (SQLException deleteFailure) {
+                aggregateFailure(
+                        primary,
+                        "Cleanup failed for table '" + tableName + "' of persistence unit '"
+                                + persistenceUnitName + "'",
+                        deleteFailure);
             }
         }
-        return false;
+    }
+
+    private static void addForeignKeys(
+            Statement statement,
+            List<ForeignKeyDefinition> foreignKeys,
+            String persistenceUnitName,
+            AtomicReference<RuntimeException> primary) {
+        for (ForeignKeyDefinition fk : foreignKeys) {
+            try {
+                statement.execute(fk.toAddSql());
+            } catch (SQLException addFailure) {
+                aggregateFailure(
+                        primary,
+                        "Failed to re-add foreign key '" + fk.constraintName() + "' on table '"
+                                + fk.tableName() + "' of persistence unit '" + persistenceUnitName
+                                + "' — schema may be inconsistent for subsequent tests",
+                        addFailure);
+            }
+        }
     }
 
     private static void aggregateFailure(
             AtomicReference<RuntimeException> primary, String message, SQLException cause) {
         RuntimeException current = primary.get();
-        RuntimeException wrapped = new RuntimeException(message, cause);
+        RuntimeException wrapped = cause == null
+                ? new RuntimeException(message)
+                : new RuntimeException(message, cause);
         if (current == null) {
             primary.set(wrapped);
         } else {
             current.addSuppressed(wrapped);
+        }
+    }
+
+    /** Captured FK definition — enough state to re-emit a verbatim ADD CONSTRAINT. */
+    private record ForeignKeyDefinition(
+            String tableName,
+            String constraintName,
+            List<String> fkColumns,
+            String referencedTable,
+            List<String> referencedColumns,
+            int deleteRule,
+            int updateRule) {
+
+        String toDropSql() {
+            return "ALTER TABLE \"" + tableName + "\" DROP CONSTRAINT \"" + constraintName + "\"";
+        }
+
+        String toAddSql() {
+            return "ALTER TABLE \"" + tableName + "\" ADD CONSTRAINT \"" + constraintName + "\" "
+                    + "FOREIGN KEY (" + quoteAndJoin(fkColumns) + ") "
+                    + "REFERENCES \"" + referencedTable + "\" (" + quoteAndJoin(referencedColumns) + ") "
+                    + "ON DELETE " + ruleToSql(deleteRule) + " "
+                    + "ON UPDATE " + ruleToSql(updateRule);
+        }
+
+        private static String quoteAndJoin(List<String> columns) {
+            StringBuilder builder = new StringBuilder();
+            for (int index = 0; index < columns.size(); index++) {
+                if (index > 0) {
+                    builder.append(", ");
+                }
+                builder.append('"').append(columns.get(index)).append('"');
+            }
+            return builder.toString();
+        }
+
+        private static String ruleToSql(int rule) {
+            // Map JDBC's DatabaseMetaData.importedKey* constants to SQL clauses.
+            // Default to NO ACTION when an unknown / vendor-extended code surfaces.
+            return switch (rule) {
+                case DatabaseMetaData.importedKeyCascade -> "CASCADE";
+                case DatabaseMetaData.importedKeyRestrict -> "RESTRICT";
+                case DatabaseMetaData.importedKeySetNull -> "SET NULL";
+                case DatabaseMetaData.importedKeyNoAction -> "NO ACTION";
+                case DatabaseMetaData.importedKeySetDefault -> "SET DEFAULT";
+                default -> "NO ACTION";
+            };
+        }
+    }
+
+    /** Mutable accumulator for a single FK as its multi-column metadata rows arrive. */
+    private static final class ForeignKeyBuilder {
+
+        private final String tableName;
+        private final String constraintName;
+        private final Map<Short, String> fkColumnsBySeq = new TreeMap<>();
+        private final Map<Short, String> referencedColumnsBySeq = new TreeMap<>();
+        private String referencedTable;
+        private int deleteRule;
+        private int updateRule;
+
+        ForeignKeyBuilder(String tableName, String constraintName) {
+            this.tableName = tableName;
+            this.constraintName = constraintName;
+        }
+
+        void addColumn(
+                short keySeq,
+                String fkColumn,
+                String pkTable,
+                String pkColumn,
+                int deleteRuleIn,
+                int updateRuleIn) {
+            fkColumnsBySeq.put(keySeq, fkColumn);
+            referencedColumnsBySeq.put(keySeq, pkColumn);
+            // referencedTable / rules are constant across the rows of one FK; capture from the first
+            if (referencedTable == null) {
+                referencedTable = pkTable;
+                deleteRule = deleteRuleIn;
+                updateRule = updateRuleIn;
+            }
+        }
+
+        ForeignKeyDefinition build() {
+            return new ForeignKeyDefinition(
+                    tableName,
+                    constraintName,
+                    List.copyOf(fkColumnsBySeq.values()),
+                    referencedTable,
+                    List.copyOf(referencedColumnsBySeq.values()),
+                    deleteRule,
+                    updateRule);
         }
     }
 }
