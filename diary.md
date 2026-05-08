@@ -917,3 +917,14 @@ Fix: added a try/catch block in `JpaLifecycleAdapter.afterEach` (after cleanup, 
 The Javadoc on `clearForCurrentThread` already claimed it was called from `afterEach` — the comment was correct, the wiring just hadn't landed. Now matches.
 
 Verified: full `tests/jpa-module` suite green under `mvn -P owb`.
+
+## 2026-05-08 — DOCS §2.3: NativeSqlDeleteDbCleanupStrategy circular-FK limitation
+
+Punch-list §2.3 (LOW, equal verdict): the native-SQL delete fallback iterates entities in reverse order to handle parent→child→grandchild acyclic FK shapes, but cannot resolve circular FKs (self-FK or two-table cycles). Mitigation today: scenario-51 passes only because `JdbcTruncateDbCleanupStrategy` ships at higher priority and handles circular FKs by toggling H2's `REFERENTIAL_INTEGRITY` around the truncate.
+
+Added a "Limitation — circular foreign keys" section to the strategy's Javadoc spelling out:
+- The exact failure shape (first DELETE fails, rest cascade, aggregated rethrow).
+- Three mitigation paths for consumers running against a non-H2 database that lacks `SET REFERENTIAL_INTEGRITY`: keep JdbcTruncate on classpath, ship a custom topological-sort strategy, or map FKs as nullable + ON DELETE SET NULL.
+- Reference to punch-list §2.3 + verdict.
+
+No code change; doc-only. Full jpa-module suite still green under `mvn -P owb`.

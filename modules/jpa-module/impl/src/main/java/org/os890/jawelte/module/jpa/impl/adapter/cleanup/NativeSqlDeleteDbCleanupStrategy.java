@@ -46,6 +46,33 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
  * <em>any</em> table — including {@code @JoinTable},
  * {@code @ElementCollection}, sequence, and trigger-populated tables
  * that have no JPA {@code @Entity} mapping.
+ *
+ * <p><strong>Limitation — circular foreign keys.</strong> Reverse-order
+ * deletion handles the common parent→child→grandchild acyclic FK shape,
+ * but it cannot resolve <em>circular</em> FKs (e.g. a self-referencing
+ * {@code person.parent_id → person.id} or two tables that point at each
+ * other). The first {@code DELETE} fails because rows still reference
+ * each other, every subsequent table-delete also fails (cascading), and
+ * the aggregated failure rethrows from {@link #cleanAllTables}. Mitigation
+ * options for consumers running against a database without
+ * {@code SET REFERENTIAL_INTEGRITY} (or equivalent referential-integrity
+ * disable + truncate primitives):
+ * <ul>
+ *   <li>Keep the {@link JdbcTruncateDbCleanupStrategy} on the classpath
+ *       — it sits one priority rank ahead and handles circular FKs by
+ *       toggling H2's {@code REFERENTIAL_INTEGRITY} off / on around
+ *       the truncate. (Default for H2-backed test runs.)</li>
+ *   <li>Ship a custom {@link DbCleanupStrategy} at a lower
+ *       {@code @Priority} that performs a topological sort or a
+ *       two-pass null-update + delete sequence appropriate for the
+ *       target database. The strategy port is swappable through
+ *       {@code META-INF/services} with no jpa-module changes.</li>
+ *   <li>Map the circular FKs as nullable + ON DELETE SET NULL at the
+ *       schema level so reverse-order deletion succeeds.</li>
+ * </ul>
+ * Documented limitation per punch-list §2.3 (verdict: equal — POC's
+ * fallback has the same shape; the JdbcTruncate default covers the
+ * common case).
  */
 @Priority(Integer.MAX_VALUE)
 public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
