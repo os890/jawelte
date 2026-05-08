@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.tests.jpa.scenario31;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManagerFactory;
 
@@ -24,11 +26,19 @@ import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
  * Test-only {@link DbCleanupStrategy} at {@code @Priority(100)} — wins over
  * the default impls (which sit at {@code @Priority(Integer.MAX_VALUE)} and
  * {@code @Priority(Integer.MAX_VALUE - 1)}). Counts how many times
- * {@code cleanAllTables} is called so the test can assert the swap took
- * effect.
+ * {@code cleanAllTables} is called so the test can prove
+ * the lifecycle actually delegates to the SPI-resolved impl, not just
+ * that the SPI returns it.
  */
 @Priority(100)
 public class CountingDbCleanupStrategy implements DbCleanupStrategy {
+
+    /**
+     * Static so the test can read it across CDI scopes — {@code TestContext.loadService}
+     * may instantiate this strategy multiple times. Reset is a per-suite
+     * concern handled by JUnit-fresh class loaders, not by this counter.
+     */
+    public static final AtomicInteger INVOCATION_COUNT = new AtomicInteger();
 
     /** No-arg constructor required by ServiceLoader. */
     public CountingDbCleanupStrategy() {
@@ -36,6 +46,8 @@ public class CountingDbCleanupStrategy implements DbCleanupStrategy {
 
     @Override
     public void cleanAllTables(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
-        // Custom impl is a no-op — test only cares that this method was reached.
+        // Count the call. The body itself is a no-op — the test asserts
+        // delegation happened, not that any specific cleanup work ran.
+        INVOCATION_COUNT.incrementAndGet();
     }
 }
