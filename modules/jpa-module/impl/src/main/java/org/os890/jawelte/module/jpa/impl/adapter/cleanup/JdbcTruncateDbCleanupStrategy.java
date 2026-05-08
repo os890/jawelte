@@ -21,13 +21,12 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.Priority;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
-import org.hibernate.Session;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
+import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
 
 /**
  * JDBC-level {@link DbCleanupStrategy} for H2: takes the table list
@@ -52,6 +51,10 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
  *
  * <p>H2-specific. The {@code SET REFERENTIAL_INTEGRITY} statement
  * is an H2 extension; other providers will throw on it.
+ *
+ * <p>Connection sourced through {@link JdbcAccess} — borrows a
+ * pooled connection without allocating an {@code EntityManager}
+ * (punch-list §2.4).
  */
 @Priority(Integer.MAX_VALUE - 1)
 public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
@@ -67,11 +70,9 @@ public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
         if (tableNames.isEmpty()) {
             return;
         }
-        EntityManager entityManager = entityManagerFactory.createEntityManager();
         AtomicReference<RuntimeException> primary = new AtomicReference<>();
         try {
-            Session session = entityManager.unwrap(Session.class);
-            session.doWork(connection -> {
+            JdbcAccess.run(entityManagerFactory, connection -> {
                 boolean originalAutoCommit = connection.getAutoCommit();
                 try {
                     connection.setAutoCommit(true);
@@ -98,17 +99,19 @@ public class JdbcTruncateDbCleanupStrategy implements DbCleanupStrategy {
                     connection.setAutoCommit(originalAutoCommit);
                 }
             });
-            if (primary.get() != null) {
-                throw primary.get();
+        } catch (SQLException sqlFailure) {
+            RuntimeException current = primary.get();
+            RuntimeException wrapped = new RuntimeException(
+                    "JDBC connection lifecycle failed during cleanup of persistence unit '"
+                            + persistenceUnitName + "'", sqlFailure);
+            if (current == null) {
+                primary.set(wrapped);
+            } else {
+                current.addSuppressed(wrapped);
             }
-        } finally {
-            try {
-                entityManager.close();
-            } catch (RuntimeException closeFailure) {
-                if (primary.get() != null) {
-                    primary.get().addSuppressed(closeFailure);
-                }
-            }
+        }
+        if (primary.get() != null) {
+            throw primary.get();
         }
     }
 }

@@ -28,13 +28,12 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.Priority;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
-import org.hibernate.Session;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
+import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
 
 /**
  * Fallback {@link DbCleanupStrategy}: drops every foreign-key
@@ -92,6 +91,10 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
  * use the non-standard {@code DROP FOREIGN KEY} keyword instead;
  * consumers running tests against MySQL ship a vendor-specific
  * {@code DbCleanupStrategy} at a lower {@code @Priority}.
+ *
+ * <p>Connection sourced through {@link JdbcAccess} — borrows a
+ * pooled connection without allocating an {@code EntityManager}
+ * (punch-list §2.4).
  */
 @Priority(Integer.MAX_VALUE)
 public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
@@ -107,42 +110,57 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
         if (tableNames.isEmpty()) {
             return;
         }
-        EntityManager entityManager = entityManagerFactory.createEntityManager();
         AtomicReference<RuntimeException> primary = new AtomicReference<>();
         try {
-            entityManager.getTransaction().begin();
-            Session session = entityManager.unwrap(Session.class);
-            session.doWork(connection -> {
-                List<ForeignKeyDefinition> capturedForeignKeys =
-                        captureForeignKeys(connection, tableNames, persistenceUnitName, primary);
-                try (Statement statement = connection.createStatement()) {
-                    dropForeignKeys(statement, capturedForeignKeys, persistenceUnitName, primary);
-                    try {
-                        deleteAllRows(statement, tableNames, persistenceUnitName, primary);
-                    } finally {
-                        // Re-add FKs even if the DELETE phase threw, so the schema is
-                        // restored on databases where DDL implicitly commits.
-                        addForeignKeys(statement, capturedForeignKeys, persistenceUnitName, primary);
+            JdbcAccess.run(entityManagerFactory, connection -> {
+                boolean originalAutoCommit = connection.getAutoCommit();
+                connection.setAutoCommit(false);
+                try {
+                    runDropDeleteAndReadd(connection, tableNames, persistenceUnitName, primary);
+                    if (primary.get() == null) {
+                        connection.commit();
+                    } else {
+                        try {
+                            connection.rollback();
+                        } catch (SQLException rollbackFailure) {
+                            primary.get().addSuppressed(rollbackFailure);
+                        }
                     }
+                } finally {
+                    connection.setAutoCommit(originalAutoCommit);
                 }
             });
-            if (primary.get() == null) {
-                entityManager.getTransaction().commit();
+        } catch (SQLException sqlFailure) {
+            RuntimeException current = primary.get();
+            RuntimeException wrapped = new RuntimeException(
+                    "JDBC connection lifecycle failed during cleanup of persistence unit '"
+                            + persistenceUnitName + "'", sqlFailure);
+            if (current == null) {
+                primary.set(wrapped);
             } else {
-                try {
-                    entityManager.getTransaction().rollback();
-                } catch (RuntimeException rollbackFailure) {
-                    primary.get().addSuppressed(rollbackFailure);
-                }
-                throw primary.get();
+                current.addSuppressed(wrapped);
             }
-        } finally {
+        }
+        if (primary.get() != null) {
+            throw primary.get();
+        }
+    }
+
+    private static void runDropDeleteAndReadd(
+            Connection connection,
+            List<String> tableNames,
+            String persistenceUnitName,
+            AtomicReference<RuntimeException> primary) throws SQLException {
+        List<ForeignKeyDefinition> capturedForeignKeys =
+                captureForeignKeys(connection, tableNames, persistenceUnitName, primary);
+        try (Statement statement = connection.createStatement()) {
+            dropForeignKeys(statement, capturedForeignKeys, persistenceUnitName, primary);
             try {
-                entityManager.close();
-            } catch (RuntimeException closeFailure) {
-                if (primary.get() != null) {
-                    primary.get().addSuppressed(closeFailure);
-                }
+                deleteAllRows(statement, tableNames, persistenceUnitName, primary);
+            } finally {
+                // Re-add FKs even if the DELETE phase threw, so the schema is
+                // restored on databases where DDL implicitly commits.
+                addForeignKeys(statement, capturedForeignKeys, persistenceUnitName, primary);
             }
         }
     }

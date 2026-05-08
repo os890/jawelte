@@ -22,11 +22,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.annotation.Priority;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
-import org.hibernate.Session;
 import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
+import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
 
 /**
  * Default {@link TableNameResolver} shipped by jpa-module — queries
@@ -47,6 +46,10 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
  * H2-style {@code TABLE_SCHEMA = 'PUBLIC'} filtering. Other providers
  * surface different system-catalog views; consumers running against
  * those swap in their own resolver.
+ *
+ * <p>Connection sourced through {@link JdbcAccess} — borrows a
+ * pooled connection from Hibernate's connection provider without
+ * allocating an {@code EntityManager} (punch-list §2.4).
  */
 @Priority(Integer.MAX_VALUE)
 public class InformationSchemaTableNameResolver implements TableNameResolver {
@@ -58,25 +61,21 @@ public class InformationSchemaTableNameResolver implements TableNameResolver {
     @Override
     public List<String> resolveTableNames(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
         List<String> tableNames = new ArrayList<>();
-        EntityManager entityManager = entityManagerFactory.createEntityManager();
         try {
-            Session session = entityManager.unwrap(Session.class);
-            session.doWork(connection -> {
+            JdbcAccess.run(entityManagerFactory, connection -> {
                 try (Statement statement = connection.createStatement();
                         ResultSet resultSet = statement.executeQuery(
                                 "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'PUBLIC'")) {
                     while (resultSet.next()) {
                         tableNames.add(resultSet.getString(1));
                     }
-                } catch (SQLException sqlFailure) {
-                    throw new RuntimeException(
-                            "INFORMATION_SCHEMA query for cleanup-target tables failed for persistence unit '"
-                                    + persistenceUnitName + "'",
-                            sqlFailure);
                 }
             });
-        } finally {
-            entityManager.close();
+        } catch (SQLException sqlFailure) {
+            throw new RuntimeException(
+                    "INFORMATION_SCHEMA query for cleanup-target tables failed for persistence unit '"
+                            + persistenceUnitName + "'",
+                    sqlFailure);
         }
         return List.copyOf(tableNames);
     }

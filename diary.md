@@ -964,3 +964,24 @@ Implementation details:
 - Standard-SQL `DROP CONSTRAINT` syntax; documented portability: works on H2 / PostgreSQL / Oracle. MySQL/MariaDB use the non-standard `DROP FOREIGN KEY` keyword and need a vendor-specific strategy.
 
 Verified: scenario-61 (two-table FK cycle) still passes 3/3 with the new impl. Full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`.
+
+## 2026-05-08 — IMPROVED §2.4: skip EntityManager construction in cleanup helpers
+
+Punch-list §2.4 (LOW, equal): both cleanup strategies and the table-name resolver were creating a fresh `EntityManager` on every call — about ~120 EM open/close pairs per reactor build, just to obtain a JDBC `Connection`. The EM allocation + persistence-context teardown is the only material cost; the connection itself was already pooled by Hibernate.
+
+New `JdbcAccess` helper (`modules/jpa-module/impl/src/main/java/.../impl/util/JdbcAccess.java`) borrows a connection straight from Hibernate's `JdbcConnectionAccess` via `EntityManagerFactory.unwrap(SessionFactoryImplementor.class)`, skipping the EM entirely:
+
+```java
+JdbcAccess.run(emf, connection -> {
+    try (Statement stmt = connection.createStatement()) { ... }
+});
+```
+
+Refactored three call sites:
+- `InformationSchemaTableNameResolver.resolveTableNames` — drops EM allocation for the `INFORMATION_SCHEMA.TABLES` query.
+- `JdbcTruncateDbCleanupStrategy.cleanAllTables` — drops EM allocation for the H2 truncate path.
+- `NativeSqlDeleteDbCleanupStrategy.cleanAllTables` — drops EM allocation for the drop-and-readd path; tx control now via `connection.setAutoCommit(false)` + `commit/rollback` instead of `entityManager.getTransaction()`.
+
+Hibernate-SPI coupling: the helper unwraps to `SessionFactoryImplementor` and asks `JdbcServices` for the bootstrap `JdbcConnectionAccess`. The strategies were already Hibernate-aware (`Session.doWork`); no new coupling is introduced.
+
+Verified: full jpa-module suite green under both `mvn -P owb` and `mvn -P weld`. Cost saved per cleanup × every test method × every active PU is bounded but real — the §2.4 verdict moves from "equal" to "jawelte better" in the cleanup-overhead axis.
