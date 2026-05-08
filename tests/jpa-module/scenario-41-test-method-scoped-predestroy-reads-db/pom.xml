@@ -31,5 +31,18 @@
     <packaging>jar</packaging>
 
     <name>jawelte tests/jpa-module scenario 41: test-method-scoped-predestroy-reads-db</name>
-    <description>jpa-module test scenario covering ticket-005 scenario #41 (test-method-scoped-predestroy-reads-db). Inherits the shared deps from tests/jpa-module/pom.xml; classpath is per-module so ServiceLoader / @Entity / persistence.xml content is isolated.</description>
+    <description>jpa-module test scenario covering ticket-005 scenario #41 (test-method-scoped-predestroy-reads-db). Adds scope-module deps so @TestMethodScoped is available; the test asserts that a @TestMethodScoped bean's @PreDestroy can still query the database via a fresh EntityManager — the per-PU EMF is JVM-cached and remains open across the afterEach lifecycle.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

@@ -15,17 +15,38 @@
  */
 package org.os890.jawelte.tests.jpa.scenario43;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManagerFactory;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #43 (user-produces-entity-manager-factory) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A user-declared {@code @Produces EntityManagerFactory} on the test classpath
+ * triggers jpa-module's per-PU back-off: the synthetic addon EMF bean is not
+ * registered for that PU and the user's instance reaches every
+ * {@code @Inject EntityManagerFactory} site.
  */
+@EnableTestBeans
 public class Scenario43Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManagerFactory injectedEntityManagerFactory;
+
+    /** No-arg constructor for CDI. */
     public Scenario43Test() {
+    }
+
+    /** The mock's default isOpen() is false; the real EMF would return true. */
+    @Test
+    public void userProducedEmfWinsOverAddon() {
+        // Mockito mocks default isOpen() to false; jpa-module's real EMF would
+        // return true. A false return here proves the user's @Produces won.
+        assertThat(injectedEntityManagerFactory.isOpen())
+                .as("user @Produces EntityManagerFactory must shadow the addon's EMF — "
+                        + "the mock returns false on isOpen() while a real Hibernate EMF returns true")
+                .isFalse();
     }
 }

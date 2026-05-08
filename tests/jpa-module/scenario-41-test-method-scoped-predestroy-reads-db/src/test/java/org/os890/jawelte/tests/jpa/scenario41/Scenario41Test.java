@@ -15,17 +15,70 @@
  */
 package org.os890.jawelte.tests.jpa.scenario41;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
+
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #41 (test-method-scoped-predestroy-reads-db) for jpa-module — placeholder.
- *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * A {@code @TestMethodScoped} bean's {@code @PreDestroy} (driven by
+ * scope-module's {@code afterEach}) runs a JPQL query through a fresh
+ * {@link EntityManager} created from the JVM-cached
+ * {@link jakarta.persistence.EntityManagerFactory}. Two ordered methods:
+ * method 1 persists a marker + materialises the bean; method 2 inspects
+ * the static result captured by the bean's {@code @PreDestroy} (which fired
+ * in the afterEach between the two methods).
  */
+@EnableTestBeans
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class Scenario41Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManager entityManager;
+
+    @Inject
+    private PreDestroyDbReader preDestroyDbReader;
+
+    /** No-arg constructor for CDI. */
     public Scenario41Test() {
+    }
+
+    /** Method 1: persist a marker, materialise the bean — its @PreDestroy will fire after this method. */
+    @Test
+    @Order(1)
+    @Transactional
+    public void method1PersistsAndMaterialisesTheBean() {
+        PreDestroyDbReader.reset();
+
+        entityManager.persist(new Marker());
+        entityManager.flush();
+        preDestroyDbReader.touch();
+
+        long inTxCount = entityManager
+                .createQuery("SELECT COUNT(m) FROM Marker m", Long.class)
+                .getSingleResult();
+        assertThat(inTxCount)
+                .as("the @Transactional method must see the row it just persisted")
+                .isEqualTo(1L);
+    }
+
+    /** Method 2: assert that the previous method's @PreDestroy succeeded. */
+    @Test
+    @Order(2)
+    public void method2VerifiesPreDestroyRanAndQueried() {
+        assertThat(PreDestroyDbReader.FAILURE_AT_PREDESTROY.get())
+                .as("the @TestMethodScoped @PreDestroy must execute its JPQL query without error")
+                .isNull();
+        assertThat(PreDestroyDbReader.COUNT_AT_PREDESTROY.get())
+                .as("@PreDestroy ran a SELECT COUNT and got a non-null result — the EMF was still "
+                        + "open and the schema was reachable")
+                .isNotNull();
     }
 }

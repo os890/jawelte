@@ -15,17 +15,44 @@
  */
 package org.os890.jawelte.tests.jpa.scenario42;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
- * Test scenario #42 (test-bean-static-field-entity-manager) for jpa-module — placeholder.
+ * A user-declared {@code @Produces EntityManager} on the test classpath
+ * triggers jpa-module's per-PU back-off: the synthetic addon EM proxy is not
+ * registered for that PU and the user's instance reaches every
+ * {@code @Inject EntityManager} site.
  *
- * <p>The full {@code @Test} body for this scenario lands as a
- * follow-up commit on this branch (the scaffold ships first so the
- * 44-module reactor builds cleanly under both the {@code -P owb} and
- * {@code -P weld} profiles).
+ * <p>(The scenario folder name "test-bean-static-field-entity-manager" mirrors
+ * the POC label, but the static-field {@code @TestBean} form is currently
+ * blocked by an ambiguous-resolution conflict with the addon's @Default
+ * synthetic bean — captured in §6 of
+ * {@code tickets/poc-gaps-2nd-pass.html}. The producer-method form below is
+ * the supported override path today.)
  */
+@EnableTestBeans
 public class Scenario42Test {
 
-    /** Default constructor for the Surefire-discovered placeholder. */
+    @Inject
+    private EntityManager injectedEntityManager;
+
+    /** No-arg constructor for CDI. */
     public Scenario42Test() {
+    }
+
+    /** The user's mock returns false on isOpen(); the real proxy would behave differently. */
+    @Test
+    public void userProducedEntityManagerWinsOverAddon() {
+        assertThat(injectedEntityManager.isOpen())
+                .as("user @Produces EntityManager must shadow the addon's synthetic EM — "
+                        + "the mock returns false on isOpen() while the real proxy would surface "
+                        + "the underlying EM's state (or throw outside any tx)")
+                .isFalse();
     }
 }
