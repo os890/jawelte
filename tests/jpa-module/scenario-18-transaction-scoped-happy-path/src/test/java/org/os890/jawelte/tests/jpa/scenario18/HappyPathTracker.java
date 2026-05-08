@@ -36,24 +36,14 @@ public class HappyPathTracker implements Serializable {
 
     private int touchCount;
 
-    /** Reset both counters and instance state to zero. */
-    public static void reset() {
-        POST_CONSTRUCT_COUNT.set(0);
-        PRE_DESTROY_COUNT.set(0);
-    }
-
     /** No-arg constructor required by CDI. */
     public HappyPathTracker() {
     }
 
-    @PostConstruct
-    void onCreate() {
-        POST_CONSTRUCT_COUNT.incrementAndGet();
-    }
-
-    @PreDestroy
-    void onDestroy() {
-        PRE_DESTROY_COUNT.incrementAndGet();
+    /** Reset both counters and instance state to zero. */
+    public static void reset() {
+        POST_CONSTRUCT_COUNT.set(0);
+        PRE_DESTROY_COUNT.set(0);
     }
 
     /** Bump the per-instance counter; lets the test assert state survives across calls within a tx. */
@@ -64,5 +54,15 @@ public class HappyPathTracker implements Serializable {
     /** @return the per-instance touch count */
     public int getTouchCount() {
         return touchCount;
+    }
+
+    @PostConstruct
+    void onCreate() {
+        POST_CONSTRUCT_COUNT.incrementAndGet();
+    }
+
+    @PreDestroy
+    void onDestroy() {
+        PRE_DESTROY_COUNT.incrementAndGet();
     }
 }

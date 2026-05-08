@@ -13,4 +13,3 @@
 # limitations under the License.
 
 org.os890.jawelte.module.jpa.impl.adapter.cleanup.JdbcTruncateDbCleanupStrategy
-org.os890.jawelte.module.jpa.impl.adapter.cleanup.NativeSqlDeleteDbCleanupStrategy

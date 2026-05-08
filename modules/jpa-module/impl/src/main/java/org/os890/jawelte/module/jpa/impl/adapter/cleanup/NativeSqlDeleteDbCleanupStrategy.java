@@ -73,12 +73,19 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
  * failures (and any rollback failure) attach via
  * {@link Throwable#addSuppressed(Throwable)}.
  *
- * <p>{@code @Priority(Integer.MAX_VALUE)} — absolute fallback. The
- * H2-targeted {@link JdbcTruncateDbCleanupStrategy} sits one priority
- * rank ahead and wins by default; consumers running against a non-H2
- * database that lacks {@code TRUNCATE} or {@code SET REFERENTIAL_INTEGRITY}
- * drop the JdbcTruncate jar from the test classpath and let this
- * native-DELETE fallback take over.
+ * <p><strong>NOT pre-registered</strong> via {@code META-INF/services}.
+ * The H2-targeted {@link JdbcTruncateDbCleanupStrategy} is the only
+ * {@link DbCleanupStrategy} jpa-module pre-registers; consumers running
+ * against a non-H2 database that lacks {@code TRUNCATE} or
+ * {@code SET REFERENTIAL_INTEGRITY} drop the appropriate
+ * {@code META-INF/services/org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy}
+ * file in their own classpath pointing at this class — typically at a
+ * lower numeric {@code @Priority} than the
+ * {@code Integer.MAX_VALUE - 1} of {@link JdbcTruncateDbCleanupStrategy}
+ * so the swap takes effect. The {@code @Priority(Integer.MAX_VALUE)}
+ * carried here is the "lose every priority sort by default" rank — it
+ * matters only when both impls happen to be on the classpath; the swap
+ * itself is the consumer's explicit registration.
  *
  * <p>Native SQL (rather than JPQL) so the strategy can target
  * <em>any</em> table — including {@code @JoinTable},

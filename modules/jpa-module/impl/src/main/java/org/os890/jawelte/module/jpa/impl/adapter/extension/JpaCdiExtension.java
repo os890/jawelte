@@ -251,63 +251,6 @@ public class JpaCdiExtension implements Extension {
         event.veto();
     }
 
-    private static boolean matchesVendorVetoTarget(String className) {
-        for (String prefix : VENDOR_VETO_PACKAGE_PREFIXES) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean matchesVendorVetoAllowlist(String className) {
-        Set<String> allowlist = vendorVetoAllowlist;
-        if (allowlist == null) {
-            synchronized (this) {
-                if (vendorVetoAllowlist == null) {
-                    vendorVetoAllowlist = readVendorVetoAllowlist();
-                }
-                allowlist = vendorVetoAllowlist;
-            }
-        }
-        for (String prefix : allowlist) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static Set<String> readVendorVetoAllowlist() {
-        return resolver().resolve(VENDOR_VETO_ALLOWLIST_KEY)
-                .map(value -> {
-                    Set<String> prefixes = new LinkedHashSet<>();
-                    for (String entry : value.split(",")) {
-                        String trimmed = entry.trim();
-                        if (!trimmed.isEmpty()) {
-                            prefixes.add(trimmed);
-                        }
-                    }
-                    return prefixes;
-                })
-                .orElseGet(Collections::emptySet);
-    }
-
-    /**
-     * Pre-CDI lookup of the active {@link ConfigResolver}. CDI is
-     * still in {@code BeforeBeanDiscovery} when this Extension's
-     * observers fire, so the standard {@code @Inject ConfigResolver}
-     * channel isn't available yet — we route through
-     * {@link TestContext#loadService(Class)}, which uses the same
-     * prioritized SPI lookup the rest of the framework uses for
-     * pre-CDI port resolution. The returned resolver applies the
-     * dot-or-underscore key fallback internally, so callers feed it
-     * a single canonical dot-key per config-key constant.
-     */
-    private static ConfigResolver resolver() {
-        return TestContext.loadService(ConfigResolver.class);
-    }
-
     <X> void onProcessFactoryProducerMethod(
             @Observes ProcessProducerMethod<EntityManagerFactory, X> event) {
         if (!active) {
@@ -379,6 +322,63 @@ public class JpaCdiExtension implements Extension {
                 .produceWith(instance -> new UserTransactionImpl());
 
         event.addContext(new TransactionScopedContext());
+    }
+
+    private static boolean matchesVendorVetoTarget(String className) {
+        for (String prefix : VENDOR_VETO_PACKAGE_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean matchesVendorVetoAllowlist(String className) {
+        Set<String> allowlist = vendorVetoAllowlist;
+        if (allowlist == null) {
+            synchronized (this) {
+                if (vendorVetoAllowlist == null) {
+                    vendorVetoAllowlist = readVendorVetoAllowlist();
+                }
+                allowlist = vendorVetoAllowlist;
+            }
+        }
+        for (String prefix : allowlist) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> readVendorVetoAllowlist() {
+        return resolver().resolve(VENDOR_VETO_ALLOWLIST_KEY)
+                .map(value -> {
+                    Set<String> prefixes = new LinkedHashSet<>();
+                    for (String entry : value.split(",")) {
+                        String trimmed = entry.trim();
+                        if (!trimmed.isEmpty()) {
+                            prefixes.add(trimmed);
+                        }
+                    }
+                    return prefixes;
+                })
+                .orElseGet(Collections::emptySet);
+    }
+
+    /**
+     * Pre-CDI lookup of the active {@link ConfigResolver}. CDI is
+     * still in {@code BeforeBeanDiscovery} when this Extension's
+     * observers fire, so the standard {@code @Inject ConfigResolver}
+     * channel isn't available yet — we route through
+     * {@link TestContext#loadService(Class)}, which uses the same
+     * prioritized SPI lookup the rest of the framework uses for
+     * pre-CDI port resolution. The returned resolver applies the
+     * dot-or-underscore key fallback internally, so callers feed it
+     * a single canonical dot-key per config-key constant.
+     */
+    private static ConfigResolver resolver() {
+        return TestContext.loadService(ConfigResolver.class);
     }
 
     private static TestContext activeContextOrNull() {

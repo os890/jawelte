@@ -114,20 +114,6 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         beginTransactionForTransactionalTestMethod(testContext);
     }
 
-    private static void beginTransactionForTransactionalTestMethod(TestContext testContext) {
-        Method testMethod = TestMethodTransactionWrapping.currentTestMethod(testContext).orElse(null);
-        if (testMethod == null || !testMethod.isAnnotationPresent(Transactional.class)) {
-            return;
-        }
-        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
-        TransactionScopedContext transactionScopedContext = TransactionScopedContext.current();
-        strategy.begin();
-        if (transactionScopedContext != null) {
-            transactionScopedContext.activate();
-        }
-        testContext.bindMetadata(TestMethodTransactionMarker.class, TestMethodTransactionMarker.INSTANCE);
-    }
-
     @Override
     public void afterEach(TestContext testContext) {
         RuntimeException primary = null;
@@ -204,6 +190,20 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         }
         TransactionScopedEmHolder.clearForCurrentThread();
         JpaActivePersistenceUnits.reset();
+    }
+
+    private static void beginTransactionForTransactionalTestMethod(TestContext testContext) {
+        Method testMethod = TestMethodTransactionWrapping.currentTestMethod(testContext).orElse(null);
+        if (testMethod == null || !testMethod.isAnnotationPresent(Transactional.class)) {
+            return;
+        }
+        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
+        TransactionScopedContext transactionScopedContext = TransactionScopedContext.current();
+        strategy.begin();
+        if (transactionScopedContext != null) {
+            transactionScopedContext.activate();
+        }
+        testContext.bindMetadata(TestMethodTransactionMarker.class, TestMethodTransactionMarker.INSTANCE);
     }
 
     private static RuntimeException completeTransactionForTransactionalTestMethod(

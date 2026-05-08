@@ -34,14 +34,18 @@ public class NestedTracker implements Serializable {
     /** Incremented on every {@code @PreDestroy}. */
     public static final AtomicInteger PRE_DESTROY_COUNT = new AtomicInteger();
 
+    /** No-arg constructor required by CDI. */
+    public NestedTracker() {
+    }
+
     /** Reset both counters to zero. */
     public static void reset() {
         POST_CONSTRUCT_COUNT.set(0);
         PRE_DESTROY_COUNT.set(0);
     }
 
-    /** No-arg constructor required by CDI. */
-    public NestedTracker() {
+    /** Force the contextual proxy to materialise its bean instance. */
+    public void touch() {
     }
 
     @PostConstruct
@@ -52,9 +56,5 @@ public class NestedTracker implements Serializable {
     @PreDestroy
     void onDestroy() {
         PRE_DESTROY_COUNT.incrementAndGet();
-    }
-
-    /** Force the contextual proxy to materialise its bean instance. */
-    public void touch() {
     }
 }

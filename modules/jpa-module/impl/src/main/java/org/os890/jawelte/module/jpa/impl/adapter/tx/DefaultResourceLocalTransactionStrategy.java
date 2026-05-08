@@ -147,6 +147,72 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
         }
     }
 
+    @Override
+    public void rollback() {
+        activeFrameOrThrow();
+        Set<String> framePersistenceUnits = TransactionScopedEmHolder.currentFramePersistenceUnits();
+        for (String persistenceUnitName : framePersistenceUnits) {
+            fireEvent(new TransactionBeforeCompletion(persistenceUnitName));
+        }
+        try {
+            for (String persistenceUnitName : framePersistenceUnits) {
+                EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
+                if (entityManager == null) {
+                    continue;
+                }
+                try {
+                    if (entityManager.getTransaction().isActive()) {
+                        entityManager.getTransaction().rollback();
+                    }
+                    fireEvent(new TransactionRolledBack(persistenceUnitName));
+                } finally {
+                    TransactionScopedEmHolder.pop(persistenceUnitName);
+                    entityManager.close();
+                }
+            }
+        } finally {
+            FRAMES.get().pop();
+            TransactionScopedEmHolder.exitTransactionalScope();
+        }
+    }
+
+    @Override
+    public boolean isActive() {
+        return !FRAMES.get().isEmpty();
+    }
+
+    @Override
+    public void setRollbackOnly() {
+        TransactionFrame frame = activeFrameOrThrow();
+        frame.rollbackOnly = true;
+        for (String persistenceUnitName : TransactionScopedEmHolder.currentFramePersistenceUnits()) {
+            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
+            if (entityManager != null) {
+                entityManager.getTransaction().setRollbackOnly();
+            }
+        }
+    }
+
+    @Override
+    public boolean getRollbackOnly() {
+        return activeFrameOrThrow().rollbackOnly;
+    }
+
+    @Override
+    public TransactionManager getTransactionManager() {
+        return null;
+    }
+
+    @Override
+    public PersistenceUnitTransactionType getTransactionType() {
+        return PersistenceUnitTransactionType.RESOURCE_LOCAL;
+    }
+
+    @Override
+    public void shutdown() {
+        FRAMES.remove();
+    }
+
     private void flushAllOrRollback(Set<String> framePersistenceUnits) {
         RuntimeException flushFailure = null;
         for (String persistenceUnitName : framePersistenceUnits) {
@@ -229,72 +295,6 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
         if (primary != null) {
             throw primary;
         }
-    }
-
-    @Override
-    public void rollback() {
-        activeFrameOrThrow();
-        Set<String> framePersistenceUnits = TransactionScopedEmHolder.currentFramePersistenceUnits();
-        for (String persistenceUnitName : framePersistenceUnits) {
-            fireEvent(new TransactionBeforeCompletion(persistenceUnitName));
-        }
-        try {
-            for (String persistenceUnitName : framePersistenceUnits) {
-                EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
-                if (entityManager == null) {
-                    continue;
-                }
-                try {
-                    if (entityManager.getTransaction().isActive()) {
-                        entityManager.getTransaction().rollback();
-                    }
-                    fireEvent(new TransactionRolledBack(persistenceUnitName));
-                } finally {
-                    TransactionScopedEmHolder.pop(persistenceUnitName);
-                    entityManager.close();
-                }
-            }
-        } finally {
-            FRAMES.get().pop();
-            TransactionScopedEmHolder.exitTransactionalScope();
-        }
-    }
-
-    @Override
-    public boolean isActive() {
-        return !FRAMES.get().isEmpty();
-    }
-
-    @Override
-    public void setRollbackOnly() {
-        TransactionFrame frame = activeFrameOrThrow();
-        frame.rollbackOnly = true;
-        for (String persistenceUnitName : TransactionScopedEmHolder.currentFramePersistenceUnits()) {
-            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
-            if (entityManager != null) {
-                entityManager.getTransaction().setRollbackOnly();
-            }
-        }
-    }
-
-    @Override
-    public boolean getRollbackOnly() {
-        return activeFrameOrThrow().rollbackOnly;
-    }
-
-    @Override
-    public TransactionManager getTransactionManager() {
-        return null;
-    }
-
-    @Override
-    public PersistenceUnitTransactionType getTransactionType() {
-        return PersistenceUnitTransactionType.RESOURCE_LOCAL;
-    }
-
-    @Override
-    public void shutdown() {
-        FRAMES.remove();
     }
 
     private TransactionFrame activeFrameOrThrow() {

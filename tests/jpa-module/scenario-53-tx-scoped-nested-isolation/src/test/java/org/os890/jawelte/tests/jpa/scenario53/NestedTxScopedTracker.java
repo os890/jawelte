@@ -43,14 +43,14 @@ public class NestedTxScopedTracker implements Serializable {
 
     private String value;
 
+    /** Default constructor required by CDI. */
+    public NestedTxScopedTracker() {
+    }
+
     /** Reset both counters to zero. */
     public static void reset() {
         POST_CONSTRUCT_COUNT.set(0);
         PRE_DESTROY_COUNT.set(0);
-    }
-
-    /** Default constructor required by CDI. */
-    public NestedTxScopedTracker() {
     }
 
     /**

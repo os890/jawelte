@@ -1033,3 +1033,22 @@ Pre-existing slip during the §8 / §2 / §5 fix pass: I'd been running the suit
 - `Scenario44Test.java` had two unused imports left over from when I lifted the persist into `MarkerService` (`jakarta.persistence.EntityManager`, `jakarta.transaction.Transactional`); `MarkerService.java`'s class Javadoc was a single 125-char line. Cleaned both.
 
 Verified `mvn -P owb verify` and `mvn -P weld verify` clean on the full reactor — RAT, Checkstyle, Enforcer, Javadoc, JaCoCo all happy.
+
+## 2026-05-08 — FIXED: method-ordering convention + un-pre-register NativeSqlDelete + scenario-49 SentinelConfigResolver
+
+User flagged two issues:
+
+**(1) Both `JdbcTruncateDbCleanupStrategy` AND `NativeSqlDeleteDbCleanupStrategy` were pre-registered** in `META-INF/services`. Inconsistent with the convention everywhere else (e.g. `JpaMetamodelTableNameResolver` ships unregistered; consumers opt in). Dropped `NativeSqlDeleteDbCleanupStrategy` from the services file; updated its class Javadoc to mirror the "NOT pre-registered" pattern. Consumers running against a non-H2 database register it themselves at a lower numeric `@Priority`.
+
+**(2) Several classes violated the "ctors first, then methods in visibility order" rule** (public > protected > package > private). Wrote a scanner (`/tmp/check_order.py`) and walked every Java file in `core/`, `modules/`, `tests/`. After eliminating false positives (Javadoc text with parens, annotation arguments, multi-line decls), 4 main-src + 6 test-src real violations remained. Fixes:
+
+- `TestPersistenceUnitInfo` — moved the private static `resolveRootUrl()` helper from before the `@Override` getters to the bottom of the class.
+- `JpaCdiExtension` — moved the private helper block (`matchesVendorVetoTarget` / `matchesVendorVetoAllowlist` / `readVendorVetoAllowlist` / `resolver`) from between two pkg-private observer groups down to after `onAfterBeanDiscovery`.
+- `JpaLifecycleAdapter` — moved private `beginTransactionForTransactionalTestMethod` from between `beforeEach` and `afterEach` to after `afterAll`, joining the other private helpers.
+- `DefaultResourceLocalTransactionStrategy` — moved private `flushAllOrRollback` and `commitAllAggregated` from between the `commit()` and `rollback()` overrides to after `shutdown()`, joining the existing private block.
+- 5 `@TransactionScoped` trackers (`HappyPathTracker`, `NestedTracker`, `TxScopedAuditTracker`, `NestedTxScopedTracker`, `PreDestroyDbReader`) had their constructor placed after the public static `reset()` method; reordered to ctor-first then public methods then `@PostConstruct`/`@PreDestroy` package-private callbacks.
+- `Greeter` (scenario-09) — swapped the public `beacon()` and pkg-private `@Inject initBeacon()` ordering.
+
+**(3) Compile fix from §5.4** — `SentinelConfigResolver` (scenario-49) implemented `ConfigResolver` but never got the new `resolveKeys()` override I added when the port grew that method. Added `@Override public Iterable<String> resolveKeys() { return List.of(); }`.
+
+`mvn -P owb verify` and `mvn -P weld verify` both clean on the full reactor.

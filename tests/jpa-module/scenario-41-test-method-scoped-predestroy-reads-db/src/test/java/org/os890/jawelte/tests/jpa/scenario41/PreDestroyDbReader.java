@@ -47,14 +47,14 @@ public class PreDestroyDbReader {
     @Inject
     private EntityManagerFactory entityManagerFactory;
 
+    /** No-arg constructor required by CDI. */
+    public PreDestroyDbReader() {
+    }
+
     /** Reset both result holders to {@code null}. */
     public static void reset() {
         COUNT_AT_PREDESTROY.set(null);
         FAILURE_AT_PREDESTROY.set(null);
-    }
-
-    /** No-arg constructor required by CDI. */
-    public PreDestroyDbReader() {
     }
 
     /** Force the contextual proxy to materialise its bean instance. */

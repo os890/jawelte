@@ -41,24 +41,14 @@ public class TxScopedAuditTracker implements Serializable {
 
     private String mark;
 
-    /** Reset both counters to zero. */
-    public static void reset() {
-        POST_CONSTRUCT_COUNT.set(0);
-        PRE_DESTROY_COUNT.set(0);
-    }
-
     /** Default constructor required by CDI. */
     public TxScopedAuditTracker() {
     }
 
-    @PostConstruct
-    void onCreate() {
-        POST_CONSTRUCT_COUNT.incrementAndGet();
-    }
-
-    @PreDestroy
-    void onDestroy() {
-        PRE_DESTROY_COUNT.incrementAndGet();
+    /** Reset both counters to zero. */
+    public static void reset() {
+        POST_CONSTRUCT_COUNT.set(0);
+        PRE_DESTROY_COUNT.set(0);
     }
 
     /**
@@ -87,5 +77,15 @@ public class TxScopedAuditTracker implements Serializable {
      */
     public void setMark(String newMark) {
         this.mark = newMark;
+    }
+
+    @PostConstruct
+    void onCreate() {
+        POST_CONSTRUCT_COUNT.incrementAndGet();
+    }
+
+    @PreDestroy
+    void onDestroy() {
+        PRE_DESTROY_COUNT.incrementAndGet();
     }
 }

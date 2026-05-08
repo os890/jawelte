@@ -93,28 +93,6 @@ public class TestPersistenceUnitInfo implements PersistenceUnitInfo {
         this.persistenceUnitRootUrl = resolveRootUrl();
     }
 
-    private static URL resolveRootUrl() {
-        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-        URL classpathRootUrl = contextClassLoader.getResource("");
-        if (classpathRootUrl != null) {
-            return classpathRootUrl;
-        }
-        URL persistenceXmlUrl = contextClassLoader.getResource("META-INF/persistence.xml");
-        if (persistenceXmlUrl == null) {
-            return null;
-        }
-        String externalForm = persistenceXmlUrl.toExternalForm();
-        int metaInfIndex = externalForm.indexOf("META-INF/persistence.xml");
-        if (metaInfIndex <= 0) {
-            return null;
-        }
-        try {
-            return URI.create(externalForm.substring(0, metaInfIndex)).toURL();
-        } catch (Exception ignored) {
-            return null;
-        }
-    }
-
     @Override
     public String getPersistenceUnitName() {
         return persistenceUnitName;
@@ -210,5 +188,27 @@ public class TestPersistenceUnitInfo implements PersistenceUnitInfo {
     @Override
     public List<String> getQualifierAnnotationNames() {
         return Collections.emptyList();
+    }
+
+    private static URL resolveRootUrl() {
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        URL classpathRootUrl = contextClassLoader.getResource("");
+        if (classpathRootUrl != null) {
+            return classpathRootUrl;
+        }
+        URL persistenceXmlUrl = contextClassLoader.getResource("META-INF/persistence.xml");
+        if (persistenceXmlUrl == null) {
+            return null;
+        }
+        String externalForm = persistenceXmlUrl.toExternalForm();
+        int metaInfIndex = externalForm.indexOf("META-INF/persistence.xml");
+        if (metaInfIndex <= 0) {
+            return null;
+        }
+        try {
+            return URI.create(externalForm.substring(0, metaInfIndex)).toURL();
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

@@ -15,6 +15,7 @@
  */
 package org.os890.jawelte.tests.cdi.scenario49;
 
+import java.util.List;
 import java.util.Optional;
 
 import jakarta.annotation.Priority;
@@ -34,5 +35,10 @@ public class SentinelConfigResolver implements ConfigResolver {
     @Override
     public Optional<String> resolve(String key) {
         return Optional.of("sentinel-value");
+    }
+
+    @Override
+    public Iterable<String> resolveKeys() {
+        return List.of();
     }
 }
