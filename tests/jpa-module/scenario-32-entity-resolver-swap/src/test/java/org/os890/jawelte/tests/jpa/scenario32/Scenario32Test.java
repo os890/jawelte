@@ -17,7 +17,14 @@ package org.os890.jawelte.tests.jpa.scenario32;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
+
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
@@ -26,13 +33,30 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
  * A test-only {@link CountingTableNameResolver} at {@code @Priority(100)}
  * registered through {@code META-INF/services} wins the
  * {@code TestContext.loadService} priority sort over jpa-module's
- * default impl — locks in the swappability claim for the table-name
- * resolution port that drives per-method cleanup. (The directory name
- * keeps the original "entity-resolver-swap" label for branch
- * traceability; the port itself is now {@code TableNameResolver}.)
+ * default impl AND the framework's per-method cleanup actually
+ * delegates to it. Both halves matter:
+ *
+ * <ul>
+ *   <li>Method 1 verifies SPI resolution (the priority sort).</li>
+ *   <li>Method 2 persists a real row inside a {@code @Transactional}
+ *       method, triggering jpa-module's per-method cleanup. Method 3
+ *       then asserts the swapped resolver's counter was bumped — proves
+ *       {@code JdbcTruncateDbCleanupStrategy} actually consults the
+ *       SPI-resolved {@code TableNameResolver}, not a hard-coded
+ *       {@code new InformationSchemaTableNameResolver()} (punch-list
+ *       §8.2 / §9.2).</li>
+ * </ul>
+ *
+ * <p>(The directory name keeps the original "entity-resolver-swap"
+ * label for branch traceability; the port itself is now
+ * {@code TableNameResolver}.)
  */
 @EnableTestBeans
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class Scenario32Test {
+
+    @Inject
+    private EntityManager entityManager;
 
     /** No-arg constructor for CDI. */
     public Scenario32Test() {
@@ -40,6 +64,7 @@ public class Scenario32Test {
 
     /** TestContext.loadService returns the @Priority(100) test-only impl. */
     @Test
+    @Order(1)
     public void customTableNameResolverWinsThePrioritySort() {
         TableNameResolver active = TestContext.loadService(TableNameResolver.class);
 
@@ -47,5 +72,33 @@ public class Scenario32Test {
                 .as("a test-only TableNameResolver at @Priority(100) must win over the "
                         + "addon's @Priority(MAX_VALUE) InformationSchemaTableNameResolver")
                 .isInstanceOf(CountingTableNameResolver.class);
+    }
+
+    /** Persist + commit in a @Transactional method — drives the cleanup hook. */
+    @Test
+    @Order(2)
+    @Transactional
+    public void persistDrivesTableNameResolverThroughCleanup() {
+        CountingTableNameResolver.INVOCATION_COUNT.set(0);
+        entityManager.persist(new Marker());
+        entityManager.flush();
+    }
+
+    /**
+     * Method 2's afterEach cleanup must have consulted the swapped
+     * resolver. Without this assertion, a regression where
+     * {@code JdbcTruncateDbCleanupStrategy} hard-codes
+     * {@code new InformationSchemaTableNameResolver()} bypassing
+     * the SPI would not be caught.
+     */
+    @Test
+    @Order(3)
+    public void jdbcTruncateDelegatedToTheSwappedResolver() {
+        assertThat(CountingTableNameResolver.INVOCATION_COUNT.get())
+                .as("JdbcTruncateDbCleanupStrategy must resolve the table-name resolver via "
+                        + "TestContext.loadService (NOT instantiate the default directly) so "
+                        + "the swapped impl is the one that actually walks the schema. "
+                        + "Closes punch-list §8.2.")
+                .isGreaterThanOrEqualTo(1);
     }
 }

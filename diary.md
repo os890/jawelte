@@ -866,3 +866,14 @@ Strengthened:
 - Added a follow-up @Order(3) method asserting `INVOCATION_COUNT >= 1`.
 
 Mutation re-verify: hardcoding the default impl in `JpaLifecycleAdapter` now produces a test failure (`Failures: 1`). Closes §8.2 / §9.2 for scenario-31.
+
+## 2026-05-08 — FIXED: scenario-32 strategy-swap delegation (§8.2 / §9.2 part 2)
+
+Same shape as scenario-31: prior assertion only verified `TestContext.loadService(TableNameResolver.class)` returned the @Priority(100) impl, never that `JdbcTruncateDbCleanupStrategy` actually consulted it.
+
+Strengthened:
+- `CountingTableNameResolver.resolveTableNames` now bumps a static `INVOCATION_COUNT`.
+- Added `Marker` entity + `@Transactional` test method to drive the cleanup hook.
+- @Order(3) method asserts `INVOCATION_COUNT >= 1`.
+
+Mutation re-verify: hardcoding `new InformationSchemaTableNameResolver()` in `JdbcTruncateDbCleanupStrategy` now produces `Failures: 1`. Closes §8.2 / §9.2 for scenario-32.

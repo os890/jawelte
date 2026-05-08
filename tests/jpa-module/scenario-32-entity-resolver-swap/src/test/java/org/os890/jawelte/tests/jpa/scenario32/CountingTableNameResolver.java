@@ -16,6 +16,7 @@
 package org.os890.jawelte.tests.jpa.scenario32;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManagerFactory;
@@ -25,11 +26,18 @@ import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 /**
  * Test-only {@link TableNameResolver} at {@code @Priority(100)} — wins over
  * the addon's INFORMATION_SCHEMA-backed default. Returns an empty list (the
- * cleanup strategies treat that as "nothing to clean"); the test only cares
- * that {@code TestContext.loadService} routes to this impl.
+ * cleanup strategies treat that as "nothing to clean") and bumps a static
+ * counter so the test can prove the cleanup strategy actually <em>delegates</em>
+ * to the SPI-resolved resolver, not just that the SPI returns this class.
  */
 @Priority(100)
 public class CountingTableNameResolver implements TableNameResolver {
+
+    /**
+     * Static so the test can read it across CDI scopes. Each
+     * {@code resolveTableNames} call bumps it once.
+     */
+    public static final AtomicInteger INVOCATION_COUNT = new AtomicInteger();
 
     /** No-arg constructor required by ServiceLoader. */
     public CountingTableNameResolver() {
@@ -37,6 +45,7 @@ public class CountingTableNameResolver implements TableNameResolver {
 
     @Override
     public List<String> resolveTableNames(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
+        INVOCATION_COUNT.incrementAndGet();
         return List.of();
     }
 }
