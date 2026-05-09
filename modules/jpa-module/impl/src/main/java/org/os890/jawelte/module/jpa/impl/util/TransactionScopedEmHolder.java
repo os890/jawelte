@@ -181,6 +181,31 @@ public abstract class TransactionScopedEmHolder {
     }
 
     /**
+     * Mark the start of an "all-lazy" transactional scope on the
+     * calling thread — no eagerly-opened persistence unit. The first
+     * {@link #peekOrAutoBegin(String)} call for any active PU
+     * lazy-creates its {@link EntityManager} and begins a tx on
+     * first access; subsequent calls for other PUs lazy-join the
+     * same frame.
+     *
+     * <p>Used by the strategy when no persistence unit can be
+     * eagerly identified: multi-PU active, no
+     * {@code @PersistenceConfig.persistenceUnitName} set, and the
+     * field-walk found either zero or multiple distinct
+     * {@code @Named EntityManager} candidates.
+     *
+     * <p>Pairs with {@link #exitTransactionalScope()} like the
+     * single-arg overload. The empty-string sentinel pushed onto
+     * {@code MANAGED_PU_STACK} keeps the stack-depth bookkeeping
+     * consistent with the eager path; nothing reads its value.
+     */
+    public static void enterTransactionalScope() {
+        MANAGED_PU_STACK.get().push("");
+        FRAME_PUS_STACK.get().push(new LinkedHashSet<>());
+        FRAMEWORK_OWNED.set(Boolean.TRUE);
+    }
+
+    /**
      * Mark the end of the current transactional scope on the
      * calling thread. Pops one entry from each stack; if the stacks
      * are empty after popping, the thread-locals are removed.

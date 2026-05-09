@@ -77,4 +77,25 @@ public @interface PersistenceConfig {
      *         include every persistence unit
      */
     String[] persistenceUnits() default {};
+
+    /**
+     * The persistence-unit name the active {@link
+     * org.os890.jawelte.module.jpa.api.port.TransactionStrategy}
+     * should eagerly open on {@code begin()} when more than one
+     * persistence unit is active. Empty (the default) means the
+     * strategy resolves the eager PU itself by walking the
+     * intercepted bean / test class for a single
+     * {@code @Inject @Named EntityManager} (or
+     * {@code @PersistenceContext(unitName=...)}) field; if zero or
+     * more-than-one distinct names are found the strategy starts no
+     * transaction up-front and lets every PU lazy-join on first
+     * {@code EntityManager} dereference. Setting this attribute is
+     * the explicit override — useful when the test reaches multiple
+     * persistence units but one of them is the natural "primary"
+     * scope. Ignored when only one persistence unit is active.
+     *
+     * @return the eager-managed persistence-unit name, or an empty
+     *         string to let the strategy decide
+     */
+    String persistenceUnitName() default "";
 }

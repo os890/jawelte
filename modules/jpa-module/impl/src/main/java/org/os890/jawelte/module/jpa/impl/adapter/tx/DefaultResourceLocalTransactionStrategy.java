@@ -31,6 +31,8 @@ import jakarta.persistence.PersistenceUnitTransactionType;
 import jakarta.persistence.RollbackException;
 import jakarta.transaction.TransactionManager;
 
+import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.event.TransactionBeforeCompletion;
 import org.os890.jawelte.module.jpa.api.event.TransactionCommitted;
 import org.os890.jawelte.module.jpa.api.event.TransactionRolledBack;
@@ -43,13 +45,25 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 /**
  * Default {@link TransactionStrategy} shipped by jpa-module: drives
  * RESOURCE_LOCAL transactions for the calling thread. On
- * {@code begin()} it opens a transaction <em>only</em> on the
- * "managed" persistence unit — the first entry in
- * {@link JpaActivePersistenceUnits} (insertion order, mirrors
- * {@code persistence.xml} order). Non-managed persistence units
- * lazy-join the scope on first {@code EntityManager} dereference
- * via
- * {@link TransactionScopedEmHolder#peekOrAutoBegin(String)}.
+ * {@code begin()} the strategy resolves the eagerly-opened
+ * persistence unit via the following precedence:
+ *
+ * <ol>
+ *   <li><strong>Single-PU shortcut:</strong> when only one persistence
+ *       unit is active, that PU is the eager one.</li>
+ *   <li><strong>{@code @PersistenceConfig.persistenceUnitName}:</strong>
+ *       when multi-PU is active and the test class declares this
+ *       attribute, the configured PU is the eager one (validated to
+ *       be a member of the active set).</li>
+ *   <li><strong>All-lazy fallback:</strong> otherwise the strategy
+ *       starts no transaction up-front; every PU lazy-joins via
+ *       {@link TransactionScopedEmHolder#peekOrAutoBegin(String)} on
+ *       first {@code EntityManager} dereference.</li>
+ * </ol>
+ *
+ * <p>Non-eager persistence units always lazy-join the scope on first
+ * {@code EntityManager} dereference, regardless of how the eager one
+ * was selected.
  *
  * <p>{@code commit()} and {@code rollback()} read the per-frame PU
  * set from {@link TransactionScopedEmHolder} so they cover both
@@ -101,18 +115,26 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
             throw new IllegalStateException(
                     "No active persistence units. Was JpaCdiExtension.beforeBeanDiscovery skipped?");
         }
-        String managedPersistenceUnitName = persistenceUnits.iterator().next();
-        EntityManagerFactory emf = EmfCache.getCached(managedPersistenceUnitName)
-                .orElseThrow(() -> new IllegalStateException(
-                        "No EntityManagerFactory cached for persistence unit '"
-                                + managedPersistenceUnitName + "'."));
-        EntityManager entityManager = emf.createEntityManager();
-        EntityTransaction transaction = entityManager.getTransaction();
-        transaction.begin();
-        TransactionScopedEmHolder.push(managedPersistenceUnitName, entityManager);
-        TransactionScopedEmHolder.enterTransactionalScope(managedPersistenceUnitName);
-        FRAMES.get().push(new TransactionFrame());
-        fireEvent(new TransactionStarted(managedPersistenceUnitName));
+        String eagerPersistenceUnitName = resolveEagerPersistenceUnit(persistenceUnits);
+        if (eagerPersistenceUnitName != null) {
+            EntityManagerFactory emf = EmfCache.getCached(eagerPersistenceUnitName)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "No EntityManagerFactory cached for persistence unit '"
+                                    + eagerPersistenceUnitName + "'."));
+            EntityManager entityManager = emf.createEntityManager();
+            EntityTransaction transaction = entityManager.getTransaction();
+            transaction.begin();
+            TransactionScopedEmHolder.push(eagerPersistenceUnitName, entityManager);
+            TransactionScopedEmHolder.enterTransactionalScope(eagerPersistenceUnitName);
+            FRAMES.get().push(new TransactionFrame());
+            fireEvent(new TransactionStarted(eagerPersistenceUnitName));
+        } else {
+            TransactionScopedEmHolder.enterTransactionalScope();
+            FRAMES.get().push(new TransactionFrame());
+            // No TransactionStarted fire here — the first
+            // peekOrAutoBegin lazy-join fires its own event for the
+            // PU it touches.
+        }
     }
 
     @Override
@@ -316,6 +338,38 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
             // CDI not up or observer threw — events are non-critical
             // and observer failures are aggregated by the framework.
         }
+    }
+
+    /**
+     * Resolve which persistence unit (if any) the strategy should
+     * eagerly open on {@code begin()}. Returns {@code null} for the
+     * "all-lazy" path. See the class-level Javadoc for the precedence.
+     */
+    private static String resolveEagerPersistenceUnit(Set<String> persistenceUnits) {
+        if (persistenceUnits.size() == 1) {
+            return persistenceUnits.iterator().next();
+        }
+        String configured = readConfiguredPersistenceUnitName();
+        if (configured != null && !configured.isEmpty()) {
+            if (!persistenceUnits.contains(configured)) {
+                throw new IllegalStateException(
+                        "@PersistenceConfig.persistenceUnitName='" + configured
+                                + "' is not in the active persistence-unit set " + persistenceUnits);
+            }
+            return configured;
+        }
+        return null;
+    }
+
+    private static String readConfiguredPersistenceUnitName() {
+        TestContext testContext;
+        try {
+            testContext = TestContext.get();
+        } catch (IllegalStateException notInBootstrap) {
+            return null;
+        }
+        PersistenceConfig persistenceConfig = testContext.getTestClass().getAnnotation(PersistenceConfig.class);
+        return persistenceConfig == null ? null : persistenceConfig.persistenceUnitName();
     }
 
     /**
