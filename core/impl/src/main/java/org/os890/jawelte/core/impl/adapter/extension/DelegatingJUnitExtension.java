@@ -16,6 +16,7 @@
 package org.os890.jawelte.core.impl.adapter.extension;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -132,6 +133,8 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
     @Override
     public void beforeEach(ExtensionContext extensionContext) throws Exception {
         TestContext testContext = retrieveAndRefresh(extensionContext);
+        bindTestMethodMetadata(testContext, extensionContext);
+        bindExecutionExceptionMetadata(testContext, extensionContext);
         Store store = store(extensionContext);
         List<TestModuleLifecyclePort> completed = new ArrayList<>();
         store.put(COMPLETED_BEFORE_EACH_KEY, completed);
@@ -150,6 +153,11 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
     @Override
     public void afterEach(ExtensionContext extensionContext) throws Exception {
         TestContext testContext = retrieveAndRefresh(extensionContext);
+        // Refresh execution-exception metadata: getExecutionException() is empty
+        // during beforeEach and populated after the test body returns. Module
+        // adapters reading testContext.getMetadata(Throwable.class) in their
+        // afterEach hook see the actual outcome.
+        bindExecutionExceptionMetadata(testContext, extensionContext);
         List<TestModuleLifecyclePort> completed = lookupCompleted(extensionContext, COMPLETED_BEFORE_EACH_KEY);
 
         List<Throwable> collected = new ArrayList<>();
@@ -199,6 +207,34 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
         TestContext testContext = store(extensionContext).get(TestContext.class, TestContext.class);
         testContext.bindMetadata(ExtensionContext.class, extensionContext);
         return testContext;
+    }
+
+    /**
+     * Bind the current {@code @Test} method as
+     * {@code TestContext.getMetadata(Method.class)} so module adapters
+     * read it directly without reflecting on the JUnit
+     * {@link ExtensionContext}. Unbinds when the
+     * {@link ExtensionContext} reports no test method (e.g. between
+     * test classes).
+     */
+    private static void bindTestMethodMetadata(TestContext testContext, ExtensionContext extensionContext) {
+        extensionContext.getTestMethod().ifPresentOrElse(
+                method -> testContext.bindMetadata(Method.class, method),
+                () -> testContext.unbindMetadata(Method.class));
+    }
+
+    /**
+     * Bind the current execution exception as
+     * {@code TestContext.getMetadata(Throwable.class)}. {@code beforeEach}
+     * always clears (test body hasn't run yet); {@code afterEach}
+     * populates with the captured {@link Throwable} when the test
+     * threw, or leaves it cleared on success.
+     */
+    private static void bindExecutionExceptionMetadata(
+            TestContext testContext, ExtensionContext extensionContext) {
+        extensionContext.getExecutionException().ifPresentOrElse(
+                throwable -> testContext.bindMetadata(Throwable.class, throwable),
+                () -> testContext.unbindMetadata(Throwable.class));
     }
 
     @SuppressWarnings("unchecked")

@@ -34,7 +34,6 @@ import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.FileModeState;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
 import org.os890.jawelte.module.jpa.impl.util.TestMethodTransactionMarker;
-import org.os890.jawelte.module.jpa.impl.util.TestMethodTransactionWrapping;
 import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 
 /**
@@ -193,7 +192,7 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
     }
 
     private static void beginTransactionForTransactionalTestMethod(TestContext testContext) {
-        Method testMethod = TestMethodTransactionWrapping.currentTestMethod(testContext).orElse(null);
+        Method testMethod = testContext.getMetadata(Method.class).orElse(null);
         if (testMethod == null || !testMethod.isAnnotationPresent(Transactional.class)) {
             return;
         }
@@ -215,8 +214,7 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         try {
             TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
             if (strategy.isActive()) {
-                Throwable executionException =
-                        TestMethodTransactionWrapping.currentExecutionException(testContext).orElse(null);
+                Throwable executionException = testContext.getMetadata(Throwable.class).orElse(null);
                 if (executionException != null) {
                     strategy.rollback();
                 } else {
@@ -261,17 +259,17 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
     private static void fireAfterTestTransaction(TestContext testContext) {
         // committed = "the test method body completed normally". When the
         // current test method threw, the wrapping @Transactional rolls back
-        // (and so do orphan UTs); committed is false. When no exception is
-        // captured (test passed, or JUnit's ExtensionContext isn't bindable
-        // for this run), default to true — matches the pre-§5.1 behaviour
+        // (and so do orphan UTs); committed is false. When no Throwable
+        // is bound (test passed, or a non-JUnit driver never bound the
+        // metadata), default to true — matches the pre-§5.1 behaviour
         // for the no-info path.
-        boolean committed = TestMethodTransactionWrapping.currentExecutionException(testContext).isEmpty();
+        boolean committed = testContext.getMetadata(Throwable.class).isEmpty();
         // Prefer the actual test method name; fall back to the test class
-        // simple name when JUnit's ExtensionContext isn't accessible (e.g.
-        // a non-JUnit driver). The pre-§5.1 code passed the class name in
-        // both cases — the field's contract said "test method name", so
-        // the fallback is the regression-safe path, not the canonical one.
-        String methodName = TestMethodTransactionWrapping.currentTestMethod(testContext)
+        // simple name when no Method metadata was bound (e.g. a non-JUnit
+        // driver). The pre-§5.1 code passed the class name in both cases —
+        // the field's contract said "test method name", so the fallback is
+        // the regression-safe path, not the canonical one.
+        String methodName = testContext.getMetadata(Method.class)
                 .map(Method::getName)
                 .orElseGet(() -> testContext.getTestClass().getSimpleName());
         testContext.getMetadata(SeContainer.class).ifPresent(seContainer ->
