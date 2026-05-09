@@ -79,7 +79,17 @@ public abstract class EmfCache {
     public static EntityManagerFactory getOrCreate(
             String persistenceUnitName, Supplier<EntityManagerFactory> entityManagerFactorySupplier) {
         registerShutdownHookOnce();
-        return CACHE.computeIfAbsent(persistenceUnitName, name -> entityManagerFactorySupplier.get());
+        return CACHE.computeIfAbsent(persistenceUnitName, name -> {
+            long startNanos = System.nanoTime();
+            LOG.log(Level.INFO,
+                    "Bootstrapping EntityManagerFactory for persistence unit '" + name + "'");
+            EntityManagerFactory factory = entityManagerFactorySupplier.get();
+            long durationMillis = (System.nanoTime() - startNanos) / 1_000_000L;
+            LOG.log(Level.INFO,
+                    "Bootstrapped EntityManagerFactory for persistence unit '" + name
+                            + "' in " + durationMillis + "ms");
+            return factory;
+        });
     }
 
     /**
