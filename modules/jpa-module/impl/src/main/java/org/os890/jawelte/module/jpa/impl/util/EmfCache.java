@@ -121,13 +121,20 @@ public abstract class EmfCache {
         }
     }
 
-    private static void registerShutdownHookOnce() {
-        if (SHUTDOWN_HOOK_REGISTERED.compareAndSet(false, true)) {
-            Runtime.getRuntime().addShutdownHook(new Thread(EmfCache::closeAll, "jawelte-emf-cache-shutdown"));
-        }
-    }
-
-    private static void closeAll() {
+    /**
+     * Close every cached {@link EntityManagerFactory} and empty the
+     * cache. Invoked by the JVM shutdown hook (registered on first
+     * use) and — when the consumer opts in — by
+     * {@code JpaLauncherSessionListener.launcherSessionClosed} for
+     * deterministic JVM-scoped cleanup before the shutdown hook runs.
+     * Idempotent: a second call after the cache is empty is a no-op.
+     * Close failures are aggregated into a single primary
+     * {@link RuntimeException} chain and logged at
+     * {@link Level#WARNING}; never rethrown so shutdown hooks and
+     * launcher-session listeners can't break on residual cleanup
+     * failures.
+     */
+    public static void closeAll() {
         RuntimeException primary = null;
         for (Map.Entry<String, EntityManagerFactory> entry : CACHE.entrySet()) {
             try {
@@ -144,6 +151,7 @@ public abstract class EmfCache {
                 }
             }
         }
+        CACHE.clear();
         if (primary != null) {
             // Aggregate per the project-wide TICKET-001 exception policy:
             // first failure is the primary cause, every subsequent failure
@@ -151,6 +159,12 @@ public abstract class EmfCache {
             // one WARNING per failure so log readers see one trace + chain.
             // Not rethrown — JVM shutdown hooks swallow throwables.
             LOG.log(Level.WARNING, "EntityManagerFactory close failures during JVM shutdown", primary);
+        }
+    }
+
+    private static void registerShutdownHookOnce() {
+        if (SHUTDOWN_HOOK_REGISTERED.compareAndSet(false, true)) {
+            Runtime.getRuntime().addShutdownHook(new Thread(EmfCache::closeAll, "jawelte-emf-cache-shutdown"));
         }
     }
 }

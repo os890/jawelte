@@ -97,6 +97,7 @@
         <module>scenario-61-native-sql-delete-circular-fk</module>
         <module>scenario-62-after-test-transaction-payload</module>
         <module>scenario-63-config-resolver-prefix-walk</module>
+        <module>scenario-64-launcher-session-listener-opt-in</module>
     </modules>
 
     <dependencies>

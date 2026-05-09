@@ -107,6 +107,21 @@
             <artifactId>opentest4j</artifactId>
             <scope>provided</scope>
         </dependency>
+
+        <!--
+            junit-platform-launcher hosts the LauncherSessionListener SPI
+            that JpaLauncherSessionListener implements. provided scope:
+            JUnit-driven consumers bring it transitively via Surefire's
+            runtime classpath, so jpa-module never imposes the version.
+            jpa-module ships NO META-INF/services entry for this SPI —
+            consumers opt in by registering JpaLauncherSessionListener
+            in their own classpath.
+        -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

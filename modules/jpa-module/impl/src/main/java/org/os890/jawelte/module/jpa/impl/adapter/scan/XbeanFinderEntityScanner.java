@@ -77,6 +77,43 @@ public class XbeanFinderEntityScanner implements EntityScanner {
         return Collections.unmodifiableSet(filtered);
     }
 
+    /**
+     * Pre-populate the JVM-wide scan cache for the calling thread's
+     * context classloader. Called by
+     * {@code JpaLauncherSessionListener.launcherSessionOpened} when
+     * the consumer opts the listener in, so the first test class
+     * doesn't pay the classpath-walk latency. Idempotent — a second
+     * call hits the existing cache entry. Scan failures here are
+     * silenced (logged but not rethrown) so an opt-in pre-warm can
+     * never block the launcher session from opening; the lazy path
+     * in {@link #scan(Set, Whitelist)} will surface the failure with
+     * the same diagnostic when a test actually needs an entity scan.
+     */
+    public static void prewarmForCurrentThread() {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        try {
+            scanAllForClassLoader(classLoader);
+        } catch (RuntimeException prewarmFailure) {
+            LOG.log(Level.WARNING,
+                    "Pre-warm of @Entity scan cache failed; lazy scan will retry on first use",
+                    prewarmFailure);
+        }
+    }
+
+    /**
+     * Drop every cached scan result. Called by
+     * {@code JpaLauncherSessionListener.launcherSessionClosed} so a
+     * JVM that hosts multiple Surefire suites (or a Gradle test
+     * worker that gets reused) re-scans on the next session instead
+     * of returning a stale result for a classloader that was
+     * decommissioned and re-created with the same identity.
+     */
+    public static void clearScanCache() {
+        synchronized (SCAN_CACHE) {
+            SCAN_CACHE.clear();
+        }
+    }
+
     private static Set<String> scanAllForClassLoader(ClassLoader classLoader) {
         synchronized (SCAN_CACHE) {
             Set<String> cached = SCAN_CACHE.get(classLoader);
