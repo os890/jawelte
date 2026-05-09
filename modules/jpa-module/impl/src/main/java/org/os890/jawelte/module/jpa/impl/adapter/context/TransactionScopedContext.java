@@ -92,15 +92,7 @@ public class TransactionScopedContext implements AlterableContext {
 
     @Override
     public boolean isActive() {
-        // Always-active Context (matches scope-module's pattern). The
-        // CDI Container's beanManager.getContext(TransactionScoped.class)
-        // is the only API that retrieves the Context object before any
-        // tx scope has been activated; it requires isActive() == true to
-        // succeed. The actual "is there a tx scope on this thread?"
-        // guard happens at lookup time: get(Contextual, ...) calls
-        // topOrThrow() which raises ContextNotActiveException when the
-        // per-thread frame stack is empty.
-        return true;
+        return !stacks.get().isEmpty();
     }
 
     @Override
