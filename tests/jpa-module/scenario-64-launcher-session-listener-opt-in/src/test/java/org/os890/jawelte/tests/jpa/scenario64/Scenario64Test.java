@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.os890.jawelte.core.api.EnableTestBeans;
-import org.os890.jawelte.module.jpa.impl.adapter.launcher.JpaLauncherSessionListener;
+import org.os890.jawelte.module.jpa.impl.launcher.JpaLauncherSessionListener;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
 
