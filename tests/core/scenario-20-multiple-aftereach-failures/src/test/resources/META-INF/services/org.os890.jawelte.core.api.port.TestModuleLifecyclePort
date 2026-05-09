@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.tests.core.scenario20.Port50Throws
-org.os890.jawelte.tests.core.scenario20.Port100Throws
-org.os890.jawelte.tests.core.scenario20.Port200Throws
+org.os890.jawelte.tests.core.scenario20.TestScenarioPort50Throws
+org.os890.jawelte.tests.core.scenario20.TestScenarioPort100Throws
+org.os890.jawelte.tests.core.scenario20.TestScenarioPort200Throws

@@ -25,6 +25,6 @@ class Scenario33Test {
 
     @Test
     void vetoBlocksRequestContextControllerActivationAndAfterEachStillRuns() {
-        assertThat(CapturingLifecyclePort.CONTROLLER_BOUND_AFTER_BEFORE_EACH).isFalse();
+        assertThat(TestScenarioCapturingLifecyclePort.CONTROLLER_BOUND_AFTER_BEFORE_EACH).isFalse();
     }
 }

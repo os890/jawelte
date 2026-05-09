@@ -1052,3 +1052,7 @@ User flagged two issues:
 **(3) Compile fix from §5.4** — `SentinelConfigResolver` (scenario-49) implemented `ConfigResolver` but never got the new `resolveKeys()` override I added when the port grew that method. Added `@Override public Iterable<String> resolveKeys() { return List.of(); }`.
 
 `mvn -P owb verify` and `mvn -P weld verify` both clean on the full reactor.
+
+## 2026-05-09 — TestScenario prefix for test-only port impls
+
+Renamed every test-classpath class that implements a jawelte port interface (or extends a prod class implementing one) to use a `TestScenario` prefix — so they stand out in code search and can never be mistaken for prod port impls. 46 classes touched across 30+ scenario sub-modules in tests/core, tests/cdi-module, tests/scope-module, tests/jpa-module. Updated Java sources, `META-INF/services/<port-fqn>` registrations and `microprofile-config.properties` ServicePriorityResolver wiring in lockstep. Full reactor `mvn -P owb verify` (RAT + Checkstyle + Enforcer + JaCoCo + Surefire on every scenario) passes.

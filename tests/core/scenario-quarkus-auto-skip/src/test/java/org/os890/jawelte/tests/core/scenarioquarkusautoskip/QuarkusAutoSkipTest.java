@@ -25,7 +25,7 @@ class QuarkusAutoSkipTest {
 
     @Test
     void quarkusAnnotatedClassSkipsBeforeAllAndAfterAllOnContainerPort() {
-        RecordingContainerPort.resetCounters();
+        TestScenarioRecordingContainerPort.resetCounters();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(QuarkusSubject.class))
@@ -38,27 +38,27 @@ class QuarkusAutoSkipTest {
         // second one. The other lifecycle phases still fire so module
         // ports and per-test setup remain consistent with
         // manageContainer=false.
-        assertThat(RecordingContainerPort.BEFORE_ALL_CALLS.get())
+        assertThat(TestScenarioRecordingContainerPort.BEFORE_ALL_CALLS.get())
                 .as("beforeAll must NOT be called for @QuarkusTest classes")
                 .isZero();
-        assertThat(RecordingContainerPort.AFTER_ALL_CALLS.get())
+        assertThat(TestScenarioRecordingContainerPort.AFTER_ALL_CALLS.get())
                 .as("afterAll must NOT be called for @QuarkusTest classes")
                 .isZero();
 
-        assertThat(RecordingContainerPort.POST_PROCESS_CALLS.get())
+        assertThat(TestScenarioRecordingContainerPort.POST_PROCESS_CALLS.get())
                 .as("postProcessTestInstance still fires under @QuarkusTest")
                 .isEqualTo(1);
-        assertThat(RecordingContainerPort.BEFORE_EACH_CALLS.get())
+        assertThat(TestScenarioRecordingContainerPort.BEFORE_EACH_CALLS.get())
                 .as("beforeEach still fires under @QuarkusTest")
                 .isEqualTo(1);
-        assertThat(RecordingContainerPort.AFTER_EACH_CALLS.get())
+        assertThat(TestScenarioRecordingContainerPort.AFTER_EACH_CALLS.get())
                 .as("afterEach still fires under @QuarkusTest")
                 .isEqualTo(1);
     }
 
     @Test
     void plainEnableTestBeansClassStillBootsThroughContainerPort() {
-        RecordingContainerPort.resetCounters();
+        TestScenarioRecordingContainerPort.resetCounters();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(PlainSubject.class))
@@ -71,10 +71,10 @@ class QuarkusAutoSkipTest {
         // proves the recording port itself is wired correctly via
         // ServiceLoader and that the @QuarkusTest case above is
         // genuinely opting out, not silently broken.
-        assertThat(RecordingContainerPort.BEFORE_ALL_CALLS.get()).isEqualTo(1);
-        assertThat(RecordingContainerPort.AFTER_ALL_CALLS.get()).isEqualTo(1);
-        assertThat(RecordingContainerPort.POST_PROCESS_CALLS.get()).isEqualTo(1);
-        assertThat(RecordingContainerPort.BEFORE_EACH_CALLS.get()).isEqualTo(1);
-        assertThat(RecordingContainerPort.AFTER_EACH_CALLS.get()).isEqualTo(1);
+        assertThat(TestScenarioRecordingContainerPort.BEFORE_ALL_CALLS.get()).isEqualTo(1);
+        assertThat(TestScenarioRecordingContainerPort.AFTER_ALL_CALLS.get()).isEqualTo(1);
+        assertThat(TestScenarioRecordingContainerPort.POST_PROCESS_CALLS.get()).isEqualTo(1);
+        assertThat(TestScenarioRecordingContainerPort.BEFORE_EACH_CALLS.get()).isEqualTo(1);
+        assertThat(TestScenarioRecordingContainerPort.AFTER_EACH_CALLS.get()).isEqualTo(1);
     }
 }

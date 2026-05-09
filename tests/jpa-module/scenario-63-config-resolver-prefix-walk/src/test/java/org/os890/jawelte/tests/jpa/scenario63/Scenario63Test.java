@@ -28,7 +28,7 @@ import org.os890.jawelte.core.api.port.TestContext;
 /**
  * A consumer-supplied {@link ConfigResolver} controls the
  * persistence-property prefix walk that drives Hibernate's
- * bootstrap: the test-only {@link InjectingConfigResolver}
+ * bootstrap: the test-only {@link TestScenarioInjectingConfigResolver}
  * registers at {@code @Priority(50)} via
  * {@code META-INF/services} and adds one synthetic key
  * (<code>…persistence-property.hibernate.format_sql</code>) to
@@ -68,19 +68,20 @@ public class Scenario63Test {
     public void consumerConfigResolverControlsPersistencePropertyPrefixWalk() {
         ConfigResolver active = TestContext.loadService(ConfigResolver.class);
         assertThat(active)
-                .as("InjectingConfigResolver at @Priority(50) must win the SPI sort over the "
+                .as("TestScenarioInjectingConfigResolver at @Priority(50) must win the SPI sort over the "
                         + "default ConfigResolverAdapter — without that, the rest of this test "
                         + "isn't actually exercising the consumer-resolver path")
-                .isInstanceOf(InjectingConfigResolver.class);
+                .isInstanceOf(TestScenarioInjectingConfigResolver.class);
 
         Object formatSql = entityManagerFactory.getProperties().get("hibernate.format_sql");
         assertThat(formatSql)
                 .as("the persistence-property prefix walk must route through "
                         + "ConfigResolver.resolveKeys() + resolve(...), so the synthetic "
-                        + "'%s' = '%s' returned by InjectingConfigResolver reaches Hibernate's "
+                        + "'%s' = '%s' returned by TestScenarioInjectingConfigResolver reaches Hibernate's "
                         + "bootstrap properties. Pre-§5.4 the walk read MP Config directly "
                         + "and the override was silently lost.",
-                        InjectingConfigResolver.INJECTED_KEY, InjectingConfigResolver.INJECTED_VALUE)
-                .isEqualTo(InjectingConfigResolver.INJECTED_VALUE);
+                        TestScenarioInjectingConfigResolver.INJECTED_KEY,
+                        TestScenarioInjectingConfigResolver.INJECTED_VALUE)
+                .isEqualTo(TestScenarioInjectingConfigResolver.INJECTED_VALUE);
     }
 }

@@ -71,10 +71,10 @@ public class Scenario61Test {
         DbCleanupStrategy active = TestContext.loadService(DbCleanupStrategy.class);
 
         assertThat(active)
-                .as("ForcedNativeSqlDeleteStrategy at @Priority(50) must win over JdbcTruncate "
+                .as("TestScenarioForcedNativeSqlDeleteStrategy at @Priority(50) must win over JdbcTruncate "
                         + "at @Priority(MAX_VALUE - 1) — otherwise this scenario would silently "
                         + "exercise the truncate path, not the native-delete fix")
-                .isInstanceOf(ForcedNativeSqlDeleteStrategy.class);
+                .isInstanceOf(TestScenarioForcedNativeSqlDeleteStrategy.class);
     }
 
     /** Persist a Foo/Bar pair with mutual FK references. */

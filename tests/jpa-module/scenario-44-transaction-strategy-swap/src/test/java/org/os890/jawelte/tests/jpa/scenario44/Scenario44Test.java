@@ -28,7 +28,7 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 
 /**
- * A test-only {@link CountingTransactionStrategy} at
+ * A test-only {@link TestScenarioCountingTransactionStrategy} at
  * {@code @Priority(100)} registered through {@code META-INF/services}
  * wins the {@code TestContext.loadService} priority sort over jpa-module's
  * default {@code DefaultResourceLocalTransactionStrategy} AND the
@@ -67,15 +67,15 @@ public class Scenario44Test {
         assertThat(active)
                 .as("a test-only TransactionStrategy at @Priority(100) must win over the "
                         + "addon's @Priority(MAX_VALUE) DefaultResourceLocalTransactionStrategy")
-                .isInstanceOf(CountingTransactionStrategy.class);
+                .isInstanceOf(TestScenarioCountingTransactionStrategy.class);
     }
 
     /** A @Transactional service call drives the interceptor's begin / commit through the strategy. */
     @Test
     @Order(2)
     public void transactionalCallDrivesStrategyBeginAndCommit() {
-        CountingTransactionStrategy.BEGIN_COUNT.set(0);
-        CountingTransactionStrategy.COMMIT_COUNT.set(0);
+        TestScenarioCountingTransactionStrategy.BEGIN_COUNT.set(0);
+        TestScenarioCountingTransactionStrategy.COMMIT_COUNT.set(0);
         markerService.persistMarker();
     }
 
@@ -89,11 +89,11 @@ public class Scenario44Test {
     @Test
     @Order(3)
     public void interceptorDelegatedToTheSwappedStrategy() {
-        assertThat(CountingTransactionStrategy.BEGIN_COUNT.get())
+        assertThat(TestScenarioCountingTransactionStrategy.BEGIN_COUNT.get())
                 .as("TransactionalInterceptor must resolve the strategy via "
                         + "TestContext.loadService and call begin() on it. Closes punch-list §8.2.")
                 .isGreaterThanOrEqualTo(1);
-        assertThat(CountingTransactionStrategy.COMMIT_COUNT.get())
+        assertThat(TestScenarioCountingTransactionStrategy.COMMIT_COUNT.get())
                 .as("the same interceptor must call commit() on the resolved strategy "
                         + "when the @Transactional method returns normally")
                 .isGreaterThanOrEqualTo(1);

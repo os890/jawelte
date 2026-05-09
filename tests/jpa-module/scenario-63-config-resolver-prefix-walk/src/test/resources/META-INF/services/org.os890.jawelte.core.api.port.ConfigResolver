@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.tests.jpa.scenario63.InjectingConfigResolver
+org.os890.jawelte.tests.jpa.scenario63.TestScenarioInjectingConfigResolver

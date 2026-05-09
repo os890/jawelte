@@ -30,7 +30,7 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.TableNameResolver;
 
 /**
- * A test-only {@link CountingTableNameResolver} at {@code @Priority(100)}
+ * A test-only {@link TestScenarioCountingTableNameResolver} at {@code @Priority(100)}
  * registered through {@code META-INF/services} wins the
  * {@code TestContext.loadService} priority sort over jpa-module's
  * default impl AND the framework's per-method cleanup actually
@@ -71,7 +71,7 @@ public class Scenario32Test {
         assertThat(active)
                 .as("a test-only TableNameResolver at @Priority(100) must win over the "
                         + "addon's @Priority(MAX_VALUE) InformationSchemaTableNameResolver")
-                .isInstanceOf(CountingTableNameResolver.class);
+                .isInstanceOf(TestScenarioCountingTableNameResolver.class);
     }
 
     /** Persist + commit in a @Transactional method — drives the cleanup hook. */
@@ -79,7 +79,7 @@ public class Scenario32Test {
     @Order(2)
     @Transactional
     public void persistDrivesTableNameResolverThroughCleanup() {
-        CountingTableNameResolver.INVOCATION_COUNT.set(0);
+        TestScenarioCountingTableNameResolver.INVOCATION_COUNT.set(0);
         entityManager.persist(new Marker());
         entityManager.flush();
     }
@@ -94,7 +94,7 @@ public class Scenario32Test {
     @Test
     @Order(3)
     public void jdbcTruncateDelegatedToTheSwappedResolver() {
-        assertThat(CountingTableNameResolver.INVOCATION_COUNT.get())
+        assertThat(TestScenarioCountingTableNameResolver.INVOCATION_COUNT.get())
                 .as("JdbcTruncateDbCleanupStrategy must resolve the table-name resolver via "
                         + "TestContext.loadService (NOT instantiate the default directly) so "
                         + "the swapped impl is the one that actually walks the schema. "

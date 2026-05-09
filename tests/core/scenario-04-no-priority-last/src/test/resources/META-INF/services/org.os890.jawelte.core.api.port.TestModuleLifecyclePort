@@ -12,5 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.tests.core.scenario04.PrioritizedPort
-org.os890.jawelte.tests.core.scenario04.UnprioritizedPort
+org.os890.jawelte.tests.core.scenario04.TestScenarioPrioritizedPort
+org.os890.jawelte.tests.core.scenario04.TestScenarioUnprioritizedPort

@@ -30,7 +30,7 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 
 /**
- * A test-only {@link CountingDbCleanupStrategy} at {@code @Priority(100)}
+ * A test-only {@link TestScenarioCountingDbCleanupStrategy} at {@code @Priority(100)}
  * registered through {@code META-INF/services} wins the
  * {@code TestContext.loadService} priority sort over jpa-module's
  * default impls AND the framework's per-method cleanup actually
@@ -68,7 +68,7 @@ public class Scenario31Test {
         assertThat(active)
                 .as("a test-only DbCleanupStrategy at @Priority(100) must win over the "
                         + "addon's @Priority(MAX_VALUE - 1) JdbcTruncate / @Priority(MAX_VALUE) JpqlDelete")
-                .isInstanceOf(CountingDbCleanupStrategy.class);
+                .isInstanceOf(TestScenarioCountingDbCleanupStrategy.class);
     }
 
     /** Persist + commit in a @Transactional method — drives the per-method-cleanup hook. */
@@ -76,7 +76,7 @@ public class Scenario31Test {
     @Order(2)
     @Transactional
     public void persistDrivesAfterEachCleanup() {
-        CountingDbCleanupStrategy.INVOCATION_COUNT.set(0);
+        TestScenarioCountingDbCleanupStrategy.INVOCATION_COUNT.set(0);
         entityManager.persist(new Marker());
         entityManager.flush();
     }
@@ -85,7 +85,7 @@ public class Scenario31Test {
     @Test
     @Order(3)
     public void lifecycleDelegatedToTheSwappedStrategy() {
-        assertThat(CountingDbCleanupStrategy.INVOCATION_COUNT.get())
+        assertThat(TestScenarioCountingDbCleanupStrategy.INVOCATION_COUNT.get())
                 .as("JpaLifecycleAdapter.afterEach must resolve the cleanup strategy via "
                         + "TestContext.loadService (NOT a hard-coded default) so the swapped "
                         + "impl is the one that actually runs. Closes punch-list §8.2.")

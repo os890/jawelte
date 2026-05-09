@@ -26,6 +26,6 @@ class Scenario44Test {
     @Test
     void mpConfigKeySelectsCustomServicePriorityResolverImplFromReflectionPath() {
         ServicePriorityResolver resolver = TestContext.loadService(ServicePriorityResolver.class);
-        assertThat(resolver).isInstanceOf(CustomServicePriorityResolver.class);
+        assertThat(resolver).isInstanceOf(TestScenarioCustomServicePriorityResolver.class);
     }
 }

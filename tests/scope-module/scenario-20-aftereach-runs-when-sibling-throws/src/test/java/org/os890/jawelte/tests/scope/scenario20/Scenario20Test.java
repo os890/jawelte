@@ -31,10 +31,10 @@ class Scenario20Test {
                 .selectors(selectClass(Scenario20Subject.class))
                 .execute();
 
-        // The test failed because Port150Throws.beforeEach threw.
+        // The test failed because TestScenarioPort150Throws.beforeEach threw.
         assertThat(execution.testEvents().failed().count()).isEqualTo(1);
 
-        // Port50Probe.afterEach ran AFTER scope-module's afterEach (LIFO),
+        // TestScenarioPort50Probe.afterEach ran AFTER scope-module's afterEach (LIFO),
         // and observed the method-scope store nulled by scope-module's
         // unconditional deactivate.
         assertThat(Scenario20Subject.RECORDED)
