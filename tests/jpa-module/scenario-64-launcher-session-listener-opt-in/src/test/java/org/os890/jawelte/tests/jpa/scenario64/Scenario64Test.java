@@ -34,8 +34,8 @@ import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
  * Opt-in {@link JpaLauncherSessionListener}: the scenario's
  * {@code META-INF/services/org.junit.platform.launcher.LauncherSessionListener}
  * registers the listener; Surefire's launcher session fires the listener
- * before any test class runs (pre-warm) and after every test class has
- * finished (cleanup).
+ * before any test class runs (pre-warm) and once at the very end of the
+ * JVM after every test class has finished (cleanup).
  *
  * <p>{@link #firstMethodSeesListenerHasFiredOnSessionOpen} asserts the
  * pre-warm side effects observable in-test: {@code OPEN_COUNT} is
@@ -44,8 +44,8 @@ import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
  *
  * <p>{@link #secondMethodInvokesDeactivateImperatively} runs the
  * cleanup path imperatively because the real
- * {@code launcherSessionClosed} fires after every test method (so
- * there's no in-test observation point). Calling
+ * {@code launcherSessionClosed} fires after every test class (so
+ * there's no in-test observation point for it). Calling
  * {@link JpaLauncherSessionListener#deactivate()} directly verifies
  * {@link EmfCache#closeAll()} drops every cached EMF and
  * {@link JpaActivePersistenceUnits#reset()} clears the registry.
@@ -98,8 +98,8 @@ public class Scenario64Test {
 
     /**
      * Drive the cleanup path imperatively. The real session-close hook
-     * runs after every test class, so there's no in-process way to
-     * assert its side-effects from a test method. Calling
+     * runs after every test class in the JVM, so there's no in-process
+     * way to assert its side-effects from a test method. Calling
      * {@code deactivate()} directly catches regressions in the cleanup
      * logic regardless.
      */

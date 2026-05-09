@@ -30,10 +30,11 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  * launcher session (≈ once per JVM regardless of how Maven Surefire
  * forks): on session open it pre-warms the
  * {@link XbeanFinderEntityScanner} cache so the first test class
- * doesn't pay classpath-walk latency, and on session close it closes
- * every cached {@link jakarta.persistence.EntityManagerFactory}
- * (releasing H2 file-mode locks deterministically before the JVM
- * shutdown hook runs), drops the scanner cache, resets
+ * doesn't pay classpath-walk latency, and on session close (after
+ * every test class in the JVM has finished) it closes every cached
+ * {@link jakarta.persistence.EntityManagerFactory} (releasing H2
+ * file-mode locks deterministically before the JVM shutdown hook
+ * runs), drops the scanner cache, resets
  * {@link JpaActivePersistenceUnits}, and drains
  * {@link TransactionScopedEmHolder} for the calling thread.
  *
@@ -47,11 +48,13 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  * by adding their own {@code META-INF/services} entry pointing at this
  * class.
  *
- * <p>The cleanup path is best-effort and never throws: pre-warm
- * failures fall back to the lazy scan with the same diagnostic, EMF
- * close failures aggregate inside {@code EmfCache.closeAll} and log
- * at {@code WARNING}. {@link #OPEN_COUNT} and {@link #CLOSE_COUNT}
- * track invocations so opt-in tests can assert the listener fired.
+ * <p>Best-effort and never throws: pre-warm failures fall back to the
+ * lazy scan with the same diagnostic, EMF close failures aggregate
+ * inside {@link EmfCache#closeAll()} and log at {@code WARNING}.
+ * {@link #OPEN_COUNT} and {@link #CLOSE_COUNT} expose invocation counts
+ * so opt-in tests can assert the listener actually fired and drive
+ * {@link #deactivate()} imperatively when the post-session timing of
+ * the real close hook puts it out of reach of in-test observation.
  */
 public class JpaLauncherSessionListener implements LauncherSessionListener {
 
@@ -63,12 +66,6 @@ public class JpaLauncherSessionListener implements LauncherSessionListener {
 
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public JpaLauncherSessionListener() {
-    }
-
-    /** Reset both invocation counters. Test-only helper. */
-    public static void resetCounters() {
-        OPEN_COUNT.set(0);
-        CLOSE_COUNT.set(0);
     }
 
     /**
