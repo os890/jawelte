@@ -184,8 +184,8 @@ public class JpaCdiExtension implements Extension {
         Class<?> testClass = testContext.getTestClass();
         PersistenceConfig persistenceConfig = testClass.getAnnotation(PersistenceConfig.class);
 
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        List<ParsedPersistenceUnit> parsed = PersistenceXmlParser.parseAll(classLoader);
+        List<ParsedPersistenceUnit> parsed =
+                PersistenceXmlParser.parseAll(Thread.currentThread().getContextClassLoader());
         Set<String> filter = filterFromAnnotation(persistenceConfig);
 
         Set<String> resolvedActivePersistenceUnits = new LinkedHashSet<>();
@@ -194,9 +194,9 @@ public class JpaCdiExtension implements Extension {
                 continue;
             }
             resolvedActivePersistenceUnits.add(unit.name());
-            Map<String, Object> properties = computeProperties(unit, persistenceConfig, testClass, classLoader);
+            Map<String, Object> properties = computeProperties(unit, persistenceConfig, testClass);
             persistenceUnitProperties.put(unit.name(), properties);
-            EmfCache.getOrCreate(unit.name(), () -> bootstrapEntityManagerFactory(unit, properties, classLoader));
+            EmfCache.getOrCreate(unit.name(), () -> bootstrapEntityManagerFactory(unit, properties));
         }
         activePersistenceUnits = resolvedActivePersistenceUnits;
         JpaActivePersistenceUnits.set(activePersistenceUnits);
@@ -399,8 +399,7 @@ public class JpaCdiExtension implements Extension {
     private Map<String, Object> computeProperties(
             ParsedPersistenceUnit unit,
             PersistenceConfig persistenceConfig,
-            Class<?> testClass,
-            ClassLoader classLoader) {
+            Class<?> testClass) {
         Map<String, Object> properties = new LinkedHashMap<>();
         boolean fileMode = persistenceConfig != null && persistenceConfig.fileMode();
         if (fileMode) {
@@ -449,17 +448,18 @@ public class JpaCdiExtension implements Extension {
      * Hibernate cannot scan for {@code @Entity} types outside of an
      * application server, so we run our own ASM scanner and feed the
      * resulting class-name list through the {@code PersistenceUnitInfo}
-     * the container API accepts.
+     * the container API accepts. The scanner picks the calling thread's
+     * context classloader internally — we deliberately don't accept a
+     * classloader parameter here, since smuggling one in would let
+     * callers override the TCCL the rest of the bootstrap relies on.
      *
      * @param unit         the parsed persistence unit
      * @param properties   merged property bag (H2 + MP Config + resolver)
-     * @param classLoader  the classloader to use for entity discovery
      * @return the bootstrapped {@link EntityManagerFactory}
      */
     private static EntityManagerFactory bootstrapEntityManagerFactory(
             ParsedPersistenceUnit unit,
-            Map<String, Object> properties,
-            ClassLoader classLoader) {
+            Map<String, Object> properties) {
         if (unit.hasClassElements()) {
             return Persistence.createEntityManagerFactory(unit.name(), properties);
         }
