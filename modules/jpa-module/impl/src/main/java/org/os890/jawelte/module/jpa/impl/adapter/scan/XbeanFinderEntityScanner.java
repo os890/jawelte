@@ -89,7 +89,7 @@ public class XbeanFinderEntityScanner implements EntityScanner {
      * in {@link #scan(Set, Whitelist)} will surface the failure with
      * the same diagnostic when a test actually needs an entity scan.
      */
-    public static void prewarmForCurrentThread() {
+    public static void initCache() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         try {
             scanAllForClassLoader(classLoader);
@@ -108,7 +108,7 @@ public class XbeanFinderEntityScanner implements EntityScanner {
      * of returning a stale result for a classloader that was
      * decommissioned and re-created with the same identity.
      */
-    public static void clearScanCache() {
+    public static void clearCache() {
         synchronized (SCAN_CACHE) {
             SCAN_CACHE.clear();
         }

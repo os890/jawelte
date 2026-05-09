@@ -76,7 +76,7 @@ public class JpaLauncherSessionListener implements LauncherSessionListener {
      */
     public static void activate() {
         OPEN_COUNT.incrementAndGet();
-        XbeanFinderEntityScanner.prewarmForCurrentThread();
+        XbeanFinderEntityScanner.initCache();
     }
 
     /**
@@ -88,7 +88,7 @@ public class JpaLauncherSessionListener implements LauncherSessionListener {
     public static void deactivate() {
         CLOSE_COUNT.incrementAndGet();
         EmfCache.closeAll();
-        XbeanFinderEntityScanner.clearScanCache();
+        XbeanFinderEntityScanner.clearCache();
         JpaActivePersistenceUnits.reset();
         TransactionScopedEmHolder.clearForCurrentThread();
     }
