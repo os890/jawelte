@@ -120,6 +120,8 @@ public class XbeanFinderEntityScanner implements EntityScanner {
             if (cached != null) {
                 return cached;
             }
+            long startNanos = System.nanoTime();
+            LOG.log(Level.INFO, "Scanning classpath for @Entity types");
             Set<String> entities = new LinkedHashSet<>();
             try {
                 List<URL> urls = new UrlSet(classLoader).getUrls();
@@ -146,6 +148,9 @@ public class XbeanFinderEntityScanner implements EntityScanner {
             }
             Set<String> result = Collections.unmodifiableSet(entities);
             SCAN_CACHE.put(classLoader, result);
+            long durationMillis = (System.nanoTime() - startNanos) / 1_000_000L;
+            LOG.log(Level.INFO,
+                    "Scanned classpath for @Entity types: found " + result.size() + " in " + durationMillis + "ms");
             return result;
         }
     }
