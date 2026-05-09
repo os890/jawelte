@@ -12,5 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.tests.core.scenario11.AlphaContainerPort
-org.os890.jawelte.tests.core.scenario11.BetaContainerPort
+org.os890.jawelte.tests.core.scenario11.TestScenarioAlphaContainerPort
+org.os890.jawelte.tests.core.scenario11.TestScenarioBetaContainerPort

@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-jpa-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/jpa-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-jpa-module. Each scenario boots a CDI container (via cdi-module) so jpa-module's lifecycle adapter, CDI Extension, interceptors, and TransactionScopedContext run end-to-end with Hibernate ORM and H2. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld).</description>
+
+    <modules>
+        <module>scenario-01-entity-manager-injectable</module>
+        <module>scenario-02-entity-manager-factory-injectable</module>
+        <module>scenario-03-persistence-context-rewriting</module>
+        <module>scenario-04-persistence-context-named-rewriting</module>
+        <module>scenario-05-persistence-unit-rewriting</module>
+        <module>scenario-06-entity-auto-discovery</module>
+        <module>scenario-07-protected-packages-excludes</module>
+        <module>scenario-08-transactional-on-service-bean</module>
+        <module>scenario-09-transactional-on-test-method</module>
+        <module>scenario-10-rollback-on-runtime-exception</module>
+        <module>scenario-11-commit-on-checked-exception</module>
+        <module>scenario-12-rollback-on-error</module>
+        <module>scenario-13-nested-commit-commit</module>
+        <module>scenario-14-nested-commit-rollback</module>
+        <module>scenario-15-nested-rollback-commit</module>
+        <module>scenario-16-readonly-discards-writes</module>
+        <module>scenario-17-readonly-without-transactional</module>
+        <module>scenario-18-transaction-scoped-happy-path</module>
+        <module>scenario-19-transaction-scoped-per-nested-transaction</module>
+        <module>scenario-20-transaction-scoped-outside-transaction</module>
+        <module>scenario-21-single-pu-default-qualifier</module>
+        <module>scenario-22-multi-pu-named-injection</module>
+        <module>scenario-23-multi-pu-unqualified-fails</module>
+        <module>scenario-24-multi-pu-cross-pu-writes</module>
+        <module>scenario-25-file-mode-true</module>
+        <module>scenario-26-file-mode-false</module>
+        <module>scenario-27-file-path-default</module>
+        <module>scenario-28-persistence-units-filter</module>
+        <module>scenario-29-persistence-units-empty</module>
+        <module>scenario-30-per-method-cleanup</module>
+        <module>scenario-31-db-cleanup-strategy-swap</module>
+        <module>scenario-32-entity-resolver-swap</module>
+        <module>scenario-33-user-transaction-injectable</module>
+        <module>scenario-34-user-transaction-rollback</module>
+        <module>scenario-35-user-transaction-inside-transactional</module>
+        <module>scenario-36-user-transaction-commit-no-active-tx</module>
+        <module>scenario-37-orphan-rollback-safety-net</module>
+        <module>scenario-38-cdi-events-on-commit</module>
+        <module>scenario-39-cdi-events-on-rollback</module>
+        <module>scenario-40-after-test-transaction-timing</module>
+        <module>scenario-41-test-method-scoped-predestroy-reads-db</module>
+        <module>scenario-42-test-bean-static-field-entity-manager</module>
+        <module>scenario-43-user-produces-entity-manager-factory</module>
+        <module>scenario-44-transaction-strategy-swap</module>
+        <module>scenario-45-container-started-seeding</module>
+        <module>scenario-46-m1-relationship</module>
+        <module>scenario-47-prod-shaped-persistence-xml</module>
+        <module>scenario-48-nested-three-level-commit</module>
+        <module>scenario-49-nested-midflight-jpql-read</module>
+        <module>scenario-50-cleanup-jointable</module>
+        <module>scenario-51-cleanup-self-fk</module>
+        <module>scenario-52-tx-scoped-lifecycle-counts</module>
+        <module>scenario-53-tx-scoped-nested-isolation</module>
+        <module>scenario-54-readonly-multi-modification</module>
+        <module>scenario-55-readonly-inner-writable-outer</module>
+        <module>scenario-56-inactive-pu-lazy-begin</module>
+        <module>scenario-57-framework-owned-tx-events</module>
+        <module>scenario-58-vendor-bean-veto</module>
+        <module>scenario-59-persistence-xml-parser</module>
+        <module>scenario-60-entity-scan-whitelist</module>
+        <module>scenario-61-native-sql-delete-circular-fk</module>
+        <module>scenario-62-after-test-transaction-payload</module>
+        <module>scenario-63-config-resolver-prefix-walk</module>
+        <module>scenario-64-launcher-session-listener-opt-in</module>
+        <module>scenario-65-cross-bean-tx-propagation-no-em-on-outer</module>
+    </modules>
+
+    <dependencies>
+        <!--
+            Same dep shape as tests/scope-module, plus Hibernate ORM,
+            H2, and ASM at test scope so every scenario can bootstrap
+            a real EntityManagerFactory and exercise jpa-module's
+            adapters end-to-end. Scenarios that need to opt out of a
+            shared dep (e.g. scenario 32 swaps in a custom
+            TableNameResolver and may want to drop the default) do so
+            at the leaf pom by overriding scope to `provided` or by
+            replacing transitively.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-testkit</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-se</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.weld.se</groupId>
+                    <artifactId>weld-se-shaded</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>

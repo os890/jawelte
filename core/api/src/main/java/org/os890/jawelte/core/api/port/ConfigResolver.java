@@ -18,11 +18,13 @@ package org.os890.jawelte.core.api.port;
 import java.util.Optional;
 
 /**
- * Single-method SPI for resolving a configuration key to its raw
- * {@link String} value. Config beans inject a {@code ConfigResolver}
- * and call {@link #resolve(String)} for every config-value lookup;
- * the bean method is responsible for parsing or converting the raw
- * value and providing a meaningful default.
+ * SPI for resolving configuration keys to their raw {@link String}
+ * values. Config beans inject a {@code ConfigResolver} and call
+ * {@link #resolve(String)} for every single-key lookup; for any
+ * caller that needs to walk the configuration (prefix matches,
+ * regex filters, exact-key sets, …) {@link #resolveKeys()} returns the
+ * full universe of configured keys, and the caller resolves each
+ * value via {@link #resolve(String)} as needed.
  *
  * <p>The default implementation lives in {@code core/impl}
  * ({@code ConfigResolverAdapter}) and looks up the key via
@@ -41,10 +43,15 @@ import java.util.Optional;
  *
  * <p><strong>Contract.</strong>
  * <ul>
- *   <li>{@code dotKey} must not be {@code null}; passing {@code null}
- *       throws {@link NullPointerException}.</li>
- *   <li>The return value is {@link Optional#empty()} when no value
- *       is found for the key after all fallback attempts.</li>
+ *   <li>{@code dotKey} on {@link #resolve(String)} must not be
+ *       {@code null}; passing {@code null} throws
+ *       {@link NullPointerException}.</li>
+ *   <li>{@link #resolve(String)} returns {@link Optional#empty()}
+ *       when no value is found for the key after all fallback
+ *       attempts.</li>
+ *   <li>{@link #resolveKeys()} returns every configured key the
+ *       resolver knows about, in an unspecified but stable order;
+ *       never {@code null}.</li>
  * </ul>
  */
 public interface ConfigResolver {
@@ -60,4 +67,20 @@ public interface ConfigResolver {
      * @throws NullPointerException if {@code dotKey} is {@code null}
      */
     Optional<String> resolve(String dotKey);
+
+    /**
+     * The full universe of configuration keys the resolver knows
+     * about. Callers that need any key-iteration use case (prefix
+     * matches, regex filters, hand-curated allowlists, …) walk this
+     * sequence and resolve each value via {@link #resolve(String)};
+     * the port stays single-key-resolve + all-keys-list rather than
+     * carrying domain-specific iteration helpers.
+     *
+     * <p>Order is unspecified but stable for a given resolver
+     * instance. Callers must not assume a particular ordering.
+     *
+     * @return every configured key; never {@code null}; empty when
+     *         the underlying configuration is empty
+     */
+    Iterable<String> resolveKeys();
 }

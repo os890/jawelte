@@ -24,7 +24,14 @@ package org.os890.jawelte.core.api.port;
  * <p>This port has no JUnit API on its surface; the only shared type
  * is {@link TestContext}. Modules that genuinely need the JUnit
  * {@code ExtensionContext} retrieve it as metadata from {@link TestContext}
- * via {@code getMetadata(ExtensionContext.class)}.
+ * via {@code getMetadata(ExtensionContext.class)}. The two most common
+ * lookups are short-cut as plain JDK types so module adapters can read
+ * them without depending on the JUnit API:
+ * {@code getMetadata(java.lang.reflect.Method.class)} returns the
+ * current {@code @Test} method (set by the delegating extension's
+ * {@code beforeEach}, refreshed across test methods); and
+ * {@code getMetadata(Throwable.class)} returns the test body's
+ * captured exception (refreshed in {@code afterEach}, absent on success).
  *
  * <p>Zero or multiple implementations cause the delegating extension
  * to throw an {@link IllegalStateException} on bootstrap.

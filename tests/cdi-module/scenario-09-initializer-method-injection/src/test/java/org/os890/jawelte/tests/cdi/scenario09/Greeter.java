@@ -26,12 +26,12 @@ public class Greeter {
     public Greeter() {
     }
 
+    public Beacon beacon() {
+        return beacon;
+    }
+
     @Inject
     void initBeacon(Beacon beacon) {
         this.beacon = beacon;
-    }
-
-    public Beacon beacon() {
-        return beacon;
     }
 }

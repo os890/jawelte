@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-jpa-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-jpa-module-api</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (jpa-module/api)</name>
+    <description>Annotations, ports, and CDI events for jawelte's JPA integration. Ships @PersistenceConfig and @ReadOnly (the framework-specific annotations); reuses jakarta.transaction.Transactional and jakarta.transaction.TransactionScoped. Defines the prioritized SPIs (TransactionStrategy, DbCleanupStrategy, TableNameResolver, EntityScanner, PersistenceUnitConnectionResolver, PersistencePropertyResolver) and the four CDI events (TransactionStarted, TransactionBeforeCompletion, TransactionCommitted, TransactionRolledBack — all extending PersistenceUnitTransactionEvent). No Hibernate / H2 / xbean-finder imports — loads cleanly in JVMs without those libraries.</description>
+
+    <dependencies>
+        <!--
+            Implements TestModuleLifecyclePort and uses TestContext +
+            AfterTestTransaction (the latter shipped by core/api/event in
+            TICKET-001). SPI lookups go through TestContext.loadService(...)
+            so no compile-time dependency on core/impl is needed.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            CDI types appear in interceptor binding annotations and event
+            payload classes; jakarta.persistence-api is referenced by
+            TableNameResolver (returns table-name strings on
+            EntityManagerFactory) and DbCleanupStrategy; jakarta.transaction-api
+            is referenced by TransactionStrategy (returns TransactionManager
+            and PersistenceUnitTransactionType). All `provided`.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

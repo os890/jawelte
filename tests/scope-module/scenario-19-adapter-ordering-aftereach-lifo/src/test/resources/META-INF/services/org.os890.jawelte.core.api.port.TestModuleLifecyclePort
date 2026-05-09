@@ -12,5 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.tests.scope.scenario19.Port50
-org.os890.jawelte.tests.scope.scenario19.Port200
+org.os890.jawelte.tests.scope.scenario19.TestScenarioPort50
+org.os890.jawelte.tests.scope.scenario19.TestScenarioPort200

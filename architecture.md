@@ -39,7 +39,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 
 | Module | Technology | Purpose |
 |---|---|---|
-| `jawelte-jpa` | JPA + JTA | Managed persistence context, transaction lifecycle |
+| `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
 | `jawelte-jaxrs` | JAX-RS | Embedded REST container for endpoint testing |
 | `jawelte-microprofile` | MicroProfile | Config, Health, Metrics, OpenAPI support |
 | `jawelte-dbunit` | DB-Unit | Dataset-based database state management |
@@ -80,6 +80,17 @@ Each port represents the integration boundary between jawelte's core and an exte
 
 scope-module ships **no new ports of its own**. It implements the existing `TestModuleLifecyclePort` and the standard CDI `Extension` SPI. The sealed `ScopeBinding` interface in `core/api/port` groups the cross-module override records as nested types: `ScopeBinding.TestBeanDefaultScope` and `ScopeBinding.AutoMockDefaultScope`. scope-module binds them on `TestContext` during `BeforeBeanDiscovery`; cdi-module reads them in `AfterBeanDiscovery` to pick the scope of `@TestBean` static-field synthetic beans and auto-mocks. The records carry no behaviour — just a `Class<? extends Annotation>` token — so neither module compile-depends on the other. The sealed interface relies on implicit-permits (every direct subtype lives in the same compilation unit), so adding a new binding kind means editing `ScopeBinding.java` itself, which doubles as a code-review nudge for the cross-module contract.
 
+**jpa-module additions (in `jpa-module/api`):**
+
+- `@PersistenceConfig` — class-level JPA configuration (`fileMode`, `filePath`, `persistenceUnits`).
+- `@ReadOnly` — `@InterceptorBinding` modifier for a `@Transactional` method or type that discards writes (flush mode `COMMIT` + rollback-only).
+- `TransactionStrategy` — pluggable transaction-management facade; the default impl drives RESOURCE_LOCAL, a future jta-module substitutes JTA via `@Priority`.
+- `DbCleanupStrategy` — pluggable per-method database cleanup; the default impl issues JPQL `DELETE` per resolved entity.
+- `EntityResolver`, `PersistenceUnitConnectionResolver`, `PersistencePropertyResolver` — supporting SPIs for cleanup, JDBC unwrap, and per-PU EMF property contributions.
+- `TransactionStarted` / `TransactionBeforeCompletion` / `TransactionCommitted` / `TransactionRolledBack` — CDI events fired by the active strategy at the documented points.
+
+`@Transactional` and `@TransactionScoped` are reused from `jakarta.transaction-api` — jpa-module registers an `@InterceptorBinding` for the former and a CDI `Context` for the latter; neither annotation is redeclared.
+
 **Adapters:**
 
 | Port | Adapter | Technology container | Module |
@@ -92,8 +103,13 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `ExcludedPackageFilter` | `DefaultExcludedPackageFilter` | MicroProfile Config | `cdi-module/impl` |
 | `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
 | `TestModuleLifecyclePort` | `ScopeLifecycleAdapter` (`@Priority(100)`) + `TestScopeCdiExtension` | CDI runtime (`BeanManager` from `SeContainer` on `TestContext`) | `scope-module/impl` |
+| `TestModuleLifecyclePort` | `JpaLifecycleAdapter` (`@Priority(200)`) + `JpaCdiExtension` | CDI runtime + JPA provider (Hibernate) + JDBC driver (H2) | `jpa-module/impl` |
+| `TransactionStrategy` | `DefaultResourceLocalTransactionStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process) | `jpa-module/impl` |
+| `DbCleanupStrategy` | `JpqlDeleteDbCleanupStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process; calls JPA) | `jpa-module/impl` |
+| `EntityResolver` | `JpaMetamodelEntityResolver` (`@Priority(Integer.MAX_VALUE)`) | JPA metamodel | `jpa-module/impl` |
+| `PersistenceUnitConnectionResolver` | `DefaultPersistenceUnitConnectionResolver` (`@Priority(Integer.MAX_VALUE)`) | JDBC | `jpa-module/impl` |
 
-**Planned (forward-looking, not yet shipped):** `JpaContainerPort` / `JtaContainerPort` (persistence + transactions), `JaxRsContainerPort` (embedded REST runtime), `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
+**Planned (forward-looking, not yet shipped):** `JtaTransactionStrategy` (a JTA-backed alternative that would substitute the default `TransactionStrategy` via `@Priority`), `JaxRsContainerPort` (embedded REST runtime), `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 
 New integrations are simply new adapters — the core remains untouched.
 

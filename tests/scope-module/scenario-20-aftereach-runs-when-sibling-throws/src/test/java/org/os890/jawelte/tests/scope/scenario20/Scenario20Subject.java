@@ -31,8 +31,8 @@ public class Scenario20Subject {
 
     @Test
     void neverActuallyRunsBecausePort150ThrowsInBeforeEach() {
-        // Port150Throws.beforeEach throws after scope-module activated,
+        // TestScenarioPort150Throws.beforeEach throws after scope-module activated,
         // so this body is unreachable. JUnit still calls afterEach for
-        // every port whose beforeEach completed (Port50Probe + scope-module).
+        // every port whose beforeEach completed (TestScenarioPort50Probe + scope-module).
     }
 }

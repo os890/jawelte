@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.tests.core.scenario02.PortPriority50
-org.os890.jawelte.tests.core.scenario02.PortPriority100
-org.os890.jawelte.tests.core.scenario02.PortPriority200
+org.os890.jawelte.tests.core.scenario02.TestScenarioPortPriority50
+org.os890.jawelte.tests.core.scenario02.TestScenarioPortPriority100
+org.os890.jawelte.tests.core.scenario02.TestScenarioPortPriority200

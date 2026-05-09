@@ -26,6 +26,6 @@ class Scenario46Test {
     @Test
     void containerStartedFiresAfterBootButBeforeModulePortBeforeAll() {
         assertThat(StartupListener.RECEIVED_CONTAINER_STARTED).isTrue();
-        assertThat(AssertingLifecyclePort.SAW_CONTAINER_STARTED_BEFORE_BEFORE_ALL).isTrue();
+        assertThat(TestScenarioAssertingLifecyclePort.SAW_CONTAINER_STARTED_BEFORE_BEFORE_ALL).isTrue();
     }
 }

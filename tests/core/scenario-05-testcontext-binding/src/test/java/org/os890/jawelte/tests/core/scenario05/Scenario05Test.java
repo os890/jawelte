@@ -25,7 +25,7 @@ class Scenario05Test {
 
     @Test
     void testContextGetTestClassReturnsTheSubjectAcrossAllCallbacks() {
-        RecordingContainerPort.TEST_CLASSES_SEEN.clear();
+        TestScenarioRecordingContainerPort.TEST_CLASSES_SEEN.clear();
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario05Subject.class))
@@ -35,7 +35,7 @@ class Scenario05Test {
 
         // 5 callbacks (beforeAll, postProcessTestInstance, beforeEach, afterEach, afterAll)
         // - all should see the same TestContext.getTestClass(), namely Scenario05Subject.
-        assertThat(RecordingContainerPort.TEST_CLASSES_SEEN)
+        assertThat(TestScenarioRecordingContainerPort.TEST_CLASSES_SEEN)
                 .hasSize(5)
                 .allMatch(c -> c.equals(Scenario05Subject.class));
     }
