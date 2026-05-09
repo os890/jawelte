@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.scope.impl.adapter.context;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -127,7 +128,18 @@ public abstract class ScopeStore {
         }
         List<Throwable> collected = new ArrayList<>();
         try {
-            for (Map.Entry<Contextual<?>, ScopedBeanInstance<?>> entry : snapshot.entrySet()) {
+            // Iterate by Contextual class FQN. The underlying map is a
+            // ConcurrentHashMap whose iteration order is unspecified —
+            // without sorting, @PreDestroy callback dispatch order +
+            // the "first thrown becomes primary" rule resolve to
+            // whichever Contextual the iterator happens to hit first,
+            // and that's non-deterministic across runs. Sorting by
+            // FQN gives stable order regardless of bean-creation
+            // sequence.
+            List<Map.Entry<Contextual<?>, ScopedBeanInstance<?>>> ordered =
+                    new ArrayList<>(snapshot.entrySet());
+            ordered.sort(Comparator.comparing(entry -> entry.getKey().getClass().getName()));
+            for (Map.Entry<Contextual<?>, ScopedBeanInstance<?>> entry : ordered) {
                 try {
                     destroyEntry(entry);
                 } catch (RuntimeException | Error failure) {

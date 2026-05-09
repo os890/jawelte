@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.jpa.impl.util;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -267,7 +268,14 @@ public abstract class TransactionScopedEmHolder {
         if (framesStack.isEmpty()) {
             return Set.of();
         }
-        return Set.copyOf(framesStack.peek());
+        // The internal frame storage is a LinkedHashSet so PUs are
+        // tracked in join order. Set.copyOf would re-bucket entries
+        // into a JDK ImmutableCollections.SetN whose iteration order
+        // is hash-based — and therefore non-deterministic across runs.
+        // Wrap in an unmodifiableSet view of a LinkedHashSet copy so
+        // commit / rollback iterate in the join order the rest of the
+        // module already documents.
+        return Collections.unmodifiableSet(new LinkedHashSet<>(framesStack.peek()));
     }
 
     /**

@@ -18,7 +18,7 @@ package org.os890.jawelte.module.jpa.impl.adapter.context;
 import java.lang.annotation.Annotation;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import jakarta.enterprise.context.ContextNotActiveException;
@@ -141,7 +141,12 @@ public class TransactionScopedContext implements AlterableContext {
      * after {@code TransactionStrategy.begin()} returns.
      */
     public void activate() {
-        stacks.get().push(new HashMap<>());
+        // LinkedHashMap (not HashMap) so deactivate()'s @PreDestroy
+        // dispatch and exception aggregation iterate in bean-creation
+        // order rather than random hash order. Per-tx bean creation
+        // order is deterministic across runs; destroy order should be
+        // too.
+        stacks.get().push(new LinkedHashMap<>());
     }
 
     /**

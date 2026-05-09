@@ -17,6 +17,9 @@ package org.os890.jawelte.module.jpa.impl.util;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -146,13 +149,25 @@ public abstract class EmfCache {
      */
     public static void closeAll() {
         RuntimeException primary = null;
-        for (Map.Entry<String, EntityManagerFactory> entry : CACHE.entrySet()) {
+        // Iterate by sorted PU name. CACHE is a ConcurrentHashMap whose
+        // iteration order is unspecified — without sorting the "first
+        // failure becomes primary" rule resolves to whichever PU the
+        // map iterator happens to hit first, and that's non-deterministic
+        // across runs. Sorting by name gives a stable primary across
+        // runs (alphabetically first failing PU wins).
+        List<String> persistenceUnitNames = new ArrayList<>(CACHE.keySet());
+        Collections.sort(persistenceUnitNames);
+        for (String persistenceUnitName : persistenceUnitNames) {
+            EntityManagerFactory factory = CACHE.get(persistenceUnitName);
+            if (factory == null) {
+                continue;
+            }
             try {
-                entry.getValue().close();
+                factory.close();
             } catch (RuntimeException closeFailure) {
                 RuntimeException wrapped = new RuntimeException(
                         "Failed to close EntityManagerFactory for persistence unit '"
-                                + entry.getKey() + "' on shutdown",
+                                + persistenceUnitName + "' on shutdown",
                         closeFailure);
                 if (primary == null) {
                     primary = wrapped;
