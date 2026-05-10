@@ -73,6 +73,9 @@
         <asm.version>9.8</asm.version>
         <xbean.version>4.30</xbean.version>
         <opentest4j.version>1.3.0</opentest4j.version>
+        <geronimo.transaction.version>4.0.0</geronimo.transaction.version>
+        <narayana.jta.version>7.0.0.Final</narayana.jta.version>
+        <atomikos.version>6.0.0</atomikos.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -261,6 +264,34 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-jta-module-impl</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!--
+                JTA implementations. test-scope by default: jta-module's
+                three Maven profiles (-P jta-geronimo, -P jta-narayana,
+                -P jta-atomikos) add exactly one of these to the active
+                test classpath so each provider's isAvailable() / create()
+                / userTransaction() path can be exercised in isolation.
+                Production consumers ship their own JTA jar at the scope
+                of their choice.
+            -->
+            <dependency>
+                <groupId>org.apache.geronimo.components</groupId>
+                <artifactId>geronimo-transaction</artifactId>
+                <version>${geronimo.transaction.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.narayana.jta</groupId>
+                <artifactId>narayana-jta</artifactId>
+                <version>${narayana.jta.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.atomikos</groupId>
+                <artifactId>transactions-jta</artifactId>
+                <version>${atomikos.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <!--

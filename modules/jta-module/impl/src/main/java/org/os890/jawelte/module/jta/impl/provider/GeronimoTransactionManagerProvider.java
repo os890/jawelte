@@ -43,7 +43,9 @@ public class GeronimoTransactionManagerProvider implements TransactionManagerPro
             "org.apache.geronimo.transaction.manager.GeronimoTransactionManager";
 
     private static final String GERONIMO_USER_TRANSACTION_CLASS =
-            "org.apache.geronimo.transaction.manager.UserTransactionImpl";
+            "org.apache.geronimo.transaction.GeronimoUserTransaction";
+
+    private volatile TransactionManager cachedTransactionManager;
 
     /** No-arg constructor required by {@link ServiceLoader}. */
     public GeronimoTransactionManagerProvider() {
@@ -55,10 +57,15 @@ public class GeronimoTransactionManagerProvider implements TransactionManagerPro
     }
 
     @Override
-    public TransactionManager create() {
+    public synchronized TransactionManager create() {
+        if (cachedTransactionManager != null) {
+            return cachedTransactionManager;
+        }
         try {
             Class<?> transactionManagerClass = forName(GERONIMO_TM_CLASS);
-            return (TransactionManager) transactionManagerClass.getDeclaredConstructor().newInstance();
+            cachedTransactionManager =
+                    (TransactionManager) transactionManagerClass.getDeclaredConstructor().newInstance();
+            return cachedTransactionManager;
         } catch (ReflectiveOperationException reflectionFailure) {
             throw new IllegalStateException(
                     "Failed to instantiate Geronimo TransactionManager via reflection",
@@ -68,11 +75,11 @@ public class GeronimoTransactionManagerProvider implements TransactionManagerPro
 
     @Override
     public UserTransaction userTransaction() {
-        // Geronimo's UserTransactionImpl wraps the TransactionManager and
-        // exposes the standard UserTransaction surface. We rebuild a TM
-        // here rather than caching one because the strategy is the
-        // canonical owner of the TM lifecycle; this method is called once
-        // per JVM via JtaTransactionStrategy.ensureProviderResolved.
+        // Wrap the *same* TM instance the strategy uses, otherwise
+        // userTx.begin() would drive a different TransactionManager
+        // than the @Transactional interceptor's strategy.begin(). The
+        // cache is populated on the first create() call (Pre-condition
+        // documented on the SPI: create() must precede userTransaction()).
         TransactionManager transactionManager = create();
         try {
             Class<?> userTransactionClass = forName(GERONIMO_USER_TRANSACTION_CLASS);
