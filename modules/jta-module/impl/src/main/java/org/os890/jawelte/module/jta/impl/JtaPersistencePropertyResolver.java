@@ -19,12 +19,15 @@ import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.ServiceLoader;
 
 import javax.sql.XADataSource;
 
 import jakarta.annotation.Priority;
 
+import org.os890.jawelte.core.api.port.ConfigResolver;
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
 import org.os890.jawelte.module.jta.impl.hibernate.StandaloneJtaPlatform;
 import org.os890.jawelte.module.jta.impl.xa.XaDataSourceWrapper;
@@ -53,10 +56,8 @@ import org.os890.jawelte.module.jta.impl.xa.XaDataSourceWrapper;
  *       the {@code TransactionManager} / {@code UserTransaction} via
  *       the active {@code TransactionStrategy}.</li>
  *   <li>{@code jakarta.persistence.jtaDataSource} — set to a per-PU
- *       {@code XaDataSourceWrapper} so multi-PU writes flow through
- *       the JTA two-phase-commit machinery (unset when
- *       {@code XaDataSourceWrapper} is unavailable on the runtime
- *       classpath).</li>
+ *       {@code XaDataSourceWrapper} fronting the configured
+ *       {@link XADataSource} (see "MicroProfile Config" below).</li>
  * </ul>
  *
  * <p>{@code @Priority(Integer.MAX_VALUE - 1)} — wins over any future
@@ -68,6 +69,31 @@ import org.os890.jawelte.module.jta.impl.xa.XaDataSourceWrapper;
  * and Atomikos because the {@code TransactionManager} and
  * {@code UserTransaction} indirection lives entirely behind
  * {@link StandaloneJtaPlatform}.
+ *
+ * <h2>MicroProfile Config</h2>
+ *
+ * <p>{@code org.os890.jawelte.module.jta.xa-data-source-class} —
+ * the full class name of the {@link XADataSource} implementation
+ * the resolver instantiates per persistence unit. The default value
+ * ({@code org.h2.jdbcx.JdbcDataSource}) ships in
+ * {@code jta-module/impl}'s own
+ * {@code META-INF/microprofile-config.properties} at the standard
+ * ordinal 100. Consumers running against another database
+ * <strong>override</strong> by shipping their own
+ * {@code microprofile-config.properties} with {@code config_ordinal}
+ * set higher than 100, by passing the key as a system property
+ * (ordinal 400), or by setting an environment variable (ordinal 300).
+ * The class must be a JavaBean-style {@code XADataSource} with a
+ * public no-arg constructor and the standard {@code setURL(String)} /
+ * {@code setUser(String)} / {@code setPassword(String)} setters —
+ * the JDBC convention every major vendor follows (PostgreSQL's
+ * {@code PGXADataSource}, MySQL's {@code MysqlXADataSource}, H2's
+ * {@code JdbcDataSource}, …). If the configured class is not on the
+ * classpath at runtime, or the key is unset / empty, the resolver
+ * falls through to "no jtaDataSource" — Hibernate then uses the
+ * JDBC-URL coordinates directly. Vendors whose XA data source needs
+ * a different configuration shape ship their own
+ * {@code PersistencePropertyResolver} impl.
  */
 @Priority(Integer.MAX_VALUE - 1)
 public class JtaPersistencePropertyResolver implements PersistencePropertyResolver {
@@ -75,7 +101,17 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
     private static final Logger LOG =
             System.getLogger(JtaPersistencePropertyResolver.class.getName());
 
-    private static final String H2_XA_DATA_SOURCE_CLASS = "org.h2.jdbcx.JdbcDataSource";
+    /**
+     * MicroProfile Config key for the full class name of the
+     * {@link XADataSource} implementation the resolver instantiates.
+     * The default value ships in
+     * {@code jta-module/impl/src/main/resources/META-INF/microprofile-config.properties}
+     * at the standard ordinal 100 — there is no Java-side default,
+     * so removing the file or setting the key to an empty string is
+     * a deliberate opt-out.
+     */
+    static final String XA_DATA_SOURCE_CLASS_KEY =
+            "org.os890.jawelte.module.jta.xa-data-source-class";
 
     /** No-arg constructor required by {@link ServiceLoader}. */
     public JtaPersistencePropertyResolver() {
@@ -105,17 +141,13 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
         // closes the cached XAConnection on tx completion.
         properties.put("hibernate.connection.handling_mode",
                 "DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION");
-        // Always set jakarta.persistence.jtaDataSource to an
-        // XaDataSourceWrapper around the underlying H2 JdbcDataSource:
-        // multi-PU XA atomicity (Test Scenario 10/11/12) requires
-        // real XA enlistment of the JDBC connection in the JTA tx.
-        // Single-PU scenarios benefit too — the XA wrapper drives the
-        // commit / rollback through the TM rather than relying on
-        // Hibernate's JDBC handling mode for the synchronization.
-        // Production consumers ship their own PersistencePropertyResolver
-        // for non-H2 databases (their resolver builds whatever XADataSource
-        // their DB vendor provides).
-        XADataSource xaDataSource = buildH2XaDataSourceOrNull(existingProperties);
+        // Set jakarta.persistence.jtaDataSource to an
+        // XaDataSourceWrapper around the configured XADataSource
+        // (see XA_DATA_SOURCE_CLASS_KEY). Multi-PU XA atomicity
+        // requires real XA enlistment of the JDBC connection in
+        // the JTA tx, and single-PU scenarios benefit too because
+        // the wrapper drives commit / rollback through the TM.
+        XADataSource xaDataSource = buildXaDataSourceOrNull(existingProperties);
         if (xaDataSource != null) {
             properties.put("jakarta.persistence.jtaDataSource",
                     new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
@@ -124,42 +156,87 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
     }
 
     /**
-     * Reflectively build an H2 {@link XADataSource} from the
-     * {@code jakarta.persistence.jdbc.url} / user / password the H2
-     * branch of {@code JpaCdiExtension} accumulates. Returns
-     * {@code null} when H2's {@code JdbcDataSource} is not on the
-     * classpath (production consumers ship their own
-     * {@link PersistencePropertyResolver} that builds whatever
-     * {@code XADataSource} their database vendor provides).
+     * Reflectively build the configured {@link XADataSource} from
+     * the {@code jakarta.persistence.jdbc.url} / user / password
+     * the H2 branch of {@code JpaCdiExtension} accumulates. The
+     * concrete data-source class is read from MP Config under
+     * {@link #XA_DATA_SOURCE_CLASS_KEY}. Returns {@code null} when
+     * either the JDBC URL is missing, the configured class is unset
+     * / empty, or the class is not on the runtime classpath.
      */
-    private static XADataSource buildH2XaDataSourceOrNull(Map<String, Object> existingProperties) {
+    private static XADataSource buildXaDataSourceOrNull(Map<String, Object> existingProperties) {
         Object url = existingProperties.get("jakarta.persistence.jdbc.url");
         if (!(url instanceof String urlString) || urlString.isEmpty()) {
+            return null;
+        }
+        String configuredClassName = configuredXaDataSourceClassNameOrNull();
+        if (configuredClassName == null) {
             return null;
         }
         Object user = existingProperties.get("jakarta.persistence.jdbc.user");
         Object password = existingProperties.get("jakarta.persistence.jdbc.password");
         try {
-            Class<?> jdbcDataSourceClass = Class.forName(
-                    H2_XA_DATA_SOURCE_CLASS, true, Thread.currentThread().getContextClassLoader());
-            Object instance = jdbcDataSourceClass.getDeclaredConstructor().newInstance();
-            jdbcDataSourceClass.getMethod("setURL", String.class).invoke(instance, urlString);
+            Class<?> dataSourceClass = Class.forName(
+                    configuredClassName, true, Thread.currentThread().getContextClassLoader());
+            Object instance = dataSourceClass.getDeclaredConstructor().newInstance();
+            dataSourceClass.getMethod("setURL", String.class).invoke(instance, urlString);
             if (user instanceof String userString) {
-                jdbcDataSourceClass.getMethod("setUser", String.class).invoke(instance, userString);
+                dataSourceClass.getMethod("setUser", String.class).invoke(instance, userString);
             }
             if (password instanceof String passwordString) {
-                jdbcDataSourceClass.getMethod("setPassword", String.class)
+                dataSourceClass.getMethod("setPassword", String.class)
                         .invoke(instance, passwordString);
             }
             return (XADataSource) instance;
-        } catch (ClassNotFoundException h2Absent) {
+        } catch (ClassNotFoundException notOnClasspath) {
             LOG.log(Level.DEBUG,
-                    "H2 JdbcDataSource not on the classpath — falling back to non-XA jtaDataSource");
+                    "Configured XADataSource class '" + configuredClassName
+                            + "' not on the classpath — falling back to non-XA jtaDataSource");
             return null;
         } catch (ReflectiveOperationException reflectionFailure) {
             throw new IllegalStateException(
-                    "Failed to construct H2 XADataSource via reflection from existing JDBC properties",
+                    "Failed to construct XADataSource '" + configuredClassName
+                            + "' via reflection from existing JDBC properties",
                     reflectionFailure);
+        }
+    }
+
+    /**
+     * Read {@link #XA_DATA_SOURCE_CLASS_KEY} from the active
+     * {@code ConfigResolver} (which layers MP Config sources by
+     * ordinal). The default value lives in jta-module's own
+     * {@code META-INF/microprofile-config.properties} at ordinal
+     * 100, so a missing key here means the user deliberately
+     * removed it — log it and let the caller fall through. Empty
+     * string is also treated as opt-out.
+     */
+    private static String configuredXaDataSourceClassNameOrNull() {
+        try {
+            ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
+            if (resolver == null) {
+                LOG.log(Level.DEBUG, "ConfigResolver unavailable — no jtaDataSource will be set");
+                return null;
+            }
+            // Trim before the empty-check: a user writing the value
+            // in their microprofile-config.properties may include
+            // accidental leading/trailing whitespace; Class.forName
+            // would fail on " foo.bar.X " with ClassNotFoundException.
+            Optional<String> configured = resolver.resolve(XA_DATA_SOURCE_CLASS_KEY)
+                    .map(String::trim)
+                    .filter(value -> !value.isEmpty());
+            if (configured.isEmpty()) {
+                LOG.log(Level.DEBUG,
+                        XA_DATA_SOURCE_CLASS_KEY
+                                + " is unset or empty — no jtaDataSource will be set");
+                return null;
+            }
+            return configured.get();
+        } catch (RuntimeException configFailure) {
+            LOG.log(Level.DEBUG,
+                    "ConfigResolver lookup failed while reading "
+                            + XA_DATA_SOURCE_CLASS_KEY + " — no jtaDataSource will be set",
+                    configFailure);
+            return null;
         }
     }
 }

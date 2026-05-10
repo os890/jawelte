@@ -1425,3 +1425,34 @@ RESOURCE_LOCAL spot-check (08 / 24 / 44) green — the
 present, so RESOURCE_LOCAL paths are untouched.
 
 Closes G5 + G6 from the 3rd-pass gap report.
+
+## 2026-05-10 — TICKET-006 configurable XADataSource class via MP Config
+
+`JtaPersistencePropertyResolver` previously hardcoded
+`org.h2.jdbcx.JdbcDataSource` as the XADataSource class. Replaced
+with a layered MP Config lookup:
+
+- New key `org.os890.jawelte.module.jta.xa-data-source-class`.
+- `jta-module/impl` ships its own
+  `META-INF/microprofile-config.properties` at the standard ordinal
+  100 with the H2 default. Consumers running against another
+  database override by shipping their own
+  `microprofile-config.properties` with `config_ordinal` set higher
+  than 100, or by passing the key as a system property (ordinal
+  400) / environment variable (ordinal 300) — the canonical MP
+  Config layering pattern.
+- The resolver reads the key via `TestContext.loadService(ConfigResolver.class)`
+  and **trims** the value before reaching `Class.forName` so
+  accidental whitespace in a user-supplied properties file
+  (e.g. ` foo.bar.X `) doesn't fail with `ClassNotFoundException`.
+  An empty / unset value opts out of jtaDataSource entirely.
+- Reflection-based instantiation expects the standard JDBC bean
+  shape (no-arg ctor + `setURL` / `setUser` / `setPassword`).
+
+Scenario 44 (`xa-data-source-class-override`) verifies the override
+path end-to-end: a counting `XADataSource` swapped in via a higher-
+ordinal `microprofile-config.properties` records construction +
+`getXAConnection()` calls — both increment when a real JTA tx runs.
+
+Verified: 27/27 jta-module scenarios green under
+`-Powb -Pjta-geronimo`.
