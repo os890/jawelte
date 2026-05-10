@@ -232,10 +232,35 @@
         </profile>
         <profile>
             <id>jta-narayana</id>
+            <!--
+                Use Narayana's lean `jta` artifact (TM core only, no CDI
+                integration). Our jpa-module ships its own
+                @Transactional interceptor + @TransactionScoped context
+                and uses the same machinery uniformly across CDI
+                runtimes; adding Narayana's bundled CDI extension
+                (only present in the uber `narayana-jta` artifact)
+                duplicates these and triggers a Weld-vs-Narayana
+                bootstrap-order issue with JTAEnvironmentBean.
+                Consumers who use the uber jar in their own apps still
+                get delegation: JpaCdiExtension auto-detects
+                `com.arjuna.ats.jta.cdi.TransactionExtension` and
+                steps aside.
+            -->
             <dependencies>
                 <dependency>
                     <groupId>org.jboss.narayana.jta</groupId>
-                    <artifactId>narayana-jta</artifactId>
+                    <artifactId>jta</artifactId>
+                </dependency>
+                <!--
+                    Required by the lean Narayana `jta` artifact: its
+                    JTAEnvironmentBean static initializer references
+                    org.jboss.tm.usertx.client.ServerVMClientUserTransactionOperationsProvider.
+                    The uber `narayana-jta` artifact pulls this in
+                    directly; the lean `jta` does not.
+                -->
+                <dependency>
+                    <groupId>org.jboss</groupId>
+                    <artifactId>jboss-transaction-spi</artifactId>
                 </dependency>
             </dependencies>
         </profile>

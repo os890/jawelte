@@ -146,6 +146,31 @@ public class JpaCdiExtension implements Extension {
             "com.arjuna.ats.jta.cdi.TransactionExtension";
 
     /**
+     * Our own {@code @Transactional} interceptor — vetoed at PAT
+     * when a vendor JTA CDI integration is on the classpath so the
+     * vendor's interceptor wins outright (no double-interception).
+     * String literal to avoid pulling the impl class into Extension's
+     * compile-time API.
+     */
+    private static final String OUR_TRANSACTIONAL_INTERCEPTOR_CLASS_NAME =
+            "org.os890.jawelte.module.jpa.impl.adapter.interceptor.TransactionalInterceptor";
+
+    /**
+     * Narayana's {@code JTAEnvironmentBean} — vetoed at PAT so
+     * Weld's implicit-discovery doesn't register it as a competing
+     * CDI bean alongside the synthetic one
+     * {@link #registerSyntheticVendorJtaEnvironmentBeanIfNeeded}
+     * adds. Without this veto the two collide as
+     * {@code AmbiguousResolutionException} when Narayana's
+     * {@code NarayanaTransactionManager} resolves
+     * {@code Instance<JTAEnvironmentBean>}. OWB doesn't emit a bean
+     * for it (the class carries no bean-defining annotation), so this
+     * veto is a no-op there.
+     */
+    private static final String NARAYANA_JTA_ENV_BEAN_CLASS_NAME =
+            "com.arjuna.ats.jta.common.JTAEnvironmentBean";
+
+    /**
      * MicroProfile Config keys for the optional entity-scan whitelist.
      * When at least one of the two is set (and non-empty), the
      * {@link EntityScanner} drops every FQCN that doesn't match a
@@ -270,10 +295,26 @@ public class JpaCdiExtension implements Extension {
             return;
         }
         String className = event.getAnnotatedType().getJavaClass().getName();
-        if (!matchesVendorVetoTarget(className)) {
+        if (matchesVendorVetoAllowlist(className)) {
             return;
         }
-        if (matchesVendorVetoAllowlist(className)) {
+        // When delegating @Transactional handling to a vendor JTA CDI
+        // integration, also veto our own TransactionalInterceptor —
+        // the binding annotation (jakarta.transaction.Transactional)
+        // is added by the vendor's extension regardless of whether we
+        // add it ourselves, so without this veto our interceptor would
+        // double-fire alongside the vendor's.
+        if (OUR_TRANSACTIONAL_INTERCEPTOR_CLASS_NAME.equals(className)
+                && platformProvidesCdiTransactionalInterceptor()) {
+            event.veto();
+            return;
+        }
+        if (NARAYANA_JTA_ENV_BEAN_CLASS_NAME.equals(className)
+                && platformProvidesCdiTransactionalInterceptor()) {
+            event.veto();
+            return;
+        }
+        if (!matchesVendorVetoTarget(className)) {
             return;
         }
         event.veto();
@@ -315,6 +356,16 @@ public class JpaCdiExtension implements Extension {
         if (!active) {
             return;
         }
+        // Pre-bootstrap the active TransactionStrategy. RESOURCE_LOCAL is
+        // a no-op (returns null TM); under JTA the call triggers lazy
+        // TransactionManagerProvider resolution. Narayana's provider
+        // pre-seeds JTAEnvironmentBean from create() so its CDI bean
+        // (which constructs lazily on first @Transactional fire and
+        // looks up the same JTAEnvironmentBean) sees a configured TM
+        // regardless of when the application first dereferences it.
+        TestContext.loadService(TransactionStrategy.class).getTransactionManager();
+        registerSyntheticVendorJtaEnvironmentBeanIfNeeded(event);
+
         boolean singlePersistenceUnit = activePersistenceUnits.size() == 1;
         for (String persistenceUnitName : activePersistenceUnits) {
             EntityManagerFactory factory = EmfCache.getCached(persistenceUnitName)
@@ -363,6 +414,56 @@ public class JpaCdiExtension implements Extension {
         // interceptor calls) or lose it and leave our context unused.
         if (!platformProvidesCdiTransactionScopedContext()) {
             event.addContext(new TransactionScopedContext());
+        }
+    }
+
+    /**
+     * Register a synthetic CDI bean for Narayana's
+     * {@code JTAEnvironmentBean} that produces the static singleton
+     * {@code BeanPopulator} caches (which jta-module's
+     * {@code NarayanaTransactionManagerProvider.create()} pre-seeds
+     * with a configured {@code TransactionManager}).
+     *
+     * <p>Without this synthetic bean, Weld's implicit-discovery path
+     * lets Narayana's {@code NarayanaTransactionManager} see an
+     * {@code Instance<JTAEnvironmentBean>} satisfied by a fresh
+     * Weld-managed instance whose state diverges from the seeded
+     * singleton — its {@code transactionManager} is {@code null} and
+     * the constructor NPEs deep inside {@code JTASupplier.get(...)}.
+     * OWB doesn't hit this because its instance lookup falls through
+     * to the unsatisfied path and reads the same singleton we seed.
+     *
+     * <p>Reflection-only — jpa-module never compile-depends on
+     * Narayana. No-op when Narayana isn't on the classpath.
+     */
+    private static void registerSyntheticVendorJtaEnvironmentBeanIfNeeded(AfterBeanDiscovery event) {
+        if (!platformProvidesCdiTransactionalInterceptor()) {
+            return;
+        }
+        try {
+            ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+            Class<?> envBeanClass = Class.forName(
+                    "com.arjuna.ats.jta.common.JTAEnvironmentBean", false, contextClassLoader);
+            Class<?> beanPopulatorClass = Class.forName(
+                    "com.arjuna.common.internal.util.propertyservice.BeanPopulator",
+                    false, contextClassLoader);
+            Object seededSingleton = beanPopulatorClass
+                    .getMethod("getDefaultInstance", Class.class)
+                    .invoke(null, envBeanClass);
+            event.<Object>addBean()
+                    .beanClass(envBeanClass)
+                    .types(envBeanClass, Object.class)
+                    .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
+                    .scope(ApplicationScoped.class)
+                    .produceWith(instance -> seededSingleton);
+        } catch (ClassNotFoundException notPresent) {
+            // Narayana classes truly absent — should not happen given
+            // platformProvidesCdiTransactionalInterceptor() returned true,
+            // but tolerate the race.
+        } catch (ReflectiveOperationException reflectionFailure) {
+            throw new IllegalStateException(
+                    "Failed to register synthetic JTAEnvironmentBean for Narayana CDI bootstrap",
+                    reflectionFailure);
         }
     }
 

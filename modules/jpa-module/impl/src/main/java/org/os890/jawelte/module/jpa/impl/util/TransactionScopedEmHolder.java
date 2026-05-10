@@ -373,6 +373,14 @@ public abstract class TransactionScopedEmHolder {
                 return;
             }
             transaction.registerSynchronization(new EmCleanupSynchronization(persistenceUnitName, entityManager));
+            // Bind the strategy's lifecycle events for this tx if no
+            // begin() on the strategy has done it already. Keeps
+            // TransactionStarted / TransactionBeforeCompletion /
+            // TransactionCommitted / TransactionRolledBack firing under
+            // a vendor JTA CDI interceptor (Narayana, Quarkus) that
+            // drives the tx via UserTransaction without going through
+            // this strategy's begin / commit / rollback.
+            strategy.bindLifecycleEventsToCurrentTransaction();
         } catch (RollbackException | SystemException registerFailure) {
             // The active tx is already finishing (or in error). Close the
             // EM ourselves so it doesn't leak; the strategy's commit /

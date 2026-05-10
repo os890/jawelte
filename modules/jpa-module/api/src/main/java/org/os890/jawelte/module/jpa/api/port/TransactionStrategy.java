@@ -154,4 +154,26 @@ public interface TransactionStrategy {
      * are logged and not propagated.
      */
     void shutdown();
+
+    /**
+     * Ensure the strategy's lifecycle events
+     * ({@code TransactionStarted} / {@code TransactionBeforeCompletion}
+     * / {@code TransactionCommitted} / {@code TransactionRolledBack})
+     * fire for whatever transaction is currently active on the calling
+     * thread, even when the strategy's own
+     * {@link #begin()} / {@link #commit()} / {@link #rollback()}
+     * methods aren't on the call path. Relevant under JTA when a
+     * vendor {@code @Transactional} interceptor (Narayana, Quarkus)
+     * drives the tx via {@code UserTransaction} directly — the strategy
+     * never sees the begin call but jpa-module's event contract still
+     * needs to hold.
+     *
+     * <p>Idempotent: callers (typically the EM holder on EM
+     * acquisition) can invoke this without coordinating with the
+     * strategy's own begin path. RESOURCE_LOCAL strategies have
+     * nothing to do here — the begin / commit / rollback methods
+     * are always the driver — so this defaults to a no-op.
+     */
+    default void bindLifecycleEventsToCurrentTransaction() {
+    }
 }

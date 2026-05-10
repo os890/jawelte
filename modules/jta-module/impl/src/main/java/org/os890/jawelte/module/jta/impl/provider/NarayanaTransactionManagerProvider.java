@@ -36,14 +36,23 @@ import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
  * Narayana class. Consumers add {@code narayana-jta} to their test
  * classpath under the {@code jta-narayana} build profile.
  *
- * <p>Note: jpa-module's {@code JpaCdiExtension} vetos
- * {@code com.arjuna.ats.jta.cdi.*} types during {@code ProcessAnnotatedType}
- * so Narayana's embedded CDI integration (which would otherwise install
- * its own {@code @Transactional} interceptor and a competing
- * {@code TransactionContext}) does not register beans that conflict with
- * jpa-module's wiring. The TM itself is reached via the
- * {@code com.arjuna.ats.jta.TransactionManager} static accessor — it is
- * not a CDI bean and is unaffected by the veto.
+ * <p>Note: jpa-module's {@code JpaCdiExtension} delegates the CDI
+ * {@code @Transactional} interceptor + {@code @TransactionScoped}
+ * context to Narayana's bundled extension when its
+ * {@code TransactionExtension} is on the classpath. The TM itself is
+ * reached via the {@code com.arjuna.ats.jta.TransactionManager} static
+ * accessor — it is not a CDI bean.
+ *
+ * <p>Pre-seeds {@code JTAEnvironmentBean.transactionManager} on
+ * {@link #create()} via reflection. Without that seeding, Narayana's
+ * {@code NarayanaTransactionManager} CDI bean's constructor calls
+ * {@code JTASupplier.get(...)} which (via the fallback supplier) reads
+ * {@code BeanPopulator}'s default {@code JTAEnvironmentBean} —
+ * unconfigured, that returns {@code null} and the NPE bubbles up as a
+ * Weld bean-creation failure. OWB's bootstrap order happens to land
+ * after Narayana's static {@code TransactionManager.transactionManager()}
+ * accessor has already populated the bean, so the seeding is a no-op
+ * there.
  */
 @Priority(Integer.MAX_VALUE)
 public class NarayanaTransactionManagerProvider implements TransactionManagerProvider {
@@ -53,6 +62,15 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
 
     private static final String NARAYANA_USER_TRANSACTION_ACCESSOR_CLASS =
             "com.arjuna.ats.jta.UserTransaction";
+
+    private static final String NARAYANA_BEAN_POPULATOR_CLASS =
+            "com.arjuna.common.internal.util.propertyservice.BeanPopulator";
+
+    private static final String NARAYANA_JTA_ENV_BEAN_CLASS =
+            "com.arjuna.ats.jta.common.JTAEnvironmentBean";
+
+    private static final String NARAYANA_CORE_ENV_BEAN_CLASS =
+            "com.arjuna.ats.arjuna.common.CoreEnvironmentBean";
 
     /** No-arg constructor required by {@link ServiceLoader}. */
     public NarayanaTransactionManagerProvider() {
@@ -67,12 +85,71 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
     @Override
     public TransactionManager create() {
         try {
+            // Pre-seed CoreEnvironmentBean.nodeIdentifier before any
+            // tx is begun: 2-PC commit fails with "ARJUNA016111: The
+            // node identifier cannot be null" otherwise. The uber
+            // narayana-jta jar bundles a jbossts-properties.xml that
+            // BeanPopulator reads on first JTAEnvironmentBean access;
+            // the lean jta jar doesn't bundle it, leaving the field
+            // null until something configures it.
+            seedCoreEnvironmentBean();
             Class<?> accessor = forName(NARAYANA_TM_ACCESSOR_CLASS);
-            return (TransactionManager) accessor.getMethod("transactionManager").invoke(null);
+            TransactionManager tm = (TransactionManager) accessor.getMethod("transactionManager").invoke(null);
+            seedJtaEnvironmentBean(tm);
+            return tm;
         } catch (ReflectiveOperationException reflectionFailure) {
             throw new IllegalStateException(
                     "Failed to obtain Narayana TransactionManager via reflection",
                     reflectionFailure);
+        }
+    }
+
+    private static void seedCoreEnvironmentBean() {
+        try {
+            Class<?> beanPopulator = forName(NARAYANA_BEAN_POPULATOR_CLASS);
+            Class<?> coreEnvBeanClass = forName(NARAYANA_CORE_ENV_BEAN_CLASS);
+            Object envBean = beanPopulator
+                    .getMethod("getDefaultInstance", Class.class)
+                    .invoke(null, coreEnvBeanClass);
+            String currentNodeIdentifier = (String) coreEnvBeanClass
+                    .getMethod("getNodeIdentifier")
+                    .invoke(envBean);
+            if (currentNodeIdentifier == null || currentNodeIdentifier.isEmpty()) {
+                coreEnvBeanClass
+                        .getMethod("setNodeIdentifier", String.class)
+                        .invoke(envBean, "1");
+            }
+        } catch (ReflectiveOperationException notSeedable) {
+            // best-effort
+        }
+    }
+
+    /**
+     * Set the resolved TM on the static {@code JTAEnvironmentBean}
+     * default singleton so Narayana's CDI {@code NarayanaTransactionManager}
+     * bean's constructor (which queries the same singleton on first
+     * dereference) sees a non-null TM regardless of CDI runtime
+     * bootstrap order. Best-effort: silently no-ops if either Narayana's
+     * BeanPopulator or its JTAEnvironmentBean class can't be found —
+     * that means Narayana isn't on the classpath in the way we expect,
+     * and the original NPE will surface from the unmodified code path
+     * rather than being masked by a reflection failure here.
+     */
+    private static void seedJtaEnvironmentBean(TransactionManager tm) {
+        try {
+            Class<?> beanPopulator = forName(NARAYANA_BEAN_POPULATOR_CLASS);
+            Class<?> envBeanClass = forName(NARAYANA_JTA_ENV_BEAN_CLASS);
+            Object envBean = beanPopulator
+                    .getMethod("getDefaultInstance", Class.class)
+                    .invoke(null, envBeanClass);
+            envBeanClass
+                    .getMethod("setTransactionManager", TransactionManager.class)
+                    .invoke(envBean, tm);
+            envBeanClass
+                    .getMethod("setTransactionManagerJNDIContext", String.class)
+                    .invoke(envBean, "");
+        } catch (ReflectiveOperationException notSeedable) {
+            // best-effort
         }
     }
 

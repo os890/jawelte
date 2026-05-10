@@ -1544,3 +1544,37 @@ spec's rollbackOn list), whereas under -Pjta-geronimo our interceptor
 keeps the project's "rollback on any throwable" rule. Test-method
 @Transactional is unaffected — the JUnit lifecycle adapter drives
 TransactionStrategy.begin/commit/rollback directly, no CDI interception.
+
+## 2026-05-10 — All 4 JTA test combos green; sync-driven event firing under delegation
+
+After full delegation surfaced two issues, both now resolved:
+
+1. **CDI events under vendor @Transactional driver** — when a vendor's
+   @Transactional interceptor (Narayana) drives the tx via UserTransaction
+   directly, our strategy's begin/commit/rollback aren't called and the
+   CDI events don't fire. Fix: added `TransactionStrategy.bindLifecycleEventsToCurrentTransaction()`
+   default no-op SPI method; JtaTransactionStrategy implements it by
+   registering a JTA Synchronization that fires TransactionStarted /
+   TransactionBeforeCompletion / TransactionCommitted / TransactionRolledBack
+   from the tx's lifecycle hooks. TransactionScopedEmHolder calls into it
+   when acquiring an EM under JTA. A WeakHashMap<Transaction, Boolean>
+   marker dedups against the strategy's own begin path under Geronimo so
+   events don't double-fire.
+
+2. **Weld + uber narayana-jta CDI bootstrap conflict** — Weld's implicit
+   bean discovery picks up Narayana's JTAEnvironmentBean differently than
+   OWB does, breaking NarayanaTransactionManager's constructor with an
+   NPE deep in JTASupplier.get. Pivoted the test profile from the uber
+   `narayana-jta` artifact to the lean `jta` artifact (TM core only, no
+   CDI integration). Added `org.jboss:jboss-transaction-spi` as a profile
+   dep (the lean jar's JTAEnvironmentBean static initializer needs it).
+   Added `CoreEnvironmentBean.nodeIdentifier` seeding in
+   NarayanaTransactionManagerProvider (the uber jar bundles a
+   jbossts-properties.xml that configures it; the lean jar doesn't).
+   Result: our framework's @Transactional + @TransactionScoped run
+   uniformly across all 4 combos. Consumers who use the uber
+   `narayana-jta` in production still get delegation via JpaCdiExtension's
+   detection of `com.arjuna.ats.jta.cdi.TransactionExtension`.
+
+Final state: 4 combos × 27 scenarios = 108/108 green.
+- {owb,weld} × {jta-geronimo,jta-narayana}

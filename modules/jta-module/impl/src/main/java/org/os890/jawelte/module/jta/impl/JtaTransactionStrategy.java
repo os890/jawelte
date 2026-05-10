@@ -18,10 +18,12 @@ package org.os890.jawelte.module.jta.impl;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.WeakHashMap;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.Dependent;
@@ -33,6 +35,7 @@ import jakarta.transaction.HeuristicMixedException;
 import jakarta.transaction.HeuristicRollbackException;
 import jakarta.transaction.NotSupportedException;
 import jakarta.transaction.Status;
+import jakarta.transaction.Synchronization;
 import jakarta.transaction.SystemException;
 import jakarta.transaction.Transaction;
 import jakarta.transaction.TransactionManager;
@@ -122,6 +125,40 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             ThreadLocal.withInitial(ArrayDeque::new);
 
     /**
+     * Per-{@link Transaction} marker tracking whether the lifecycle
+     * events ({@link TransactionStarted} +
+     * {@link TransactionBeforeCompletion} +
+     * {@link TransactionCommitted} / {@link TransactionRolledBack})
+     * have already been wired for the active tx. Two firing paths
+     * exist:
+     *
+     * <ul>
+     *   <li><strong>Direct path</strong> — when this strategy's
+     *       {@link #begin()} / {@link #commit()} / {@link #rollback()}
+     *       drive the JTA tx (jpa-module's own
+     *       {@code @Transactional} interceptor or the JUnit
+     *       lifecycle adapter). The strategy fires events inline and
+     *       writes the marker to suppress the sync-driven path.</li>
+     *   <li><strong>Sync path</strong> — when a vendor's
+     *       {@code @Transactional} interceptor (Narayana / Quarkus)
+     *       drives the tx. {@link #bindLifecycleEventsToCurrentTransaction()}
+     *       registers a JTA {@link Synchronization} that fires
+     *       {@code TransactionBeforeCompletion} from
+     *       {@code beforeCompletion()} and
+     *       {@code TransactionCommitted} / {@code TransactionRolledBack}
+     *       from {@code afterCompletion(int)}. The same call fires
+     *       {@code TransactionStarted} synchronously and sets the
+     *       marker.</li>
+     * </ul>
+     *
+     * <p>{@link WeakHashMap} so completed-and-discarded {@code Transaction}
+     * instances are eligible for GC; vendor TMs typically discard the
+     * {@code Transaction} object once {@code afterCompletion} has run.
+     */
+    private static final Map<Transaction, Boolean> EVENTS_BOUND =
+            Collections.synchronizedMap(new WeakHashMap<>());
+
+    /**
      * Marker emitted on {@link TransactionStarted} /
      * {@link TransactionCommitted} / {@link TransactionRolledBack} /
      * {@link TransactionBeforeCompletion} payloads. JTA's transaction is
@@ -192,6 +229,13 @@ public class JtaTransactionStrategy implements TransactionStrategy {
                 SUSPENDED.get().push(suspended);
             }
             tm.begin();
+            // Mark events as bound for the freshly-begun tx so the
+            // sync-driven path (bindLifecycleEventsToCurrentTx) won't
+            // double-fire when an EM is later acquired in this same tx.
+            Transaction current = tm.getTransaction();
+            if (current != null) {
+                EVENTS_BOUND.put(current, Boolean.TRUE);
+            }
         } catch (NotSupportedException | SystemException failure) {
             throw new IllegalStateException("Failed to begin JTA transaction", failure);
         }
@@ -414,6 +458,86 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         } catch (RuntimeException ignored) {
             // CDI not up or observer threw — events are non-critical
             // and observer failures are aggregated by the framework.
+        }
+    }
+
+    /**
+     * Ensure {@link TransactionStarted} +
+     * {@link TransactionBeforeCompletion} +
+     * {@link TransactionCommitted} / {@link TransactionRolledBack}
+     * fire for the current JTA transaction even when this strategy's
+     * own {@link #begin()} / {@link #commit()} / {@link #rollback()}
+     * methods aren't on the call path — i.e., when a vendor
+     * {@code @Transactional} interceptor (Narayana today, Quarkus
+     * later) drives the tx via {@code UserTransaction} directly.
+     *
+     * <p>Idempotent: a second call within the same tx is a no-op,
+     * so callers (currently {@code TransactionScopedEmHolder} on
+     * EM acquisition) can call this freely without coordinating
+     * with the strategy's own begin path.
+     *
+     * <p>Fires {@code TransactionStarted} synchronously and registers
+     * a JTA {@link Synchronization} that fires the remaining lifecycle
+     * events from {@code beforeCompletion()} /
+     * {@code afterCompletion(int)}. On the rollback path, JTA does
+     * <em>not</em> invoke {@code beforeCompletion()}; the sync fires
+     * {@code TransactionBeforeCompletion} from
+     * {@code afterCompletion(int)} in that case so jawelte's contract
+     * "the event fires on both commit and rollback paths" holds.
+     */
+    @Override
+    public void bindLifecycleEventsToCurrentTransaction() {
+        TransactionManager tm = ensureProviderResolved();
+        Transaction transaction;
+        try {
+            transaction = tm.getTransaction();
+        } catch (SystemException probe) {
+            return;
+        }
+        if (transaction == null) {
+            return;
+        }
+        if (EVENTS_BOUND.putIfAbsent(transaction, Boolean.TRUE) != null) {
+            return;
+        }
+        try {
+            transaction.registerSynchronization(new LifecycleEventSynchronization());
+        } catch (jakarta.transaction.RollbackException | SystemException registerFailure) {
+            EVENTS_BOUND.remove(transaction);
+            return;
+        }
+        fireEvent(new TransactionStarted(TRANSACTION_WIDE));
+    }
+
+    /**
+     * Fires the remaining lifecycle events from JTA's
+     * {@link Synchronization} hooks. Used only when this strategy
+     * isn't the one driving begin / commit / rollback (i.e., a
+     * vendor's CDI {@code @Transactional} interceptor is in charge).
+     */
+    private static class LifecycleEventSynchronization implements Synchronization {
+
+        private boolean beforeCompletionFired;
+
+        @Override
+        public void beforeCompletion() {
+            beforeCompletionFired = true;
+            fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
+        }
+
+        @Override
+        public void afterCompletion(int status) {
+            if (!beforeCompletionFired) {
+                // JTA spec: rollback path skips beforeCompletion. Fire
+                // here so jawelte's contract holds across commit and
+                // rollback paths.
+                fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
+            }
+            if (status == Status.STATUS_COMMITTED) {
+                fireEvent(new TransactionCommitted(TRANSACTION_WIDE));
+            } else {
+                fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
+            }
         }
     }
 }
