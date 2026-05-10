@@ -1314,3 +1314,42 @@ Plus the original ticket-006 scenarios still deferred:
   the classpath.
 
 Net: 19 scenarios shipped, ~25 scenarios skipped with rationale.
+
+## 2026-05-10 — TICKET-006 +7 scenarios closing scenario-test gaps
+
+Seven additional scenarios under `tests/jta-module/` (scenario-37
+through scenario-43) close the scenario-test gaps surfaced by the
+3rd-pass comparison. Six of them cover the multi-PU axis the
+ticket previously deferred entirely:
+
+| # | Scenario | What it verifies |
+|---|----------|-------------------|
+| 37 | multi-pu-em-identity | `@Inject @Named("puA"/"puB")` produces distinct EMF + EM proxies per PU under JTA + multi-PU |
+| 38 | multi-pu-cross-pu-writes | `@Transactional` method writing to both PUs commits atomically; both rows visible in a subsequent JTA tx |
+| 39 | multi-pu-xa-flush-failure | **headline XA atomicity test** — valid row to PU "a" + NOT-NULL-violating row to PU "b" → both PUs roll back when PU "b"'s flush fails |
+| 40 | multi-pu-pc-routing | `@PersistenceContext(unitName)` + `@PersistenceUnit(unitName)` route to the correct EM/EMF (validates `JpaCdiExtension`'s PAT rewriting under JTA + multi-PU) |
+| 41 | multi-pu-readonly | `@ReadOnly @Transactional` works against one PU in a multi-PU JTA container — query returns correct count, persist is rolled back |
+| 42 | readonly-setter-rollback | load existing committed entity, modify via setter inside `@Transactional @ReadOnly`, change discarded at JTA commit (single-PU; covers the dirty-check rollback path) |
+| 43 | per-method-cleanup | two ordered `@Test` methods: first persists rows, second sees an empty table — `DbCleanupStrategy` runs in `afterEach` under JTA the same way as under RESOURCE_LOCAL |
+
+All 7 green under `-Powb -Pjta-geronimo` and `-Powb -Pjta-narayana`.
+
+XA correctness now has direct executable verification via scenario
+39 — the `XaDataSourceWrapper` + `JtaPersistencePropertyResolver`
+recipe successfully drives a two-phase commit that aborts both PUs
+on a flush-time SQL constraint violation.
+
+Total jta-module scenarios shipped: 26 (8 from the ticket + 11 ports
+of jpa-module RESOURCE_LOCAL coverage + 7 multi-PU and ReadOnly
+gap closures). Geronimo: 26/26 green. Narayana: 23/26 green —
+17, 30, 36 still fail under `-Pjta-narayana` due to the bundled
+`com.arjuna.ats.jta.cdi.TransactionExtension` conflict on
+`@TransactionScoped`; the new multi-PU + setter-rollback scenarios
+(37–43) all pass under both providers.
+
+Remaining ticket gaps:
+- nested `@Transactional` under JTA (architectural — needs
+  per-`Transaction` EM keying in `TransactionScopedEmHolder`).
+- `@TransactionScoped` Narayana conflict (CDI-extension vendor-veto
+  expansion).
+- `shutdown()` error handling — needs a mock provider.
