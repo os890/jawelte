@@ -1353,3 +1353,43 @@ Remaining ticket gaps:
 - `@TransactionScoped` Narayana conflict (CDI-extension vendor-veto
   expansion).
 - `shutdown()` error handling — needs a mock provider.
+
+## 2026-05-10 — TICKET-006 G2 + G3: per-tx caching + RELEASE_AFTER_TRANSACTION
+
+Two coupled changes that must land together:
+
+**G3 — `XaDataSourceWrapper` caches per JTA transaction.** Two
+`ConcurrentHashMap<Transaction, ...>` fields on the wrapper: one for
+the `Connection` handle returned to Hibernate, one for the underlying
+`XAConnection` so it can be closed at tx complete. First
+`getConnection()` within a JTA tx asks the delegate `XADataSource`
+for a fresh `XAConnection`, enlists its `XAResource`, registers a
+single `Synchronization` for cleanup, caches both, and returns the
+`Connection`. Subsequent `getConnection()` calls within the same tx
+return the cached handle. The cleanup `Synchronization` removes both
+entries and closes the `XAConnection` on completion.
+
+Without this caching, every `getConnection()` call within a JTA tx
+created a new `XAConnection` AND enlisted a new `XAResource` on the
+active transaction. The TM was left holding multiple resources for
+the same logical PU; commit had to walk them individually; and
+behaviour with `RELEASE_AFTER_TRANSACTION` (G2) was incorrect because
+Hibernate would cleanly release one acquired-and-cached connection
+each time it borrowed the wrapper, but the wrapper would hand back a
+fresh enlistment on the next borrow.
+
+**G2 — `hibernate.connection.handling_mode` switched from
+`DELAYED_ACQUISITION_AND_HOLD` to
+`DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION`.** This is the
+JPA-recommended mode for JTA: connection acquired on first JDBC use,
+released back to the pool when the JTA tx completes. Previously we
+held the connection past the JTA tx as a workaround for the missing
+caching in G3. With G3 in place, the canonical mode is correct.
+
+Verified: all 26 jta-module scenarios green under
+`-Powb -Pjta-geronimo`; all 23 non-`@TransactionScoped` scenarios
+green under `-Powb -Pjta-narayana` (17/30/36 still fail under
+Narayana per the bundled CDI-extension conflict, separate gap).
+No jpa-module/impl changes — RESOURCE_LOCAL paths untouched.
+
+Closes G2 + G3 from the 3rd-pass gap report.

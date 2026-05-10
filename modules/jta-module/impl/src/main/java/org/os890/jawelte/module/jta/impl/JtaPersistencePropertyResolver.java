@@ -88,14 +88,18 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
         properties.put("jakarta.persistence.transaction-type", "JTA");
         properties.put("hibernate.transaction.coordinator_class", "jta");
         properties.put("hibernate.transaction.jta.platform", StandaloneJtaPlatform.class.getName());
-        // hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND_HOLD
-        // keeps a single Connection borrowed for the life of the JTA tx,
-        // so the XAResource's enlistment / delistment / commit / rollback
-        // applies to the same connection that ran the INSERTs. The default
-        // RELEASE_AFTER_STATEMENT in some configurations would return the
-        // connection to the pool between statements and break XA enlistment.
+        // DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION is the
+        // JPA-recommended mode for JTA: the connection is acquired on
+        // first JDBC use and released back to the pool when the JTA
+        // tx completes. XaDataSourceWrapper caches the underlying
+        // XAConnection per JTA Transaction (keyed by Transaction
+        // object), so Hibernate's repeated borrow + return calls
+        // within one tx all hit the same enlisted XAResource —
+        // RELEASE_AFTER_TRANSACTION cleanly releases the handle on
+        // the right boundary, and the wrapper's Synchronization
+        // closes the cached XAConnection on tx completion.
         properties.put("hibernate.connection.handling_mode",
-                "DELAYED_ACQUISITION_AND_HOLD");
+                "DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION");
         // Always set jakarta.persistence.jtaDataSource to an
         // XaDataSourceWrapper around the underlying H2 JdbcDataSource:
         // multi-PU XA atomicity (Test Scenario 10/11/12) requires

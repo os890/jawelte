@@ -21,6 +21,8 @@ import java.lang.System.Logger.Level;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.sql.DataSource;
 import javax.sql.XAConnection;
@@ -28,12 +30,10 @@ import javax.sql.XADataSource;
 import javax.transaction.xa.XAResource;
 
 import jakarta.transaction.RollbackException;
-import jakarta.transaction.Status;
 import jakarta.transaction.Synchronization;
 import jakarta.transaction.SystemException;
 import jakarta.transaction.Transaction;
 import jakarta.transaction.TransactionManager;
-// XAResource referenced via the inner Sync class.
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
@@ -49,23 +49,30 @@ import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
  * {@link Transaction} so multi-PU writes flow through the JTA
  * implementation's two-phase-commit machinery.
  *
- * <p>Each {@link #getConnection()} call:
- * <ol>
- *   <li>asks the underlying {@link XADataSource} for a fresh
- *       {@link XAConnection},</li>
- *   <li>resolves the active JTA {@link Transaction} via the active
- *       {@link TransactionStrategy} and enlists the
- *       {@link XAResource} on it,</li>
- *   <li>registers a {@link Synchronization} that delists and closes
- *       the {@link XAConnection} on transaction completion,</li>
- *   <li>returns the underlying {@link Connection}.</li>
- * </ol>
+ * <p>Connections are <strong>cached per JTA transaction</strong>.
+ * The first {@link #getConnection()} call within a JTA tx asks the
+ * underlying {@link XADataSource} for a fresh {@link XAConnection},
+ * enlists its {@link XAResource}, registers a {@link Synchronization}
+ * for cleanup, caches both the {@code XAConnection} and the
+ * {@code Connection} handle keyed by the active
+ * {@link Transaction}, and returns the handle. Subsequent calls
+ * within the same tx return the cached {@code Connection} — Hibernate
+ * may borrow + return its connection many times during one JTA tx
+ * (especially under
+ * {@code DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION}), and
+ * caching avoids creating a new {@code XAResource} per call.
  *
  * <p>If no JTA transaction is active on the calling thread the
- * wrapper returns a non-enlisted connection — the JPA provider must
- * not call this wrapper outside a JTA transaction in JTA-coordinator
- * mode, so the path exists only as a defensive fallback for diagnostic
- * tooling and connection-validation calls.
+ * wrapper returns a non-enlisted, non-cached connection — the JPA
+ * provider must not call this wrapper outside a JTA transaction in
+ * JTA-coordinator mode, so the path exists only as a defensive
+ * fallback for diagnostic tooling and connection-validation calls.
+ *
+ * <p>Cleanup is driven by the registered {@code Synchronization}:
+ * its {@code afterCompletion} removes the entry from both caches and
+ * closes the {@code XAConnection}. The handle returned to the caller
+ * (Hibernate) is closed by the caller; the underlying
+ * {@code XAConnection} is the project's responsibility.
  */
 public class XaDataSourceWrapper implements DataSource {
 
@@ -74,6 +81,21 @@ public class XaDataSourceWrapper implements DataSource {
     private final XADataSource delegate;
 
     private final String persistenceUnitName;
+
+    /**
+     * Per-JTA-tx cache of the {@link Connection} handle returned to
+     * Hibernate. Keyed by the active {@link Transaction} so two calls
+     * to {@link #getConnection()} inside one JTA tx return the same
+     * handle.
+     */
+    private final Map<Transaction, Connection> cachedConnections = new ConcurrentHashMap<>();
+
+    /**
+     * Per-JTA-tx cache of the underlying {@link XAConnection}. The
+     * {@link Synchronization} closes this on tx completion so the
+     * pool's resources are released.
+     */
+    private final Map<Transaction, XAConnection> cachedXaConnections = new ConcurrentHashMap<>();
 
     /**
      * Construct the wrapper over a configured {@link XADataSource}.
@@ -93,12 +115,12 @@ public class XaDataSourceWrapper implements DataSource {
 
     @Override
     public Connection getConnection() throws SQLException {
-        return enlistedConnection(delegate.getXAConnection());
+        return managedConnection(null, null);
     }
 
     @Override
     public Connection getConnection(String user, String password) throws SQLException {
-        return enlistedConnection(delegate.getXAConnection(user, password));
+        return managedConnection(user, password);
     }
 
     @Override
@@ -155,30 +177,46 @@ public class XaDataSourceWrapper implements DataSource {
         return persistenceUnitName;
     }
 
-    private Connection enlistedConnection(XAConnection xaConnection) throws SQLException {
+    private Connection managedConnection(String user, String password) throws SQLException {
         Transaction transaction = currentTransactionOrNull();
         if (transaction == null) {
-            // Defensive: no JTA tx active. Return a non-enlisted
-            // connection. Hibernate's JTA coordinator should never
-            // ask for one outside a transaction — but connection
+            // Defensive: no JTA tx active. Return a non-enlisted,
+            // non-cached connection. Hibernate's JTA coordinator
+            // should never ask for one outside a tx — but connection
             // validation / startup probes might.
+            XAConnection xaConnection = openXa(user, password);
             return xaConnection.getConnection();
         }
+        Connection cached = cachedConnections.get(transaction);
+        if (cached != null) {
+            return cached;
+        }
+        XAConnection xaConnection = openXa(user, password);
         try {
             XAResource xaResource = xaConnection.getXAResource();
             transaction.enlistResource(xaResource);
-            transaction.registerSynchronization(
-                    new XaConnectionSynchronization(xaConnection, xaResource, transaction));
-            return xaConnection.getConnection();
+            Connection connection = xaConnection.getConnection();
+            cachedXaConnections.put(transaction, xaConnection);
+            cachedConnections.put(transaction, connection);
+            transaction.registerSynchronization(new TxScopedCleanupSynchronization(transaction, this));
+            return connection;
         } catch (RollbackException | SystemException jtaFailure) {
+            cachedConnections.remove(transaction);
+            cachedXaConnections.remove(transaction);
             closeQuietly(xaConnection);
             throw new SQLException(
                     "Failed to enlist XAResource for persistence unit '" + persistenceUnitName + "'",
                     jtaFailure);
         } catch (RuntimeException | SQLException unexpected) {
+            cachedConnections.remove(transaction);
+            cachedXaConnections.remove(transaction);
             closeQuietly(xaConnection);
             throw unexpected;
         }
+    }
+
+    private XAConnection openXa(String user, String password) throws SQLException {
+        return user == null ? delegate.getXAConnection() : delegate.getXAConnection(user, password);
     }
 
     private static Transaction currentTransactionOrNull() {
@@ -203,25 +241,21 @@ public class XaDataSourceWrapper implements DataSource {
     }
 
     /**
-     * {@link Synchronization} that delists and closes the
-     * {@link XAConnection} on transaction completion. Registered once
-     * per enlistment so the connection's resources are released even
-     * if the consumer forgets to close the {@link Connection} handle
-     * (Hibernate's JTA coordinator does close it, but the
-     * {@code Synchronization} is the authoritative cleanup point).
+     * {@link Synchronization} that drops the cached connection +
+     * {@link XAConnection} entries and closes the underlying
+     * {@code XAConnection} on transaction completion. Registered once
+     * per JTA tx (on first {@link #getConnection()} that enlists an
+     * XAResource); fires whether the tx commits or rolls back.
      */
-    private static class XaConnectionSynchronization implements Synchronization {
-
-        private final XAConnection xaConnection;
-
-        private final XAResource xaResource;
+    private static class TxScopedCleanupSynchronization implements Synchronization {
 
         private final Transaction transaction;
 
-        XaConnectionSynchronization(XAConnection xaConnection, XAResource xaResource, Transaction transaction) {
-            this.xaConnection = xaConnection;
-            this.xaResource = xaResource;
+        private final XaDataSourceWrapper owner;
+
+        TxScopedCleanupSynchronization(Transaction transaction, XaDataSourceWrapper owner) {
             this.transaction = transaction;
+            this.owner = owner;
         }
 
         @Override
@@ -232,15 +266,18 @@ public class XaDataSourceWrapper implements DataSource {
 
         @Override
         public void afterCompletion(int status) {
-            // Delist + close happens via the TM's own commit / rollback
-            // path during prepare/commit/rollback (TMSUCCESS / TMFAIL),
-            // so afterCompletion only needs to close the XAConnection
-            // handle and release pooled resources. Status is unused
-            // here but kept on the signature per the JTA Synchronization
-            // contract.
+            // Status is informational only. The XAResource has already
+            // been delisted + committed/rolled-back by the TM during
+            // its own commit/rollback flow; afterCompletion's job is
+            // to release pooled resources.
+            owner.cachedConnections.remove(transaction);
+            XAConnection xaConnection = owner.cachedXaConnections.remove(transaction);
             int unusedStatus = status;
-            if (unusedStatus == Status.STATUS_UNKNOWN) {
-                LOG.log(Level.WARNING, "JTA tx completed with STATUS_UNKNOWN — cleanup may be incomplete");
+            if (xaConnection == null) {
+                if (unusedStatus == jakarta.transaction.Status.STATUS_UNKNOWN) {
+                    LOG.log(Level.WARNING, "JTA tx completed with STATUS_UNKNOWN — no cached XAConnection to release");
+                }
+                return;
             }
             try {
                 xaConnection.close();
