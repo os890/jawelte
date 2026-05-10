@@ -61,8 +61,8 @@ import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.ReadOnly;
 import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
+import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
-import org.os890.jawelte.module.jpa.impl.adapter.tx.UserTransactionImpl;
 import org.os890.jawelte.module.jpa.impl.config.JpaConfig;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.EntityManagerProxy;
@@ -314,12 +314,17 @@ public class JpaCdiExtension implements Extension {
             }
         }
 
+        // The active TransactionStrategy contributes the synthetic
+        // UserTransaction bean: RESOURCE_LOCAL ships a delegating
+        // helper that drives this same strategy; JTA ships the JTA
+        // implementation's standard UserTransaction so consumers see
+        // the real Jakarta-EE shape (Test Scenario 20).
         event.addBean()
                 .beanClass(UserTransaction.class)
                 .scope(ApplicationScoped.class)
                 .types(UserTransaction.class, Object.class)
                 .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
-                .produceWith(instance -> new UserTransactionImpl());
+                .produceWith(instance -> TestContext.loadService(TransactionStrategy.class).userTransaction());
 
         event.addContext(new TransactionScopedContext());
     }

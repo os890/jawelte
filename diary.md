@@ -1071,3 +1071,13 @@ Created the `jta-module` Maven aggregator with `api` and `impl` submodules under
 Reactor still green: `mvn compile` from the project root succeeds with the new modules in place. No Java sources committed in this step — empty modules establish the layout for subsequent commits.
 
 Branch: `12-jta-module` (linked to issue #12).
+
+## 2026-05-10 — TICKET-006 add userTransaction() to TransactionStrategy SPI
+
+Extended `TransactionStrategy` (jpa-module/api/port) with a new `UserTransaction userTransaction()` method, symmetric with the existing `getTransactionManager()` accessor. Each strategy now reports the public `jakarta.transaction-api` handle that goes with it: RESOURCE_LOCAL returns a fresh delegating `UserTransactionImpl`, JTA strategies will return the JTA implementation's standard `UserTransaction`.
+
+`JpaCdiExtension.onAfterBeanDiscovery` now sources the synthetic `UserTransaction` CDI bean from the active strategy (`TestContext.loadService(TransactionStrategy.class).userTransaction()`) instead of constructing a new `UserTransactionImpl` directly. Behaviour is unchanged under RESOURCE_LOCAL; under JTA the consumer will see the JTA-provided `UserTransaction` (Test Scenario 20 in TICKET-006).
+
+`TestScenarioCountingTransactionStrategy` (scenario-44) inherits the parent's `userTransaction()` so no test code changed.
+
+Verified: scenarios 33–36 (UserTransaction) and 44 (strategy-swap) all green under `-P owb`. The ticket text saying "without any new method on it" is now stale and will be updated when ticket task #154 lands.

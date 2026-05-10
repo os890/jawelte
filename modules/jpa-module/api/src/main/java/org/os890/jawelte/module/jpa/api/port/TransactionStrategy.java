@@ -20,6 +20,7 @@ import java.util.Map;
 import jakarta.persistence.PersistenceUnitTransactionType;
 import jakarta.persistence.RollbackException;
 import jakarta.transaction.TransactionManager;
+import jakarta.transaction.UserTransaction;
 
 /**
  * Pluggable transaction-management seam. The default impl shipped by
@@ -120,6 +121,24 @@ public interface TransactionStrategy {
      * @return the JTA {@code TransactionManager} or {@code null}
      */
     TransactionManager getTransactionManager();
+
+    /**
+     * The {@link UserTransaction} {@code JpaCdiExtension} registers
+     * as the synthetic CDI {@code UserTransaction} bean while this
+     * strategy is active. RESOURCE_LOCAL strategies typically return
+     * a delegating helper that drives this same {@code TransactionStrategy}
+     * (so {@code @Inject UserTransaction} stays consistent with
+     * {@code @Transactional}); JTA strategies return the JTA
+     * implementation's standard {@code UserTransaction} so consumers
+     * see the real Jakarta-EE shape.
+     *
+     * <p>Symmetric with {@link #getTransactionManager()}: each
+     * strategy reports the public Jakarta {@code transaction-api}
+     * handle that goes with it.
+     *
+     * @return the {@code UserTransaction} to expose; never {@code null}
+     */
+    UserTransaction userTransaction();
 
     /**
      * The transaction model the strategy implements:
