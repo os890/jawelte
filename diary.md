@@ -1456,3 +1456,33 @@ ordinal `microprofile-config.properties` records construction +
 
 Verified: 27/27 jta-module scenarios green under
 `-Powb -Pjta-geronimo`.
+
+## 2026-05-10 — TestContext.instantiateConfigured trims FQCN values
+
+Audit of "configured class names that reach Class.forName" found
+one site missing trim handling besides the JTA resolver:
+`TestContext.instantiateConfigured` (core/api). This is the
+project-wide canonical SPI bootstrap path — every
+`TestContext.loadService(...)` and `TestContext.get()` call goes
+through it to look up the configured impl class for ports like
+`TransactionStrategy`, `ServicePriorityResolver`,
+`ConfigResolver`, and `TestContext` itself.
+
+`Optional.map(String::trim).filter(s -> !s.isEmpty())` chained on
+the value lookup so accidental whitespace in a user-supplied
+`microprofile-config.properties` value doesn't reach Class.forName,
+and a blank-after-trim value is treated as "key not set" so the
+user gets the same actionable error.
+
+CSV-separated config values were also audited; every existing
+parser (`JpaConfig.splitCsv*`, `JpaCdiExtension.{readVendorVetoAllowlist,
+readCsvList, readProtectedPackagePrefixes}`, `JpaTypesExcludedPackageFilter.readUserPrefixes`,
+`FrameworkAllowlist.readPrefixes`,
+`DefaultExcludedPackageFilter.readPrefixes`) already calls
+`String::trim` on each token after splitting. No further changes
+needed there.
+
+Verified: jta-module scenarios 01 / 02 / 39 / 44 + jpa-module 08 /
+44 / 63 (config-resolver-prefix-walk) all green — the trim is
+transparent for valid no-whitespace values and only intervenes
+on the malformed-input path.
