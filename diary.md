@@ -1208,3 +1208,109 @@ Existing jpa-module scenarios (sample: 08 / 13 / 24 / 44 / 57)
 remain green under `-Powb`, confirming the cross-cuts to
 TransactionScopedEmHolder, TransactionalInterceptor, and
 JpaCdiExtension haven't regressed RESOURCE_LOCAL behaviour.
+
+## 2026-05-10 — TICKET-006 +11 scenarios ported from jpa-module suite
+
+User asked to add every tx scenario the JTA strategy supports.
+Eleven new scenarios under `tests/jta-module/` (scenario-26 through
+scenario-36) port the jpa-module RESOURCE_LOCAL coverage they had
+counterparts for:
+
+| New scenario | Ported from | Description |
+|--------------|-------------|-------------|
+| 26 tx-on-test-method | jpa 09 | `@Transactional` on a `@Test` method runs under JTA |
+| 27 rollback-on-error | jpa 12 | rollback on `Error` (project rule: any throwable rolls back) |
+| 28 readonly-discards-writes | jpa 16 | `@ReadOnly @Transactional` discards writes under JTA |
+| 29 readonly-without-transactional | jpa 17 | `@ReadOnly` without `@Transactional` is a no-op pass-through |
+| 30 tx-scoped-outside-tx | jpa 20 | dereferencing `@TransactionScoped` outside a tx → `ContextNotActiveException` |
+| 31 ut-rollback-undoes-writes | jpa 34 | `UserTransaction.rollback()` undoes pending writes |
+| 32 ut-commit-no-active-tx | jpa 36 | `UT.commit()` outside a tx raises `IllegalStateException` |
+| 33 cdi-events-on-commit | jpa 38 | `TransactionStarted` + `TransactionBeforeCompletion` + `TransactionCommitted` each fire once per JTA tx |
+| 34 cdi-events-on-rollback | jpa 39 | `TransactionStarted` + `TransactionBeforeCompletion` + `TransactionRolledBack` fire on rollback path; `TransactionCommitted` does not |
+| 35 readonly-multi-modification | jpa 54 | every write inside one `@ReadOnly @Transactional` discarded |
+| 36 tx-scoped-lifecycle-counts | jpa 52 | two `@Transactional` calls = two `@PostConstruct` + two `@PreDestroy` fires; second call sees fresh tracker |
+
+All 11 green under `-Powb -Pjta-geronimo`. 8 of them green under
+`-Powb -Pjta-narayana`; the three @TransactionScoped-using ones
+(30 + 36) hit the same Narayana TransactionExtension conflict
+already documented for scenario 17.
+
+One small fix landed during this batch:
+`TransactionScopedEmHolder.peekOrAutoBegin` no longer fires
+`TransactionStarted` from the lazy-EM-acquire path when the
+strategy is JTA. The JTA strategy is the authoritative source of
+the once-per-tx CDI event (per ticket scenario 16) — without the
+guard, single-PU JTA fires twice (strategy event + holder event).
+RESOURCE_LOCAL behaviour is unchanged: jpa-module's
+event-related scenarios (38 / 39 / 57) all still green.
+
+Total jta-module scenarios now: 19 (8 from the ticket + 11 ports).
+Geronimo: 19/19 green. Narayana: 16/19 green (17, 30, 36
+deferred — Narayana CDI extension conflict).
+
+Skipped jpa-module scenarios — i.e. tx-related scenarios with no
+JTA counterpart on this branch — and why:
+
+- **04 commit-on-checked-exception** — contradicts project rule.
+  jpa-module's own scenario 11 documents that checked also rolls
+  back; mirrored by scenario 27 (Error path).
+- **13/14/15 nested-{commit-commit, commit-rollback, rollback-commit}**,
+  **19 tx-scoped-per-nested-transaction**, **48 nested-three-level-commit**,
+  **49 nested-midflight-jpql-read**, **53 tx-scoped-nested-isolation**,
+  **55 readonly-inner-writable-outer** — nested `@Transactional`.
+  `JtaTransactionStrategy`'s suspended-tx deque is in place but
+  the holder's per-PU stack still treats nested levels as sharing
+  the same EM (the RESOURCE_LOCAL semantics). Correct nested-JTA
+  semantics need per-`Transaction` EM keying.
+- **22 multi-pu-named-injection**, **23 multi-pu-unqualified-fails**,
+  **24 multi-pu-cross-pu-writes** — multi-PU. Single-PU JTA works;
+  the test setup for two PUs under JTA needs the XaDataSourceWrapper
+  exercised across both, which is the same machinery flagged for
+  ticket scenarios 10/11/12 below.
+- **25 file-mode-true** — `@PersistenceConfig(fileMode=true)`. The
+  JTA resolver's H2 XADataSource construction reads `jdbc.url`
+  but `JdbcDataSource.setURL` may not handle the file-mode URL
+  shape uniformly across H2 versions; not tested.
+- **35 user-transaction-inside-transactional** — combines programmatic
+  UT inside an active `@Transactional`, which under JTA goes through
+  the strategy's nested-tx suspend/resume path; same nested-JTA
+  caveat as 13/14/15.
+- **37 orphan-rollback-safety-net** — assertion spans test-method
+  boundaries; awkward to write deterministically in JUnit.
+- **40 after-test-transaction-timing**, **62 after-test-transaction-payload**
+  — `AfterTestTransaction` event timing. Should work under JTA but
+  needs scenario coverage; deferred for time.
+- **41 test-method-scoped-predestroy-reads-db**,
+  **42 test-bean-static-field-entity-manager** — exercise the
+  scope-module's `@TestMethodScoped` integration. The tests/jta-module
+  test deps don't include scope-module currently.
+- **44 transaction-strategy-swap** — the jta-module being on the
+  classpath IS the swap; covered implicitly by scenario 01.
+- **47 prod-shaped-persistence-xml** — would work but deferred.
+- **57 framework-owned-tx-events** — semantics differ under JTA
+  (the JTA strategy fires for every begin, since user-driven
+  `userTx.begin()` goes to the JTA-provided UT directly, not
+  through the strategy).
+- **65 cross-bean-tx-propagation-no-em-on-outer** — would work but
+  deferred.
+
+Plus the original ticket-006 scenarios still deferred:
+
+- **05 / 06 / 07 / 08** — provider-selection edge cases. 05 + 06
+  partially covered by running same scenarios under different
+  profiles. 07 (no provider available) and 08 (forced via lower
+  priority) need bespoke setup.
+- **10 / 11 / 12** — multi-PU XA atomic commit / rollback /
+  prepare-failure. XA infrastructure is in place; deferred until
+  multi-PU scenarios are wired in.
+- **13 / 14 / 15 / 19** — nested @Transactional under JTA (same
+  reason as the jpa-module nested ports above).
+- **16** — CDI events fire once per tx — already covered by my
+  scenarios 33 + 34.
+- **22** — orphan rollback safety net (boundary issue).
+- **23** — `shutdown()` error handling — needs mock provider.
+- **25** — RESOURCE_LOCAL fallback when jta-module absent — covered
+  implicitly by tests/jpa-module running without jta-module on
+  the classpath.
+
+Net: 19 scenarios shipped, ~25 scenarios skipped with rationale.

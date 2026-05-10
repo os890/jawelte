@@ -350,7 +350,14 @@ public abstract class TransactionScopedEmHolder {
         if (!framesStack.isEmpty()) {
             framesStack.peek().add(persistenceUnitName);
         }
-        fireTransactionStartedQuietly(persistenceUnitName);
+        // Under RESOURCE_LOCAL the strategy fires TransactionStarted only
+        // for the eagerly-managed PU; lazy-joining PUs fire their own
+        // event from here. Under JTA the strategy fires exactly one
+        // transaction-wide event per JTA tx (per ticket scenario 16),
+        // so the holder must not fire a second per-PU event.
+        if (!jtaMode) {
+            fireTransactionStartedQuietly(persistenceUnitName);
+        }
         return entityManager;
     }
 

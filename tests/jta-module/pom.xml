@@ -42,6 +42,17 @@
         <module>scenario-20-user-transaction-is-jta-provided</module>
         <module>scenario-21-user-transaction-begin-commit</module>
         <module>scenario-24-isavailable-side-effect-free</module>
+        <module>scenario-26-tx-on-test-method</module>
+        <module>scenario-27-rollback-on-error</module>
+        <module>scenario-28-readonly-discards-writes</module>
+        <module>scenario-29-readonly-without-transactional</module>
+        <module>scenario-30-tx-scoped-outside-tx</module>
+        <module>scenario-31-ut-rollback-undoes-writes</module>
+        <module>scenario-32-ut-commit-no-active-tx</module>
+        <module>scenario-33-cdi-events-on-commit</module>
+        <module>scenario-34-cdi-events-on-rollback</module>
+        <module>scenario-35-readonly-multi-modification</module>
+        <module>scenario-36-tx-scoped-lifecycle-counts</module>
     </modules>
 
     <dependencies>
