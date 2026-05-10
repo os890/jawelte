@@ -309,7 +309,19 @@ public abstract class TransactionScopedEmHolder {
         if (existing != null) {
             return existing;
         }
-        if (!isTransactionalScopeActive()) {
+        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
+        boolean jtaMode = strategy.getTransactionType() == PersistenceUnitTransactionType.JTA;
+        // Source of truth for "is a tx active" differs between modes:
+        // RESOURCE_LOCAL relies on the holder's own scope stack
+        // (interceptor / strategy push frames there); JTA reads
+        // strategy.isActive() because the JTA strategy doesn't push
+        // onto the holder, and a programmatic userTx.begin() outside
+        // the @Transactional interceptor reaches this method without
+        // the holder's frame stack being populated.
+        if (!jtaMode && !isTransactionalScopeActive()) {
+            return null;
+        }
+        if (jtaMode && !strategy.isActive()) {
             return null;
         }
         if (!JpaActivePersistenceUnits.get().contains(persistenceUnitName)) {
@@ -320,8 +332,7 @@ public abstract class TransactionScopedEmHolder {
             return null;
         }
         EntityManager entityManager = factory.createEntityManager();
-        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
-        if (strategy.getTransactionType() == PersistenceUnitTransactionType.JTA) {
+        if (jtaMode) {
             // Under JTA the EM cannot drive its own EntityTransaction —
             // em.getTransaction() throws "JTA mode" — and a freshly
             // created EM is unsynchronized by default per JPA 3.2 §7.6.

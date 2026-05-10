@@ -118,24 +118,47 @@ public class JtaTransactionStrategy implements TransactionStrategy {
      */
     private static final String TRANSACTION_WIDE = "";
 
-    private volatile boolean initialized;
+    /**
+     * JVM-static caches. {@link java.util.ServiceLoader} returns a
+     * fresh strategy instance per {@code TestContext.loadService(...)}
+     * call (the project's {@code ServicePriorityResolver} pattern), so
+     * an instance-level cache here would force every fresh call to
+     * re-resolve the provider and bootstrap a new {@code TransactionManager}.
+     * Pinning to JVM scope ensures every strategy lookup — including
+     * the ones that come through the {@code EntityManagerProxy}'s
+     * {@code peekOrAutoBegin} fast path and the
+     * {@code StandaloneJtaPlatform.locateTransactionManager} indirection
+     * — sees the same TM the {@code @Transactional} interceptor's
+     * {@code begin()} drove.
+     */
+    private static volatile boolean initialized;
 
-    private volatile TransactionManagerProvider provider;
+    private static volatile TransactionManagerProvider provider;
 
-    private volatile TransactionManager transactionManager;
+    private static volatile TransactionManager transactionManager;
 
-    private volatile UserTransaction userTransaction;
+    private static volatile UserTransaction userTransaction;
+
+    private static final Object STRATEGY_LOCK = new Object();
 
     /** No-arg constructor required by {@link ServiceLoader}. */
     public JtaTransactionStrategy() {
     }
 
     @Override
-    public synchronized void initialize(Map<String, Object> entityManagerFactoryProperties) {
-        if (initialized) {
-            throw new IllegalStateException("TransactionStrategy already initialized");
+    public void initialize(Map<String, Object> entityManagerFactoryProperties) {
+        synchronized (STRATEGY_LOCK) {
+            if (initialized) {
+                // initialized at JVM scope rather than per-instance:
+                // CDI bootstrap fires once per test class and goes
+                // through a fresh strategy instance, but the
+                // jta-module/impl invariant is that one TM serves the
+                // entire JVM. A second call from a different instance
+                // is therefore a no-op rather than a failure.
+                return;
+            }
+            initialized = true;
         }
-        initialized = true;
         // Provider resolution is deliberately lazy — deferred to the
         // first begin() so the TM bootstrap cost is not paid during
         // CDI BeforeBeanDiscovery (where every TransactionStrategy is
@@ -215,10 +238,11 @@ public class JtaTransactionStrategy implements TransactionStrategy {
 
     @Override
     public boolean isActive() {
-        TransactionManager tm = transactionManager;
-        if (tm == null) {
-            return false;
-        }
+        // Resolve through the lazy bootstrap so a fresh strategy
+        // instance (ServiceLoader returns one per loadService call)
+        // doesn't read a null transactionManager and report inactive
+        // even when the JVM-singleton TM has an active transaction.
+        TransactionManager tm = ensureProviderResolved();
         try {
             int status = tm.getStatus();
             return status == Status.STATUS_ACTIVE || status == Status.STATUS_MARKED_ROLLBACK;
@@ -265,7 +289,10 @@ public class JtaTransactionStrategy implements TransactionStrategy {
 
     @Override
     public void shutdown() {
-        TransactionManagerProvider currentProvider = provider;
+        TransactionManagerProvider currentProvider;
+        synchronized (STRATEGY_LOCK) {
+            currentProvider = provider;
+        }
         if (currentProvider == null) {
             return;
         }
@@ -282,19 +309,19 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         SUSPENDED.remove();
     }
 
-    private TransactionManager ensureProviderResolved() {
+    private static TransactionManager ensureProviderResolved() {
         TransactionManager localTm = transactionManager;
         if (localTm != null) {
             return localTm;
         }
-        synchronized (this) {
+        synchronized (STRATEGY_LOCK) {
             if (transactionManager != null) {
                 return transactionManager;
             }
             TransactionManagerProvider chosen = pickAvailableProvider();
-            this.provider = chosen;
-            this.transactionManager = chosen.create();
-            this.userTransaction = chosen.userTransaction();
+            provider = chosen;
+            transactionManager = chosen.create();
+            userTransaction = chosen.userTransaction();
             LOG.log(Level.INFO,
                     "JTA TransactionManager bootstrapped via provider '" + chosen.name() + "'");
             return transactionManager;
@@ -339,7 +366,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
                 "No TransactionManagerProvider available on the classpath. Tried: " + names);
     }
 
-    private TransactionManager requireInitialized() {
+    private static TransactionManager requireInitialized() {
         TransactionManager tm = transactionManager;
         if (tm == null) {
             throw new IllegalStateException(

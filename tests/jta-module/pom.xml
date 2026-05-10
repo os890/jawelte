@@ -37,6 +37,10 @@
         <module>scenario-01-jta-strategy-auto-selected</module>
         <module>scenario-02-transactional-under-jta</module>
         <module>scenario-03-rollback-on-runtime-exception</module>
+        <module>scenario-09-emf-bootstrapped-in-jta-mode</module>
+        <module>scenario-20-user-transaction-is-jta-provided</module>
+        <module>scenario-21-user-transaction-begin-commit</module>
+        <module>scenario-24-isavailable-side-effect-free</module>
     </modules>
 
     <dependencies>
