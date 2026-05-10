@@ -45,7 +45,17 @@ public class GeronimoTransactionManagerProvider implements TransactionManagerPro
     private static final String GERONIMO_USER_TRANSACTION_CLASS =
             "org.apache.geronimo.transaction.GeronimoUserTransaction";
 
-    private volatile TransactionManager cachedTransactionManager;
+    /**
+     * JVM-static cache. Each {@code TestContext.loadService(...)} call
+     * returns a fresh provider instance via {@link ServiceLoader}, so
+     * an instance-level cache would multiply TMs across the strategy,
+     * the JtaPlatform's {@code locateTransactionManager()}, and the
+     * userTransaction() wrapper. The static here pins exactly one
+     * Geronimo {@code TransactionManager} to the JVM lifetime.
+     */
+    private static volatile TransactionManager cachedTransactionManager;
+
+    private static final Object LOCK = new Object();
 
     /** No-arg constructor required by {@link ServiceLoader}. */
     public GeronimoTransactionManagerProvider() {
@@ -57,19 +67,25 @@ public class GeronimoTransactionManagerProvider implements TransactionManagerPro
     }
 
     @Override
-    public synchronized TransactionManager create() {
-        if (cachedTransactionManager != null) {
-            return cachedTransactionManager;
+    public TransactionManager create() {
+        TransactionManager local = cachedTransactionManager;
+        if (local != null) {
+            return local;
         }
-        try {
-            Class<?> transactionManagerClass = forName(GERONIMO_TM_CLASS);
-            cachedTransactionManager =
-                    (TransactionManager) transactionManagerClass.getDeclaredConstructor().newInstance();
-            return cachedTransactionManager;
-        } catch (ReflectiveOperationException reflectionFailure) {
-            throw new IllegalStateException(
-                    "Failed to instantiate Geronimo TransactionManager via reflection",
-                    reflectionFailure);
+        synchronized (LOCK) {
+            if (cachedTransactionManager != null) {
+                return cachedTransactionManager;
+            }
+            try {
+                Class<?> transactionManagerClass = forName(GERONIMO_TM_CLASS);
+                cachedTransactionManager =
+                        (TransactionManager) transactionManagerClass.getDeclaredConstructor().newInstance();
+                return cachedTransactionManager;
+            } catch (ReflectiveOperationException reflectionFailure) {
+                throw new IllegalStateException(
+                        "Failed to instantiate Geronimo TransactionManager via reflection",
+                        reflectionFailure);
+            }
         }
     }
 

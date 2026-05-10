@@ -34,10 +34,8 @@
     <description>Aggregator AND parent for the per-scenario test modules covering jawelte-jta-module. Each scenario boots a CDI container so the JTA strategy, the GeronimoPersistencePropertyResolver, and one of the three TransactionManagerProvider impls run end-to-end with Hibernate ORM and H2. CDI runtime selected by -Powb (default) / -Pweld; JTA implementation selected by -Pjta-geronimo (default) / -Pjta-narayana / -Pjta-atomikos.</description>
 
     <modules>
-        <!--
-            Scenario sub-modules registered here as they are created.
-            See ticket §"Test Scenarios" for the full list.
-        -->
+        <module>scenario-01-jta-strategy-auto-selected</module>
+        <module>scenario-02-transactional-under-jta</module>
     </modules>
 
     <dependencies>

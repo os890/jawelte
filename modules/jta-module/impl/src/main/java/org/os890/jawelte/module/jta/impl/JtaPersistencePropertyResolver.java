@@ -88,10 +88,20 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
         properties.put("jakarta.persistence.transaction-type", "JTA");
         properties.put("hibernate.transaction.coordinator_class", "jta");
         properties.put("hibernate.transaction.jta.platform", StandaloneJtaPlatform.class.getName());
-        XADataSource xaDataSource = buildH2XaDataSourceOrNull(existingProperties);
-        if (xaDataSource != null) {
-            properties.put("jakarta.persistence.jtaDataSource",
-                    new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
+        // jtaDataSource is opt-in via the boolean property below: a
+        // bare JTA coordinator (without an XA-enlisting DataSource)
+        // is enough for single-PU scenarios — Hibernate's JTA
+        // coordinator drives JDBC commit via a Synchronization on
+        // afterCompletion and the connection's auto-commit /
+        // begin / commit is managed inside that callback. Multi-PU
+        // XA (Test Scenario 10/11/12) flips the flag on so the
+        // XaDataSourceWrapper provides per-PU XA enlistment.
+        if (Boolean.parseBoolean(System.getProperty("jawelte.jta.useXaDataSource", "false"))) {
+            XADataSource xaDataSource = buildH2XaDataSourceOrNull(existingProperties);
+            if (xaDataSource != null) {
+                properties.put("jakarta.persistence.jtaDataSource",
+                        new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
+            }
         }
         return properties;
     }

@@ -56,7 +56,18 @@ public class AtomikosTransactionManagerProvider implements TransactionManagerPro
     private static final String ATOMIKOS_USER_TRANSACTION_MANAGER_CLASS =
             "com.atomikos.icatch.jta.UserTransactionManager";
 
-    private volatile Object userTransactionManager;
+    /**
+     * JVM-static cache. {@link ServiceLoader} returns a fresh provider
+     * instance per {@code TestContext.loadService(...)} call, so an
+     * instance-level cache would result in multiple
+     * {@code UserTransactionManager} instances — each driving its own
+     * {@code TransactionManager} — leading to cross-instance tx
+     * mismatches between the strategy's {@code begin()} and the
+     * JtaPlatform's {@code locateTransactionManager()}.
+     */
+    private static volatile Object cachedUserTransactionManager;
+
+    private static final Object LOCK = new Object();
 
     /** No-arg constructor required by {@link ServiceLoader}. */
     public AtomikosTransactionManagerProvider() {
@@ -78,8 +89,12 @@ public class AtomikosTransactionManagerProvider implements TransactionManagerPro
     }
 
     @Override
-    public synchronized void shutdown() {
-        Object current = userTransactionManager;
+    public void shutdown() {
+        Object current;
+        synchronized (LOCK) {
+            current = cachedUserTransactionManager;
+            cachedUserTransactionManager = null;
+        }
         if (current == null) {
             return;
         }
@@ -90,7 +105,6 @@ public class AtomikosTransactionManagerProvider implements TransactionManagerPro
                     "Atomikos UserTransactionManager.close() failed via reflection",
                     loggedAndIgnored);
         }
-        userTransactionManager = null;
     }
 
     @Override
@@ -98,31 +112,36 @@ public class AtomikosTransactionManagerProvider implements TransactionManagerPro
         return "Atomikos";
     }
 
-    private synchronized Object ensureUserTransactionManager() {
-        Object current = userTransactionManager;
-        if (current != null) {
-            return current;
+    private Object ensureUserTransactionManager() {
+        Object local = cachedUserTransactionManager;
+        if (local != null) {
+            return local;
         }
-        try {
-            Class<?> userTransactionManagerClass = forName(ATOMIKOS_USER_TRANSACTION_MANAGER_CLASS);
-            Object instance = userTransactionManagerClass.getDeclaredConstructor().newInstance();
-            // setForceShutdown(false) leaves recovery threads alone on
-            // close — appropriate when Atomikos's own shutdown hook will
-            // run after the test JVM exits this strategy. setStartupTransactionService
-            // is true by default in 6.x.
-            try {
-                userTransactionManagerClass.getMethod("setForceShutdown", boolean.class)
-                        .invoke(instance, false);
-            } catch (NoSuchMethodException olderApi) {
-                // Older Atomikos releases lack the setter; the default is fine.
+        synchronized (LOCK) {
+            if (cachedUserTransactionManager != null) {
+                return cachedUserTransactionManager;
             }
-            userTransactionManagerClass.getMethod("init").invoke(instance);
-            this.userTransactionManager = instance;
-            return instance;
-        } catch (ReflectiveOperationException reflectionFailure) {
-            throw new IllegalStateException(
-                    "Failed to initialise Atomikos UserTransactionManager via reflection",
-                    reflectionFailure);
+            try {
+                Class<?> userTransactionManagerClass = forName(ATOMIKOS_USER_TRANSACTION_MANAGER_CLASS);
+                Object instance = userTransactionManagerClass.getDeclaredConstructor().newInstance();
+                // setForceShutdown(false) leaves recovery threads alone on
+                // close — appropriate when Atomikos's own shutdown hook will
+                // run after the test JVM exits this strategy. setStartupTransactionService
+                // is true by default in 6.x.
+                try {
+                    userTransactionManagerClass.getMethod("setForceShutdown", boolean.class)
+                            .invoke(instance, false);
+                } catch (NoSuchMethodException olderApi) {
+                    // Older Atomikos releases lack the setter; the default is fine.
+                }
+                userTransactionManagerClass.getMethod("init").invoke(instance);
+                cachedUserTransactionManager = instance;
+                return instance;
+            } catch (ReflectiveOperationException reflectionFailure) {
+                throw new IllegalStateException(
+                        "Failed to initialise Atomikos UserTransactionManager via reflection",
+                        reflectionFailure);
+            }
         }
     }
 
