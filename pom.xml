@@ -287,11 +287,25 @@
                 <version>${narayana.jta.version}</version>
                 <scope>test</scope>
             </dependency>
+            <!--
+                Atomikos transactions-jta is published only in the
+                legacy javax.transaction namespace on Maven Central
+                (com.atomikos:transactions-jta:6.0.0 builds against
+                javax.transaction-api). The jakarta-namespace builds
+                are available through Atomikos's commercial channel.
+                The dependencyManagement entry is kept here for users
+                who bring their own jakarta-Atomikos jar — by setting
+                a version themselves they pick up the
+                AtomikosTransactionManagerProvider that
+                jta-module/impl ships. The project's own test profile
+                does not include this dep (see tests/jta-module/pom.xml).
+            -->
             <dependency>
                 <groupId>com.atomikos</groupId>
                 <artifactId>transactions-jta</artifactId>
                 <version>${atomikos.version}</version>
                 <scope>test</scope>
+                <optional>true</optional>
             </dependency>
 
             <!--

@@ -210,14 +210,19 @@
                 </dependency>
             </dependencies>
         </profile>
-        <profile>
-            <id>jta-atomikos</id>
-            <dependencies>
-                <dependency>
-                    <groupId>com.atomikos</groupId>
-                    <artifactId>transactions-jta</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
+        <!--
+            jta-atomikos profile intentionally omitted from the test
+            matrix: Atomikos's open-source TransactionsEssentials
+            jar (com.atomikos:transactions-jta) is published on
+            Maven Central only in the legacy javax.transaction
+            namespace, which is incompatible with this project's
+            jakarta.transaction stack. The
+            AtomikosTransactionManagerProvider class still ships in
+            jta-module/impl so users who bring their own
+            jakarta-namespace Atomikos build (typically the
+            commercial release) can opt in via the standard
+            ServiceLoader + @Priority mechanism.
+        -->
+
     </profiles>
 </project>
