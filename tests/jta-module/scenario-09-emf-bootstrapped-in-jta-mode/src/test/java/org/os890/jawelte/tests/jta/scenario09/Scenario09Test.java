@@ -44,7 +44,7 @@ public class Scenario09Test {
 
     @Test
     public void emfPropertiesReportJtaModeWithXaWrapper() {
-        Object transactionType = entityManagerFactory.getProperties().get("jakarta.persistence.transaction-type");
+        Object transactionType = entityManagerFactory.getProperties().get("jakarta.persistence.transactionType");
         assertThat(transactionType).asString().isEqualTo("JTA");
 
         Object coordinatorClass =

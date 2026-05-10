@@ -451,6 +451,16 @@ public class JpaCdiExtension implements Extension {
             }
         }
 
+        // When a resolver contributed a jtaDataSource, drop the plain
+        // JDBC connection coordinates so Hibernate cannot fall back to
+        // its non-XA connection-provider path for schema-generation /
+        // pool-warm-up. user + password are kept — Hibernate still
+        // uses them for DDL execution against the wrapped DataSource.
+        if (properties.containsKey("jakarta.persistence.jtaDataSource")) {
+            properties.remove("jakarta.persistence.jdbc.url");
+            properties.remove("jakarta.persistence.jdbc.driver");
+        }
+
         return properties;
     }
 

@@ -1393,3 +1393,35 @@ Narayana per the bundled CDI-extension conflict, separate gap).
 No jpa-module/impl changes — RESOURCE_LOCAL paths untouched.
 
 Closes G2 + G3 from the 3rd-pass gap report.
+
+## 2026-05-10 — TICKET-006 G5 + G6: EMF property-name + jdbc-cleanup recipe
+
+Two recipe fixes:
+
+**G6 — `jakarta.persistence.transactionType` (camelCase).** The
+JTA resolver previously contributed
+`jakarta.persistence.transaction-type=JTA` (kebab-case). Per
+Jakarta Persistence 3.2 §3.7.1 the canonical property-bag name is
+camelCase `transactionType`; the kebab form is the
+`persistence.xml` attribute on the `<persistence-unit>` element,
+not the property name. Hibernate accepts both, but a strict JPA
+provider would only see the camelCase form. Scenario 09's
+assertion updated to read the new key.
+
+**G5 — drop `jdbc.url` + `jdbc.driver` when `jtaDataSource` is
+set.** `JpaCdiExtension.computeProperties` now removes the plain
+JDBC URL + driver from the merged property bag whenever the
+resolver contributed a `jakarta.persistence.jtaDataSource` —
+preventing Hibernate from falling back to its non-XA
+connection-provider path for schema generation, pool warm-up, or
+connection validation. `user` + `password` are kept; Hibernate
+still uses them for DDL execution against the wrapped DataSource.
+
+Verified: 26/26 jta-module scenarios green under
+`-Powb -Pjta-geronimo`; 6/6 spot-check (02 / 03 / 09 / 21 / 39 /
+43) green under `-Powb -Pjta-narayana`; 3/3 jpa-module
+RESOURCE_LOCAL spot-check (08 / 24 / 44) green — the
+`JpaCdiExtension` cleanup is gated on `jtaDataSource` being
+present, so RESOURCE_LOCAL paths are untouched.
+
+Closes G5 + G6 from the 3rd-pass gap report.

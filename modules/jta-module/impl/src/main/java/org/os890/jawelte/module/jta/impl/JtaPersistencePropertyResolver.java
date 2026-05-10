@@ -36,9 +36,14 @@ import org.os890.jawelte.module.jta.impl.xa.XaDataSourceWrapper;
  *
  * <p>Property contributions:
  * <ul>
- *   <li>{@code jakarta.persistence.transaction-type=JTA} — the
+ *   <li>{@code jakarta.persistence.transactionType=JTA} — the
  *       Jakarta-Persistence-level switch that flips the EMF from
- *       RESOURCE_LOCAL to JTA.</li>
+ *       RESOURCE_LOCAL to JTA. The property name follows the
+ *       Jakarta Persistence 3.2 §3.7.1 spec form (camelCase) — note
+ *       that the {@code persistence.xml} attribute on the
+ *       {@code <persistence-unit>} element uses the kebab-case
+ *       {@code transaction-type} variant; only the property-bag
+ *       form is camelCase.</li>
  *   <li>{@code hibernate.transaction.coordinator_class=jta} — tells
  *       Hibernate's transaction coordinator factory to use the JTA
  *       coordinator (which drives JDBC connection enlistment off the
@@ -85,7 +90,7 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
     public Map<String, Object> resolvePropertiesFor(
             String persistenceUnitName, Map<String, Object> existingProperties) {
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("jakarta.persistence.transaction-type", "JTA");
+        properties.put("jakarta.persistence.transactionType", "JTA");
         properties.put("hibernate.transaction.coordinator_class", "jta");
         properties.put("hibernate.transaction.jta.platform", StandaloneJtaPlatform.class.getName());
         // DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION is the
