@@ -1091,3 +1091,17 @@ The spec bootstrap path (`Persistence.createEntityManagerFactory(name, propertie
 A small enum converter (`PersistenceUnitTransactionType.valueOf(strategy.getTransactionType().name())`) bridges the public `jakarta.persistence` enum the SPI returns to the `jakarta.persistence.spi` enum `TestPersistenceUnitInfo` consumes. Both have identical names so `valueOf` round-trips cleanly.
 
 Verified: scenarios 06 (auto-discovery), 08 (transactional), 24 (multi-PU writes), 47 (prod-shaped persistence.xml) all green under `-P owb`.
+
+## 2026-05-10 — TICKET-006 JtaTransactionStrategy + JtaPlatform + property resolver
+
+Three classes in jta-module/impl:
+
+**`JtaTransactionStrategy`** — TICKET-005 `TransactionStrategy` impl at `@Priority(Integer.MAX_VALUE - 100)`. Lazy provider resolution on first `begin()` (walks the priority-sorted candidate list and picks the first whose `isAvailable()` returns true; throws fast if none). TM and UT cached for JVM lifetime. Per-thread `Deque<Transaction>` for nested suspend/resume. Fires CDI events once per JTA tx with empty `persistenceUnitName` (signals "transaction-wide", per ticket scenario 16). Translates JTA-checked exceptions to the `jakarta.persistence.RollbackException` the SPI signature uses.
+
+**`StandaloneJtaPlatform`** (Hibernate `AbstractJtaPlatform` extension) — locates the `TransactionManager` and `UserTransaction` via `TestContext.loadService(TransactionStrategy.class)`. Hibernate caches whatever it returns for the EMF lifetime so the lookup cost is paid once per PU.
+
+**`JtaPersistencePropertyResolver`** (active `PersistencePropertyResolver` at `@Priority(Integer.MAX_VALUE - 1)`) — contributes `jakarta.persistence.transaction-type=JTA`, `hibernate.transaction.coordinator_class=jta`, and `hibernate.transaction.jta.platform=...StandaloneJtaPlatform`. The resolver is generic — same property pack for Geronimo, Narayana, Atomikos. Renamed from the ticket's "GeronimoPersistencePropertyResolver" because the contents are not provider-specific.
+
+ServiceLoader registrations in `META-INF/services/` for `TransactionStrategy` and `PersistencePropertyResolver`. `META-INF/beans.xml` ships at `bean-discovery-mode="annotated"`; jta-module/impl has no CDI beans of its own.
+
+`mvn -pl modules/jta-module/impl -am verify` green (Checkstyle + RAT + Javadoc all clean).
