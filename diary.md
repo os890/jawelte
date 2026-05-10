@@ -1060,3 +1060,14 @@ Renamed every test-classpath class that implements a jawelte port interface (or 
 ## 2026-05-09 — Opt-in JpaLauncherSessionListener
 
 Added a JUnit Platform LauncherSessionListener that gives jpa-module a deterministic JVM-scoped lifecycle: pre-warms the XbeanFinderEntityScanner cache on session open and runs cleanup (EmfCache.closeAll, scanner cache reset, JpaActivePersistenceUnits.reset, TransactionScopedEmHolder drain) on session close. Not registered by default — consumers opt in by adding their own META-INF/services entry — so any breakage surfaces fast through the dedicated test scenario rather than silently affecting every project. New test scenario (scenario-64) registers the listener via test-classpath SPI and asserts both the pre-warm side effect and the deactivate() cleanup path. Made EmfCache.closeAll public + cache-clearing, added prewarmForCurrentThread / clearScanCache to XbeanFinderEntityScanner, and pulled junit-platform-launcher in at provided scope. Full reactor `mvn -P owb verify` (60+ scenarios) passes.
+
+## 2026-05-10 — TICKET-006 jta-module skeleton
+
+Created the `jta-module` Maven aggregator with `api` and `impl` submodules under `modules/`. Registered `jta-module` in `modules/pom.xml` and added cross-module references for `jawelte-jta-module-api` / `jawelte-jta-module-impl` in the parent `dependencyManagement`.
+
+- `jta-module/api`: depends on `core-api` + `jakarta.transaction-api` (provided). Hosts the upcoming `TransactionManagerProvider` port.
+- `jta-module/impl`: depends on `jta-module/api`, `jpa-module/api`, `core-api`, the standard Jakarta APIs (cdi/transaction/persistence/MP-Config) at `provided`, and `hibernate-core` at `provided` for the upcoming `StandaloneJtaPlatform`. No compile-time dep on `jpa-module/impl` or any specific JTA implementation jar — provider impls will use `Class.forName` + reflection.
+
+Reactor still green: `mvn compile` from the project root succeeds with the new modules in place. No Java sources committed in this step — empty modules establish the layout for subsequent commits.
+
+Branch: `12-jta-module` (linked to issue #12).

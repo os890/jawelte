@@ -251,6 +251,18 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal jta-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jta-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jta-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!--
                 JPA / Transaction APIs default to provided: the CDI runtime
                 (or a Jakarta EE container) supplies them at test time, the

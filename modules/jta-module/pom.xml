@@ -22,21 +22,19 @@
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
-        <artifactId>jawelte-parent</artifactId>
+        <artifactId>jawelte-modules</artifactId>
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-modules</artifactId>
+    <artifactId>jawelte-jta-module</artifactId>
     <packaging>pom</packaging>
 
-    <name>jawelte (modules aggregator)</name>
-    <description>Top-level aggregator for jawelte feature modules. Each feature module is a Maven aggregator with api / impl submodules.</description>
+    <name>jawelte (jta-module aggregator)</name>
+    <description>JTA-backed transaction support for jawelte. jta-module/api ships the TransactionManagerProvider port; jta-module/impl ships JtaTransactionStrategy (the TICKET-005 TransactionStrategy impl that wins by @Priority over the default RESOURCE_LOCAL one), the GeronimoPersistencePropertyResolver, default TransactionManagerProvider impls (Geronimo, Narayana, Atomikos), the Hibernate StandaloneJtaPlatform, and the XaDataSourceWrapper.</description>
 
     <modules>
-        <module>cdi-module</module>
-        <module>scope-module</module>
-        <module>jpa-module</module>
-        <module>jta-module</module>
+        <module>api</module>
+        <module>impl</module>
     </modules>
 </project>
