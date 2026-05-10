@@ -1519,3 +1519,28 @@ parity with OWB. Scenarios 17 / 30 / 36 (which fail under
 `-Pjta-narayana` due to Narayana's bundled CDI extension) pass
 under Weld + Geronimo because the Geronimo TM doesn't ship its
 own CDI extension to compete with `JpaCdiExtension`.
+
+## 2026-05-10 — Delegate JTA CDI integration to vendor when present
+
+Pivoted from the narrow-veto + skip-our-context plan to full delegation.
+JpaCdiExtension now detects Narayana's `com.arjuna.ats.jta.cdi.TransactionExtension`
+on the classpath and:
+
+- drops `com.arjuna.ats.jta.cdi.*` from VENDOR_VETO_PACKAGE_PREFIXES so
+  Narayana's bundled CDI beans (TransactionContext, producers,
+  @Transactional interceptor) participate normally
+- skips `addInterceptorBinding(Transactional.class)` so our
+  TransactionalInterceptor doesn't double-intercept alongside Narayana's
+- skips `addContext(new TransactionScopedContext())` so Narayana's
+  TransactionContext owns @TransactionScoped lifecycle
+
+`@ReadOnly` interceptor binding stays unconditional — that's a jawelte-only
+annotation, no vendor handles it. The same detection hook will cover
+Quarkus (TICKET-015) since Quarkus embeds Narayana.
+
+Trade-off accepted: under -Pjta-narayana, `@Transactional` follows
+Jakarta-EE rollback rules (rollback only on RuntimeException + the
+spec's rollbackOn list), whereas under -Pjta-geronimo our interceptor
+keeps the project's "rollback on any throwable" rule. Test-method
+@Transactional is unaffected — the JUnit lifecycle adapter drives
+TransactionStrategy.begin/commit/rollback directly, no CDI interception.

@@ -127,12 +127,23 @@ public class JpaCdiExtension implements Extension {
      * package prefixes that are <em>exempt</em> from the
      * vendor-internal CDI-bean vetoing observer. Keep set when a
      * downstream module legitimately ships beans in
-     * {@code com.arjuna.ats.jta.cdi.*} or
      * {@code org.apache.geronimo.transaction.*} that the user wants
      * registered.
      */
     private static final String VENDOR_VETO_ALLOWLIST_KEY =
             "org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages";
+
+    /**
+     * Marker class shipped by Narayana's CDI integration jar.
+     * Presence on the classpath indicates Narayana ships its own
+     * {@code @TransactionScoped} {@code Context} and its own
+     * {@code @Transactional} interceptors — we delegate to them
+     * rather than register competing ones from jpa-module. The same
+     * delegation pattern will apply to Quarkus (which embeds Narayana)
+     * once TICKET-015 lands.
+     */
+    private static final String NARAYANA_CDI_EXTENSION_CLASS =
+            "com.arjuna.ats.jta.cdi.TransactionExtension";
 
     /**
      * MicroProfile Config keys for the optional entity-scan whitelist.
@@ -149,14 +160,15 @@ public class JpaCdiExtension implements Extension {
 
     /**
      * Package prefixes whose CDI beans are vetoed at PAT to avoid
-     * duplicate-bean conflicts when JTA implementations land on the
-     * test classpath even though jawelte itself ships only
-     * RESOURCE_LOCAL. Defensive measure; an allowlist via
+     * duplicate-bean conflicts. Geronimo doesn't ship a CDI integration
+     * we want to delegate to, so its CDI beans (if any sneak in via
+     * transitives) stay vetoed. Narayana's CDI beans are kept — we
+     * delegate context + interceptor to its bundled extension when
+     * it's on the classpath. An allowlist via
      * {@link #VENDOR_VETO_ALLOWLIST_KEY} exempts specific packages
      * when a downstream module actually wants them registered.
      */
     private static final Set<String> VENDOR_VETO_PACKAGE_PREFIXES = Set.of(
-            "com.arjuna.ats.jta.cdi.",
             "org.apache.geronimo.transaction.");
 
     private boolean active;
@@ -210,7 +222,14 @@ public class JpaCdiExtension implements Extension {
         activePersistenceUnits = resolvedActivePersistenceUnits;
         JpaActivePersistenceUnits.set(activePersistenceUnits);
 
-        event.addInterceptorBinding(Transactional.class);
+        // When a vendor JTA CDI integration is on the classpath
+        // (Narayana today, Quarkus later) we delegate the @Transactional
+        // interceptor to it: Jakarta-EE rollback rules from the
+        // platform, no double-interception. Our @ReadOnly interceptor
+        // is project-specific, so it stays bound either way.
+        if (!platformProvidesCdiTransactionalInterceptor()) {
+            event.addInterceptorBinding(Transactional.class);
+        }
         event.addInterceptorBinding(ReadOnly.class);
     }
 
@@ -335,7 +354,47 @@ public class JpaCdiExtension implements Extension {
                 .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
                 .produceWith(instance -> TestContext.loadService(TransactionStrategy.class).userTransaction());
 
-        event.addContext(new TransactionScopedContext());
+        // Same delegation rationale as the @Transactional interceptor
+        // binding: when Narayana (or in future Quarkus) is on the
+        // classpath, its bundled extension already adds a
+        // @TransactionScoped Context. Adding our own would either
+        // win the bean lookup race and break the vendor's
+        // TransactionContext.isActive() (which the vendor's
+        // interceptor calls) or lose it and leave our context unused.
+        if (!platformProvidesCdiTransactionScopedContext()) {
+            event.addContext(new TransactionScopedContext());
+        }
+    }
+
+    /**
+     * Detect whether a vendor JTA CDI integration is on the classpath
+     * that ships its own {@code @Transactional} interceptor. Tests
+     * for Narayana's integration class today; the same hook will
+     * cover Quarkus once TICKET-015 lands (Quarkus embeds Narayana).
+     * Resolved via {@link Class#forName(String, boolean, ClassLoader)}
+     * against the TCCL — no compile-time dependency on the vendor jar.
+     */
+    private static boolean platformProvidesCdiTransactionalInterceptor() {
+        return classExists(NARAYANA_CDI_EXTENSION_CLASS);
+    }
+
+    /**
+     * Detect whether a vendor JTA CDI integration registers a
+     * {@code @TransactionScoped} {@code Context}. Same probe as
+     * {@link #platformProvidesCdiTransactionalInterceptor()} — Narayana's
+     * extension does both in one go.
+     */
+    private static boolean platformProvidesCdiTransactionScopedContext() {
+        return classExists(NARAYANA_CDI_EXTENSION_CLASS);
+    }
+
+    private static boolean classExists(String className) {
+        try {
+            Class.forName(className, false, Thread.currentThread().getContextClassLoader());
+            return true;
+        } catch (ClassNotFoundException notPresent) {
+            return false;
+        }
     }
 
     private static boolean matchesVendorVetoTarget(String className) {
