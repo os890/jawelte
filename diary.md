@@ -1081,3 +1081,13 @@ Extended `TransactionStrategy` (jpa-module/api/port) with a new `UserTransaction
 `TestScenarioCountingTransactionStrategy` (scenario-44) inherits the parent's `userTransaction()` so no test code changed.
 
 Verified: scenarios 33–36 (UserTransaction) and 44 (strategy-swap) all green under `-P owb`. The ticket text saying "without any new method on it" is now stale and will be updated when ticket task #154 lands.
+
+## 2026-05-10 — TICKET-006 branch JpaCdiExtension EMF bootstrap on tx-type
+
+`JpaCdiExtension.bootstrapEntityManagerFactory` no longer hardcodes `PersistenceUnitTransactionType.RESOURCE_LOCAL` on the synthetic `TestPersistenceUnitInfo`. The active `TransactionStrategy.getTransactionType()` is resolved once in `onBeforeBeanDiscovery` and threaded through to the factory. Under RESOURCE_LOCAL the value is unchanged; under JTA (next commits) the auto-discovery path will hand `JTA` to Hibernate.
+
+The spec bootstrap path (`Persistence.createEntityManagerFactory(name, properties)`) doesn't need the change — the JTA `PersistencePropertyResolver` will contribute `jakarta.persistence.transaction-type=JTA` so Hibernate sees the same value via properties.
+
+A small enum converter (`PersistenceUnitTransactionType.valueOf(strategy.getTransactionType().name())`) bridges the public `jakarta.persistence` enum the SPI returns to the `jakarta.persistence.spi` enum `TestPersistenceUnitInfo` consumes. Both have identical names so `valueOf` round-trips cleanly.
+
+Verified: scenarios 06 (auto-discovery), 08 (transactional), 24 (multi-PU writes), 47 (prod-shaped persistence.xml) all green under `-P owb`.

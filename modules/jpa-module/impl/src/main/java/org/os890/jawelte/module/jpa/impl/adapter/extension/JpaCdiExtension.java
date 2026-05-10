@@ -187,6 +187,14 @@ public class JpaCdiExtension implements Extension {
         List<ParsedPersistenceUnit> parsed =
                 PersistenceXmlParser.parseAll(Thread.currentThread().getContextClassLoader());
         Set<String> filter = filterFromAnnotation(persistenceConfig);
+        // Resolve the active strategy's transaction type once: under
+        // JTA the auto-discovery (Hibernate) path bootstraps the EMF
+        // with PersistenceUnitTransactionType.JTA; under RESOURCE_LOCAL
+        // it stays RESOURCE_LOCAL. The spec bootstrap path picks up
+        // the same change from properties (PersistencePropertyResolver
+        // contributes jakarta.persistence.transaction-type=JTA when
+        // the JTA strategy is active).
+        PersistenceUnitTransactionType emfTransactionType = resolveEmfTransactionType();
 
         Set<String> resolvedActivePersistenceUnits = new LinkedHashSet<>();
         for (ParsedPersistenceUnit unit : parsed) {
@@ -196,7 +204,8 @@ public class JpaCdiExtension implements Extension {
             resolvedActivePersistenceUnits.add(unit.name());
             Map<String, Object> properties = computeProperties(unit, persistenceConfig, testClass);
             persistenceUnitProperties.put(unit.name(), properties);
-            EmfCache.getOrCreate(unit.name(), () -> bootstrapEntityManagerFactory(unit, properties));
+            EmfCache.getOrCreate(unit.name(),
+                    () -> bootstrapEntityManagerFactory(unit, properties, emfTransactionType));
         }
         activePersistenceUnits = resolvedActivePersistenceUnits;
         JpaActivePersistenceUnits.set(activePersistenceUnits);
@@ -458,13 +467,18 @@ public class JpaCdiExtension implements Extension {
      * classloader parameter here, since smuggling one in would let
      * callers override the TCCL the rest of the bootstrap relies on.
      *
-     * @param unit         the parsed persistence unit
-     * @param properties   merged property bag (H2 + MP Config + resolver)
+     * @param unit            the parsed persistence unit
+     * @param properties      merged property bag (H2 + MP Config + resolver)
+     * @param transactionType the {@code PersistenceUnitTransactionType} the
+     *                        active {@code TransactionStrategy} reports —
+     *                        JTA when {@code jta-module} is on the
+     *                        classpath, RESOURCE_LOCAL otherwise
      * @return the bootstrapped {@link EntityManagerFactory}
      */
     private static EntityManagerFactory bootstrapEntityManagerFactory(
             ParsedPersistenceUnit unit,
-            Map<String, Object> properties) {
+            Map<String, Object> properties,
+            PersistenceUnitTransactionType transactionType) {
         if (unit.hasClassElements()) {
             return Persistence.createEntityManagerFactory(unit.name(), properties);
         }
@@ -480,8 +494,21 @@ public class JpaCdiExtension implements Extension {
                 List.copyOf(mergedEntities),
                 List.of(),
                 propertiesAsJavaProperties,
-                PersistenceUnitTransactionType.RESOURCE_LOCAL);
+                transactionType);
         return new HibernatePersistenceProvider().createContainerEntityManagerFactory(unitInfo, properties);
+    }
+
+    /**
+     * Read the active {@code TransactionStrategy}'s transaction type
+     * and convert from the public {@code jakarta.persistence}
+     * enum (returned by the SPI) to the {@code jakarta.persistence.spi}
+     * enum {@link TestPersistenceUnitInfo} consumes. The two enums
+     * have identical names — {@code JTA} / {@code RESOURCE_LOCAL} —
+     * so {@code valueOf} round-trips cleanly.
+     */
+    private static PersistenceUnitTransactionType resolveEmfTransactionType() {
+        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
+        return PersistenceUnitTransactionType.valueOf(strategy.getTransactionType().name());
     }
 
     private static EntityScanner.Whitelist readEntityScanWhitelist() {
