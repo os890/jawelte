@@ -36,6 +36,7 @@
     <modules>
         <module>scenario-01-jta-strategy-auto-selected</module>
         <module>scenario-02-transactional-under-jta</module>
+        <module>scenario-03-rollback-on-runtime-exception</module>
     </modules>
 
     <dependencies>

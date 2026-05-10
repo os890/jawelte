@@ -88,20 +88,28 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
         properties.put("jakarta.persistence.transaction-type", "JTA");
         properties.put("hibernate.transaction.coordinator_class", "jta");
         properties.put("hibernate.transaction.jta.platform", StandaloneJtaPlatform.class.getName());
-        // jtaDataSource is opt-in via the boolean property below: a
-        // bare JTA coordinator (without an XA-enlisting DataSource)
-        // is enough for single-PU scenarios — Hibernate's JTA
-        // coordinator drives JDBC commit via a Synchronization on
-        // afterCompletion and the connection's auto-commit /
-        // begin / commit is managed inside that callback. Multi-PU
-        // XA (Test Scenario 10/11/12) flips the flag on so the
-        // XaDataSourceWrapper provides per-PU XA enlistment.
-        if (Boolean.parseBoolean(System.getProperty("jawelte.jta.useXaDataSource", "false"))) {
-            XADataSource xaDataSource = buildH2XaDataSourceOrNull(existingProperties);
-            if (xaDataSource != null) {
-                properties.put("jakarta.persistence.jtaDataSource",
-                        new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
-            }
+        // hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND_HOLD
+        // keeps a single Connection borrowed for the life of the JTA tx,
+        // so the XAResource's enlistment / delistment / commit / rollback
+        // applies to the same connection that ran the INSERTs. The default
+        // RELEASE_AFTER_STATEMENT in some configurations would return the
+        // connection to the pool between statements and break XA enlistment.
+        properties.put("hibernate.connection.handling_mode",
+                "DELAYED_ACQUISITION_AND_HOLD");
+        // Always set jakarta.persistence.jtaDataSource to an
+        // XaDataSourceWrapper around the underlying H2 JdbcDataSource:
+        // multi-PU XA atomicity (Test Scenario 10/11/12) requires
+        // real XA enlistment of the JDBC connection in the JTA tx.
+        // Single-PU scenarios benefit too — the XA wrapper drives the
+        // commit / rollback through the TM rather than relying on
+        // Hibernate's JDBC handling mode for the synchronization.
+        // Production consumers ship their own PersistencePropertyResolver
+        // for non-H2 databases (their resolver builds whatever XADataSource
+        // their DB vendor provides).
+        XADataSource xaDataSource = buildH2XaDataSourceOrNull(existingProperties);
+        if (xaDataSource != null) {
+            properties.put("jakarta.persistence.jtaDataSource",
+                    new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
         }
         return properties;
     }

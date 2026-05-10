@@ -33,6 +33,7 @@ import jakarta.transaction.Synchronization;
 import jakarta.transaction.SystemException;
 import jakarta.transaction.Transaction;
 import jakarta.transaction.TransactionManager;
+// XAResource referenced via the inner Sync class.
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
@@ -231,24 +232,21 @@ public class XaDataSourceWrapper implements DataSource {
 
         @Override
         public void afterCompletion(int status) {
+            // Delist + close happens via the TM's own commit / rollback
+            // path during prepare/commit/rollback (TMSUCCESS / TMFAIL),
+            // so afterCompletion only needs to close the XAConnection
+            // handle and release pooled resources. Status is unused
+            // here but kept on the signature per the JTA Synchronization
+            // contract.
+            int unusedStatus = status;
+            if (unusedStatus == Status.STATUS_UNKNOWN) {
+                LOG.log(Level.WARNING, "JTA tx completed with STATUS_UNKNOWN — cleanup may be incomplete");
+            }
             try {
-                int delistFlag = status == Status.STATUS_COMMITTED
-                        ? XAResource.TMSUCCESS
-                        : XAResource.TMFAIL;
-                transaction.delistResource(xaResource, delistFlag);
-            } catch (SystemException loggedAndIgnored) {
-                LOG.log(Level.WARNING, "Failed to delist XAResource on transaction completion",
+                xaConnection.close();
+            } catch (SQLException loggedAndIgnored) {
+                LOG.log(Level.WARNING, "Failed to close XAConnection on transaction completion",
                         loggedAndIgnored);
-            } catch (IllegalStateException alreadyDelisted) {
-                // The TM may have already delisted at commit/rollback time;
-                // treat as expected.
-            } finally {
-                try {
-                    xaConnection.close();
-                } catch (SQLException loggedAndIgnored) {
-                    LOG.log(Level.WARNING, "Failed to close XAConnection on transaction completion",
-                            loggedAndIgnored);
-                }
             }
         }
     }
