@@ -1486,3 +1486,36 @@ Verified: jta-module scenarios 01 / 02 / 39 / 44 + jpa-module 08 /
 44 / 63 (config-resolver-prefix-walk) all green — the trim is
 transparent for valid no-whitespace values and only intervenes
 on the malformed-input path.
+
+## 2026-05-10 — Weld bean-archive marker on JtaTransactionStrategy
+
+`@Dependent` added to `JtaTransactionStrategy` purely as a CDI
+bean-archive marker. Without at least one annotated bean class,
+Weld may skip `jta-module/impl`'s `beans.xml` entirely under
+`bean-discovery-mode="annotated"`, missing the rest of the
+META-INF wiring (`META-INF/services` files for the
+`TransactionStrategy` SPI, the `PersistencePropertyResolver` SPI,
+and the three `TransactionManagerProvider` impls). The strategy
+itself is never `@Inject`'d — `TestContext.loadService(...)`
+resolves the ServiceLoader-instantiated singleton at JVM-static
+scope. The CDI instance and the ServiceLoader instance are
+independent and the CDI one is unused.
+
+`@Dependent` (vs `@ApplicationScoped`) is the lightest CDI scope —
+no normal-scope proxy is generated — and equally valid as a
+bean-archive marker.
+
+Plus: `mockito-core` added to `tests/jta-module/pom.xml` (was
+already on `tests/jpa-module/pom.xml`). `cdi-module/impl`'s
+auto-mock CDI extension `MockitoMockFactory` references
+`org.mockito.Mockito` directly; without the dep on the test
+classpath, Weld's `AfterBeanDiscovery` event-fire fails with
+`NoClassDefFoundError`. OWB tolerated the missing class because
+it observed the extension differently.
+
+Verified: all 27 jta-module scenarios green under both
+`-Powb -Pjta-geronimo` AND `-Pweld -Pjta-geronimo` — full Weld
+parity with OWB. Scenarios 17 / 30 / 36 (which fail under
+`-Pjta-narayana` due to Narayana's bundled CDI extension) pass
+under Weld + Geronimo because the Geronimo TM doesn't ship its
+own CDI extension to compete with `JpaCdiExtension`.

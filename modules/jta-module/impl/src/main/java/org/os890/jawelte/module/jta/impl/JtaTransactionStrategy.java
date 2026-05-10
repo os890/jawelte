@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.ServiceLoader;
 
 import jakarta.annotation.Priority;
+import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.PersistenceUnitTransactionType;
@@ -92,6 +93,18 @@ import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
  * {@code persistenceUnitName} field is empty on these events to signal
  * "transaction-wide" rather than "PU-scoped".
  */
+// @Dependent makes JtaTransactionStrategy a CDI bean-archive marker —
+// without at least one annotated bean class, Weld may skip
+// jta-module/impl's beans.xml entirely under
+// bean-discovery-mode="annotated". @Dependent is the lightest CDI
+// scope (no normal-scope proxy is generated) and the strategy itself
+// is never @Inject'd — TestContext.loadService(...) resolves the
+// ServiceLoader-instantiated singleton at JVM-static scope. The CDI
+// instance and the ServiceLoader instance are independent and the
+// CDI one is never observed; the annotation is purely the
+// bean-archive marker that pulls the rest of the META-INF wiring
+// (META-INF/services, beans.xml) onto Weld's radar.
+@Dependent
 @Priority(Integer.MAX_VALUE - 100)
 public class JtaTransactionStrategy implements TransactionStrategy {
 
