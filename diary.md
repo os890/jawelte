@@ -1578,3 +1578,49 @@ After full delegation surfaced two issues, both now resolved:
 
 Final state: 4 combos × 27 scenarios = 108/108 green.
 - {owb,weld} × {jta-geronimo,jta-narayana}
+
+## 2026-05-10 — verify-all.sh: full matrix build script
+
+Added `verify-all.sh` at the repo root. Three phases:
+
+1. **Install** — `./mvnw -DskipTests install` populates the local m2 with
+   every module's snapshot.
+2. **Test matrix** — sequentially runs `mvn verify` against each test
+   module under each applicable profile combo:
+   - tests/core (no profile)
+   - tests/cdi-module / scope-module / jpa-module: {owb, weld}
+   - tests/jta-module: {owb, weld} × {jta-geronimo, jta-narayana}
+3. **Coverage** — `coverage-report` aggregates JaCoCo data.
+
+Fail-fast via `set -euo pipefail` plus an explicit FAIL banner from the
+`run` helper. Sequential is required: parallel mvn invocations clobber
+each other's `target/` directories. Total: 13 phases (1 install + 11
+matrix + 1 coverage).
+
+## 2026-05-10 — Refactor: JTA-vendor CDI plumbing moves out of jpa-module
+
+Architectural fix. The dependency direction is `jta-module → jpa-module`,
+but JpaCdiExtension was directly knowing about Narayana / Geronimo
+classes, vetoing them, registering a synthetic JTAEnvironmentBean, and
+probing for `com.arjuna.ats.jta.cdi.TransactionExtension`. That violated
+the rule.
+
+New seam: `org.os890.jawelte.module.jpa.api.port.CdiTransactionalSupportProvider`.
+Default impl in jpa-module/impl returns `false` for both
+`platformProvidesTransactionalInterceptor()` and
+`platformProvidesTransactionScopedContext()` (jpa-module hosts both
+itself). jta-module/impl ships a higher-priority impl that probes
+Narayana's TransactionExtension class — when present, jpa-module steps
+aside and the new `JtaCdiExtension` (also in jta-module/impl) handles
+the vendor-veto observer, the TransactionalInterceptor / JTAEnvironmentBean
+delegation vetos, the synthetic JTAEnvironmentBean registration, and
+the strategy pre-bootstrap.
+
+Also moved `tests/jpa-module/scenario-58-vendor-bean-veto` to
+`tests/jta-module/scenario-45-vendor-bean-veto` since the veto behavior
+is now jta-module's responsibility. Reframed the assertion: Geronimo
+beans are vetoed (no CDI integration to delegate to); Narayana CDI
+beans are kept (delegation depends on them); a regular bean still
+resolves.
+
+verify-all.sh: 13 phases, 14m 48s, all green.

@@ -59,6 +59,7 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.ReadOnly;
+import org.os890.jawelte.module.jpa.api.port.CdiTransactionalSupportProvider;
 import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
@@ -123,54 +124,6 @@ public class JpaCdiExtension implements Extension {
             "org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages";
 
     /**
-     * MicroProfile Config key whose value (comma-separated) lists
-     * package prefixes that are <em>exempt</em> from the
-     * vendor-internal CDI-bean vetoing observer. Keep set when a
-     * downstream module legitimately ships beans in
-     * {@code org.apache.geronimo.transaction.*} that the user wants
-     * registered.
-     */
-    private static final String VENDOR_VETO_ALLOWLIST_KEY =
-            "org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages";
-
-    /**
-     * Marker class shipped by Narayana's CDI integration jar.
-     * Presence on the classpath indicates Narayana ships its own
-     * {@code @TransactionScoped} {@code Context} and its own
-     * {@code @Transactional} interceptors — we delegate to them
-     * rather than register competing ones from jpa-module. The same
-     * delegation pattern will apply to Quarkus (which embeds Narayana)
-     * once TICKET-015 lands.
-     */
-    private static final String NARAYANA_CDI_EXTENSION_CLASS =
-            "com.arjuna.ats.jta.cdi.TransactionExtension";
-
-    /**
-     * Our own {@code @Transactional} interceptor — vetoed at PAT
-     * when a vendor JTA CDI integration is on the classpath so the
-     * vendor's interceptor wins outright (no double-interception).
-     * String literal to avoid pulling the impl class into Extension's
-     * compile-time API.
-     */
-    private static final String OUR_TRANSACTIONAL_INTERCEPTOR_CLASS_NAME =
-            "org.os890.jawelte.module.jpa.impl.adapter.interceptor.TransactionalInterceptor";
-
-    /**
-     * Narayana's {@code JTAEnvironmentBean} — vetoed at PAT so
-     * Weld's implicit-discovery doesn't register it as a competing
-     * CDI bean alongside the synthetic one
-     * {@link #registerSyntheticVendorJtaEnvironmentBeanIfNeeded}
-     * adds. Without this veto the two collide as
-     * {@code AmbiguousResolutionException} when Narayana's
-     * {@code NarayanaTransactionManager} resolves
-     * {@code Instance<JTAEnvironmentBean>}. OWB doesn't emit a bean
-     * for it (the class carries no bean-defining annotation), so this
-     * veto is a no-op there.
-     */
-    private static final String NARAYANA_JTA_ENV_BEAN_CLASS_NAME =
-            "com.arjuna.ats.jta.common.JTAEnvironmentBean";
-
-    /**
      * MicroProfile Config keys for the optional entity-scan whitelist.
      * When at least one of the two is set (and non-empty), the
      * {@link EntityScanner} drops every FQCN that doesn't match a
@@ -183,22 +136,7 @@ public class JpaCdiExtension implements Extension {
     private static final String ENTITY_SCAN_WHITELIST_PATTERNS_KEY =
             "org.os890.jawelte.module.jpa.entity-scan.whitelist.patterns";
 
-    /**
-     * Package prefixes whose CDI beans are vetoed at PAT to avoid
-     * duplicate-bean conflicts. Geronimo doesn't ship a CDI integration
-     * we want to delegate to, so its CDI beans (if any sneak in via
-     * transitives) stay vetoed. Narayana's CDI beans are kept — we
-     * delegate context + interceptor to its bundled extension when
-     * it's on the classpath. An allowlist via
-     * {@link #VENDOR_VETO_ALLOWLIST_KEY} exempts specific packages
-     * when a downstream module actually wants them registered.
-     */
-    private static final Set<String> VENDOR_VETO_PACKAGE_PREFIXES = Set.of(
-            "org.apache.geronimo.transaction.");
-
     private boolean active;
-
-    private volatile Set<String> vendorVetoAllowlist;
 
     private Set<String> activePersistenceUnits = new LinkedHashSet<>();
 
@@ -247,12 +185,14 @@ public class JpaCdiExtension implements Extension {
         activePersistenceUnits = resolvedActivePersistenceUnits;
         JpaActivePersistenceUnits.set(activePersistenceUnits);
 
-        // When a vendor JTA CDI integration is on the classpath
-        // (Narayana today, Quarkus later) we delegate the @Transactional
-        // interceptor to it: Jakarta-EE rollback rules from the
-        // platform, no double-interception. Our @ReadOnly interceptor
-        // is project-specific, so it stays bound either way.
-        if (!platformProvidesCdiTransactionalInterceptor()) {
+        // When a downstream module reports that the deployed runtime
+        // already provides a CDI @Transactional interceptor (today:
+        // jta-module/impl when Narayana's TransactionExtension is on
+        // the classpath; future: quarkus-arc-module), we step aside
+        // and let the platform's interceptor handle @Transactional.
+        // Our @ReadOnly interceptor is project-specific so it stays
+        // bound either way — no vendor handles it.
+        if (!cdiTransactionalSupport().platformProvidesTransactionalInterceptor()) {
             event.addInterceptorBinding(Transactional.class);
         }
         event.addInterceptorBinding(ReadOnly.class);
@@ -276,48 +216,6 @@ public class JpaCdiExtension implements Extension {
                 rewriteField(field, persistenceUnit.unitName(), PersistenceUnit.class);
             }
         }
-    }
-
-    /**
-     * Vetoes types whose package matches one of the
-     * vendor-internal prefixes (Narayana / Geronimo JTA CDI beans)
-     * unless the user has allowlisted that prefix via
-     * {@link #VENDOR_VETO_ALLOWLIST_KEY}. Defensive against
-     * duplicate-bean conflicts when a JTA implementation lands on
-     * the test classpath even though jawelte itself ships only
-     * RESOURCE_LOCAL.
-     *
-     * @param event the {@code ProcessAnnotatedType} event
-     * @param <T>   the annotated type's class type parameter
-     */
-    <T> void onProcessAnnotatedTypeForVendorVeto(@Observes ProcessAnnotatedType<T> event) {
-        if (!active) {
-            return;
-        }
-        String className = event.getAnnotatedType().getJavaClass().getName();
-        if (matchesVendorVetoAllowlist(className)) {
-            return;
-        }
-        // When delegating @Transactional handling to a vendor JTA CDI
-        // integration, also veto our own TransactionalInterceptor —
-        // the binding annotation (jakarta.transaction.Transactional)
-        // is added by the vendor's extension regardless of whether we
-        // add it ourselves, so without this veto our interceptor would
-        // double-fire alongside the vendor's.
-        if (OUR_TRANSACTIONAL_INTERCEPTOR_CLASS_NAME.equals(className)
-                && platformProvidesCdiTransactionalInterceptor()) {
-            event.veto();
-            return;
-        }
-        if (NARAYANA_JTA_ENV_BEAN_CLASS_NAME.equals(className)
-                && platformProvidesCdiTransactionalInterceptor()) {
-            event.veto();
-            return;
-        }
-        if (!matchesVendorVetoTarget(className)) {
-            return;
-        }
-        event.veto();
     }
 
     <X> void onProcessFactoryProducerMethod(
@@ -356,16 +254,6 @@ public class JpaCdiExtension implements Extension {
         if (!active) {
             return;
         }
-        // Pre-bootstrap the active TransactionStrategy. RESOURCE_LOCAL is
-        // a no-op (returns null TM); under JTA the call triggers lazy
-        // TransactionManagerProvider resolution. Narayana's provider
-        // pre-seeds JTAEnvironmentBean from create() so its CDI bean
-        // (which constructs lazily on first @Transactional fire and
-        // looks up the same JTAEnvironmentBean) sees a configured TM
-        // regardless of when the application first dereferences it.
-        TestContext.loadService(TransactionStrategy.class).getTransactionManager();
-        registerSyntheticVendorJtaEnvironmentBeanIfNeeded(event);
-
         boolean singlePersistenceUnit = activePersistenceUnits.size() == 1;
         for (String persistenceUnitName : activePersistenceUnits) {
             EntityManagerFactory factory = EmfCache.getCached(persistenceUnitName)
@@ -405,139 +293,26 @@ public class JpaCdiExtension implements Extension {
                 .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
                 .produceWith(instance -> TestContext.loadService(TransactionStrategy.class).userTransaction());
 
-        // Same delegation rationale as the @Transactional interceptor
-        // binding: when Narayana (or in future Quarkus) is on the
-        // classpath, its bundled extension already adds a
-        // @TransactionScoped Context. Adding our own would either
-        // win the bean lookup race and break the vendor's
-        // TransactionContext.isActive() (which the vendor's
-        // interceptor calls) or lose it and leave our context unused.
-        if (!platformProvidesCdiTransactionScopedContext()) {
+        // When a downstream module reports that the runtime already
+        // provides a CDI @TransactionScoped Context (Narayana's
+        // extension does this when it's on the classpath), we step
+        // aside. Adding our own would compete with the vendor's for
+        // bean-store ownership of @TransactionScoped resolution.
+        if (!cdiTransactionalSupport().platformProvidesTransactionScopedContext()) {
             event.addContext(new TransactionScopedContext());
         }
     }
 
     /**
-     * Register a synthetic CDI bean for Narayana's
-     * {@code JTAEnvironmentBean} that produces the static singleton
-     * {@code BeanPopulator} caches (which jta-module's
-     * {@code NarayanaTransactionManagerProvider.create()} pre-seeds
-     * with a configured {@code TransactionManager}).
-     *
-     * <p>Without this synthetic bean, Weld's implicit-discovery path
-     * lets Narayana's {@code NarayanaTransactionManager} see an
-     * {@code Instance<JTAEnvironmentBean>} satisfied by a fresh
-     * Weld-managed instance whose state diverges from the seeded
-     * singleton — its {@code transactionManager} is {@code null} and
-     * the constructor NPEs deep inside {@code JTASupplier.get(...)}.
-     * OWB doesn't hit this because its instance lookup falls through
-     * to the unsatisfied path and reads the same singleton we seed.
-     *
-     * <p>Reflection-only — jpa-module never compile-depends on
-     * Narayana. No-op when Narayana isn't on the classpath.
+     * Resolve the active {@link CdiTransactionalSupportProvider}.
+     * Default impl shipped by jpa-module/impl reports {@code false}
+     * for both methods (jpa-module hosts everything); a downstream
+     * module like jta-module/impl ships an alternative at higher
+     * priority that probes the runtime for vendor JTA CDI
+     * integrations and reports {@code true} when they're present.
      */
-    private static void registerSyntheticVendorJtaEnvironmentBeanIfNeeded(AfterBeanDiscovery event) {
-        if (!platformProvidesCdiTransactionalInterceptor()) {
-            return;
-        }
-        try {
-            ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-            Class<?> envBeanClass = Class.forName(
-                    "com.arjuna.ats.jta.common.JTAEnvironmentBean", false, contextClassLoader);
-            Class<?> beanPopulatorClass = Class.forName(
-                    "com.arjuna.common.internal.util.propertyservice.BeanPopulator",
-                    false, contextClassLoader);
-            Object seededSingleton = beanPopulatorClass
-                    .getMethod("getDefaultInstance", Class.class)
-                    .invoke(null, envBeanClass);
-            event.<Object>addBean()
-                    .beanClass(envBeanClass)
-                    .types(envBeanClass, Object.class)
-                    .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
-                    .scope(ApplicationScoped.class)
-                    .produceWith(instance -> seededSingleton);
-        } catch (ClassNotFoundException notPresent) {
-            // Narayana classes truly absent — should not happen given
-            // platformProvidesCdiTransactionalInterceptor() returned true,
-            // but tolerate the race.
-        } catch (ReflectiveOperationException reflectionFailure) {
-            throw new IllegalStateException(
-                    "Failed to register synthetic JTAEnvironmentBean for Narayana CDI bootstrap",
-                    reflectionFailure);
-        }
-    }
-
-    /**
-     * Detect whether a vendor JTA CDI integration is on the classpath
-     * that ships its own {@code @Transactional} interceptor. Tests
-     * for Narayana's integration class today; the same hook will
-     * cover Quarkus once TICKET-015 lands (Quarkus embeds Narayana).
-     * Resolved via {@link Class#forName(String, boolean, ClassLoader)}
-     * against the TCCL — no compile-time dependency on the vendor jar.
-     */
-    private static boolean platformProvidesCdiTransactionalInterceptor() {
-        return classExists(NARAYANA_CDI_EXTENSION_CLASS);
-    }
-
-    /**
-     * Detect whether a vendor JTA CDI integration registers a
-     * {@code @TransactionScoped} {@code Context}. Same probe as
-     * {@link #platformProvidesCdiTransactionalInterceptor()} — Narayana's
-     * extension does both in one go.
-     */
-    private static boolean platformProvidesCdiTransactionScopedContext() {
-        return classExists(NARAYANA_CDI_EXTENSION_CLASS);
-    }
-
-    private static boolean classExists(String className) {
-        try {
-            Class.forName(className, false, Thread.currentThread().getContextClassLoader());
-            return true;
-        } catch (ClassNotFoundException notPresent) {
-            return false;
-        }
-    }
-
-    private static boolean matchesVendorVetoTarget(String className) {
-        for (String prefix : VENDOR_VETO_PACKAGE_PREFIXES) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean matchesVendorVetoAllowlist(String className) {
-        Set<String> allowlist = vendorVetoAllowlist;
-        if (allowlist == null) {
-            synchronized (this) {
-                if (vendorVetoAllowlist == null) {
-                    vendorVetoAllowlist = readVendorVetoAllowlist();
-                }
-                allowlist = vendorVetoAllowlist;
-            }
-        }
-        for (String prefix : allowlist) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static Set<String> readVendorVetoAllowlist() {
-        return resolver().resolve(VENDOR_VETO_ALLOWLIST_KEY)
-                .map(value -> {
-                    Set<String> prefixes = new LinkedHashSet<>();
-                    for (String entry : value.split(",")) {
-                        String trimmed = entry.trim();
-                        if (!trimmed.isEmpty()) {
-                            prefixes.add(trimmed);
-                        }
-                    }
-                    return prefixes;
-                })
-                .orElseGet(Collections::emptySet);
+    private static CdiTransactionalSupportProvider cdiTransactionalSupport() {
+        return TestContext.loadService(CdiTransactionalSupportProvider.class);
     }
 
     /**

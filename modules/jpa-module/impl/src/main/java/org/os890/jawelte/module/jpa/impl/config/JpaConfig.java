@@ -63,9 +63,6 @@ public class JpaConfig {
     private static final String PROTECTED_PACKAGES_KEY =
             "org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages";
 
-    private static final String VENDOR_VETO_ALLOWLIST_KEY =
-            "org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages";
-
     private static final String ENTITY_SCAN_WHITELIST_PACKAGES_KEY =
             "org.os890.jawelte.module.jpa.entity-scan.whitelist.packages";
 
@@ -99,19 +96,6 @@ public class JpaConfig {
         return lookupResolver().resolve(PROTECTED_PACKAGES_KEY)
                 .map(JpaConfig::splitCsvToOrderedSet)
                 .orElse(fallback);
-    }
-
-    /**
-     * Allowlist of package prefixes the vendor-veto observer must
-     * NOT veto, even when their FQCNs would otherwise match a
-     * vendor-veto target prefix.
-     *
-     * @return the allowlist; empty when the key isn't set
-     */
-    public Set<String> vendorVetoAllowlist() {
-        return lookupResolver().resolve(VENDOR_VETO_ALLOWLIST_KEY)
-                .map(JpaConfig::splitCsvToOrderedSet)
-                .orElseGet(LinkedHashSet::new);
     }
 
     /**
