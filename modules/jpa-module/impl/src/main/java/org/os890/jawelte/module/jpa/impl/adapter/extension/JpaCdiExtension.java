@@ -445,7 +445,7 @@ public class JpaCdiExtension implements Extension {
 
         PersistencePropertyResolver resolver = TestContext.loadService(PersistencePropertyResolver.class);
         if (resolver != null) {
-            Map<String, Object> contributed = resolver.resolvePropertiesFor(unit.name());
+            Map<String, Object> contributed = resolver.resolvePropertiesFor(unit.name(), properties);
             if (contributed != null) {
                 properties.putAll(contributed);
             }

@@ -15,14 +15,19 @@
  */
 package org.os890.jawelte.module.jta.impl;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.ServiceLoader;
+
+import javax.sql.XADataSource;
 
 import jakarta.annotation.Priority;
 
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
 import org.os890.jawelte.module.jta.impl.hibernate.StandaloneJtaPlatform;
+import org.os890.jawelte.module.jta.impl.xa.XaDataSourceWrapper;
 
 /**
  * The active {@link PersistencePropertyResolver} shipped by jta-module:
@@ -62,16 +67,72 @@ import org.os890.jawelte.module.jta.impl.hibernate.StandaloneJtaPlatform;
 @Priority(Integer.MAX_VALUE - 1)
 public class JtaPersistencePropertyResolver implements PersistencePropertyResolver {
 
+    private static final Logger LOG =
+            System.getLogger(JtaPersistencePropertyResolver.class.getName());
+
+    private static final String H2_XA_DATA_SOURCE_CLASS = "org.h2.jdbcx.JdbcDataSource";
+
     /** No-arg constructor required by {@link ServiceLoader}. */
     public JtaPersistencePropertyResolver() {
     }
 
     @Override
     public Map<String, Object> resolvePropertiesFor(String persistenceUnitName) {
+        return resolvePropertiesFor(persistenceUnitName, Map.of());
+    }
+
+    @Override
+    public Map<String, Object> resolvePropertiesFor(
+            String persistenceUnitName, Map<String, Object> existingProperties) {
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("jakarta.persistence.transaction-type", "JTA");
         properties.put("hibernate.transaction.coordinator_class", "jta");
         properties.put("hibernate.transaction.jta.platform", StandaloneJtaPlatform.class.getName());
+        XADataSource xaDataSource = buildH2XaDataSourceOrNull(existingProperties);
+        if (xaDataSource != null) {
+            properties.put("jakarta.persistence.jtaDataSource",
+                    new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
+        }
         return properties;
+    }
+
+    /**
+     * Reflectively build an H2 {@link XADataSource} from the
+     * {@code jakarta.persistence.jdbc.url} / user / password the H2
+     * branch of {@code JpaCdiExtension} accumulates. Returns
+     * {@code null} when H2's {@code JdbcDataSource} is not on the
+     * classpath (production consumers ship their own
+     * {@link PersistencePropertyResolver} that builds whatever
+     * {@code XADataSource} their database vendor provides).
+     */
+    private static XADataSource buildH2XaDataSourceOrNull(Map<String, Object> existingProperties) {
+        Object url = existingProperties.get("jakarta.persistence.jdbc.url");
+        if (!(url instanceof String urlString) || urlString.isEmpty()) {
+            return null;
+        }
+        Object user = existingProperties.get("jakarta.persistence.jdbc.user");
+        Object password = existingProperties.get("jakarta.persistence.jdbc.password");
+        try {
+            Class<?> jdbcDataSourceClass = Class.forName(
+                    H2_XA_DATA_SOURCE_CLASS, true, Thread.currentThread().getContextClassLoader());
+            Object instance = jdbcDataSourceClass.getDeclaredConstructor().newInstance();
+            jdbcDataSourceClass.getMethod("setURL", String.class).invoke(instance, urlString);
+            if (user instanceof String userString) {
+                jdbcDataSourceClass.getMethod("setUser", String.class).invoke(instance, userString);
+            }
+            if (password instanceof String passwordString) {
+                jdbcDataSourceClass.getMethod("setPassword", String.class)
+                        .invoke(instance, passwordString);
+            }
+            return (XADataSource) instance;
+        } catch (ClassNotFoundException h2Absent) {
+            LOG.log(Level.DEBUG,
+                    "H2 JdbcDataSource not on the classpath — falling back to non-XA jtaDataSource");
+            return null;
+        } catch (ReflectiveOperationException reflectionFailure) {
+            throw new IllegalStateException(
+                    "Failed to construct H2 XADataSource via reflection from existing JDBC properties",
+                    reflectionFailure);
+        }
     }
 }
