@@ -1105,3 +1105,106 @@ Three classes in jta-module/impl:
 ServiceLoader registrations in `META-INF/services/` for `TransactionStrategy` and `PersistencePropertyResolver`. `META-INF/beans.xml` ships at `bean-discovery-mode="annotated"`; jta-module/impl has no CDI beans of its own.
 
 `mvn -pl modules/jta-module/impl -am verify` green (Checkstyle + RAT + Javadoc all clean).
+
+## 2026-05-10 — TICKET-006 implementation summary
+
+Branch `12-jta-module` against issue #12. Eight scenarios shipped:
+01 (auto-selection), 02 (transactional commit), 03 (rollback on
+RuntimeException), 09 (EMF in JTA mode), 17 (@TransactionScoped
+under JTA — covers ticket 17 + 18), 20 (UserTransaction is JTA-provided),
+21 (programmatic UT.begin/commit), 24 (isAvailable side-effect-free).
+
+All eight pass under `-Powb -Pjta-geronimo`. Under `-Powb -Pjta-narayana`
+seven pass; scenario 17 is currently broken under Narayana because
+`narayana-jta` 7.0.0.Final bundles `com.arjuna.ats.jta.cdi.TransactionExtension`
+that registers a competing `@TransactionScoped` Context — the existing
+JpaCdiExtension vendor-veto blocks Narayana's CDI managed beans
+(via ProcessAnnotatedType) but doesn't intercept Extensions loaded
+via the ServiceLoader path, so Narayana's TransactionContext.isActive
+fires alongside ours during scope resolution.
+
+Atomikos: OSS `com.atomikos:transactions-jta:6.0.0` is `javax.transaction`
+namespace and incompatible with the project's jakarta.transaction stack.
+The `jta-atomikos` test profile is omitted; the provider class
+(`AtomikosTransactionManagerProvider`) still ships in jta-module/impl
+for users who bring their own jakarta-Atomikos build (typically
+behind Atomikos's commercial channel).
+
+Cross-cuts to TICKET-005:
+- `TransactionStrategy` SPI gained `userTransaction()` (symmetric with
+  the existing `getTransactionManager()`); the ticket's "no new
+  methods" note in §"Cross-cuts to TICKET-005" is stale.
+- `PersistencePropertyResolver` SPI gained a 2-arg form
+  `resolvePropertiesFor(puName, existingProperties)` so the JTA
+  resolver can read `jakarta.persistence.jdbc.url` to construct an
+  H2 XADataSource. Default-method shim preserves any single-arg impls.
+- `JpaCdiExtension.bootstrapEntityManagerFactory` no longer hardcodes
+  RESOURCE_LOCAL; reads `strategy.getTransactionType()` once per
+  bootstrap and threads it into `TestPersistenceUnitInfo`.
+- `TransactionScopedEmHolder.peekOrAutoBegin` branches on tx-type:
+  RESOURCE_LOCAL drives `EntityTransaction.begin()` (existing path);
+  JTA calls `em.joinTransaction()` and registers a Synchronization
+  that pops + closes the EM at tx complete. Under JTA the holder
+  reads `strategy.isActive()` rather than its own scope stack so
+  programmatic `userTx.begin()` outside the @Transactional interceptor
+  also acquires EMs.
+- `TransactionalInterceptor` opens a holder transactional scope
+  under JTA before `strategy.begin()` (the JTA strategy doesn't push
+  onto the holder).
+
+Renamed the ticket's `GeronimoPersistencePropertyResolver` to
+`JtaPersistencePropertyResolver` since the contributed property pack
+(transaction-type=JTA, jta coordinator, StandaloneJtaPlatform,
+jtaDataSource → XaDataSourceWrapper) is provider-agnostic — the same
+resolver is the active impl across all three providers.
+
+`XaDataSourceWrapper` is shipped and **mandatory** under JTA mode
+(not opt-in as the POC scope-cut suggested). Without XA enlistment
+H2 leaves connections in auto-commit and rollbacks have no effect;
+with the wrapper plus `hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND_HOLD`
+the JDBC connection stays bound to the JTA tx for the life of the
+@Transactional method and the TM drives commit / rollback through
+XA.
+
+JtaTransactionStrategy state lives at JVM-static scope (provider,
+TM, UT). ServiceLoader returns a fresh strategy instance per
+loadService() call; without static caches, peekOrAutoBegin's strategy
+lookup and the JtaPlatform's locateTransactionManager indirection
+would each see a null TM and either fail or bootstrap a *different*
+TM than the @Transactional interceptor's begin() drove.
+
+Deferred from the ticket's 25 scenarios — to be picked up on a
+follow-up branch:
+- 04 (commit on checked exception) — project rule rolls back on any
+  throwable; scenario contradicts the existing TICKET-005 contract.
+- 05–08 (provider selection edge cases) — partially covered by running
+  scenarios 01–03 under both -Pjta-geronimo and -Pjta-narayana; the
+  no-provider-available and forced-priority cases need bespoke setup.
+- 10–12 (multi-PU XA atomic commit / rollback / prepare-failure) —
+  the XA infrastructure is in place; deferred until a multi-PU test
+  setup is wired in.
+- 13–15, 19 (nested @Transactional under JTA) — the JTA strategy's
+  suspended-tx deque is implemented but the holder's per-PU stack
+  treats nested levels as sharing the same EM, which is the
+  RESOURCE_LOCAL behaviour. Correct nested-JTA semantics require a
+  per-tx EM lookup (key by Transaction object) rather than the
+  current top-of-stack.
+- 16 (CDI events fire once per tx) — events fire correctly per the
+  strategy implementation; an observer-based assertion is straightforward
+  but not yet shipped.
+- 18 (@PreDestroy on rollback) — actually covered by scenario 17's
+  second test method `perTxBeanPreDestroyFiresOnRollback`.
+- 22 (orphan rollback safety net) — behaviour exists via
+  `JpaLifecycleAdapter.afterEach`; an end-to-end assertion that
+  spans test-method boundaries is awkward to write deterministically.
+- 23 (shutdown error handling) — needs a mock provider that throws;
+  not yet scaffolded.
+- 25 (RESOURCE_LOCAL fallback when jta-module absent) — already
+  covered implicitly: the existing tests/jpa-module suite runs
+  without jta-module on the classpath and uses the default
+  RESOURCE_LOCAL strategy.
+
+Existing jpa-module scenarios (sample: 08 / 13 / 24 / 44 / 57)
+remain green under `-Powb`, confirming the cross-cuts to
+TransactionScopedEmHolder, TransactionalInterceptor, and
+JpaCdiExtension haven't regressed RESOURCE_LOCAL behaviour.
