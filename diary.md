@@ -2285,3 +2285,12 @@ Three improvements on top of the merged-to-branch ejb-module:
 All 27 scenarios green (26 existing + scenario 28) under
 `-P owb verify` and `-P weld verify`. Coverage-report aggregator
 includes scenario 28.
+
+## 2026-05-12 — TICKET-007 bootstrap sequence diagram: escape angle brackets
+
+GitHub mermaid was throwing a syntax error on the Bootstrap-sequence
+diagram in issue #14. Cause: `ProcessAnnotatedType<T>` and
+`List<Annotation>` in arrow labels — mermaid parses `<...>` as HTML
+and trips. Replaced with `&lt;T&gt;` / `List&lt;Annotation&gt;`
+which render identically. Applied to `tickets/007-ejb-module.md`
+and synced to the issue body via `gh issue edit`.
