@@ -1980,3 +1980,38 @@ profile), but the per-vendor scenarios document the SPI pinning
 pattern uniformly. GeronimoTransactionManagerProvider now reports
 81.1% (was already high), AtomikosTransactionManagerProvider 70.4%,
 NarayanaTransactionManagerProvider 81.4%.
+
+## 2026-05-11 — TICKET-007 ejb-module — scaffold
+
+Picked up TICKET-007. After main-pull of #13 (TICKET-006 merged), agreed
+ticket-text updates with os890 to align with the as-shipped codebase:
+
+- `ScopeBinding.TestBeanDefaultScope` (sealed-interface nested record)
+  replaces the standalone `TestBeanDefaultScope` references — matches
+  what scope-module already binds.
+- Chain enumeration uses `ServiceLoader.load(EjbAnnotationMapper.class)`
+  + `TestContext.loadService(ServicePriorityResolver.class).sort(...)`
+  (same precedent as `JtaTransactionStrategy`'s
+  `TransactionManagerProvider` chain) — `loadService(...)` alone returns
+  only the head and would defeat the chain.
+
+Filed GitHub issue #14 from the corrected ticket body; `gh issue develop
+14 --checkout --base main` cut branch `14-ejb-module-ejb-module`.
+
+Maven skeleton landed:
+
+- `pom.xml` — pinned `jakarta.ejb.version=4.0.2` (EE-11 generation,
+  same as the existing `jakarta.cdi-api 4.1.0` / `jakarta.persistence-api
+  3.2.0`); added `jakarta.ejb-api` to `<dependencyManagement>` at
+  `provided` scope; added internal cross-refs for `jawelte-ejb-module-api`
+  / `jawelte-ejb-module-impl`.
+- `modules/pom.xml` — registers `ejb-module` as a sibling under
+  `cdi-module / scope-module / jpa-module / jta-module`.
+- `modules/ejb-module/pom.xml` — aggregator (`<modules>api,impl</modules>`).
+- `modules/ejb-module/api/pom.xml` — single surface dep
+  `jakarta.enterprise.cdi-api`; javadoc-jar at verify.
+- `modules/ejb-module/impl/pom.xml` — depends on api + core-api +
+  `jakarta.ejb-api` + `jakarta.transaction-api`; no compile dep on
+  scope-/jpa-/jta-module.
+
+`./mvnw -pl modules/ejb-module,...api,...impl -am validate` is green.
