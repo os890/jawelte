@@ -1887,3 +1887,12 @@ Atomikos-specific scenarios run alongside the Atomikos deps.
 Atomikos's recovery log is disabled via
 com.atomikos.icatch.enable_logging=false during init so no
 tmlog*.log files leak into the test working directory.
+
+## 2026-05-11 — Atomikos profile verified
+
+verify-all.sh 15/15 phases green in 18m 8s. Atomikos sweep adds
+~2m vs the prior 13-phase 16m 7s baseline — full Maven lifecycle
+overhead dominates the per-phase cost, not the ~6s of actual test
+runtime. Existing 13 phases unaffected by the
+pooledJtaDataSource SPI addition (Geronimo/Narayana inherit the
+default empty Optional and take the same code path as before).
