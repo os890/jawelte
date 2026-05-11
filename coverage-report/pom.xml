@@ -1121,6 +1121,16 @@
             <artifactId>jawelte-tests-jta-module-scenario-51-atomikos-multi-pu-xa</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jta-module-scenario-52-narayana-tm-bootstrap</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jta-module-scenario-53-narayana-multi-pu-xa</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

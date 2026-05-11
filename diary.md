@@ -1946,3 +1946,23 @@ entirely from the report).
 Remaining 0% impl-alt classes that need new scenarios:
 - `JpaMetamodelTableNameResolver` (opt-in TableNameResolver alternative)
 - `DefaultPersistenceUnitConnectionResolver` (the SPI is untested end-to-end)
+
+## 2026-05-11 — add scenario-52 + 53 (Narayana-pinned scenarios)
+
+Same pattern as the Atomikos pair (50, 51): pin
+NarayanaTransactionManagerProvider via a per-scenario
+META-INF/services override so the scenarios run against Narayana
+under bare `mvn clean install`, not only under `-P jta-narayana`.
+narayana-jta is already on the activeByDefault `jta-geronimo`
+profile's classpath (bundled for the CDI integration) so no extra
+deps are needed in the scenarios' poms.
+
+- scenario-52-narayana-tm-bootstrap: single-PU, asserts provider name
+  + @Transactional persist/read round-trip.
+- scenario-53-narayana-multi-pu-xa: two PUs, @Transactional method
+  writes into both, asserts atomic 2PC commit.
+
+Coverage delta:
+- NarayanaTransactionManagerProvider: 1.2% → 81.4%
+- jta-module-impl: 60.5/46.1 → 68.7/48.3
+- aggregate: 76.0/62.5 → 77.9/62.8
