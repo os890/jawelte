@@ -1847,3 +1847,10 @@ marker class and delegates all SPI methods to the first one available.
 Atomikos bumped to 6.0.1 (first jakarta-namespace release); pom comments
 updated to drop the stale "javax-only" notes. scenario-24 test comment
 updated for the new shape.
+
+## 2026-05-11 — TICKET-006 auto-select refactor verified
+
+verify-all.sh: all 13 phases green, 16m27s. The auto-select wrapper's
+classpath probe correctly picks Geronimo under jta-geronimo profile and
+Narayana under jta-narayana, under both owb and weld. No test scenarios
+regressed.
