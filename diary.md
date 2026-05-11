@@ -2015,3 +2015,22 @@ Maven skeleton landed:
   scope-/jpa-/jta-module.
 
 `./mvnw -pl modules/ejb-module,...api,...impl -am validate` is green.
+
+### 2026-05-11 — ejb-module/api — `EjbAnnotationMapper`
+
+Single-port api. `mapBeanMetadata(Class<?>, BeanManager)` returns:
+
+- `null` to defer to the next mapper,
+- an empty `List<Annotation>` to claim the class without
+  contributing annotations (default is skipped),
+- a non-empty `List<Annotation>` whose elements the CDI Extension
+  applies via `configureAnnotatedType().add(...)`.
+
+`isAdditionalMapper()` defaults to `true` (additional/supplementary
+mapper); the project's terminal default impl overrides to `false`.
+
+The api jar carries only `jakarta.enterprise.cdi-api` (provided) on
+its compile surface — no `jakarta.ejb-api`, no `jakarta.transaction-api`,
+no scope-module reference. Loads cleanly in JVMs without those libs.
+
+`./mvnw -pl modules/ejb-module/api -am compile` is green.
