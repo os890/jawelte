@@ -35,6 +35,9 @@
 
     <modules>
         <module>scenario-01-singleton-injectable</module>
+        <module>scenario-02-singleton-shared-state</module>
+        <module>scenario-03-stateless-injectable</module>
+        <module>scenario-04-stateless-dependent-semantics</module>
     </modules>
 
     <dependencies>

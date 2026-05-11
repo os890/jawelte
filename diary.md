@@ -2102,3 +2102,15 @@ class to `event.addAnnotatedType(beanManager.createAnnotatedType(c),
 Scenario-01 (`@Singleton` injectable, plain class with no CDI scope on
 it) now green under both `mvn -P owb test` and `mvn -P weld test` with
 `bean-discovery-mode="annotated"` in the scenario's `beans.xml`.
+
+### 2026-05-11 — scenarios 2-4 (basic mapping)
+
+- 02 — `@Singleton` shared state: two `@Inject` Counter injection
+  points share the same `@ApplicationScoped` instance (increment via
+  one is visible from the other).
+- 03 — `@Stateless` injectable: bean is discovered + injectable.
+- 04 — `@Stateless` `@Dependent` semantics: two injection points get
+  different instances (`first.self() != second.self()`).
+
+All green under `mvn -P owb test` and `mvn -P weld test` with
+`bean-discovery-mode="annotated"`.
