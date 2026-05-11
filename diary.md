@@ -2294,3 +2294,24 @@ diagram in issue #14. Cause: `ProcessAnnotatedType<T>` and
 and trips. Replaced with `&lt;T&gt;` / `List&lt;Annotation&gt;`
 which render identically. Applied to `tickets/007-ejb-module.md`
 and synced to the issue body via `gh issue edit`.
+
+## 2026-05-12 — TICKET-007 SPI shrink: drop `observedAnnotations()`, MP Config drives observation
+
+Replaced the per-mapper `observedAnnotations()` SPI method with an
+extension-level MP Config key
+`org.os890.jawelte.module.ejb.bean-defining-annotations`. ejb-module/impl
+ships defaults (`jakarta.ejb.Singleton,jakarta.ejb.Stateless`) at the
+standard ordinal 100; users with custom mappers extend the list.
+
+The configured set drives both the xbean-finder scan (which classes
+become discoverable in `bean-discovery-mode="annotated"`) and the
+broad PAT observer's filter (computed as configured-minus-defaults,
+empty for the common case → broad observer returns on the first
+boolean check). FQCNs that don't resolve to an annotation type
+fail BBD fast — silent skip would have hidden typos.
+
+Scenario 23 (additional mapper for `@Stateful`) got a small
+`META-INF/microprofile-config.properties` opting `@Stateful` into
+the observed-annotations list, otherwise the broad observer never
+reaches `StatefulSubject` under the new design. All 27 scenarios
+green on OWB and Weld.

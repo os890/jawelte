@@ -73,6 +73,22 @@
         </dependency>
 
         <!--
+            MP Config supplies the bean-defining-annotations list that
+            drives the xbean-finder scan AND the broad PAT observer's
+            filter. Read via core/api's ConfigResolver port (same
+            pattern cdi-module's FrameworkAllowlist follows), so the
+            dot-then-underscore key fallback and any user-supplied
+            @Alternative ConfigResolver apply uniformly. Defaults ship
+            in this module's META-INF/microprofile-config.properties
+            at the standard ordinal 100; consumers override by setting
+            the same key in a higher-priority source.
+        -->
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+        </dependency>
+
+        <!--
             xbean-finder hosts the @Singleton / @Stateless classpath
             scan that ejb-module performs during BeforeBeanDiscovery.
             Neither OpenWebBeans nor Weld treat

@@ -19,7 +19,6 @@ import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import jakarta.annotation.Priority;
 import jakarta.ejb.Singleton;
@@ -96,15 +95,6 @@ public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
     @Override
     public boolean isAdditionalMapper() {
         return false;
-    }
-
-    @Override
-    public Set<Class<? extends Annotation>> observedAnnotations() {
-        // The default mapper only acts on the two standard EJB
-        // session-bean annotations; declaring them here lets the CDI
-        // Extension restrict its fast-path PAT observer via
-        // @WithAnnotations.
-        return Set.of(Singleton.class, Stateless.class);
     }
 
     @Override

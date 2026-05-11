@@ -21,6 +21,7 @@ import java.lang.System.Logger.Level;
 import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -45,6 +46,7 @@ import jakarta.enterprise.inject.spi.configurator.AnnotatedTypeConfigurator;
 import org.apache.xbean.finder.AnnotationFinder;
 import org.apache.xbean.finder.UrlSet;
 import org.apache.xbean.finder.archive.ClasspathArchive;
+import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
@@ -103,6 +105,26 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
 public class EjbAnnotationExtension implements Extension {
 
     /**
+     * MP Config key whose comma-separated value lists the
+     * class-level annotations ejb-module observes. The two standard
+     * EJB session-bean annotations ship as the default value in this
+     * module's {@code META-INF/microprofile-config.properties}; a
+     * user with a custom {@code EjbAnnotationMapper} (e.g. for
+     * {@code @Stateful}) extends the list by overriding the same
+     * key in a higher-priority MP Config source.
+     *
+     * <p>The configured set drives two things at
+     * {@code BeforeBeanDiscovery}: the {@code xbean-finder} classpath
+     * scan (which annotations make a class discoverable under
+     * {@code bean-discovery-mode="annotated"}) and the broad
+     * {@code ProcessAnnotatedType} observer's filter (which classes
+     * the additional-mapper chain runs against beyond the hardcoded
+     * {@code @Singleton} / {@code @Stateless} fast-path).
+     */
+    public static final String BEAN_DEFINING_ANNOTATIONS_KEY =
+            "org.os890.jawelte.module.ejb.bean-defining-annotations";
+
+    /**
      * Logger emitting one entry per class whose
      * {@code AnnotatedType} the extension transformed. Level
      * {@link Level#DEBUG}: silent under default JUL/SLF4J root
@@ -136,11 +158,37 @@ public class EjbAnnotationExtension implements Extension {
             "org.os890.jawelte.core.",
             "org.os890.jawelte.module.");
 
+    /**
+     * Annotations hardcoded into the fast-path
+     * {@code ProcessAnnotatedType} observer via {@code @WithAnnotations}.
+     * The MP Config–driven set
+     * ({@link #BEAN_DEFINING_ANNOTATIONS_KEY}) defaults to exactly
+     * these two; any additional FQCN configured beyond them flows
+     * through the broad observer instead.
+     */
+    private static final Set<Class<? extends Annotation>> FAST_PATH_ANNOTATIONS =
+            Set.of(Singleton.class, Stateless.class);
+
     /** Additional mappers in priority order, populated on {@code BeforeBeanDiscovery}. */
     private final List<EjbAnnotationMapper> additionalMappers = new ArrayList<>();
 
     /** Terminal default mapper, populated on {@code BeforeBeanDiscovery}. */
     private EjbAnnotationMapper terminalMapper;
+
+    /**
+     * Class-level annotations ejb-module observes, resolved from MP
+     * Config at {@code BeforeBeanDiscovery} time. Drives both the
+     * {@code xbean-finder} scan and the broad observer's filter.
+     */
+    private Set<Class<? extends Annotation>> configuredAnnotations = Set.of();
+
+    /**
+     * Configured annotations minus the hardcoded fast-path set. The
+     * broad observer returns immediately when this is empty, so a
+     * deployment that sticks with the defaults pays no per-class
+     * cost for the broad observer beyond a single boolean check.
+     */
+    private Set<Class<? extends Annotation>> extraAnnotations = Set.of();
 
     /**
      * Required public no-arg constructor for CDI Extension
@@ -164,6 +212,7 @@ public class EjbAnnotationExtension implements Extension {
      *                    non-{@code null}
      */
     void onBeforeBeanDiscovery(@Observes BeforeBeanDiscovery event, BeanManager beanManager) {
+        resolveConfiguredAnnotations();
         resolveMapperChain();
         event.addStereotype(Singleton.class,
                 ApplicationScoped.Literal.INSTANCE,
@@ -179,9 +228,9 @@ public class EjbAnnotationExtension implements Extension {
      * annotations. CDI restricts delivery to types carrying
      * {@code @jakarta.ejb.Singleton} or {@code @jakarta.ejb.Stateless}
      * via {@link WithAnnotations}, so non-EJB classes never reach the
-     * extension here — only the broad observer (below) sees them, and
-     * only when at least one additional mapper opts into broad
-     * observation through {@link EjbAnnotationMapper#observedAnnotations()}.
+     * extension here — only the broad observer (below) sees them,
+     * and only when MP Config configures annotations beyond this
+     * hardcoded pair (see {@link #BEAN_DEFINING_ANNOTATIONS_KEY}).
      *
      * @param event       the in-flight {@code ProcessAnnotatedType}
      *                    event for an EJB-annotated type; non-{@code null}
@@ -198,12 +247,22 @@ public class EjbAnnotationExtension implements Extension {
     }
 
     /**
-     * Broad-path observer that runs only the additional mappers (the
-     * terminal default never claims a class that lacks
-     * {@code @Singleton} or {@code @Stateless}, so there is no value
-     * in invoking it here). Skips classes already handled by the
-     * fast-path observer above so each class flows through the chain
-     * at most once.
+     * Broad-path observer that runs only the additional mappers. The
+     * terminal default never claims a class that lacks the hardcoded
+     * fast-path annotations, so there is no value in invoking it
+     * here.
+     *
+     * <p>Three short-circuits keep the per-class cost low for the
+     * common case where MP Config sticks with the defaults:
+     * <ol>
+     *   <li>If no extra annotations are configured beyond the
+     *       fast-path defaults, return immediately.</li>
+     *   <li>Skip classes already handled by the fast-path observer
+     *       so each class flows through the chain at most once.</li>
+     *   <li>Match the class against the {@link #extraAnnotations}
+     *       set; only classes carrying at least one extra reach the
+     *       chain.</li>
+     * </ol>
      *
      * @param event       the in-flight {@code ProcessAnnotatedType}
      *                    event; non-{@code null}
@@ -215,9 +274,15 @@ public class EjbAnnotationExtension implements Extension {
     <T> void onProcessOtherAnnotatedType(
             @Observes ProcessAnnotatedType<T> event,
             BeanManager beanManager) {
+        if (extraAnnotations.isEmpty()) {
+            return;
+        }
         Class<T> beanClass = event.getAnnotatedType().getJavaClass();
         if (beanClass.isAnnotationPresent(Singleton.class)
                 || beanClass.isAnnotationPresent(Stateless.class)) {
+            return;
+        }
+        if (!classCarriesAnyExtra(beanClass)) {
             return;
         }
         applyChain(event, beanManager, /* runTerminal */ false);
@@ -250,9 +315,6 @@ public class EjbAnnotationExtension implements Extension {
                                          BeanManager beanManager,
                                          boolean runTerminal) {
         for (EjbAnnotationMapper mapper : additionalMappers) {
-            if (!classMatchesObservedAnnotations(mapper, beanClass)) {
-                continue;
-            }
             List<Annotation> result = mapper.mapBeanMetadata(beanClass, beanManager);
             if (result != null) {
                 return result;
@@ -264,12 +326,8 @@ public class EjbAnnotationExtension implements Extension {
         return null;
     }
 
-    private static boolean classMatchesObservedAnnotations(EjbAnnotationMapper mapper, Class<?> beanClass) {
-        Set<Class<? extends Annotation>> observed = mapper.observedAnnotations();
-        if (observed.isEmpty()) {
-            return true;
-        }
-        for (Class<? extends Annotation> annotationType : observed) {
+    private boolean classCarriesAnyExtra(Class<?> beanClass) {
+        for (Class<? extends Annotation> annotationType : extraAnnotations) {
             if (beanClass.isAnnotationPresent(annotationType)) {
                 return true;
             }
@@ -320,6 +378,9 @@ public class EjbAnnotationExtension implements Extension {
     }
 
     private void registerEjbAnnotatedTypes(BeforeBeanDiscovery event, BeanManager beanManager) {
+        if (configuredAnnotations.isEmpty()) {
+            return;
+        }
         Set<Class<?>> candidates = scanClasspathForEjbAnnotatedTypes();
         for (Class<?> beanClass : candidates) {
             AnnotatedType<?> annotatedType = beanManager.createAnnotatedType(beanClass);
@@ -327,36 +388,80 @@ public class EjbAnnotationExtension implements Extension {
         }
     }
 
-    private static Set<Class<?>> scanClasspathForEjbAnnotatedTypes() {
+    private Set<Class<?>> scanClasspathForEjbAnnotatedTypes() {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         Set<Class<?>> matches = new LinkedHashSet<>();
         try {
             List<URL> urls = new UrlSet(classLoader).getUrls();
             AnnotationFinder finder = new AnnotationFinder(new ClasspathArchive(classLoader, urls));
-            for (Class<?> ejbClass : finder.findAnnotatedClasses(Singleton.class)) {
-                if (!isExcluded(ejbClass.getName()) && !hasNormalScopeOrDependent(ejbClass)) {
-                    matches.add(ejbClass);
-                }
-            }
-            for (Class<?> ejbClass : finder.findAnnotatedClasses(Stateless.class)) {
-                if (!isExcluded(ejbClass.getName()) && !hasNormalScopeOrDependent(ejbClass)) {
-                    matches.add(ejbClass);
+            for (Class<? extends Annotation> annotationType : configuredAnnotations) {
+                for (Class<?> ejbClass : finder.findAnnotatedClasses(annotationType)) {
+                    if (!isExcluded(ejbClass.getName()) && !hasNormalScopeOrDependent(ejbClass)) {
+                        matches.add(ejbClass);
+                    }
                 }
             }
         } catch (IOException | RuntimeException scanFailure) {
-            // The scan is a best-effort discovery aid; surfacing the
-            // failure as an opaque CDI bootstrap error would be more
-            // disruptive than not running ejb-module on this
-            // classpath. The fallback path is the standard CDI
-            // discovery — types that already carry a CDI scope still
-            // resolve through the existing rules, and the mapper
-            // chain still runs against them via ProcessAnnotatedType.
             throw new IllegalStateException(
-                    "ejb-module classpath scan for @Singleton / @Stateless types failed; "
+                    "ejb-module classpath scan for configured bean-defining annotations failed; "
                             + "bootstrap aborted to surface the underlying classpath problem.",
                     scanFailure);
         }
         return matches;
+    }
+
+    /**
+     * Resolve {@link #BEAN_DEFINING_ANNOTATIONS_KEY} from MP Config
+     * (via {@link ConfigResolver}) into a {@code Set} of annotation
+     * {@code Class} objects. Defaults ship in this module's
+     * {@code META-INF/microprofile-config.properties}; an FQCN the
+     * configured value lists but the classloader cannot resolve, or
+     * one that resolves to a type that isn't an annotation, fails
+     * the bootstrap fast — a quiet skip would silently disable
+     * observation of the misconfigured entry.
+     */
+    private void resolveConfiguredAnnotations() {
+        ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
+        List<String> fqcns = resolver.resolve(BEAN_DEFINING_ANNOTATIONS_KEY)
+                .map(value -> Arrays.stream(value.split(","))
+                        .map(String::trim)
+                        .filter(token -> !token.isEmpty())
+                        .toList())
+                .orElseGet(List::of);
+        if (fqcns.isEmpty()) {
+            return;
+        }
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        Set<Class<? extends Annotation>> resolved = new LinkedHashSet<>();
+        for (String fqcn : fqcns) {
+            resolved.add(loadAnnotationClass(fqcn, classLoader));
+        }
+        configuredAnnotations = Set.copyOf(resolved);
+        Set<Class<? extends Annotation>> extras = new LinkedHashSet<>(resolved);
+        extras.removeAll(FAST_PATH_ANNOTATIONS);
+        extraAnnotations = Set.copyOf(extras);
+    }
+
+    private static Class<? extends Annotation> loadAnnotationClass(String fqcn, ClassLoader classLoader) {
+        Class<?> loaded;
+        try {
+            loaded = Class.forName(fqcn, false, classLoader);
+        } catch (ClassNotFoundException notFound) {
+            throw new IllegalStateException(
+                    "ejb-module: MP Config key '" + BEAN_DEFINING_ANNOTATIONS_KEY
+                            + "' lists FQCN '" + fqcn
+                            + "' but the classloader cannot resolve it.",
+                    notFound);
+        }
+        if (!loaded.isAnnotation()) {
+            throw new IllegalStateException(
+                    "ejb-module: MP Config key '" + BEAN_DEFINING_ANNOTATIONS_KEY
+                            + "' lists FQCN '" + fqcn
+                            + "' but the resolved class is not an annotation type.");
+        }
+        @SuppressWarnings("unchecked")
+        Class<? extends Annotation> annotationType = (Class<? extends Annotation>) loaded;
+        return annotationType;
     }
 
     private static boolean isExcluded(String className) {

@@ -17,7 +17,6 @@ package org.os890.jawelte.module.ejb.api.port;
 
 import java.lang.annotation.Annotation;
 import java.util.List;
-import java.util.Set;
 
 import jakarta.enterprise.inject.spi.BeanManager;
 
@@ -64,33 +63,6 @@ public interface EjbAnnotationMapper {
      */
     default boolean isAdditionalMapper() {
         return true;
-    }
-
-    /**
-     * Class-level annotations this mapper observes. The extension uses
-     * the union across the chain to optimise the CDI runtime's
-     * {@code ProcessAnnotatedType} delivery via
-     * {@code jakarta.enterprise.inject.spi.WithAnnotations}: types
-     * carrying {@code @jakarta.ejb.Singleton} or
-     * {@code @jakarta.ejb.Stateless} take a fast path that filters at
-     * the CDI level; types carrying anything else go through a
-     * broad-observation path that invokes only those mappers whose
-     * declared {@code observedAnnotations()} set is empty OR includes
-     * one of the annotations present on the class. Returning an empty
-     * set means "observe every class" — the safe default for a custom
-     * mapper that wants to inspect arbitrary types.
-     *
-     * <p>The default value of this method is the empty set so existing
-     * mappers continue to receive every class without changes. A
-     * mapper that only handles specific class-level annotations should
-     * override to return that set — the extension can then skip
-     * dispatching to the mapper for unrelated classes.
-     *
-     * @return the set of class-level annotations the mapper cares
-     *         about, or an empty set to opt into broad observation
-     */
-    default Set<Class<? extends Annotation>> observedAnnotations() {
-        return Set.of();
     }
 
     /**
