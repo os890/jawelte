@@ -31,5 +31,20 @@
     <packaging>jar</packaging>
 
     <name>jawelte tests/jta-module scenario 51: atomikos-multi-pu-xa</name>
-    <description>Multi-PU XA atomicity test against Atomikos. A @Transactional method writes one row into each of two persistence units; on commit, Atomikos drives a two-phase commit across both XA-enlisted XaDataSourceWrappers and both rows become visible.</description>
+    <description>Multi-PU XA atomicity test against Atomikos. The scenario pins AtomikosTransactionManagerProvider via its own META-INF/services override + pulls in Atomikos's jakarta-classifier deps so it always runs against Atomikos. A @Transactional method writes one row into each of two persistence units; Atomikos drives the two-phase commit across both AtomikosDataSourceBean-managed XA resources.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.atomikos</groupId>
+            <artifactId>transactions-jta</artifactId>
+            <classifier>jakarta</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.atomikos</groupId>
+            <artifactId>transactions-jdbc</artifactId>
+            <classifier>jakarta</classifier>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

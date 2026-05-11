@@ -31,5 +31,20 @@
     <packaging>jar</packaging>
 
     <name>jawelte tests/jta-module scenario 50: atomikos-tm-bootstrap</name>
-    <description>Bootstrap smoke test for the Atomikos TransactionManagerProvider. The auto-select wrapper picks AtomikosTransactionManagerProvider when Atomikos is on the classpath without Geronimo; the scenario verifies the TM reports the Atomikos provider name and that a basic @Transactional persist + read round-trip commits via Atomikos's TM.</description>
+    <description>Bootstrap smoke test for the Atomikos TransactionManagerProvider. The scenario pins AtomikosTransactionManagerProvider via its own META-INF/services override + pulls in Atomikos's jakarta-classifier deps in this pom (independent of the parent's JTA-impl profile), so it always runs against Atomikos no matter what -P the user passed.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.atomikos</groupId>
+            <artifactId>transactions-jta</artifactId>
+            <classifier>jakarta</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.atomikos</groupId>
+            <artifactId>transactions-jdbc</artifactId>
+            <classifier>jakarta</classifier>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

@@ -1896,3 +1896,27 @@ overhead dominates the per-phase cost, not the ~6s of actual test
 runtime. Existing 13 phases unaffected by the
 pooledJtaDataSource SPI addition (Geronimo/Narayana inherit the
 default empty Optional and take the same code path as before).
+
+## 2026-05-11 — fix mvn clean install: drop property-gated profile in favour of scenario-level overrides
+
+Bare `mvn clean install` was failing with "No valid CDI implementation
+found" on scenario-01. Root cause: the `default-scenarios` profile
+auto-activated by `<property><name>!atomikosOnly</name></property>`
+deactivated the activeByDefault profiles `owb` and `jta-geronimo`
+(Maven's profile rule kills activeByDefault profiles when any other
+profile auto-activates).
+
+Fixed by reverting to the original layout — 32 default scenarios at
+top-level <modules>, scenarios 50 + 51 also at top-level. The
+`jta-atomikos` parent profile is gone. Atomikos isolation now lives
+entirely at the scenario level: each Atomikos scenario pins
+`transactions-jta:jakarta` + `transactions-jdbc:jakarta` in its own
+<dependencies>, and ships its own
+META-INF/services/...TransactionManagerProvider file naming
+AtomikosTransactionManagerProvider. The detail impl's
+@Priority(Integer.MAX_VALUE - 101) wins over the default
+AutoSelectTransactionManagerProvider, so the scenario always runs
+against Atomikos regardless of which JTA-impl profile is active.
+
+verify-all.sh shrunk back to 13 phases — Atomikos coverage now rides
+inside every existing JTA-impl phase automatically.
