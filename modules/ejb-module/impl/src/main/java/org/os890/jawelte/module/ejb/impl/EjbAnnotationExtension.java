@@ -29,6 +29,7 @@ import jakarta.ejb.Singleton;
 import jakarta.ejb.Stateless;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.context.NormalScope;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.spi.AnnotatedType;
 import jakarta.enterprise.inject.spi.BeanManager;
@@ -245,12 +246,12 @@ public class EjbAnnotationExtension implements Extension {
             List<URL> urls = new UrlSet(classLoader).getUrls();
             AnnotationFinder finder = new AnnotationFinder(new ClasspathArchive(classLoader, urls));
             for (Class<?> ejbClass : finder.findAnnotatedClasses(Singleton.class)) {
-                if (!isExcluded(ejbClass.getName())) {
+                if (!isExcluded(ejbClass.getName()) && !hasNormalScopeOrDependent(ejbClass)) {
                     matches.add(ejbClass);
                 }
             }
             for (Class<?> ejbClass : finder.findAnnotatedClasses(Stateless.class)) {
-                if (!isExcluded(ejbClass.getName())) {
+                if (!isExcluded(ejbClass.getName()) && !hasNormalScopeOrDependent(ejbClass)) {
                     matches.add(ejbClass);
                 }
             }
@@ -273,6 +274,33 @@ public class EjbAnnotationExtension implements Extension {
     private static boolean isExcluded(String className) {
         for (String prefix : SCAN_EXCLUDE_PREFIXES) {
             if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code beanClass} already carries a bean-defining
+     * normal scope or {@code @Dependent}. Such classes are already
+     * discoverable under {@code bean-discovery-mode="annotated"} via
+     * the standard CDI rules; the extension must skip them when
+     * adding annotated types to avoid producing duplicate beans
+     * (OpenWebBeans rejects this with
+     * {@code DuplicateDefinitionException}).
+     *
+     * <p>Single pass over the class's annotations; no annotation
+     * hierarchy walk. Pseudo-scopes (annotations meta-annotated with
+     * {@code @jakarta.inject.Scope} only — for example
+     * {@code @jakarta.inject.Singleton}) are intentionally NOT
+     * treated as bean-defining here because they aren't bean-defining
+     * per the CDI 4.0 spec either.
+     */
+    private static boolean hasNormalScopeOrDependent(Class<?> beanClass) {
+        for (Annotation annotation : beanClass.getAnnotations()) {
+            Class<? extends Annotation> annotationType = annotation.annotationType();
+            if (annotationType == Dependent.class
+                    || annotationType.isAnnotationPresent(NormalScope.class)) {
                 return true;
             }
         }

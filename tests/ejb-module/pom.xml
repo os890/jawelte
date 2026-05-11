@@ -38,6 +38,14 @@
         <module>scenario-02-singleton-shared-state</module>
         <module>scenario-03-stateless-injectable</module>
         <module>scenario-04-stateless-dependent-semantics</module>
+        <module>scenario-08-mixed-ejb-and-cdi</module>
+        <module>scenario-09-stateful-ignored</module>
+        <module>scenario-10-messagedriven-ignored</module>
+        <module>scenario-11-inject-singleton-not-processed</module>
+        <module>scenario-13-lock-and-accesstimeout-ignored</module>
+        <module>scenario-14-startup-ignored</module>
+        <module>scenario-15-stateless-requestscoped</module>
+        <module>scenario-16-singleton-requestscoped</module>
     </modules>
 
     <dependencies>

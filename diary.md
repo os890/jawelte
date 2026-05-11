@@ -2114,3 +2114,37 @@ it) now green under both `mvn -P owb test` and `mvn -P weld test` with
 
 All green under `mvn -P owb test` and `mvn -P weld test` with
 `bean-discovery-mode="annotated"`.
+
+### 2026-05-11 — scenarios 8-16 + duplicate-bean fix
+
+- 08 — mixed EJB + CDI: `@Singleton` and `@ApplicationScoped` beans
+  injected side-by-side.
+- 09 — `@Stateful` ignored: class with `@Stateful @RequestScoped`
+  keeps `@RequestScoped` (mapper returns null for the class).
+- 10 — `@MessageDriven` ignored: same shape as #9.
+- 11 — `@jakarta.inject.Singleton` not processed: bean keeps its
+  pseudo-scope. Uses `bean-discovery-mode="all"` (pseudo-scopes
+  aren't bean-defining under "annotated").
+- 13 — `@Lock` + `@AccessTimeout` ignored: bean still gets the
+  `@Singleton`→`@ApplicationScoped` mapping; lock/timeout
+  annotations silently present but unused.
+- 14 — `@Startup` ignored: `@PostConstruct` fires only on first
+  injection (lazy `@ApplicationScoped` behaviour), not at bootstrap.
+- 15 — `@Stateless @RequestScoped`: user-declared `@RequestScoped`
+  wins over default `@Dependent`.
+- 16 — `@Singleton @RequestScoped`: user-declared `@RequestScoped`
+  wins over default `@ApplicationScoped`.
+
+**Bug fix during this batch:** The BBD classpath scan would add an
+EJB-annotated class that ALREADY carried a CDI normal scope (e.g.,
+`@Stateless @RequestScoped`), which CDI then also discovered through
+the normal-scope path — OpenWebBeans rejects this as
+`DuplicateDefinitionException` ("PassivationCapable bean id is not
+unique"). Fixed by skipping classes that already carry a
+`@NormalScope`-meta-annotated annotation or `@Dependent` directly —
+those are already bean-defining per the CDI 4.0 spec. Pseudo-scopes
+(`@Scope`-meta-annotated only) intentionally do NOT trigger the skip,
+matching the spec's exclusion of pseudo-scopes from the bean-defining
+set.
+
+All 8 scenarios green under `-P owb` and `-P weld`.
