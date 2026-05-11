@@ -267,17 +267,14 @@
             </dependencies>
         </profile>
         <!--
-            jta-atomikos profile intentionally omitted from the test
-            matrix: Atomikos's open-source TransactionsEssentials
-            jar (com.atomikos:transactions-jta) is published on
-            Maven Central only in the legacy javax.transaction
-            namespace, which is incompatible with this project's
-            jakarta.transaction stack. The
-            AtomikosTransactionManagerProvider class still ships in
-            jta-module/impl so users who bring their own
-            jakarta-namespace Atomikos build (typically the
-            commercial release) can opt in via the standard
-            ServiceLoader + @Priority mechanism.
+            jta-atomikos profile not in the active matrix yet — the
+            AtomikosTransactionManagerProvider class ships in
+            jta-module/impl and the project depMgmt now pins
+            transactions-jta 6.0.1 (the first jakarta-namespace
+            release). Adding the profile here is left as a follow-up;
+            users can already opt in by registering
+            AtomikosTransactionManagerProvider in their own
+            META-INF/services.
         -->
 
     </profiles>

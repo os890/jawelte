@@ -32,10 +32,16 @@ import org.os890.jawelte.module.jta.impl.config.JtaConfig;
  * TransactionsEssentials JTA implementation
  * ({@code com.atomikos:transactions-jta}).
  *
- * <p>{@code @Priority(Integer.MAX_VALUE - 1)} — sits between Geronimo
- * ({@code MAX_VALUE - 2}, the default winner) and Narayana
- * ({@code MAX_VALUE}, the fallback when nothing else is on the
- * classpath). Wins when Geronimo is absent and Atomikos is present.
+ * <p>Not pre-registered in jta-module's
+ * {@code META-INF/services/...TransactionManagerProvider} — the
+ * default that ships there is the
+ * {@link AutoSelectTransactionManagerProvider} wrapper, which probes
+ * the classpath and delegates here when Atomikos's JTA classes are
+ * loadable. Consumers force this provider directly by shipping their
+ * own {@code META-INF/services} file naming this class; the
+ * {@code @Priority(Integer.MAX_VALUE - 101)} below is lower than the
+ * wrapper's {@code @Priority(Integer.MAX_VALUE)} so the explicit
+ * registration wins.
  *
  * <p>Reflection-only: jta-module/impl never compile-depends on any
  * Atomikos class. Consumers add {@code transactions-jta} to their test
@@ -49,7 +55,7 @@ import org.os890.jawelte.module.jta.impl.config.JtaConfig;
  * different transaction managers, and calls {@code init()} once before
  * returning either one.
  */
-@Priority(Integer.MAX_VALUE - 1)
+@Priority(Integer.MAX_VALUE - 101)
 public class AtomikosTransactionManagerProvider implements TransactionManagerProvider {
 
     private static final Logger LOG =

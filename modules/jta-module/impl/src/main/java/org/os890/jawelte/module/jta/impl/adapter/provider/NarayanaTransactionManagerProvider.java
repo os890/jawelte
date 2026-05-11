@@ -29,10 +29,19 @@ import org.os890.jawelte.module.jta.impl.config.JtaConfig;
  * Default {@link TransactionManagerProvider} for the JBoss Narayana JTA
  * implementation ({@code org.jboss.narayana.jta:narayana-jta}).
  *
- * <p>{@code @Priority(Integer.MAX_VALUE)} — lowest priority of the
- * shipped defaults; wins only when no other provider is on the classpath
- * (Geronimo at {@code MAX_VALUE - 2} and Atomikos at
- * {@code MAX_VALUE - 1} both win when present).
+ * <p>Not pre-registered in jta-module's
+ * {@code META-INF/services/...TransactionManagerProvider} — the
+ * default that ships there is the
+ * {@link AutoSelectTransactionManagerProvider} wrapper, which probes
+ * the classpath and delegates here when Narayana's JTA classes are
+ * loadable (and when Geronimo and Atomikos are not — they take
+ * precedence inside the auto-select preference order because Narayana
+ * is usually on the classpath anyway for its CDI integration).
+ * Consumers force this provider directly by shipping their own
+ * {@code META-INF/services} file naming this class; the
+ * {@code @Priority(Integer.MAX_VALUE - 100)} below is lower than the
+ * wrapper's {@code @Priority(Integer.MAX_VALUE)} so the explicit
+ * registration wins.
  *
  * <p>Reflection-only: jta-module/impl never compile-depends on any
  * Narayana class. Consumers add {@code narayana-jta} to their test
@@ -56,7 +65,7 @@ import org.os890.jawelte.module.jta.impl.config.JtaConfig;
  * accessor has already populated the bean, so the seeding is a no-op
  * there.
  */
-@Priority(Integer.MAX_VALUE)
+@Priority(Integer.MAX_VALUE - 100)
 public class NarayanaTransactionManagerProvider implements TransactionManagerProvider {
 
     private static final String NARAYANA_TM_ACCESSOR_CLASS =

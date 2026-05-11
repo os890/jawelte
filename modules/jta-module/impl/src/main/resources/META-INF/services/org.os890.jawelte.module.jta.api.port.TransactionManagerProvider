@@ -12,6 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.module.jta.impl.adapter.provider.GeronimoTransactionManagerProvider
-org.os890.jawelte.module.jta.impl.adapter.provider.AtomikosTransactionManagerProvider
-org.os890.jawelte.module.jta.impl.adapter.provider.NarayanaTransactionManagerProvider
+# jta-module ships only the default auto-select wrapper here, at the
+# lowest priority. Consumers force a specific JTA implementation by
+# shipping their own META-INF/services file that names one of the
+# detail impls (GeronimoTransactionManagerProvider,
+# AtomikosTransactionManagerProvider, NarayanaTransactionManagerProvider)
+# -- the detail impls carry a lower numeric @Priority than the wrapper
+# so they win whenever they are explicitly registered.
+org.os890.jawelte.module.jta.impl.adapter.provider.AutoSelectTransactionManagerProvider

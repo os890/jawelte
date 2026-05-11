@@ -38,11 +38,13 @@ public class Scenario24Test {
 
     @Test
     public void isAvailableIsConsistentAcrossRepeatedCalls() {
-        // Walk every shipped provider (Geronimo / Narayana / Atomikos)
-        // and verify each one's isAvailable() returns a stable result
-        // across repeated calls. The test profile pins exactly one
-        // provider's classes onto the classpath, but the consistency
-        // assertion holds regardless of which it is.
+        // Walk every ServiceLoader-registered provider (by default, the
+        // AutoSelectTransactionManagerProvider wrapper that jta-module
+        // ships in its own META-INF/services) and verify each one's
+        // isAvailable() returns a stable result across repeated calls.
+        // The test profile pins exactly one detail impl's classes onto
+        // the classpath, but the consistency assertion holds for any
+        // shape.
         boolean foundAtLeastOneAvailable = false;
         for (TransactionManagerProvider provider
                 : ServiceLoader.load(TransactionManagerProvider.class)) {

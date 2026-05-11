@@ -30,15 +30,24 @@ import org.os890.jawelte.module.jta.impl.config.JtaConfig;
  * standalone JTA implementation
  * ({@code org.apache.geronimo.components:geronimo-transaction}).
  *
- * <p>{@code @Priority(Integer.MAX_VALUE - 2)} — wins over Atomikos
- * ({@code MAX_VALUE - 1}) and Narayana ({@code MAX_VALUE}) when more
- * than one is on the classpath. This is the project's chosen default.
+ * <p>Not pre-registered in jta-module's
+ * {@code META-INF/services/...TransactionManagerProvider} — the
+ * default that ships there is the
+ * {@link AutoSelectTransactionManagerProvider} wrapper, which probes
+ * the classpath and delegates here when Geronimo's JTA classes are
+ * loadable. Consumers force this provider directly by shipping their
+ * own {@code META-INF/services} file naming this class; the
+ * {@code @Priority(Integer.MAX_VALUE - 102)} below is lower than the
+ * wrapper's {@code @Priority(Integer.MAX_VALUE)} so the explicit
+ * registration wins. Among the three detail impls Geronimo carries
+ * the lowest numeric priority so it wins on ties when consumers
+ * register more than one.
  *
  * <p>Reflection-only: jta-module/impl never compile-depends on any
  * Geronimo class. Consumers add {@code geronimo-transaction} to their
  * test classpath under the {@code jta-geronimo} build profile.
  */
-@Priority(Integer.MAX_VALUE - 2)
+@Priority(Integer.MAX_VALUE - 102)
 public class GeronimoTransactionManagerProvider implements TransactionManagerProvider {
 
     private static final String GERONIMO_TM_CLASS =

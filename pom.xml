@@ -76,7 +76,7 @@
         <geronimo.transaction.version>4.0.0</geronimo.transaction.version>
         <narayana.jta.version>7.0.0.Final</narayana.jta.version>
         <jboss.transaction.spi.version>8.0.0.Final</jboss.transaction.spi.version>
-        <atomikos.version>6.0.0</atomikos.version>
+        <atomikos.version>6.0.1</atomikos.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -301,17 +301,14 @@
                 <scope>test</scope>
             </dependency>
             <!--
-                Atomikos transactions-jta is published only in the
-                legacy javax.transaction namespace on Maven Central
-                (com.atomikos:transactions-jta:6.0.0 builds against
-                javax.transaction-api). The jakarta-namespace builds
-                are available through Atomikos's commercial channel.
-                The dependencyManagement entry is kept here for users
-                who bring their own jakarta-Atomikos jar — by setting
-                a version themselves they pick up the
-                AtomikosTransactionManagerProvider that
-                jta-module/impl ships. The project's own test profile
-                does not include this dep (see tests/jta-module/pom.xml).
+                Atomikos transactions-jta 6.0.1+ ships builds against
+                jakarta.transaction-api. Earlier 6.0.0 was javax-only.
+                Pinned at the project version here; consumers needing
+                an alternative Atomikos build override the version
+                themselves. Picked up by
+                AtomikosTransactionManagerProvider when present on the
+                classpath. The shipped test matrix does not activate
+                this dep by default (see tests/jta-module/pom.xml).
             -->
             <dependency>
                 <groupId>com.atomikos</groupId>

@@ -1829,3 +1829,21 @@ EM through CDI, with no holder corruption possible.
 **Verification**: full matrix green — 13 phases under
 {owb,weld} × {jta-geronimo,jta-narayana} in 15m 39s, now including
 the three new scenarios.
+
+## 2026-05-11 — TICKET-006 TransactionManagerProvider auto-select refactor
+
+Refactored TransactionManagerProvider selection to match jpa-module's
+default-strategy pattern: ship a single AutoSelectTransactionManagerProvider
+wrapper as the only ServiceLoader-registered default at
+@Priority(Integer.MAX_VALUE). The three vendor-specific detail impls
+(Geronimo, Atomikos, Narayana) are no longer pre-registered; consumers
+opt in by adding their own META-INF/services entry. Detail impls
+re-prioritised to MAX-102 / MAX-101 / MAX-100 so they win over the
+wrapper whenever explicitly registered, with the relative ordering
+preserving the wrapper's hard-coded preference (Geronimo > Atomikos >
+Narayana). The wrapper probes Class.forName on each detail impl's
+marker class and delegates all SPI methods to the first one available.
+
+Atomikos bumped to 6.0.1 (first jakarta-namespace release); pom comments
+updated to drop the stale "javax-only" notes. scenario-24 test comment
+updated for the new shape.
