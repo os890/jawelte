@@ -62,6 +62,7 @@
         <module>scenario-43-per-method-cleanup</module>
         <module>scenario-44-xa-data-source-class-override</module>
         <module>scenario-45-vendor-bean-veto</module>
+        <module>scenario-46-auto-switch-resource-local-to-jta</module>
     </modules>
 
     <dependencies>

@@ -19,12 +19,12 @@
              xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence
                                  https://jakarta.ee/xml/ns/persistence/persistence_3_2.xsd"
              version="3.2">
-    <persistence-unit name="testJtaPU41a" transaction-type="RESOURCE_LOCAL">
+    <persistence-unit name="testJtaPU41a" transaction-type="JTA">
         <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
         <class>org.os890.jawelte.tests.jta.scenario41.MarkerA</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>
     </persistence-unit>
-    <persistence-unit name="testJtaPU41b" transaction-type="RESOURCE_LOCAL">
+    <persistence-unit name="testJtaPU41b" transaction-type="JTA">
         <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
         <class>org.os890.jawelte.tests.jta.scenario41.MarkerB</class>
         <exclude-unlisted-classes>true</exclude-unlisted-classes>

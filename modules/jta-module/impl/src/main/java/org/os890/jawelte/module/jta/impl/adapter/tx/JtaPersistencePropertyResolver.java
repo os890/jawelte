@@ -126,7 +126,26 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
     public Map<String, Object> resolvePropertiesFor(
             String persistenceUnitName, Map<String, Object> existingProperties) {
         Map<String, Object> properties = new LinkedHashMap<>();
+        // When no caller-supplied transactionType reaches us, log INFO
+        // that we're applying JTA. The resolver doesn't see the
+        // persistence.xml-declared transaction-type attribute (Hibernate
+        // reads that from the XML itself); existingProperties carries
+        // only the property bag jpa-module has already assembled (H2
+        // base + MP Config). Absence of the key here therefore means
+        // "no MP-Config-supplied value", and a downstream persistence.xml
+        // setting of RESOURCE_LOCAL gets auto-corrected to JTA when this
+        // bag merges on top.
+        if (!existingProperties.containsKey("jakarta.persistence.transactionType")) {
+            LOG.log(Level.INFO,
+                    () -> "Applying JTA as jakarta.persistence.transactionType for persistence unit '"
+                            + persistenceUnitName + "' — no explicit transactionType was configured");
+        }
         properties.put("jakarta.persistence.transactionType", "JTA");
+        // hibernate.transaction.coordinator_class=jta is optional —
+        // Hibernate auto-detects the coordinator from the configured
+        // JtaPlatform below. Set explicitly here for an unambiguous
+        // bootstrap log and to make the intent visible to anyone
+        // dumping the EMF property bag.
         properties.put("hibernate.transaction.coordinator_class", "jta");
         properties.put("hibernate.transaction.jta.platform", StandaloneJtaPlatform.class.getName());
         // DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION is the

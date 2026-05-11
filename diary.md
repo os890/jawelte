@@ -1756,3 +1756,41 @@ since `TransactionManager.setTransactionTimeout(int)` is per-thread):
 
 **Verification**: full matrix green — 13/13 phases under
 {owb,weld} × {jta-geronimo,jta-narayana} in 15m 2s.
+
+## 2026-05-11 — JTA test PUs flipped to canonical transaction-type="JTA"
+
+All 28 `tests/jta-module/scenario-*/persistence.xml` units now declare
+`transaction-type="JTA"` directly instead of `RESOURCE_LOCAL`. This is
+the canonical Jakarta-Persistence form for JTA-mode PUs and what an
+operator reading the XML standalone would expect.
+
+The property-resolver-driven auto-switch path is still supported and
+covered by a new scenario:
+
+- **scenario-46-auto-switch-resource-local-to-jta** — keeps
+  `transaction-type="RESOURCE_LOCAL"` in persistence.xml and asserts
+  that `EntityManagerFactory.getProperties()` reports `JTA` at
+  runtime. Verifies that consumers who don't (yet) update their
+  persistence.xml still get the JTA bootstrap when jta-module is on
+  the classpath.
+
+When the auto-switch fires — i.e. `existingProperties` lacks
+`jakarta.persistence.transactionType` at the moment
+`JtaPersistencePropertyResolver` is invoked —
+the resolver now logs an `INFO` record naming the persistence unit
+and stating that JTA was applied. The detection is necessarily
+imperfect (the resolver doesn't see persistence.xml's
+transaction-type attribute, only the property bag jpa-module
+assembled from H2 base + MP Config + `additionalPersistenceProperties`),
+but it reliably flags the common "no explicit configuration" case
+where the operator might want visibility.
+
+`hibernate.transaction.coordinator_class=jta` stays in the resolver
+with an explicit comment marking it as optional / redundant —
+Hibernate auto-detects the coordinator from the configured
+`JtaPlatform`. Keeping the property emit makes the intent visible to
+anyone dumping the EMF property bag.
+
+**Verification**: full matrix green — 13 phases under
+{owb,weld} × {jta-geronimo,jta-narayana} in 15m 20s, now including
+scenario-46.

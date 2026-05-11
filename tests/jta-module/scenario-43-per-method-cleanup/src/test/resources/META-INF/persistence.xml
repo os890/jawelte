@@ -19,7 +19,7 @@
              xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence
                                  https://jakarta.ee/xml/ns/persistence/persistence_3_2.xsd"
              version="3.2">
-    <persistence-unit name="testJtaPU43" transaction-type="RESOURCE_LOCAL">
+    <persistence-unit name="testJtaPU43" transaction-type="JTA">
         <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
         <exclude-unlisted-classes>false</exclude-unlisted-classes>
     </persistence-unit>
