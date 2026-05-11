@@ -63,6 +63,9 @@
         <module>scenario-44-xa-data-source-class-override</module>
         <module>scenario-45-vendor-bean-veto</module>
         <module>scenario-46-auto-switch-resource-local-to-jta</module>
+        <module>scenario-47-writable-outer-readonly-inner</module>
+        <module>scenario-48-readonly-inner-modification-rolls-back</module>
+        <module>scenario-49-nested-cross-pu-transactional</module>
     </modules>
 
     <dependencies>

@@ -1794,3 +1794,38 @@ anyone dumping the EMF property bag.
 **Verification**: full matrix green — 13 phases under
 {owb,weld} × {jta-geronimo,jta-narayana} in 15m 20s, now including
 scenario-46.
+
+## 2026-05-11 — nested @Transactional under JTA: T5 / T6 / T17 scenarios
+
+Three new scenarios closing the previously-gated test coverage for
+nested `@Transactional` invocations under JTA:
+
+- **scenario-47-writable-outer-readonly-inner** — outer
+  `@Transactional` persists an `Item`, then calls a
+  `REQUIRES_NEW @ReadOnly` inner method that only reads. Verifies
+  the outer's persist commits and the inner's read sees the
+  pre-outer state (its own suspended-and-resumed JTA tx, so the
+  outer's uncommitted insert is invisible to it).
+- **scenario-48-readonly-inner-modification-rolls-back** — outer
+  persists one row, inner `REQUIRES_NEW @ReadOnly` attempts to
+  persist a second. The inner JTA tx is marked rollback-only by
+  `ReadOnlyInterceptor`; outer's row survives. Verifies total row
+  count is exactly 1.
+- **scenario-49-nested-cross-pu-transactional** — outer
+  `@Transactional` writes to PU "a", calls a nested
+  `@Transactional` method that writes to PU "b". Both writes commit
+  and are visible.
+
+These scenarios confirm what the code structure already implied:
+under JTA, the `EntityManager` is sourced from the
+`@TransactionScoped` CDI bean (with per-JTA-`Transaction` keying via
+either Narayana's `@TransactionScoped` Context or jpa-module's own
+frame-stacking `TransactionScopedContext`). `TransactionScopedEmHolder`
+is jpa-module-private and only populated by
+`DefaultResourceLocalTransactionStrategy`; it is never on the JTA
+path. Nested `@Transactional(REQUIRES_NEW)` correctly gets its own
+EM through CDI, with no holder corruption possible.
+
+**Verification**: full matrix green — 13 phases under
+{owb,weld} × {jta-geronimo,jta-narayana} in 15m 39s, now including
+the three new scenarios.
