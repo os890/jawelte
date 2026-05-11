@@ -2201,3 +2201,25 @@ All 5 green on `-P owb test` and `-P weld test`.
 All 5 green on `-P owb` and `-P weld`. Each scope-module-dependent
 scenario pulls `jawelte-scope-module-api` + `jawelte-scope-module-impl`
 in its own pom; scenario 20 intentionally omits them.
+
+### 2026-05-11 — scenarios 5-7 + 12 (jpa-module integration)
+
+All 26 scenarios green on OWB + Weld.
+
+- 05 — implicit @Transactional on @Singleton: `NoteRepository.save()`
+  has NO explicit @Transactional, but ejb-module added it at class
+  level; jpa-module's TransactionalInterceptor sees it and auto-commits.
+- 06 — same shape with @Stateless: per-injection-point fresh
+  instance still picks up the class-level @Transactional.
+- 07 — @Singleton with @Inject EntityManager: the proxy resolves
+  to the active per-tx EM. Verified by writing and reading inside
+  the same @Transactional method — the un-flushed insert is visible
+  to the subsequent query, proving both calls route through the
+  same per-tx EM.
+- 12 — @TransactionAttribute(REQUIRES_NEW) on a @Singleton method
+  is silently ignored; class-level implicit @Transactional still
+  applies and the persist commits.
+
+Per-scenario pom pulls jpa-module-api + jpa-module-impl + hibernate
++ h2 + asm at test scope. Each scenario ships its own persistence.xml
+with a unique PU name (testEjbPU05, ...PU06, ...PU07, ...PU12).

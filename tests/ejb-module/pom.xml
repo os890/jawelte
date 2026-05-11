@@ -56,6 +56,10 @@
         <module>scenario-20-scope-module-absent-applicationscoped-fallback</module>
         <module>scenario-21-singleton-applicationscoped-explicit-with-scope-module</module>
         <module>scenario-22-stateless-unaffected-by-scope-module</module>
+        <module>scenario-05-implicit-transactional-on-singleton</module>
+        <module>scenario-06-implicit-transactional-on-stateless</module>
+        <module>scenario-07-singleton-injecting-entitymanager</module>
+        <module>scenario-12-transactionattribute-ignored</module>
     </modules>
 
     <dependencies>
