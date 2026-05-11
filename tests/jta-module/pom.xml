@@ -33,40 +33,15 @@
     <name>jawelte (tests/jta-module aggregator and parent)</name>
     <description>Aggregator AND parent for the per-scenario test modules covering jawelte-jta-module. Each scenario boots a CDI container so the JTA strategy, the GeronimoPersistencePropertyResolver, and one of the three TransactionManagerProvider impls run end-to-end with Hibernate ORM and H2. CDI runtime selected by -Powb (default) / -Pweld; JTA implementation selected by -Pjta-geronimo (default) / -Pjta-narayana / -Pjta-atomikos.</description>
 
-    <modules>
-        <module>scenario-01-jta-strategy-auto-selected</module>
-        <module>scenario-02-transactional-under-jta</module>
-        <module>scenario-03-rollback-on-runtime-exception</module>
-        <module>scenario-09-emf-bootstrapped-in-jta-mode</module>
-        <module>scenario-17-transaction-scoped-under-jta</module>
-        <module>scenario-20-user-transaction-is-jta-provided</module>
-        <module>scenario-21-user-transaction-begin-commit</module>
-        <module>scenario-24-isavailable-side-effect-free</module>
-        <module>scenario-26-tx-on-test-method</module>
-        <module>scenario-27-rollback-on-error</module>
-        <module>scenario-28-readonly-discards-writes</module>
-        <module>scenario-29-readonly-without-transactional</module>
-        <module>scenario-30-tx-scoped-outside-tx</module>
-        <module>scenario-31-ut-rollback-undoes-writes</module>
-        <module>scenario-32-ut-commit-no-active-tx</module>
-        <module>scenario-33-cdi-events-on-commit</module>
-        <module>scenario-34-cdi-events-on-rollback</module>
-        <module>scenario-35-readonly-multi-modification</module>
-        <module>scenario-36-tx-scoped-lifecycle-counts</module>
-        <module>scenario-37-multi-pu-em-identity</module>
-        <module>scenario-38-multi-pu-cross-pu-writes</module>
-        <module>scenario-39-multi-pu-xa-flush-failure</module>
-        <module>scenario-40-multi-pu-pc-routing</module>
-        <module>scenario-41-multi-pu-readonly</module>
-        <module>scenario-42-readonly-setter-rollback</module>
-        <module>scenario-43-per-method-cleanup</module>
-        <module>scenario-44-xa-data-source-class-override</module>
-        <module>scenario-45-vendor-bean-veto</module>
-        <module>scenario-46-auto-switch-resource-local-to-jta</module>
-        <module>scenario-47-writable-outer-readonly-inner</module>
-        <module>scenario-48-readonly-inner-modification-rolls-back</module>
-        <module>scenario-49-nested-cross-pu-transactional</module>
-    </modules>
+    <!--
+        Module list is empty here. The default scenario suite (32
+        modules) is contributed by the `default-scenarios` profile
+        below, which activates whenever the `atomikosOnly` property
+        is NOT set. The `jta-atomikos` profile sets that property
+        and contributes its own scenario list so the
+        Atomikos-specific tests run in isolation without dragging
+        the general-purpose scenarios along.
+    -->
 
     <dependencies>
         <!--
@@ -267,15 +242,98 @@
             </dependencies>
         </profile>
         <!--
-            jta-atomikos profile not in the active matrix yet — the
-            AtomikosTransactionManagerProvider class ships in
-            jta-module/impl and the project depMgmt now pins
+            jta-atomikos: a stand-alone JTA-impl profile that ships
+            its own dedicated scenario modules. Pulls in
             transactions-jta 6.0.1 (the first jakarta-namespace
-            release). Adding the profile here is left as a follow-up;
-            users can already opt in by registering
-            AtomikosTransactionManagerProvider in their own
-            META-INF/services.
+            Atomikos release) plus narayana-jta for the CDI
+            `@Transactional` / `@TransactionScoped` integration,
+            matching the dep shape of `jta-geronimo`.
+
+            IMPORTANT: callers must also pass `-DatomikosOnly` on
+            the command line. That system property deactivates the
+            `default-scenarios` profile below so the general-purpose
+            32-scenario suite does NOT run alongside the Atomikos
+            scenarios — keeping the existing matrix completely
+            unaffected. Maven's profile-based property activation
+            reads system / user properties only, so a project-model
+            property set inside this profile is not visible to
+            another profile's activation block; the system-property
+            flag is the standard workaround.
         -->
+        <profile>
+            <id>jta-atomikos</id>
+            <modules>
+                <module>scenario-50-atomikos-tm-bootstrap</module>
+                <module>scenario-51-atomikos-multi-pu-xa</module>
+            </modules>
+            <dependencies>
+                <dependency>
+                    <groupId>com.atomikos</groupId>
+                    <artifactId>transactions-jta</artifactId>
+                    <classifier>jakarta</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>com.atomikos</groupId>
+                    <artifactId>transactions-jdbc</artifactId>
+                    <classifier>jakarta</classifier>
+                </dependency>
+                <dependency>
+                    <groupId>org.jboss.narayana.jta</groupId>
+                    <artifactId>narayana-jta</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+
+        <!--
+            default-scenarios contributes the 32 general-purpose
+            scenario modules. Property-activated (NOT
+            activeByDefault) so it stays active even when callers
+            use `-P owb -P jta-geronimo` explicitly. Deactivates
+            when the caller passes `-DatomikosOnly` (alongside
+            `-P jta-atomikos`).
+        -->
+        <profile>
+            <id>default-scenarios</id>
+            <activation>
+                <property>
+                    <name>!atomikosOnly</name>
+                </property>
+            </activation>
+            <modules>
+                <module>scenario-01-jta-strategy-auto-selected</module>
+                <module>scenario-02-transactional-under-jta</module>
+                <module>scenario-03-rollback-on-runtime-exception</module>
+                <module>scenario-09-emf-bootstrapped-in-jta-mode</module>
+                <module>scenario-17-transaction-scoped-under-jta</module>
+                <module>scenario-20-user-transaction-is-jta-provided</module>
+                <module>scenario-21-user-transaction-begin-commit</module>
+                <module>scenario-24-isavailable-side-effect-free</module>
+                <module>scenario-26-tx-on-test-method</module>
+                <module>scenario-27-rollback-on-error</module>
+                <module>scenario-28-readonly-discards-writes</module>
+                <module>scenario-29-readonly-without-transactional</module>
+                <module>scenario-30-tx-scoped-outside-tx</module>
+                <module>scenario-31-ut-rollback-undoes-writes</module>
+                <module>scenario-32-ut-commit-no-active-tx</module>
+                <module>scenario-33-cdi-events-on-commit</module>
+                <module>scenario-34-cdi-events-on-rollback</module>
+                <module>scenario-35-readonly-multi-modification</module>
+                <module>scenario-36-tx-scoped-lifecycle-counts</module>
+                <module>scenario-37-multi-pu-em-identity</module>
+                <module>scenario-38-multi-pu-cross-pu-writes</module>
+                <module>scenario-39-multi-pu-xa-flush-failure</module>
+                <module>scenario-40-multi-pu-pc-routing</module>
+                <module>scenario-41-multi-pu-readonly</module>
+                <module>scenario-42-readonly-setter-rollback</module>
+                <module>scenario-43-per-method-cleanup</module>
+                <module>scenario-44-xa-data-source-class-override</module>
+                <module>scenario-45-vendor-bean-veto</module>
+                <module>scenario-46-auto-switch-resource-local-to-jta</module>
+                <module>scenario-47-writable-outer-readonly-inner</module>
+                <module>scenario-48-readonly-inner-modification-rolls-back</module>
+                <module>scenario-49-nested-cross-pu-transactional</module>
+            </modules>
+        </profile>
 
     </profiles>
 </project>

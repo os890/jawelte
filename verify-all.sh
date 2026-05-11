@@ -83,6 +83,20 @@ for cdi in owb weld; do
     done
 done
 
+# tests/jta-module: dedicated Atomikos sweep. Activates the
+# jta-atomikos profile + sets `atomikosOnly` so the parent's
+# default-scenarios profile deactivates and only the
+# Atomikos-specific scenarios (50, 51) run. Kept separate from
+# the general matrix above because the project's default
+# XaDataSourceWrapper cannot satisfy Atomikos's resource-recovery
+# enlistment model against H2; AtomikosTransactionManagerProvider
+# returns its own AtomikosDataSourceBean via
+# TransactionManagerProvider.pooledJtaDataSource(...).
+for cdi in owb weld; do
+    run "tests/jta-module [$cdi,jta-atomikos]" \
+        "$REPO_ROOT/tests/jta-module" -P "$cdi,jta-atomikos" -DatomikosOnly verify
+done
+
 # --- Phase 3: aggregated coverage ------------------------------------
 run "coverage-report" "$REPO_ROOT/coverage-report" verify
 

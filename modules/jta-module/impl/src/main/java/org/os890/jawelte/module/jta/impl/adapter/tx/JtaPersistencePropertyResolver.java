@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.ServiceLoader;
 
+import javax.sql.DataSource;
 import javax.sql.XADataSource;
 
 import jakarta.annotation.Priority;
@@ -29,6 +30,7 @@ import jakarta.annotation.Priority;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
+import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
 import org.os890.jawelte.module.jta.impl.adapter.jpa.StandaloneJtaPlatform;
 import org.os890.jawelte.module.jta.impl.adapter.xa.XaDataSourceWrapper;
 
@@ -160,16 +162,23 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
         // closes the cached XAConnection on tx completion.
         properties.put("hibernate.connection.handling_mode",
                 "DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION");
-        // Set jakarta.persistence.jtaDataSource to an
-        // XaDataSourceWrapper around the configured XADataSource
-        // (see XA_DATA_SOURCE_CLASS_KEY). Multi-PU XA atomicity
-        // requires real XA enlistment of the JDBC connection in
-        // the JTA tx, and single-PU scenarios benefit too because
-        // the wrapper drives commit / rollback through the TM.
+        // Set jakarta.persistence.jtaDataSource to a wrapping of the
+        // configured XADataSource (see XA_DATA_SOURCE_CLASS_KEY).
+        // First ask the active TransactionManagerProvider for its
+        // own pooled DataSource — Atomikos returns an
+        // AtomikosDataSourceBean that owns the XA pool and the
+        // enlistResource call internally, which is the only way to
+        // satisfy its strict resource-recovery model against H2.
+        // When the provider has no pooled DataSource of its own
+        // (Geronimo, Narayana) the project default
+        // XaDataSourceWrapper handles enlistment.
         XADataSource xaDataSource = buildXaDataSourceOrNull(existingProperties);
         if (xaDataSource != null) {
-            properties.put("jakarta.persistence.jtaDataSource",
-                    new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
+            DataSource jtaDataSource = TestContext
+                    .loadService(TransactionManagerProvider.class)
+                    .pooledJtaDataSource(xaDataSource, persistenceUnitName)
+                    .orElseGet(() -> new XaDataSourceWrapper(xaDataSource, persistenceUnitName));
+            properties.put("jakarta.persistence.jtaDataSource", jtaDataSource);
         }
         return properties;
     }

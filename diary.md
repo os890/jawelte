@@ -1854,3 +1854,36 @@ verify-all.sh: all 13 phases green, 16m27s. The auto-select wrapper's
 classpath probe correctly picks Geronimo under jta-geronimo profile and
 Narayana under jta-narayana, under both owb and weld. No test scenarios
 regressed.
+
+## 2026-05-11 — Atomikos profile + 2 dedicated scenarios
+
+Added a jta-atomikos test profile + 2 dedicated scenarios (50, 51)
+covering TM bootstrap + multi-PU XA atomicity against Atomikos's
+TransactionsEssentials 6.0.1 with the jakarta classifier.
+
+The straightforward path (registerXaDataSource via
+Configuration.addResource + JdbcTransactionalResource) hit a
+fundamental H2 limitation: H2's JdbcXAConnection.isSameRM is
+identity-only, so Atomikos's usesXAResource matcher always returns
+false against XAResources opened by the project's
+XaDataSourceWrapper. Resolved by adding a new default SPI method
+TransactionManagerProvider.pooledJtaDataSource(XADataSource, String)
+returning Optional<DataSource> — most vendors return empty (use
+the project default XaDataSourceWrapper); Atomikos overrides to
+return an AtomikosDataSourceBean which owns the XAConnection pool
++ enlistResource directly.
+
+JtaPersistencePropertyResolver consults the active provider
+through the new SPI method before falling back to the project
+default wrapper. No regression on the existing
+{owb, weld} × {jta-geronimo, jta-narayana} matrix.
+
+verify-all.sh extended with 2 additional Atomikos phases (15
+total). The Atomikos sweep activates via
+`-P jta-atomikos -DatomikosOnly` — the system property toggles
+the parent's default-scenarios profile activation so only the 2
+Atomikos-specific scenarios run alongside the Atomikos deps.
+
+Atomikos's recovery log is disabled via
+com.atomikos.icatch.enable_logging=false during init so no
+tmlog*.log files leak into the test working directory.

@@ -18,7 +18,11 @@ package org.os890.jawelte.module.jta.impl.adapter.provider;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.util.List;
+import java.util.Optional;
 import java.util.ServiceLoader;
+
+import javax.sql.DataSource;
+import javax.sql.XADataSource;
 
 import jakarta.annotation.Priority;
 import jakarta.transaction.TransactionManager;
@@ -123,6 +127,12 @@ public class AutoSelectTransactionManagerProvider implements TransactionManagerP
     @Override
     public TransactionSynchronizationRegistry transactionSynchronizationRegistry() {
         return ensureChosen().transactionSynchronizationRegistry();
+    }
+
+    @Override
+    public Optional<DataSource> pooledJtaDataSource(
+            XADataSource dataSource, String persistenceUnitName) {
+        return ensureChosen().pooledJtaDataSource(dataSource, persistenceUnitName);
     }
 
     @Override

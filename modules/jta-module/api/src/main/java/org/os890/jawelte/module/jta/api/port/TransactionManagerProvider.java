@@ -15,6 +15,11 @@
  */
 package org.os890.jawelte.module.jta.api.port;
 
+import java.util.Optional;
+
+import javax.sql.DataSource;
+import javax.sql.XADataSource;
+
 import jakarta.transaction.TransactionManager;
 import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
@@ -86,6 +91,47 @@ public interface TransactionManagerProvider {
      *                          expose one
      */
     TransactionSynchronizationRegistry transactionSynchronizationRegistry();
+
+    /**
+     * Vendor-managed {@link DataSource} that the project's
+     * {@code JtaPersistencePropertyResolver} hands to Hibernate as
+     * {@code jakarta.persistence.jtaDataSource} when the vendor
+     * needs to own the {@code XAConnection} pool and the JTA
+     * {@code enlistResource(...)} call directly. Most vendors return
+     * {@link Optional#empty()} — the project default wrapping then
+     * applies (a thin {@code XaDataSourceWrapper} that opens
+     * {@link javax.sql.XAConnection} instances against the given
+     * {@link XADataSource} and enlists each
+     * {@link javax.transaction.xa.XAResource} explicitly with the
+     * active JTA transaction). Atomikos overrides this method and
+     * returns its {@code AtomikosDataSourceBean}, which manages an
+     * XA-connection pool and integrates with Atomikos's recovery
+     * subsystem — the only way to satisfy Atomikos's "registered
+     * resource recoverable" enlistment check when the underlying DB
+     * is H2 (H2's {@code XAResource.isSameRM} is identity-only and
+     * defeats the project default wrapper's enlistment with
+     * Atomikos).
+     *
+     * <p>Default returns {@link Optional#empty()}. Keeping the
+     * default empty avoids leaking the impl-side
+     * {@code XaDataSourceWrapper} class onto this api-module
+     * interface.
+     *
+     * <p>Called once per persistence unit during
+     * {@code JtaPersistencePropertyResolver.resolvePropertiesFor(...)}.
+     * The returned {@code DataSource} must outlive the persistence
+     * unit's lifetime (typically the JVM) and is released by the
+     * provider's {@link #shutdown()}.
+     *
+     * @param dataSource          the underlying {@link XADataSource}
+     * @param persistenceUnitName a stable unique name for the PU
+     * @return a vendor-managed pooled {@link DataSource}, or
+     *         {@link Optional#empty()} to accept the project default
+     */
+    default Optional<DataSource> pooledJtaDataSource(
+            XADataSource dataSource, String persistenceUnitName) {
+        return Optional.empty();
+    }
 
     /**
      * Release any resources held by the provider. Idempotent; errors

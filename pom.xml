@@ -301,19 +301,43 @@
                 <scope>test</scope>
             </dependency>
             <!--
-                Atomikos transactions-jta 6.0.1+ ships builds against
-                jakarta.transaction-api. Earlier 6.0.0 was javax-only.
-                Pinned at the project version here; consumers needing
-                an alternative Atomikos build override the version
-                themselves. Picked up by
-                AtomikosTransactionManagerProvider when present on the
-                classpath. The shipped test matrix does not activate
-                this dep by default (see tests/jta-module/pom.xml).
+                Atomikos transactions-jta ships the
+                jakarta.transaction.* namespace under the `jakarta`
+                Maven classifier; the default-classifier jar is still
+                javax-namespaced and incompatible with this project's
+                Jakarta stack. depMgmt pins the jakarta-classified
+                jar so any consumer that declares
+                `com.atomikos:transactions-jta` with
+                `<classifier>jakarta</classifier>` picks up the right
+                jar without restating the version. Picked up by
+                AtomikosTransactionManagerProvider when on the
+                classpath. The jta-atomikos test profile in
+                tests/jta-module activates this dep for the dedicated
+                Atomikos scenarios.
             -->
             <dependency>
                 <groupId>com.atomikos</groupId>
                 <artifactId>transactions-jta</artifactId>
                 <version>${atomikos.version}</version>
+                <classifier>jakarta</classifier>
+                <scope>test</scope>
+                <optional>true</optional>
+            </dependency>
+            <!--
+                Atomikos's pooled DataSource bridge
+                (AtomikosDataSourceBean). Required when
+                AtomikosTransactionManagerProvider is the active TM
+                provider because the project's default
+                XaDataSourceWrapper cannot satisfy Atomikos's strict
+                resource-recovery model against H2 (whose
+                XAResource.isSameRM is identity-only). Same
+                jakarta-classifier story as transactions-jta.
+            -->
+            <dependency>
+                <groupId>com.atomikos</groupId>
+                <artifactId>transactions-jdbc</artifactId>
+                <version>${atomikos.version}</version>
+                <classifier>jakarta</classifier>
                 <scope>test</scope>
                 <optional>true</optional>
             </dependency>
