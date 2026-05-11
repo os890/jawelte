@@ -54,4 +54,35 @@ public interface PersistencePropertyResolver {
      *         never {@code null}, may be empty
      */
     Map<String, Object> resolvePropertiesFor(String persistenceUnitName);
+
+    /**
+     * Resolve the EMF properties to merge for a given persistence
+     * unit, given the H2 base properties already accumulated by
+     * {@code JpaCdiExtension} ({@code jakarta.persistence.jdbc.url},
+     * {@code jakarta.persistence.jdbc.user},
+     * {@code jakarta.persistence.jdbc.password},
+     * {@code jakarta.persistence.jdbc.driver}, plus any
+     * MP-Config-supplied prefixes). Resolvers that need to build a
+     * concrete object from the URL/user/pass triple — for example a
+     * JTA-mode {@code XaDataSourceWrapper} that fronts the H2
+     * {@code XADataSource} — read those values here and emit the
+     * built object directly under
+     * {@code jakarta.persistence.jtaDataSource}.
+     *
+     * <p>The default implementation delegates to
+     * {@link #resolvePropertiesFor(String)} for resolvers that do
+     * not need the property bag.
+     *
+     * @param persistenceUnitName the persistence unit name
+     * @param existingProperties  the property bag already accumulated
+     *                            by jpa-module's bootstrap (read-only
+     *                            view: callers are not expected to
+     *                            mutate it)
+     * @return the EMF property overrides for that persistence unit;
+     *         never {@code null}, may be empty
+     */
+    default Map<String, Object> resolvePropertiesFor(
+            String persistenceUnitName, Map<String, Object> existingProperties) {
+        return resolvePropertiesFor(persistenceUnitName);
+    }
 }

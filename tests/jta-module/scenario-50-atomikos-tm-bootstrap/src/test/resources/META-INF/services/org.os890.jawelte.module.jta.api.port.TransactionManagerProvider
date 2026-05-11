@@ -1,0 +1,25 @@
+# Copyright 2026 os890
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Scenario-level override that pins AtomikosTransactionManagerProvider
+# as a ServiceLoader candidate. AtomikosTransactionManagerProvider's
+# @Priority(Integer.MAX_VALUE - 101) is lower (= higher priority) than
+# the default AutoSelectTransactionManagerProvider at
+# @Priority(Integer.MAX_VALUE), so the project's ServicePriorityResolver
+# picks Atomikos as the head — independent of which JTA-impl profile
+# the parent build activated. Without this override, AutoSelect would
+# probe the classpath and prefer Geronimo (when present in the active
+# profile), which would defeat the scenario's intent of exercising
+# Atomikos specifically.
+org.os890.jawelte.module.jta.impl.adapter.provider.AtomikosTransactionManagerProvider

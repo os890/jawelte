@@ -20,6 +20,7 @@ import java.util.Map;
 import jakarta.persistence.PersistenceUnitTransactionType;
 import jakarta.persistence.RollbackException;
 import jakarta.transaction.TransactionManager;
+import jakarta.transaction.UserTransaction;
 
 /**
  * Pluggable transaction-management seam. The default impl shipped by
@@ -122,6 +123,24 @@ public interface TransactionStrategy {
     TransactionManager getTransactionManager();
 
     /**
+     * The {@link UserTransaction} {@code JpaCdiExtension} registers
+     * as the synthetic CDI {@code UserTransaction} bean while this
+     * strategy is active. RESOURCE_LOCAL strategies typically return
+     * a delegating helper that drives this same {@code TransactionStrategy}
+     * (so {@code @Inject UserTransaction} stays consistent with
+     * {@code @Transactional}); JTA strategies return the JTA
+     * implementation's standard {@code UserTransaction} so consumers
+     * see the real Jakarta-EE shape.
+     *
+     * <p>Symmetric with {@link #getTransactionManager()}: each
+     * strategy reports the public Jakarta {@code transaction-api}
+     * handle that goes with it.
+     *
+     * @return the {@code UserTransaction} to expose; never {@code null}
+     */
+    UserTransaction userTransaction();
+
+    /**
      * The transaction model the strategy implements:
      * {@link PersistenceUnitTransactionType#RESOURCE_LOCAL} or
      * {@link PersistenceUnitTransactionType#JTA}.
@@ -135,4 +154,26 @@ public interface TransactionStrategy {
      * are logged and not propagated.
      */
     void shutdown();
+
+    /**
+     * Ensure the strategy's lifecycle events
+     * ({@code TransactionStarted} / {@code TransactionBeforeCompletion}
+     * / {@code TransactionCommitted} / {@code TransactionRolledBack})
+     * fire for whatever transaction is currently active on the calling
+     * thread, even when the strategy's own
+     * {@link #begin()} / {@link #commit()} / {@link #rollback()}
+     * methods aren't on the call path. Relevant under JTA when a
+     * vendor {@code @Transactional} interceptor (Narayana, Quarkus)
+     * drives the tx via {@code UserTransaction} directly — the strategy
+     * never sees the begin call but jpa-module's event contract still
+     * needs to hold.
+     *
+     * <p>Idempotent: callers (typically the EM holder on EM
+     * acquisition) can invoke this without coordinating with the
+     * strategy's own begin path. RESOURCE_LOCAL strategies have
+     * nothing to do here — the begin / commit / rollback methods
+     * are always the driver — so this defaults to a no-op.
+     */
+    default void bindLifecycleEventsToCurrentTransaction() {
+    }
 }

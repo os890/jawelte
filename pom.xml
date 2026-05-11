@@ -73,6 +73,10 @@
         <asm.version>9.8</asm.version>
         <xbean.version>4.30</xbean.version>
         <opentest4j.version>1.3.0</opentest4j.version>
+        <geronimo.transaction.version>4.0.0</geronimo.transaction.version>
+        <narayana.jta.version>7.0.0.Final</narayana.jta.version>
+        <jboss.transaction.spi.version>8.0.0.Final</jboss.transaction.spi.version>
+        <atomikos.version>6.0.1</atomikos.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -251,6 +255,93 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal jta-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jta-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jta-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!--
+                JTA implementations. test-scope by default: jta-module's
+                three Maven profiles (-P jta-geronimo, -P jta-narayana,
+                -P jta-atomikos) add exactly one of these to the active
+                test classpath so each provider's isAvailable() / create()
+                / userTransaction() path can be exercised in isolation.
+                Production consumers ship their own JTA jar at the scope
+                of their choice.
+            -->
+            <dependency>
+                <groupId>org.apache.geronimo.components</groupId>
+                <artifactId>geronimo-transaction</artifactId>
+                <version>${geronimo.transaction.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.narayana.jta</groupId>
+                <artifactId>narayana-jta</artifactId>
+                <version>${narayana.jta.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.narayana.jta</groupId>
+                <artifactId>jta</artifactId>
+                <version>${narayana.jta.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss</groupId>
+                <artifactId>jboss-transaction-spi</artifactId>
+                <version>${jboss.transaction.spi.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!--
+                Atomikos transactions-jta ships the
+                jakarta.transaction.* namespace under the `jakarta`
+                Maven classifier; the default-classifier jar is still
+                javax-namespaced and incompatible with this project's
+                Jakarta stack. depMgmt pins the jakarta-classified
+                jar so any consumer that declares
+                `com.atomikos:transactions-jta` with
+                `<classifier>jakarta</classifier>` picks up the right
+                jar without restating the version. Picked up by
+                AtomikosTransactionManagerProvider when on the
+                classpath. The jta-atomikos test profile in
+                tests/jta-module activates this dep for the dedicated
+                Atomikos scenarios.
+            -->
+            <dependency>
+                <groupId>com.atomikos</groupId>
+                <artifactId>transactions-jta</artifactId>
+                <version>${atomikos.version}</version>
+                <classifier>jakarta</classifier>
+                <scope>test</scope>
+                <optional>true</optional>
+            </dependency>
+            <!--
+                Atomikos's pooled DataSource bridge
+                (AtomikosDataSourceBean). Required when
+                AtomikosTransactionManagerProvider is the active TM
+                provider because the project's default
+                XaDataSourceWrapper cannot satisfy Atomikos's strict
+                resource-recovery model against H2 (whose
+                XAResource.isSameRM is identity-only). Same
+                jakarta-classifier story as transactions-jta.
+            -->
+            <dependency>
+                <groupId>com.atomikos</groupId>
+                <artifactId>transactions-jdbc</artifactId>
+                <version>${atomikos.version}</version>
+                <classifier>jakarta</classifier>
+                <scope>test</scope>
+                <optional>true</optional>
+            </dependency>
+
             <!--
                 JPA / Transaction APIs default to provided: the CDI runtime
                 (or a Jakarta EE container) supplies them at test time, the
@@ -292,6 +383,24 @@
                 <artifactId>xbean-finder-shaded</artifactId>
                 <version>${xbean.version}</version>
                 <scope>provided</scope>
+            </dependency>
+            <!--
+                xbean-naming — JNDI provider used by jta-module's
+                JndiArtifactBinder to bind the active provider's
+                TransactionManager / UserTransaction /
+                TransactionSynchronizationRegistry under standard
+                JNDI names. Narayana's CDI integration (and any
+                vendor that follows the same convention) then resolves
+                them through JNDI regardless of which TM is actually
+                active. Test scope — production deployments ship their
+                own JNDI (real Jakarta-EE container) or pull this
+                themselves.
+            -->
+            <dependency>
+                <groupId>org.apache.xbean</groupId>
+                <artifactId>xbean-naming</artifactId>
+                <version>${xbean.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <!--

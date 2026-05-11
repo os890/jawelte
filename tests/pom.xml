@@ -38,5 +38,6 @@
         <module>cdi-module</module>
         <module>scope-module</module>
         <module>jpa-module</module>
+        <module>jta-module</module>
     </modules>
 </project>

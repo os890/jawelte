@@ -30,6 +30,7 @@ import jakarta.persistence.EntityTransaction;
 import jakarta.persistence.PersistenceUnitTransactionType;
 import jakarta.persistence.RollbackException;
 import jakarta.transaction.TransactionManager;
+import jakarta.transaction.UserTransaction;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
@@ -223,6 +224,11 @@ public class DefaultResourceLocalTransactionStrategy implements TransactionStrat
     @Override
     public TransactionManager getTransactionManager() {
         return null;
+    }
+
+    @Override
+    public UserTransaction userTransaction() {
+        return new UserTransactionImpl();
     }
 
     @Override

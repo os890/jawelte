@@ -26,8 +26,17 @@ import java.util.Set;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.PersistenceUnitTransactionType;
+import jakarta.transaction.RollbackException;
+import jakarta.transaction.Status;
+import jakarta.transaction.Synchronization;
+import jakarta.transaction.SystemException;
+import jakarta.transaction.Transaction;
+import jakarta.transaction.TransactionManager;
 
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.event.TransactionStarted;
+import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 
 /**
  * Per-thread stack of active {@link EntityManager}s, keyed by
@@ -300,7 +309,19 @@ public abstract class TransactionScopedEmHolder {
         if (existing != null) {
             return existing;
         }
-        if (!isTransactionalScopeActive()) {
+        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
+        boolean jtaMode = strategy.getTransactionType() == PersistenceUnitTransactionType.JTA;
+        // Source of truth for "is a tx active" differs between modes:
+        // RESOURCE_LOCAL relies on the holder's own scope stack
+        // (interceptor / strategy push frames there); JTA reads
+        // strategy.isActive() because the JTA strategy doesn't push
+        // onto the holder, and a programmatic userTx.begin() outside
+        // the @Transactional interceptor reaches this method without
+        // the holder's frame stack being populated.
+        if (!jtaMode && !isTransactionalScopeActive()) {
+            return null;
+        }
+        if (jtaMode && !strategy.isActive()) {
             return null;
         }
         if (!JpaActivePersistenceUnits.get().contains(persistenceUnitName)) {
@@ -311,14 +332,120 @@ public abstract class TransactionScopedEmHolder {
             return null;
         }
         EntityManager entityManager = factory.createEntityManager();
-        entityManager.getTransaction().begin();
+        if (jtaMode) {
+            // Under JTA the EM cannot drive its own EntityTransaction —
+            // em.getTransaction() throws "JTA mode" — and a freshly
+            // created EM is unsynchronized by default per JPA 3.2 §7.6.
+            // joinTransaction() enlists the EM with the active JTA tx;
+            // a Synchronization closes + pops the EM at tx complete so
+            // jpa-module's per-PU stack stays in sync with the JTA
+            // outcome the JTA strategy doesn't itself touch.
+            entityManager.joinTransaction();
+            registerJtaSynchronization(strategy, persistenceUnitName, entityManager);
+        } else {
+            entityManager.getTransaction().begin();
+        }
         push(persistenceUnitName, entityManager);
         Deque<Set<String>> framesStack = FRAME_PUS_STACK.get();
         if (!framesStack.isEmpty()) {
             framesStack.peek().add(persistenceUnitName);
         }
-        fireTransactionStartedQuietly(persistenceUnitName);
+        // Under RESOURCE_LOCAL the strategy fires TransactionStarted only
+        // for the eagerly-managed PU; lazy-joining PUs fire their own
+        // event from here. Under JTA the strategy fires exactly one
+        // transaction-wide event per JTA tx (per ticket scenario 16),
+        // so the holder must not fire a second per-PU event.
+        if (!jtaMode) {
+            fireTransactionStartedQuietly(persistenceUnitName);
+        }
         return entityManager;
+    }
+
+    private static void registerJtaSynchronization(
+            TransactionStrategy strategy, String persistenceUnitName, EntityManager entityManager) {
+        TransactionManager transactionManager = strategy.getTransactionManager();
+        if (transactionManager == null) {
+            return;
+        }
+        try {
+            Transaction transaction = transactionManager.getTransaction();
+            if (transaction == null) {
+                return;
+            }
+            transaction.registerSynchronization(new EmCleanupSynchronization(persistenceUnitName, entityManager));
+            // Bind the strategy's lifecycle events for this tx if no
+            // begin() on the strategy has done it already. Keeps
+            // TransactionStarted / TransactionBeforeCompletion /
+            // TransactionCommitted / TransactionRolledBack firing under
+            // a vendor JTA CDI interceptor (Narayana, Quarkus) that
+            // drives the tx via UserTransaction without going through
+            // this strategy's begin / commit / rollback.
+            strategy.bindLifecycleEventsToCurrentTransaction();
+        } catch (RollbackException | SystemException registerFailure) {
+            // The active tx is already finishing (or in error). Close the
+            // EM ourselves so it doesn't leak; the strategy's commit /
+            // rollback will fail on this anyway and surface the underlying
+            // tx error.
+            try {
+                entityManager.close();
+            } catch (RuntimeException ignored) {
+                // best-effort — primary failure is the tx-state one
+            }
+        }
+    }
+
+    /**
+     * {@link Synchronization} that pops the EM from the per-PU stack
+     * and closes it once the active JTA transaction completes. The
+     * jpa-module RESOURCE_LOCAL strategy handles pop+close itself; the
+     * JTA strategy does not, so the lazy-begin path under JTA carries
+     * its own cleanup.
+     */
+    private static class EmCleanupSynchronization implements Synchronization {
+
+        private final String persistenceUnitName;
+
+        private final EntityManager entityManager;
+
+        EmCleanupSynchronization(String persistenceUnitName, EntityManager entityManager) {
+            this.persistenceUnitName = persistenceUnitName;
+            this.entityManager = entityManager;
+        }
+
+        @Override
+        public void beforeCompletion() {
+            // No-op — Hibernate's JTA coordinator runs its own
+            // beforeCompletion to flush the EM before commit.
+        }
+
+        @Override
+        public void afterCompletion(int status) {
+            try {
+                Deque<EntityManager> stack = STACKS.get().get(persistenceUnitName);
+                if (stack != null && stack.peek() == entityManager) {
+                    stack.pop();
+                    if (stack.isEmpty()) {
+                        STACKS.get().remove(persistenceUnitName);
+                    }
+                }
+            } finally {
+                try {
+                    if (entityManager.isOpen()) {
+                        entityManager.close();
+                    }
+                } catch (RuntimeException ignored) {
+                    // best-effort — JTA tx is already finished
+                }
+            }
+            // Status hint: STATUS_COMMITTED vs STATUS_ROLLED_BACK does not
+            // change cleanup behaviour here, so the value is unused.
+            int unusedStatusHint = status;
+            // referencing the parameter so checkstyle / IDE warnings
+            // don't fire on the deliberately-unused argument.
+            if (unusedStatusHint == Status.STATUS_UNKNOWN) {
+                // never reached for well-behaved JTA TMs
+            }
+        }
     }
 
     /**

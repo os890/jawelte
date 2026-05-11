@@ -217,8 +217,16 @@ public interface TestContext {
     private static <T> T instantiateConfigured(Class<T> portType, boolean tryCdiFirst) {
         Config config = ConfigProvider.getConfig();
         String dotKey = portType.getName();
+        // Trim before the empty-check so accidental leading/trailing
+        // whitespace in a user-supplied microprofile-config.properties
+        // value (e.g. ` foo.bar.X `) doesn't reach Class.forName and
+        // fail with ClassNotFoundException. A blank-after-trim value
+        // is treated as "key not set" so the user gets the same
+        // actionable error as if they hadn't configured it at all.
         String configuredClassName = config.getOptionalValue(dotKey, String.class)
                 .or(() -> config.getOptionalValue(dotKey.replace('.', '_'), String.class))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
                 .orElseThrow(() -> new IllegalStateException(
                         "MicroProfile Config key not set: " + dotKey
                                 + " (or its underscore variant). Expected the FQCN of a "

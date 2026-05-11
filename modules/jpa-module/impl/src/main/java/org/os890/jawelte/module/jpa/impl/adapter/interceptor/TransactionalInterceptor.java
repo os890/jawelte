@@ -23,11 +23,13 @@ import jakarta.annotation.Priority;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
+import jakarta.persistence.PersistenceUnitTransactionType;
 import jakarta.transaction.Transactional;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
+import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 
 /**
  * CDI interceptor bound to {@link Transactional}. Wraps the method
@@ -115,6 +117,19 @@ public class TransactionalInterceptor {
                     "TransactionScopedContext is not registered. Was JpaCdiExtension.afterBeanDiscovery skipped?");
         }
         callStack.push(currentMethod);
+        // Under JTA the strategy intentionally doesn't push a frame
+        // onto TransactionScopedEmHolder (the holder is jpa-module/impl-
+        // private and the JTA strategy never touches it). The
+        // interceptor opens an "all-lazy" frame here so that the
+        // EntityManagerProxy's peekOrAutoBegin path can lazy-create
+        // and join JTA-mode EMs as the @Transactional method body
+        // runs. Under RESOURCE_LOCAL the strategy itself opens the
+        // frame on begin(), so this branch is skipped to keep the
+        // existing behaviour intact.
+        boolean jtaModeFrameOwned = strategy.getTransactionType() == PersistenceUnitTransactionType.JTA;
+        if (jtaModeFrameOwned) {
+            TransactionScopedEmHolder.enterTransactionalScope();
+        }
         strategy.begin();
         transactionScopedContext.activate();
         try {
@@ -137,6 +152,9 @@ public class TransactionalInterceptor {
             return result;
         } finally {
             transactionScopedContext.deactivate();
+            if (jtaModeFrameOwned) {
+                TransactionScopedEmHolder.exitTransactionalScope();
+            }
             callStack.pop();
             if (callStack.isEmpty()) {
                 CALL_STACK.remove();

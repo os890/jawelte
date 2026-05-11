@@ -59,10 +59,11 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.ReadOnly;
+import org.os890.jawelte.module.jpa.api.port.CdiTransactionalSupportProvider;
 import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
+import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
-import org.os890.jawelte.module.jpa.impl.adapter.tx.UserTransactionImpl;
 import org.os890.jawelte.module.jpa.impl.config.JpaConfig;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.EntityManagerProxy;
@@ -123,18 +124,6 @@ public class JpaCdiExtension implements Extension {
             "org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages";
 
     /**
-     * MicroProfile Config key whose value (comma-separated) lists
-     * package prefixes that are <em>exempt</em> from the
-     * vendor-internal CDI-bean vetoing observer. Keep set when a
-     * downstream module legitimately ships beans in
-     * {@code com.arjuna.ats.jta.cdi.*} or
-     * {@code org.apache.geronimo.transaction.*} that the user wants
-     * registered.
-     */
-    private static final String VENDOR_VETO_ALLOWLIST_KEY =
-            "org.os890.jawelte.module.jpa.vendor-veto.allowlist.packages";
-
-    /**
      * MicroProfile Config keys for the optional entity-scan whitelist.
      * When at least one of the two is set (and non-empty), the
      * {@link EntityScanner} drops every FQCN that doesn't match a
@@ -147,21 +136,7 @@ public class JpaCdiExtension implements Extension {
     private static final String ENTITY_SCAN_WHITELIST_PATTERNS_KEY =
             "org.os890.jawelte.module.jpa.entity-scan.whitelist.patterns";
 
-    /**
-     * Package prefixes whose CDI beans are vetoed at PAT to avoid
-     * duplicate-bean conflicts when JTA implementations land on the
-     * test classpath even though jawelte itself ships only
-     * RESOURCE_LOCAL. Defensive measure; an allowlist via
-     * {@link #VENDOR_VETO_ALLOWLIST_KEY} exempts specific packages
-     * when a downstream module actually wants them registered.
-     */
-    private static final Set<String> VENDOR_VETO_PACKAGE_PREFIXES = Set.of(
-            "com.arjuna.ats.jta.cdi.",
-            "org.apache.geronimo.transaction.");
-
     private boolean active;
-
-    private volatile Set<String> vendorVetoAllowlist;
 
     private Set<String> activePersistenceUnits = new LinkedHashSet<>();
 
@@ -175,18 +150,39 @@ public class JpaCdiExtension implements Extension {
     public JpaCdiExtension() {
     }
 
+    /**
+     * Hibernate {@code ExtendedBeanManager} passed to the EMF as the
+     * {@code jakarta.persistence.bean.manager} property. The
+     * {@code BeanManager} a CDI extension sees during
+     * {@code BeforeBeanDiscovery} is a bootstrap-phase reference, not
+     * the final runtime instance — we hand Hibernate this deferred
+     * wrapper instead, and notify it from the
+     * {@code @Initialized(ApplicationScoped.class)} observer below
+     * once the runtime {@code BeanManager} is available.
+     */
+    private org.os890.jawelte.module.jpa.impl.util.DeferredExtendedBeanManager deferredBeanManager;
+
     void onBeforeBeanDiscovery(@Observes BeforeBeanDiscovery event) {
         TestContext testContext = activeContextOrNull();
         if (testContext == null) {
             return;
         }
         active = true;
+        deferredBeanManager = new org.os890.jawelte.module.jpa.impl.util.DeferredExtendedBeanManager();
         Class<?> testClass = testContext.getTestClass();
         PersistenceConfig persistenceConfig = testClass.getAnnotation(PersistenceConfig.class);
 
         List<ParsedPersistenceUnit> parsed =
                 PersistenceXmlParser.parseAll(Thread.currentThread().getContextClassLoader());
         Set<String> filter = filterFromAnnotation(persistenceConfig);
+        // Resolve the active strategy's transaction type once: under
+        // JTA the auto-discovery (Hibernate) path bootstraps the EMF
+        // with PersistenceUnitTransactionType.JTA; under RESOURCE_LOCAL
+        // it stays RESOURCE_LOCAL. The spec bootstrap path picks up
+        // the same change from properties (PersistencePropertyResolver
+        // contributes jakarta.persistence.transaction-type=JTA when
+        // the JTA strategy is active).
+        PersistenceUnitTransactionType emfTransactionType = resolveEmfTransactionType();
 
         Set<String> resolvedActivePersistenceUnits = new LinkedHashSet<>();
         for (ParsedPersistenceUnit unit : parsed) {
@@ -195,13 +191,30 @@ public class JpaCdiExtension implements Extension {
             }
             resolvedActivePersistenceUnits.add(unit.name());
             Map<String, Object> properties = computeProperties(unit, persistenceConfig, testClass);
+            // Hand Hibernate a deferred ExtendedBeanManager. Resolved
+            // lazily after CDI bootstrap completes (see the
+            // @Initialized(ApplicationScoped.class) observer in this
+            // extension), so Hibernate's CDI integration talks to the
+            // final runtime BeanManager and not the bootstrap-phase
+            // reference an Extension observer holds.
+            properties.put("jakarta.persistence.bean.manager", deferredBeanManager);
             persistenceUnitProperties.put(unit.name(), properties);
-            EmfCache.getOrCreate(unit.name(), () -> bootstrapEntityManagerFactory(unit, properties));
+            EmfCache.getOrCreate(unit.name(),
+                    () -> bootstrapEntityManagerFactory(unit, properties, emfTransactionType));
         }
         activePersistenceUnits = resolvedActivePersistenceUnits;
         JpaActivePersistenceUnits.set(activePersistenceUnits);
 
-        event.addInterceptorBinding(Transactional.class);
+        // When a downstream module reports that the deployed runtime
+        // already provides a CDI @Transactional interceptor (today:
+        // jta-module/impl when Narayana's TransactionExtension is on
+        // the classpath; future: quarkus-arc-module), we step aside
+        // and let the platform's interceptor handle @Transactional.
+        // Our @ReadOnly interceptor is project-specific so it stays
+        // bound either way — no vendor handles it.
+        if (!cdiTransactionalSupport().platformProvidesTransactionalInterceptor()) {
+            event.addInterceptorBinding(Transactional.class);
+        }
         event.addInterceptorBinding(ReadOnly.class);
     }
 
@@ -223,32 +236,6 @@ public class JpaCdiExtension implements Extension {
                 rewriteField(field, persistenceUnit.unitName(), PersistenceUnit.class);
             }
         }
-    }
-
-    /**
-     * Vetoes types whose package matches one of the
-     * vendor-internal prefixes (Narayana / Geronimo JTA CDI beans)
-     * unless the user has allowlisted that prefix via
-     * {@link #VENDOR_VETO_ALLOWLIST_KEY}. Defensive against
-     * duplicate-bean conflicts when a JTA implementation lands on
-     * the test classpath even though jawelte itself ships only
-     * RESOURCE_LOCAL.
-     *
-     * @param event the {@code ProcessAnnotatedType} event
-     * @param <T>   the annotated type's class type parameter
-     */
-    <T> void onProcessAnnotatedTypeForVendorVeto(@Observes ProcessAnnotatedType<T> event) {
-        if (!active) {
-            return;
-        }
-        String className = event.getAnnotatedType().getJavaClass().getName();
-        if (!matchesVendorVetoTarget(className)) {
-            return;
-        }
-        if (matchesVendorVetoAllowlist(className)) {
-            return;
-        }
-        event.veto();
     }
 
     <X> void onProcessFactoryProducerMethod(
@@ -288,11 +275,16 @@ public class JpaCdiExtension implements Extension {
             return;
         }
         boolean singlePersistenceUnit = activePersistenceUnits.size() == 1;
+        // Strategy SPI returns jakarta.persistence.PersistenceUnitTransactionType
+        // (the public enum); JpaCdiExtension imports the spi enum to
+        // talk to Hibernate. Compare by name() so the public-vs-spi
+        // split doesn't matter at this branching point.
+        boolean jtaMode = "JTA".equals(
+                TestContext.loadService(TransactionStrategy.class).getTransactionType().name());
         for (String persistenceUnitName : activePersistenceUnits) {
             EntityManagerFactory factory = EmfCache.getCached(persistenceUnitName)
                     .orElseThrow(() -> new IllegalStateException(
                             "EntityManagerFactory for '" + persistenceUnitName + "' missing from cache"));
-            EntityManager managerProxy = EntityManagerProxy.create(persistenceUnitName);
             String backoffKey = singlePersistenceUnit ? "" : persistenceUnitName;
 
             if (!userProducedFactoryQualifiers.contains(backoffKey)) {
@@ -305,65 +297,95 @@ public class JpaCdiExtension implements Extension {
             }
 
             if (!userProducedManagerQualifiers.contains(backoffKey)) {
-                event.addBean()
-                        .beanClass(EntityManager.class)
-                        .scope(ApplicationScoped.class)
-                        .types(EntityManager.class, Object.class)
-                        .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
-                        .produceWith(instance -> managerProxy);
+                if (jtaMode) {
+                    // Under JTA the EM is produced fresh per JTA tx by
+                    // the vendor's @TransactionScoped Context
+                    // (Narayana's, registered by its CDI integration).
+                    // Hibernate's JtaPlatform + the
+                    // jakarta.persistence.bean.manager property handle
+                    // per-tx Session routing; we just hand back what
+                    // factory.createEntityManager() returns and let the
+                    // context close it at tx-completion.
+                    event.addBean()
+                            .beanClass(EntityManager.class)
+                            .scope(jakarta.transaction.TransactionScoped.class)
+                            .types(EntityManager.class, Object.class)
+                            .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
+                            .produceWith(instance -> {
+                                // Bind lifecycle events to the active JTA
+                                // tx so TransactionStarted /
+                                // BeforeCompletion / Committed / RolledBack
+                                // fire even when the vendor's
+                                // @Transactional interceptor drives the tx
+                                // (we no longer go through our strategy's
+                                // begin / commit here).
+                                TestContext.loadService(TransactionStrategy.class)
+                                        .bindLifecycleEventsToCurrentTransaction();
+                                return factory.createEntityManager();
+                            })
+                            .destroyWith((em, ctx) -> em.close());
+                } else {
+                    EntityManager managerProxy = EntityManagerProxy.create(persistenceUnitName);
+                    event.addBean()
+                            .beanClass(EntityManager.class)
+                            .scope(ApplicationScoped.class)
+                            .types(EntityManager.class, Object.class)
+                            .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
+                            .produceWith(instance -> managerProxy);
+                }
             }
         }
 
+        // The active TransactionStrategy contributes the synthetic
+        // UserTransaction bean: RESOURCE_LOCAL ships a delegating
+        // helper that drives this same strategy; JTA ships the JTA
+        // implementation's standard UserTransaction so consumers see
+        // the real Jakarta-EE shape (Test Scenario 20).
         event.addBean()
                 .beanClass(UserTransaction.class)
                 .scope(ApplicationScoped.class)
                 .types(UserTransaction.class, Object.class)
                 .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
-                .produceWith(instance -> new UserTransactionImpl());
+                .produceWith(instance -> TestContext.loadService(TransactionStrategy.class).userTransaction());
 
-        event.addContext(new TransactionScopedContext());
+        // When a downstream module reports that the runtime already
+        // provides a CDI @TransactionScoped Context (Narayana's
+        // extension does this when it's on the classpath), we step
+        // aside. Adding our own would compete with the vendor's for
+        // bean-store ownership of @TransactionScoped resolution.
+        if (!cdiTransactionalSupport().platformProvidesTransactionScopedContext()) {
+            event.addContext(new TransactionScopedContext());
+        }
     }
 
-    private static boolean matchesVendorVetoTarget(String className) {
-        for (String prefix : VENDOR_VETO_PACKAGE_PREFIXES) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
+    /**
+     * Fires once the CDI container has finished bootstrap and the
+     * runtime {@link jakarta.enterprise.inject.spi.BeanManager} is
+     * available. Notifies the deferred {@code ExtendedBeanManager}
+     * handed to Hibernate's CDI integration via the
+     * {@code jakarta.persistence.bean.manager} property so any beans
+     * Hibernate needs to resolve from now on use the runtime
+     * {@code BeanManager}, not the bootstrap-phase reference an
+     * Extension observer would see.
+     */
+    void onContainerInitialized(
+            @Observes @jakarta.enterprise.context.Initialized(ApplicationScoped.class) Object event,
+            jakarta.enterprise.inject.spi.BeanManager beanManager) {
+        if (deferredBeanManager != null) {
+            deferredBeanManager.onBeanManagerInitialized(beanManager);
         }
-        return false;
     }
 
-    private boolean matchesVendorVetoAllowlist(String className) {
-        Set<String> allowlist = vendorVetoAllowlist;
-        if (allowlist == null) {
-            synchronized (this) {
-                if (vendorVetoAllowlist == null) {
-                    vendorVetoAllowlist = readVendorVetoAllowlist();
-                }
-                allowlist = vendorVetoAllowlist;
-            }
-        }
-        for (String prefix : allowlist) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static Set<String> readVendorVetoAllowlist() {
-        return resolver().resolve(VENDOR_VETO_ALLOWLIST_KEY)
-                .map(value -> {
-                    Set<String> prefixes = new LinkedHashSet<>();
-                    for (String entry : value.split(",")) {
-                        String trimmed = entry.trim();
-                        if (!trimmed.isEmpty()) {
-                            prefixes.add(trimmed);
-                        }
-                    }
-                    return prefixes;
-                })
-                .orElseGet(Collections::emptySet);
+    /**
+     * Resolve the active {@link CdiTransactionalSupportProvider}.
+     * Default impl shipped by jpa-module/impl reports {@code false}
+     * for both methods (jpa-module hosts everything); a downstream
+     * module like jta-module/impl ships an alternative at higher
+     * priority that probes the runtime for vendor JTA CDI
+     * integrations and reports {@code true} when they're present.
+     */
+    private static CdiTransactionalSupportProvider cdiTransactionalSupport() {
+        return TestContext.loadService(CdiTransactionalSupportProvider.class);
     }
 
     /**
@@ -422,6 +444,11 @@ public class JpaCdiExtension implements Extension {
         properties.put("jakarta.persistence.jdbc.password", "");
         properties.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
         properties.put("jakarta.persistence.schema-generation.database.action", "drop-and-create");
+        // Define the dialect explicitly so Hibernate's bootstrap does
+        // not need to open a probe Connection to determine it from
+        // JDBC metadata — under JTA the data source is XA-only and
+        // Hibernate's metadata-probe path doesn't always reach it.
+        properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 
         // Route the persistence-property prefix walk through JpaConfig (and
         // therefore through the active ConfigResolver) so a consumer-supplied
@@ -431,10 +458,20 @@ public class JpaCdiExtension implements Extension {
 
         PersistencePropertyResolver resolver = TestContext.loadService(PersistencePropertyResolver.class);
         if (resolver != null) {
-            Map<String, Object> contributed = resolver.resolvePropertiesFor(unit.name());
+            Map<String, Object> contributed = resolver.resolvePropertiesFor(unit.name(), properties);
             if (contributed != null) {
                 properties.putAll(contributed);
             }
+        }
+
+        // When a resolver contributed a jtaDataSource, drop the plain
+        // JDBC connection coordinates so Hibernate cannot fall back to
+        // its non-XA connection-provider path for schema-generation /
+        // pool-warm-up. user + password are kept — Hibernate still
+        // uses them for DDL execution against the wrapped DataSource.
+        if (properties.containsKey("jakarta.persistence.jtaDataSource")) {
+            properties.remove("jakarta.persistence.jdbc.url");
+            properties.remove("jakarta.persistence.jdbc.driver");
         }
 
         return properties;
@@ -453,13 +490,18 @@ public class JpaCdiExtension implements Extension {
      * classloader parameter here, since smuggling one in would let
      * callers override the TCCL the rest of the bootstrap relies on.
      *
-     * @param unit         the parsed persistence unit
-     * @param properties   merged property bag (H2 + MP Config + resolver)
+     * @param unit            the parsed persistence unit
+     * @param properties      merged property bag (H2 + MP Config + resolver)
+     * @param transactionType the {@code PersistenceUnitTransactionType} the
+     *                        active {@code TransactionStrategy} reports —
+     *                        JTA when {@code jta-module} is on the
+     *                        classpath, RESOURCE_LOCAL otherwise
      * @return the bootstrapped {@link EntityManagerFactory}
      */
     private static EntityManagerFactory bootstrapEntityManagerFactory(
             ParsedPersistenceUnit unit,
-            Map<String, Object> properties) {
+            Map<String, Object> properties,
+            PersistenceUnitTransactionType transactionType) {
         if (unit.hasClassElements()) {
             return Persistence.createEntityManagerFactory(unit.name(), properties);
         }
@@ -475,8 +517,21 @@ public class JpaCdiExtension implements Extension {
                 List.copyOf(mergedEntities),
                 List.of(),
                 propertiesAsJavaProperties,
-                PersistenceUnitTransactionType.RESOURCE_LOCAL);
+                transactionType);
         return new HibernatePersistenceProvider().createContainerEntityManagerFactory(unitInfo, properties);
+    }
+
+    /**
+     * Read the active {@code TransactionStrategy}'s transaction type
+     * and convert from the public {@code jakarta.persistence}
+     * enum (returned by the SPI) to the {@code jakarta.persistence.spi}
+     * enum {@link TestPersistenceUnitInfo} consumes. The two enums
+     * have identical names — {@code JTA} / {@code RESOURCE_LOCAL} —
+     * so {@code valueOf} round-trips cleanly.
+     */
+    private static PersistenceUnitTransactionType resolveEmfTransactionType() {
+        TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
+        return PersistenceUnitTransactionType.valueOf(strategy.getTransactionType().name());
     }
 
     private static EntityScanner.Whitelist readEntityScanWhitelist() {

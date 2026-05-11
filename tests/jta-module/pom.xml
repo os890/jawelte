@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-jta-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/jta-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-jta-module. Each scenario boots a CDI container so the JTA strategy, the GeronimoPersistencePropertyResolver, and one of the three TransactionManagerProvider impls run end-to-end with Hibernate ORM and H2. CDI runtime selected by -Powb (default) / -Pweld; JTA implementation selected by -Pjta-geronimo (default) / -Pjta-narayana / -Pjta-atomikos.</description>
+
+    <modules>
+        <module>scenario-01-jta-strategy-auto-selected</module>
+        <module>scenario-02-transactional-under-jta</module>
+        <module>scenario-03-rollback-on-runtime-exception</module>
+        <module>scenario-09-emf-bootstrapped-in-jta-mode</module>
+        <module>scenario-17-transaction-scoped-under-jta</module>
+        <module>scenario-20-user-transaction-is-jta-provided</module>
+        <module>scenario-21-user-transaction-begin-commit</module>
+        <module>scenario-24-isavailable-side-effect-free</module>
+        <module>scenario-26-tx-on-test-method</module>
+        <module>scenario-27-rollback-on-error</module>
+        <module>scenario-28-readonly-discards-writes</module>
+        <module>scenario-29-readonly-without-transactional</module>
+        <module>scenario-30-tx-scoped-outside-tx</module>
+        <module>scenario-31-ut-rollback-undoes-writes</module>
+        <module>scenario-32-ut-commit-no-active-tx</module>
+        <module>scenario-33-cdi-events-on-commit</module>
+        <module>scenario-34-cdi-events-on-rollback</module>
+        <module>scenario-35-readonly-multi-modification</module>
+        <module>scenario-36-tx-scoped-lifecycle-counts</module>
+        <module>scenario-37-multi-pu-em-identity</module>
+        <module>scenario-38-multi-pu-cross-pu-writes</module>
+        <module>scenario-39-multi-pu-xa-flush-failure</module>
+        <module>scenario-40-multi-pu-pc-routing</module>
+        <module>scenario-41-multi-pu-readonly</module>
+        <module>scenario-42-readonly-setter-rollback</module>
+        <module>scenario-43-per-method-cleanup</module>
+        <module>scenario-44-xa-data-source-class-override</module>
+        <module>scenario-45-vendor-bean-veto</module>
+        <module>scenario-46-auto-switch-resource-local-to-jta</module>
+        <module>scenario-47-writable-outer-readonly-inner</module>
+        <module>scenario-48-readonly-inner-modification-rolls-back</module>
+        <module>scenario-49-nested-cross-pu-transactional</module>
+        <module>scenario-50-atomikos-tm-bootstrap</module>
+        <module>scenario-51-atomikos-multi-pu-xa</module>
+        <module>scenario-52-narayana-tm-bootstrap</module>
+        <module>scenario-53-narayana-multi-pu-xa</module>
+        <module>scenario-54-geronimo-tm-bootstrap</module>
+        <module>scenario-55-geronimo-multi-pu-xa</module>
+    </modules>
+
+    <dependencies>
+        <!--
+            Same dep shape as tests/jpa-module — the JTA scenarios
+            reuse the entire JPA test stack (Hibernate, H2,
+            jpa-module/impl) since the JTA strategy plugs into
+            TICKET-005's machinery rather than replacing it.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jta-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jta-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-naming</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-testkit</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <!-- CDI runtime selection — same shape as tests/jpa-module. -->
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-se</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.weld.se</groupId>
+                    <artifactId>weld-se-shaded</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+
+        <!--
+            JTA implementation selection. Default is jta-geronimo so a
+            plain `mvn -P owb verify` exercises the project's chosen
+            default. Activating any of the three provides exactly one
+            JTA implementation jar at test scope; the strategy walks
+            the priority-sorted candidate list and picks the only
+            available one.
+        -->
+        <profile>
+            <id>jta-geronimo</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <!--
+                Geronimo for the TM; uber Narayana for the CDI
+                @Transactional / @TransactionScoped integration.
+                JndiArtifactBinder binds Geronimo's TM/UT/TSR into
+                JNDI, so Narayana's CDI bits resolve them and end up
+                driving Geronimo's TM.
+            -->
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.geronimo.components</groupId>
+                    <artifactId>geronimo-transaction</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.jboss.narayana.jta</groupId>
+                    <artifactId>narayana-jta</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>jta-narayana</id>
+            <!--
+                Uber narayana-jta for both the TM and the CDI
+                integration. JndiArtifactBinder binds Narayana's own
+                TM/UT/TSR into JNDI; Narayana's CDI bits resolve them
+                via the standard java:/TransactionManager lookup.
+            -->
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.narayana.jta</groupId>
+                    <artifactId>narayana-jta</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <!--
+            No dedicated jta-atomikos profile: scenarios 50 + 51
+            pin Atomikos's jakarta-classifier deps in their own
+            poms and pin AtomikosTransactionManagerProvider as the
+            active TM via per-scenario META-INF/services overrides,
+            so they always run against Atomikos under whichever
+            JTA-impl profile the parent build activated (the 32
+            default scenarios remain unaffected — they use the
+            profile-active TM as before).
+        -->
+
+    </profiles>
+</project>
