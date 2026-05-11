@@ -71,6 +71,26 @@
             <groupId>jakarta.transaction</groupId>
             <artifactId>jakarta.transaction-api</artifactId>
         </dependency>
+
+        <!--
+            xbean-finder hosts the @Singleton / @Stateless classpath
+            scan that ejb-module performs during BeforeBeanDiscovery.
+            Neither OpenWebBeans nor Weld treat
+            BeforeBeanDiscovery.addStereotype(...) as bean-defining
+            for type-discovery purposes (the CDI 4.0 spec only
+            ENCOURAGES this — it is not required), so the only
+            portable way to make a class carrying only
+            @jakarta.ejb.Singleton / @jakarta.ejb.Stateless
+            discoverable under bean-discovery-mode="annotated" is for
+            ejb-module to enumerate the candidates itself and feed
+            them to BeforeBeanDiscovery.addAnnotatedType(...). Same
+            xbean-finder dep jpa-module's EntityScanner uses; provided
+            scope.
+        -->
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

@@ -15,11 +15,15 @@
  */
 package org.os890.jawelte.module.ejb.impl;
 
+import java.io.IOException;
 import java.lang.annotation.Annotation;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.ServiceLoader;
+import java.util.Set;
 
 import jakarta.ejb.Singleton;
 import jakarta.ejb.Stateless;
@@ -33,6 +37,9 @@ import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.enterprise.inject.spi.configurator.AnnotatedTypeConfigurator;
 
+import org.apache.xbean.finder.AnnotationFinder;
+import org.apache.xbean.finder.UrlSet;
+import org.apache.xbean.finder.archive.ClasspathArchive;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
@@ -48,26 +55,32 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  *       sorts them by passing the list to
  *       {@code TestContext.loadService(ServicePriorityResolver.class).sort(...)}.
  *       This is the same precedent {@code JtaTransactionStrategy} uses
- *       for the {@code TransactionManagerProvider} chain.
- *       {@code TestContext.loadService(EjbAnnotationMapper.class)} is
- *       not used here because it returns only the head of the sorted
- *       list, and the mapper chain genuinely needs every candidate in
- *       order.</li>
+ *       for the {@code TransactionManagerProvider} chain.</li>
  *   <li>Splits the sorted chain into the additional mappers
  *       ({@code isAdditionalMapper() == true}, run first) and the
  *       single terminal default ({@code isAdditionalMapper() == false},
  *       run when every additional mapper returned {@code null}).</li>
- *   <li>Calls
+ *   <li>Registers {@code @jakarta.ejb.Singleton} and
+ *       {@code @jakarta.ejb.Stateless} as CDI stereotypes via
  *       {@link BeforeBeanDiscovery#addStereotype(Class, Annotation...)}
- *       to register {@code @jakarta.ejb.Singleton} and
- *       {@code @jakarta.ejb.Stateless} as CDI stereotypes so they
- *       become bean-defining under
- *       {@code bean-discovery-mode="annotated"}. The stereotype's
- *       implied scope is the EJB baseline (Singleton →
- *       {@code @ApplicationScoped}, Stateless → {@code @Dependent});
- *       the mapper chain at {@code ProcessAnnotatedType} time may
- *       override it with an explicit scope on the AnnotatedType,
- *       which wins by CDI precedence.</li>
+ *       so the EJB session-bean annotations carry the EJB baseline
+ *       (Singleton → {@code @ApplicationScoped}, Stateless →
+ *       {@code @Dependent}) plus the implicit
+ *       {@code @jakarta.transaction.Transactional} for every class
+ *       the mapper chain claims.</li>
+ *   <li>Walks the classpath with {@code xbean-finder} to enumerate
+ *       every type carrying {@code @Singleton} or {@code @Stateless}
+ *       and feeds each to
+ *       {@link BeforeBeanDiscovery#addAnnotatedType(AnnotatedType, String)}.
+ *       The CDI 4.0 spec only ENCOURAGES (does not require) runtimes
+ *       to treat {@code addStereotype}-registered annotations as
+ *       bean-defining for type-discovery purposes; OpenWebBeans and
+ *       Weld both stop short of the encouragement, so the only
+ *       portable way to make an EJB-only-annotated class discoverable
+ *       under {@code bean-discovery-mode="annotated"} is for
+ *       ejb-module to enumerate the candidates itself. The xbean
+ *       scan reads bytecode without calling {@link Class#forName} on
+ *       non-matching classes, so the cost is bounded.</li>
  * </ul>
  *
  * <p>During {@code ProcessAnnotatedType<T>} the extension walks the
@@ -84,6 +97,31 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  */
 public class EjbAnnotationExtension implements Extension {
 
+    /**
+     * Packages skipped by the {@code @Singleton} / {@code @Stateless}
+     * classpath scan. Same baseline as
+     * {@code XbeanFinderEntityScanner.defaultExcludedPackagePrefixes()}
+     * — the JDK, the Jakarta APIs, the CDI runtimes, common test-time
+     * libraries, jawelte's own packages.
+     */
+    private static final Set<String> SCAN_EXCLUDE_PREFIXES = Set.of(
+            "java.",
+            "javax.",
+            "jakarta.",
+            "org.hibernate.",
+            "org.h2.",
+            "org.jboss.weld.",
+            "org.apache.openwebbeans.",
+            "org.apache.webbeans.",
+            "org.apache.xbean.",
+            "org.mockito.",
+            "net.bytebuddy.",
+            "org.junit.",
+            "org.opentest4j.",
+            "io.smallrye.",
+            "org.os890.jawelte.core.",
+            "org.os890.jawelte.module.");
+
     /** Additional mappers in priority order, populated on {@code BeforeBeanDiscovery}. */
     private final List<EjbAnnotationMapper> additionalMappers = new ArrayList<>();
 
@@ -98,11 +136,18 @@ public class EjbAnnotationExtension implements Extension {
     }
 
     /**
-     * Resolve the mapper chain and register the EJB session-bean
-     * annotations as CDI stereotypes.
+     * Resolve the mapper chain, register the EJB session-bean
+     * annotations as CDI stereotypes, and enumerate every
+     * {@code @Singleton} / {@code @Stateless} type on the classpath
+     * so {@code bean-discovery-mode="annotated"} archives still
+     * surface EJB-annotated classes as CDI candidates.
      *
-     * @param event the in-flight {@code BeforeBeanDiscovery} event
-     *              the CDI runtime delivers; non-{@code null}
+     * @param event       the in-flight {@code BeforeBeanDiscovery}
+     *                    event; non-{@code null}
+     * @param beanManager the in-flight {@code BeanManager}, used to
+     *                    materialise {@code AnnotatedType} instances
+     *                    for the discovered EJB classes;
+     *                    non-{@code null}
      */
     void onBeforeBeanDiscovery(@Observes BeforeBeanDiscovery event, BeanManager beanManager) {
         resolveMapperChain();
@@ -112,6 +157,7 @@ public class EjbAnnotationExtension implements Extension {
         event.addStereotype(Stateless.class,
                 Dependent.Literal.INSTANCE,
                 TransactionalLiteral.INSTANCE);
+        registerEjbAnnotatedTypes(event, beanManager);
     }
 
     /**
@@ -119,9 +165,13 @@ public class EjbAnnotationExtension implements Extension {
      * apply the resulting annotations via
      * {@link AnnotatedTypeConfigurator#add(Annotation)}.
      *
-     * @param event the in-flight {@code ProcessAnnotatedType} event
-     *              the CDI runtime delivers; non-{@code null}
-     * @param <T>   the annotated type's bean class
+     * @param event       the in-flight {@code ProcessAnnotatedType}
+     *                    event the CDI runtime delivers;
+     *                    non-{@code null}
+     * @param beanManager the in-flight {@code BeanManager}, forwarded
+     *                    to every mapper in the chain so they have
+     *                    access to CDI services; non-{@code null}
+     * @param <T>         the annotated type's bean class
      */
     <T> void onProcessAnnotatedType(@Observes ProcessAnnotatedType<T> event, BeanManager beanManager) {
         AnnotatedType<T> annotatedType = event.getAnnotatedType();
@@ -158,9 +208,8 @@ public class EjbAnnotationExtension implements Extension {
         if (candidates.isEmpty()) {
             // Hypothetical classpath with ejb-module/api but no
             // ejb-module/impl. invokeChain returns null for every
-            // type; the stereotype declarations alone keep the
-            // bean-defining behaviour, with the EJB baseline scopes
-            // inherited from the stereotypes.
+            // type; addAnnotatedType still surfaces EJB-annotated
+            // classes via the stereotype declarations.
             return;
         }
         List<EjbAnnotationMapper> sorted = TestContext
@@ -174,10 +223,59 @@ public class EjbAnnotationExtension implements Extension {
             } else if (terminalMapper == null) {
                 terminalMapper = mapper;
             }
-            // If a second terminal mapper appears, the
-            // priority-sorted-first one already won; the rest are
-            // ignored. Per the chain contract there should be
+            // A second terminal mapper would be a misconfiguration —
+            // the priority-sorted-first one already won; the rest
+            // are ignored. Per the chain contract there should be
             // exactly one terminal default on the classpath.
         }
+    }
+
+    private void registerEjbAnnotatedTypes(BeforeBeanDiscovery event, BeanManager beanManager) {
+        Set<Class<?>> candidates = scanClasspathForEjbAnnotatedTypes();
+        for (Class<?> beanClass : candidates) {
+            AnnotatedType<?> annotatedType = beanManager.createAnnotatedType(beanClass);
+            event.addAnnotatedType(annotatedType, "ejb-" + beanClass.getName());
+        }
+    }
+
+    private static Set<Class<?>> scanClasspathForEjbAnnotatedTypes() {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        Set<Class<?>> matches = new LinkedHashSet<>();
+        try {
+            List<URL> urls = new UrlSet(classLoader).getUrls();
+            AnnotationFinder finder = new AnnotationFinder(new ClasspathArchive(classLoader, urls));
+            for (Class<?> ejbClass : finder.findAnnotatedClasses(Singleton.class)) {
+                if (!isExcluded(ejbClass.getName())) {
+                    matches.add(ejbClass);
+                }
+            }
+            for (Class<?> ejbClass : finder.findAnnotatedClasses(Stateless.class)) {
+                if (!isExcluded(ejbClass.getName())) {
+                    matches.add(ejbClass);
+                }
+            }
+        } catch (IOException | RuntimeException scanFailure) {
+            // The scan is a best-effort discovery aid; surfacing the
+            // failure as an opaque CDI bootstrap error would be more
+            // disruptive than not running ejb-module on this
+            // classpath. The fallback path is the standard CDI
+            // discovery — types that already carry a CDI scope still
+            // resolve through the existing rules, and the mapper
+            // chain still runs against them via ProcessAnnotatedType.
+            throw new IllegalStateException(
+                    "ejb-module classpath scan for @Singleton / @Stateless types failed; "
+                            + "bootstrap aborted to surface the underlying classpath problem.",
+                    scanFailure);
+        }
+        return matches;
+    }
+
+    private static boolean isExcluded(String className) {
+        for (String prefix : SCAN_EXCLUDE_PREFIXES) {
+            if (className.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

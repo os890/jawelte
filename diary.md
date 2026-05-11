@@ -2073,3 +2073,32 @@ generation never released 4.0.2). `./mvnw -pl modules/ejb-module/impl
 -am verify` passes — Checkstyle (after dropping `final` on the
 `TransactionalLiteral` for CDI proxy compatibility), Apache RAT (8
 files approved), Javadoc-jar all green.
+
+### 2026-05-11 — discovery fix — addStereotype isn't enough
+
+Empirical finding (confirmed under both OWB and Weld): CDI 4.0's
+`addStereotype(...)` during BBD does NOT make the registered annotation
+bean-defining for type-discovery purposes. The spec only ENCOURAGES it;
+neither runtime implements the encouragement. Stereotype-only-annotated
+classes (e.g. one carrying just `@jakarta.ejb.Singleton`) are never
+delivered to `ProcessAnnotatedType` under `bean-discovery-mode="annotated"`.
+
+After AskUserQuestion, os890 picked option 1 (Recommended): ejb-module
+scans the classpath in BBD via xbean-finder and feeds each discovered
+class to `event.addAnnotatedType(beanManager.createAnnotatedType(c),
+"ejb-" + c.getName())`. Same approach jpa-module already uses for
+`@Entity` types; xbean-finder reads bytecode so the cost is bounded.
+
+- Added `xbean-finder-shaded` as a compile-time dep to ejb-module/impl
+  (provided scope inherited from root depMgmt).
+- `EjbAnnotationExtension.registerEjbAnnotatedTypes` walks the
+  classloader via `UrlSet` + `ClasspathArchive` + `AnnotationFinder`,
+  filters out the JDK / Jakarta / CDI-runtime / test-lib packages (same
+  exclude baseline `XbeanFinderEntityScanner.defaultExcludedPackagePrefixes`
+  uses), and calls `addAnnotatedType` per surviving type.
+- Test parent `tests/ejb-module/pom.xml` adds xbean-finder at test
+  scope so the scan resolves under both OWB and Weld test classpaths.
+
+Scenario-01 (`@Singleton` injectable, plain class with no CDI scope on
+it) now green under both `mvn -P owb test` and `mvn -P weld test` with
+`bean-discovery-mode="annotated"` in the scenario's `beans.xml`.
