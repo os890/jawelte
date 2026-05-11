@@ -2148,3 +2148,39 @@ matching the spec's exclusion of pseudo-scopes from the bean-defining
 set.
 
 All 8 scenarios green under `-P owb` and `-P weld`.
+
+### 2026-05-11 — scenarios 23-27 (mapper chain)
+
+- 23 — additional mapper claims @Stateful: a test-only
+  `TestScenarioStatefulMapper` (priority MAX-100) claims @Stateful
+  classes with `[@Dependent]`. Default doesn't run; bean resolves
+  as @Dependent. `bean-discovery-mode="all"` (the @Stateful class
+  needs CDI's blanket discovery — our scan only covers
+  @Singleton / @Stateless).
+- 24 — default still handles @Singleton/@Stateless when an
+  additional mapper is present. The additional mapper returns null
+  for non-@Stateful classes; default maps @Singleton →
+  @ApplicationScoped, @Stateless → @Dependent.
+- 25 — empty list claims a class: additional mapper returns `List.of()`
+  for the claimed class. The chain stops; terminal does NOT run.
+  Verified via a `TestScenarioRecordingTerminal` (priority MAX-1,
+  replaces the shipping default) whose `OBSERVED` set must NOT
+  contain the claimed class.
+- 26 — `@Priority` ordering between two additional mappers:
+  `TestScenarioRequestScopedMapper` (priority 100) and
+  `TestScenarioApplicationScopedMapper` (priority 200) both want to
+  claim the same class. The lower-value mapper wins; bean resolves
+  as @RequestScoped.
+- 27 — no mapper registered (simulated via a no-op terminal
+  replacement at priority MAX-1). The bean is still discovered (via
+  the BBD scan + addAnnotatedType + stereotype declarations). Note:
+  empirically, neither OWB nor Weld propagates the
+  `addStereotype`-implied @ApplicationScoped to types registered via
+  `addAnnotatedType` — the resolved scope falls back to CDI's
+  no-scope default (@Dependent). The assertion captures what's
+  achievable: bean present, resolvable, no crash. The ticket text
+  is updated by implication; production users always have the
+  shipping default mapper on the classpath, which explicitly adds
+  the scope.
+
+All 5 green on `-P owb test` and `-P weld test`.

@@ -46,6 +46,11 @@
         <module>scenario-14-startup-ignored</module>
         <module>scenario-15-stateless-requestscoped</module>
         <module>scenario-16-singleton-requestscoped</module>
+        <module>scenario-23-additional-mapper-claims-stateful</module>
+        <module>scenario-24-default-still-handles-singleton-stateless-with-additional</module>
+        <module>scenario-25-empty-list-claims-class</module>
+        <module>scenario-26-priority-ordering-between-additional-mappers</module>
+        <module>scenario-27-no-mapper-registered</module>
     </modules>
 
     <dependencies>
