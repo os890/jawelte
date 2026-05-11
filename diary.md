@@ -1920,3 +1920,29 @@ against Atomikos regardless of which JTA-impl profile is active.
 
 verify-all.sh shrunk back to 13 phases — Atomikos coverage now rides
 inside every existing JTA-impl phase automatically.
+
+## 2026-05-11 — fix coverage-report aggregator: add missing jpa scenarios 61-65 + all 34 jta-module scenarios + jta-module/api+impl as classes deps
+
+`mvn clean install` was reporting jpa-module-impl coverage at 63%
+instructions / 51% branches, with `NativeSqlDeleteDbCleanupStrategy`
+and `JpaLauncherSessionListener` listed as 0% even though tests for
+them exist (scenarios 61, 64). Root cause: the coverage-report
+aggregator's `<dependencies>` block stopped at jpa-module scenario-60
+and didn't list any jta-module scenarios at all — so their
+`jacoco.exec` files never reached `report-aggregate`. Plus
+`jawelte-jta-module-api` / `-impl` weren't listed as class-source deps,
+so JaCoCo had no class files for the jta-module package.
+
+Added:
+- jpa-module scenarios 61, 62, 63, 64, 65
+- jta-module scenarios 01..49, 50, 51 (all 34)
+- jawelte-jta-module-api + jawelte-jta-module-impl
+
+After: aggregate 76.0% instructions / 62.5% branches /  73.3% lines
+(was 74.7 / 62.3 / 72.1). jpa-module-impl recovered to 73.8 / 57.1
+(was 63.2 / 51.1). jta-module-impl now shows 60.5 / 46.1 (was missing
+entirely from the report).
+
+Remaining 0% impl-alt classes that need new scenarios:
+- `JpaMetamodelTableNameResolver` (opt-in TableNameResolver alternative)
+- `DefaultPersistenceUnitConnectionResolver` (the SPI is untested end-to-end)
