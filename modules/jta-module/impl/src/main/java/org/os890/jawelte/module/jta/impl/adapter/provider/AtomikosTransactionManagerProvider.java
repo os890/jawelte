@@ -25,6 +25,7 @@ import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
 
 import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
+import org.os890.jawelte.module.jta.impl.config.JtaConfig;
 
 /**
  * Default {@link TransactionManagerProvider} for the Atomikos
@@ -56,6 +57,17 @@ public class AtomikosTransactionManagerProvider implements TransactionManagerPro
 
     private static final String ATOMIKOS_USER_TRANSACTION_MANAGER_CLASS =
             "com.atomikos.icatch.jta.UserTransactionManager";
+
+    /**
+     * Atomikos reads this system property during
+     * {@code UserTransactionManager.init()} and uses it as the JVM-wide
+     * default transaction timeout. The value is expressed in
+     * <em>milliseconds</em>, so jta-module converts the
+     * {@link JtaConfig#defaultTransactionTimeoutSeconds()} value at the
+     * boundary.
+     */
+    private static final String ATOMIKOS_DEFAULT_JTA_TIMEOUT_MS_PROPERTY =
+            "com.atomikos.icatch.default_jta_timeout";
 
     /**
      * JVM-static cache. {@link ServiceLoader} returns a fresh provider
@@ -138,6 +150,16 @@ public class AtomikosTransactionManagerProvider implements TransactionManagerPro
                 return cachedUserTransactionManager;
             }
             try {
+                // Seed the system property *before* init() — Atomikos
+                // reads it during initialization, not at begin() time.
+                // Don't overwrite an explicit user-supplied value.
+                if (System.getProperty(ATOMIKOS_DEFAULT_JTA_TIMEOUT_MS_PROPERTY) == null) {
+                    long defaultTimeoutMillis =
+                            new JtaConfig().defaultTransactionTimeoutSeconds() * 1000L;
+                    System.setProperty(
+                            ATOMIKOS_DEFAULT_JTA_TIMEOUT_MS_PROPERTY,
+                            Long.toString(defaultTimeoutMillis));
+                }
                 Class<?> userTransactionManagerClass = forName(ATOMIKOS_USER_TRANSACTION_MANAGER_CLASS);
                 Object instance = userTransactionManagerClass.getDeclaredConstructor().newInstance();
                 // setForceShutdown(false) leaves recovery threads alone on

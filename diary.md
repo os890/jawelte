@@ -1726,3 +1726,33 @@ so consumers don't need to know we're internally coupled to Hibernate.
 
 **Verification**: full matrix green — 13/13 phases under
 {owb,weld} × {jta-geronimo,jta-narayana} in 20m 25s.
+
+## 2026-05-11 — G9: configurable JVM-default tx-timeout across all JTA providers
+
+Closed gap-report G9 (Geronimo TM constructor hardcoded to no-arg ⇒ 10-minute
+default). The timeout is now sourced from a single MP-Config key,
+`org.os890.jawelte.module.jta.default-tx-timeout-seconds`, with a 120s fallback
+matching the POC.
+
+**New facade**: `JtaConfig` (in `impl.config`, mirroring jpa-module's
+`JpaConfig`) — `@ConfigBean`, type-safe per-key methods, lazy
+`ConfigResolver` lookup for pre-CDI callers. `String::trim` before
+`Integer::parseInt` so leading/trailing whitespace from MP-Config sources
+doesn't break number parsing.
+
+**Per-provider wiring** (provider-agnostic key, vendor-specific
+application — no portable "set JVM-default" exists in the JTA spec
+since `TransactionManager.setTransactionTimeout(int)` is per-thread):
+- Geronimo: `new GeronimoTransactionManager(int defaultTimeoutSeconds)` —
+  uses the int constructor instead of the no-arg form.
+- Narayana: `CoordinatorEnvironmentBean.setDefaultTimeout(int)` seeded
+  via `BeanPopulator.getDefaultInstance(...)` reflection, in the same
+  path that already seeds the node identifier on lean-jar builds.
+- Atomikos: `System.setProperty("com.atomikos.icatch.default_jta_timeout",
+  seconds * 1000)` before `UserTransactionManager.init()`. Respects an
+  explicit user-supplied value (no overwrite if the property is already
+  set). Atomikos reads the property in **milliseconds** so the
+  conversion happens at the boundary.
+
+**Verification**: full matrix green — 13/13 phases under
+{owb,weld} × {jta-geronimo,jta-narayana} in 15m 2s.

@@ -23,6 +23,7 @@ import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
 
 import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
+import org.os890.jawelte.module.jta.impl.config.JtaConfig;
 
 /**
  * Default {@link TransactionManagerProvider} for Apache Geronimo's
@@ -79,8 +80,11 @@ public class GeronimoTransactionManagerProvider implements TransactionManagerPro
             }
             try {
                 Class<?> transactionManagerClass = forName(GERONIMO_TM_CLASS);
-                cachedTransactionManager =
-                        (TransactionManager) transactionManagerClass.getDeclaredConstructor().newInstance();
+                int defaultTransactionTimeoutSeconds =
+                        new JtaConfig().defaultTransactionTimeoutSeconds();
+                cachedTransactionManager = (TransactionManager) transactionManagerClass
+                        .getDeclaredConstructor(int.class)
+                        .newInstance(defaultTransactionTimeoutSeconds);
                 return cachedTransactionManager;
             } catch (ReflectiveOperationException reflectionFailure) {
                 throw new IllegalStateException(

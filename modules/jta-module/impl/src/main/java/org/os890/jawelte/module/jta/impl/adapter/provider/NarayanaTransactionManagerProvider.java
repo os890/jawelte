@@ -23,6 +23,7 @@ import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
 
 import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
+import org.os890.jawelte.module.jta.impl.config.JtaConfig;
 
 /**
  * Default {@link TransactionManagerProvider} for the JBoss Narayana JTA
@@ -73,6 +74,9 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
     private static final String NARAYANA_CORE_ENV_BEAN_CLASS =
             "com.arjuna.ats.arjuna.common.CoreEnvironmentBean";
 
+    private static final String NARAYANA_COORDINATOR_ENV_BEAN_CLASS =
+            "com.arjuna.ats.arjuna.common.CoordinatorEnvironmentBean";
+
     private static final String NARAYANA_TSR_IMPLE_CLASS =
             "com.arjuna.ats.internal.jta.transaction.arjunacore.TransactionSynchronizationRegistryImple";
 
@@ -97,6 +101,8 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
             // the lean jta jar doesn't bundle it, leaving the field
             // null until something configures it.
             seedCoreEnvironmentBean();
+            seedCoordinatorEnvironmentBeanDefaultTimeout(
+                    new JtaConfig().defaultTransactionTimeoutSeconds());
             Class<?> accessor = forName(NARAYANA_TM_ACCESSOR_CLASS);
             TransactionManager tm = (TransactionManager) accessor.getMethod("transactionManager").invoke(null);
             seedJtaEnvironmentBean(tm);
@@ -105,6 +111,22 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
             throw new IllegalStateException(
                     "Failed to obtain Narayana TransactionManager via reflection",
                     reflectionFailure);
+        }
+    }
+
+    private static void seedCoordinatorEnvironmentBeanDefaultTimeout(int defaultTimeoutSeconds) {
+        try {
+            Class<?> beanPopulator = forName(NARAYANA_BEAN_POPULATOR_CLASS);
+            Class<?> coordinatorEnvBeanClass = forName(NARAYANA_COORDINATOR_ENV_BEAN_CLASS);
+            Object envBean = beanPopulator
+                    .getMethod("getDefaultInstance", Class.class)
+                    .invoke(null, coordinatorEnvBeanClass);
+            coordinatorEnvBeanClass
+                    .getMethod("setDefaultTimeout", int.class)
+                    .invoke(envBean, defaultTimeoutSeconds);
+        } catch (ReflectiveOperationException notSeedable) {
+            // best-effort: if Narayana's CoordinatorEnvironmentBean
+            // can't be reached, the TM uses its own 60-second default
         }
     }
 
