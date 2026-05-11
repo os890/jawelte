@@ -2184,3 +2184,20 @@ All 8 scenarios green under `-P owb` and `-P weld`.
   the scope.
 
 All 5 green on `-P owb test` and `-P weld test`.
+
+### 2026-05-11 — scenarios 17, 19-22 (scope-module integration)
+
+- 17 — user-declared @TestClassScoped on @Singleton: user wins over
+  both default + scope-module override.
+- 19 — scope-aware @Singleton default: scope-module present →
+  @Singleton resolves through @TestClassScoped instead of @AppScoped.
+- 20 — scope-module ABSENT → @ApplicationScoped fallback: same
+  shape as #19 but without scope-module on the test classpath.
+- 21 — user-declared @ApplicationScoped wins over scope-module's
+  @TestClassScoped fallback.
+- 22 — @Stateless mapping stays @Dependent even with scope-module
+  on classpath.
+
+All 5 green on `-P owb` and `-P weld`. Each scope-module-dependent
+scenario pulls `jawelte-scope-module-api` + `jawelte-scope-module-impl`
+in its own pom; scenario 20 intentionally omits them.

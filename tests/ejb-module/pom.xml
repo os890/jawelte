@@ -51,6 +51,11 @@
         <module>scenario-25-empty-list-claims-class</module>
         <module>scenario-26-priority-ordering-between-additional-mappers</module>
         <module>scenario-27-no-mapper-registered</module>
+        <module>scenario-17-user-declared-testclassscoped-on-singleton</module>
+        <module>scenario-19-scope-aware-singleton-default</module>
+        <module>scenario-20-scope-module-absent-applicationscoped-fallback</module>
+        <module>scenario-21-singleton-applicationscoped-explicit-with-scope-module</module>
+        <module>scenario-22-stateless-unaffected-by-scope-module</module>
     </modules>
 
     <dependencies>
