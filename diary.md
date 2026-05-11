@@ -2034,3 +2034,42 @@ its compile surface — no `jakarta.ejb-api`, no `jakarta.transaction-api`,
 no scope-module reference. Loads cleanly in JVMs without those libs.
 
 `./mvnw -pl modules/ejb-module/api -am compile` is green.
+
+### 2026-05-11 — ejb-module/impl — default mapper + extension
+
+- `TransactionalLiteral` (pkg-private) — default-attribute literal
+  for `jakarta.transaction.Transactional` (TxType.REQUIRED, empty
+  rollback/dontRollback arrays). The annotation has attributes so
+  the API doesn't ship a `Literal.INSTANCE`; ejb-module fills the gap.
+- `AnnotationInstanceFactory` (pkg-private) — `Proxy.newProxyInstance`
+  helper that builds default-attribute instances for annotation types
+  resolved at runtime. Used for `@TestClassScoped` since it isn't a
+  compile-time dep. `AnnotationLiteral<X>` subclassing doesn't work
+  for runtime-resolved types — the generic parameter is erased.
+- `DefaultEjbAnnotationMapper` (`@Priority(Integer.MAX_VALUE)`,
+  `isAdditionalMapper() == false`) — terminal mapper, maps
+  `@jakarta.ejb.Singleton` → resolved scope + `@Transactional`,
+  `@jakarta.ejb.Stateless` → `@Dependent` + `@Transactional`. Skips
+  the scope addition when the class already carries a user-declared
+  CDI scope (detected by `@NormalScope` / `@Scope` meta-annotation —
+  same single-pass scan cdi-module uses for `@TestBean` static-field
+  scope inference). Reads `ScopeBinding.TestBeanDefaultScope` lazily
+  on first `@Singleton` encounter and caches the resolved scope class.
+- `EjbAnnotationExtension` — drives the chain. On `BeforeBeanDiscovery`,
+  enumerates `ServiceLoader.load(EjbAnnotationMapper.class)`, sorts via
+  `TestContext.loadService(ServicePriorityResolver.class).sort(...)`,
+  splits into additional + terminal mappers, and registers `@Singleton`
+  / `@Stateless` as CDI stereotypes (so they're bean-defining under
+  `bean-discovery-mode="annotated"`). On `ProcessAnnotatedType<T>`,
+  walks the chain — first non-null result claims the class, terminal
+  runs only if every additional mapper returned null — and applies
+  results via `configureAnnotatedType().add(...)`.
+- `META-INF/services/jakarta.enterprise.inject.spi.Extension` registers
+  the extension; `META-INF/services/.../EjbAnnotationMapper` registers
+  the default mapper; `META-INF/beans.xml` sets `bean-discovery-mode="annotated"`.
+
+Pinned `jakarta.ejb.version` to 4.0.1 (latest on central; the EE-11
+generation never released 4.0.2). `./mvnw -pl modules/ejb-module/impl
+-am verify` passes — Checkstyle (after dropping `final` on the
+`TransactionalLiteral` for CDI proxy compatibility), Apache RAT (8
+files approved), Javadoc-jar all green.
