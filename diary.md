@@ -2336,3 +2336,11 @@ assertion is still `bean.getScope() == <user-declared>`. A
 was tried and dropped — that API returns raw class annotations and
 does NOT reflect PAT modifications, so the end-to-end check in
 scenarios 5/6 stays the authoritative `@Transactional` test.
+
+## 2026-05-12 — TICKET-007 follow-up: spell out the @Transactional exception
+
+Every "@Transactional still added" statement in the issue body and
+the default-mapper Javadoc now spells out the one exception:
+when the class already declares @jakarta.transaction.Transactional
+itself, the author's attributes are kept and the mapper does not
+add a second @Transactional on top (scenario 28's rule).

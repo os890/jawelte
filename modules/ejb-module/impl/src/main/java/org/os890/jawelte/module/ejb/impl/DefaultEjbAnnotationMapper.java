@@ -60,9 +60,13 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  * already carry a CDI scope (a normal-scope annotation or
  * {@code @Dependent}); when it does, the mapper skips the scope
  * addition because the class is bean-defining through its own
- * scope. The implicit {@code @Transactional} is added either way —
- * the scope decision and the transactional addition are
- * independent.
+ * scope. The implicit {@code @Transactional} is added either way
+ * — the scope decision and the transactional addition are
+ * independent — unless the class already declares
+ * {@code @jakarta.transaction.Transactional} itself, in which
+ * case the author's {@code TxType} / {@code rollbackOn} /
+ * {@code dontRollbackOn} attributes are kept and no second
+ * {@code @Transactional} is added on top.
  *
  * <p>The other class-level EJB annotations
  * ({@code @Stateful}, {@code @MessageDriven}, {@code @Lock},
