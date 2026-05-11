@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.jta.impl.cdi;
+package org.os890.jawelte.module.jta.impl.adapter.extension;
 
 import java.util.LinkedHashSet;
 import java.util.Set;

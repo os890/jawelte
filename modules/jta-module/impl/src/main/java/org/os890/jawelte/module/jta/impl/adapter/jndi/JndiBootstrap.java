@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.jta.impl.jndi;
+package org.os890.jawelte.module.jta.impl.adapter.jndi;
 
 import javax.naming.Context;
 import javax.naming.InitialContext;

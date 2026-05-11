@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.jta.impl;
+package org.os890.jawelte.module.jta.impl.adapter.tx;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -29,8 +29,8 @@ import jakarta.annotation.Priority;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
-import org.os890.jawelte.module.jta.impl.hibernate.StandaloneJtaPlatform;
-import org.os890.jawelte.module.jta.impl.xa.XaDataSourceWrapper;
+import org.os890.jawelte.module.jta.impl.adapter.jpa.StandaloneJtaPlatform;
+import org.os890.jawelte.module.jta.impl.adapter.xa.XaDataSourceWrapper;
 
 /**
  * The active {@link PersistencePropertyResolver} shipped by jta-module:

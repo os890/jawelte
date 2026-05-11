@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.jta.impl.xa;
+package org.os890.jawelte.module.jta.impl.adapter.xa;
 
 import java.io.PrintWriter;
 import java.lang.System.Logger;

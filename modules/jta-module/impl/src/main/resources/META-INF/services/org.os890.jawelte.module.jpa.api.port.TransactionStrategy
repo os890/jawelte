@@ -12,4 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.module.jta.impl.JtaTransactionStrategy
+org.os890.jawelte.module.jta.impl.adapter.tx.JtaTransactionStrategy

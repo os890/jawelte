@@ -1672,3 +1672,57 @@ Major moves:
   Narayana's `JTASupplier` resolves through JNDI to our bound TM.
 
 Final state: 13/13 verify-all phases green, 14m 28s total.
+
+## 2026-05-11 — jta-module impl/* port-impls and adapters moved under impl.adapter.*
+
+Aligned `jta-module/impl` package layout with the project's hex-arch
+convention used in `cdi-module`, `jpa-module`, and `scope-module`:
+every port impl and external-SPI adapter now lives under
+`impl.adapter.{category}`. Layout-only — no behavior change.
+
+**Moves**:
+- Port impls (`adapter.*` named after the port's home sub-package):
+  - `impl.provider.{Atomikos,Geronimo,Narayana}TransactionManagerProvider`
+    → `impl.adapter.provider.*` (port: `TransactionManagerProvider`).
+  - `impl.cdi.JtaCdiTransactionalSupportProvider` →
+    `impl.adapter.cdi.*` (port: `CdiTransactionalSupportProvider`).
+  - `impl.JtaTransactionStrategy` → `impl.adapter.tx.*` (port:
+    `TransactionStrategy`); same package as jpa-module's
+    `DefaultResourceLocalTransactionStrategy`.
+  - `impl.JtaPersistencePropertyResolver` → `impl.adapter.tx.*` (port:
+    `PersistencePropertyResolver`; grouped with the tx strategy
+    because the contributed properties are JTA-tx-related).
+- External-SPI adapters (`adapter.*` named after the foreign system):
+  - `impl.cdi.JtaCdiExtension` → `impl.adapter.extension.*` (CDI's
+    `Extension` SPI; matches jpa-module's `adapter.extension.JpaCdiExtension`).
+  - `impl.hibernate.StandaloneJtaPlatform` → `impl.adapter.jpa.*`
+    (Hibernate's `JtaPlatform` SPI; renamed from `hibernate` to `jpa`
+    so the public surface stays vendor-neutral even though the class
+    is genuinely Hibernate-coupled).
+  - `impl.jndi.{JndiBootstrap,JndiArtifactBinder}` →
+    `impl.adapter.jndi.*` (xbean-naming + JNDI tree).
+  - `impl.xa.XaDataSourceWrapper` → `impl.adapter.xa.*`
+    (`javax.sql.DataSource` wrapper enrolling XA resources).
+
+**Wiring updated**:
+- All five `META-INF/services` SPI declaration files now point at the
+  new FQCNs (`jakarta.enterprise.inject.spi.Extension`,
+  `TransactionManagerProvider`, `TransactionStrategy`,
+  `PersistencePropertyResolver`, `CdiTransactionalSupportProvider`).
+- Internal FQCN references in `JtaTransactionStrategy` (to
+  `JndiArtifactBinder`) and `JtaPersistencePropertyResolver` (to
+  `StandaloneJtaPlatform` + `XaDataSourceWrapper`) updated.
+- Two test imports moved: `Scenario01Test` (was
+  `impl.JtaTransactionStrategy`), `Scenario09Test` (was
+  `impl.xa.XaDataSourceWrapper`).
+
+**Rationale**: jpa-module mixes two naming styles under its `adapter.*`
+sub-tree — port-named packages for driven ports the module implements
+(`adapter.tx`, `adapter.cdi`, `adapter.connection`) and tech-named
+packages for inbound SPI plug-ins (`adapter.extension`, `adapter.context`,
+`adapter.interceptor`). The same convention was applied here. The
+JPA-provider adapter package was named `jpa` rather than `hibernate`
+so consumers don't need to know we're internally coupled to Hibernate.
+
+**Verification**: full matrix green — 13/13 phases under
+{owb,weld} × {jta-geronimo,jta-narayana} in 20m 25s.

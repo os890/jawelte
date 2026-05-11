@@ -22,7 +22,7 @@ import jakarta.persistence.EntityManagerFactory;
 
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
-import org.os890.jawelte.module.jta.impl.xa.XaDataSourceWrapper;
+import org.os890.jawelte.module.jta.impl.adapter.xa.XaDataSourceWrapper;
 
 /**
  * Ticket-006 scenario #09 — EMF bootstrapped in JTA mode. The

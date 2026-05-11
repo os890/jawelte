@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.jta.impl.hibernate;
+package org.os890.jawelte.module.jta.impl.adapter.jpa;
 
 import jakarta.transaction.TransactionManager;
 import jakarta.transaction.UserTransaction;
@@ -27,7 +27,7 @@ import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
  * {@link TransactionManager} and {@link UserTransaction} via the active
  * {@link TransactionStrategy} rather than via JNDI. Selected through the
  * EMF property
- * {@code hibernate.transaction.jta.platform=org.os890.jawelte.module.jta.impl.hibernate.StandaloneJtaPlatform}
+ * {@code hibernate.transaction.jta.platform=org.os890.jawelte.module.jta.impl.adapter.jpa.StandaloneJtaPlatform}
  * contributed by {@code JtaPersistencePropertyResolver} when the JTA
  * strategy is active.
  *

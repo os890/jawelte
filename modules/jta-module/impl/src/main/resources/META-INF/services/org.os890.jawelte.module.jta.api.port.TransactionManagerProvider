@@ -12,6 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.module.jta.impl.provider.GeronimoTransactionManagerProvider
-org.os890.jawelte.module.jta.impl.provider.AtomikosTransactionManagerProvider
-org.os890.jawelte.module.jta.impl.provider.NarayanaTransactionManagerProvider
+org.os890.jawelte.module.jta.impl.adapter.provider.GeronimoTransactionManagerProvider
+org.os890.jawelte.module.jta.impl.adapter.provider.AtomikosTransactionManagerProvider
+org.os890.jawelte.module.jta.impl.adapter.provider.NarayanaTransactionManagerProvider

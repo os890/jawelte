@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.jta.impl;
+package org.os890.jawelte.module.jta.impl.adapter.tx;
 
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
@@ -385,7 +385,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             // resolve them to *this* provider's instances — works
             // uniformly whether the active TM is Geronimo, Narayana
             // or something else.
-            org.os890.jawelte.module.jta.impl.jndi.JndiArtifactBinder.bind(chosen);
+            org.os890.jawelte.module.jta.impl.adapter.jndi.JndiArtifactBinder.bind(chosen);
             LOG.log(Level.INFO,
                     "JTA TransactionManager bootstrapped via provider '" + chosen.name() + "'");
             return transactionManager;

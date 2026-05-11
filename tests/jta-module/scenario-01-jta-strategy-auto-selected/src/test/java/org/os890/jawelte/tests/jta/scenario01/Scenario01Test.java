@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
-import org.os890.jawelte.module.jta.impl.JtaTransactionStrategy;
+import org.os890.jawelte.module.jta.impl.adapter.tx.JtaTransactionStrategy;
 
 /**
  * Ticket-006 scenario #01 — JTA strategy auto-selected. With
