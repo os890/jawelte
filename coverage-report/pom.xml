@@ -1283,6 +1283,11 @@
             <artifactId>jawelte-tests-ejb-module-scenario-27-no-mapper-registered</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-ejb-module-scenario-28-user-declared-transactional-preserved</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

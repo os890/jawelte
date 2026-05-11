@@ -16,6 +16,8 @@
 package org.os890.jawelte.module.ejb.impl;
 
 import java.io.IOException;
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.util.ArrayList;
@@ -24,6 +26,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.ejb.Singleton;
 import jakarta.ejb.Stateless;
@@ -36,6 +39,7 @@ import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.BeforeBeanDiscovery;
 import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
+import jakarta.enterprise.inject.spi.WithAnnotations;
 import jakarta.enterprise.inject.spi.configurator.AnnotatedTypeConfigurator;
 
 import org.apache.xbean.finder.AnnotationFinder;
@@ -97,6 +101,15 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  * lookup at container start.
  */
 public class EjbAnnotationExtension implements Extension {
+
+    /**
+     * Logger emitting one entry per class whose
+     * {@code AnnotatedType} the extension transformed. Level
+     * {@link Level#DEBUG}: silent under default JUL/SLF4J root
+     * configurations, but turnable on per-project for
+     * "did ejb-module touch this class?" diagnostics.
+     */
+    private static final Logger LOG = System.getLogger(EjbAnnotationExtension.class.getName());
 
     /**
      * Packages skipped by the {@code @Singleton} / {@code @Stateless}
@@ -162,25 +175,70 @@ public class EjbAnnotationExtension implements Extension {
     }
 
     /**
-     * Run the mapper chain against the type being processed and
-     * apply the resulting annotations via
-     * {@link AnnotatedTypeConfigurator#add(Annotation)}.
+     * Fast-path observer for the two standard EJB session-bean
+     * annotations. CDI restricts delivery to types carrying
+     * {@code @jakarta.ejb.Singleton} or {@code @jakarta.ejb.Stateless}
+     * via {@link WithAnnotations}, so non-EJB classes never reach the
+     * extension here — only the broad observer (below) sees them, and
+     * only when at least one additional mapper opts into broad
+     * observation through {@link EjbAnnotationMapper#observedAnnotations()}.
      *
      * @param event       the in-flight {@code ProcessAnnotatedType}
-     *                    event the CDI runtime delivers;
-     *                    non-{@code null}
+     *                    event for an EJB-annotated type; non-{@code null}
      * @param beanManager the in-flight {@code BeanManager}, forwarded
-     *                    to every mapper in the chain so they have
-     *                    access to CDI services; non-{@code null}
+     *                    to every mapper in the chain;
+     *                    non-{@code null}
      * @param <T>         the annotated type's bean class
      */
-    <T> void onProcessAnnotatedType(@Observes ProcessAnnotatedType<T> event, BeanManager beanManager) {
+    <T> void onProcessEjbAnnotatedType(
+            @Observes @WithAnnotations({Singleton.class, Stateless.class})
+            ProcessAnnotatedType<T> event,
+            BeanManager beanManager) {
+        applyChain(event, beanManager, /* runTerminal */ true);
+    }
+
+    /**
+     * Broad-path observer that runs only the additional mappers (the
+     * terminal default never claims a class that lacks
+     * {@code @Singleton} or {@code @Stateless}, so there is no value
+     * in invoking it here). Skips classes already handled by the
+     * fast-path observer above so each class flows through the chain
+     * at most once.
+     *
+     * @param event       the in-flight {@code ProcessAnnotatedType}
+     *                    event; non-{@code null}
+     * @param beanManager the in-flight {@code BeanManager}, forwarded
+     *                    to every additional mapper invoked here;
+     *                    non-{@code null}
+     * @param <T>         the annotated type's bean class
+     */
+    <T> void onProcessOtherAnnotatedType(
+            @Observes ProcessAnnotatedType<T> event,
+            BeanManager beanManager) {
+        Class<T> beanClass = event.getAnnotatedType().getJavaClass();
+        if (beanClass.isAnnotationPresent(Singleton.class)
+                || beanClass.isAnnotationPresent(Stateless.class)) {
+            return;
+        }
+        applyChain(event, beanManager, /* runTerminal */ false);
+    }
+
+    private <T> void applyChain(ProcessAnnotatedType<T> event,
+                                BeanManager beanManager,
+                                boolean runTerminal) {
         AnnotatedType<T> annotatedType = event.getAnnotatedType();
         Class<T> beanClass = annotatedType.getJavaClass();
 
-        List<Annotation> result = invokeChain(beanClass, beanManager);
+        List<Annotation> result = invokeChain(beanClass, beanManager, runTerminal);
         if (result == null || result.isEmpty()) {
             return;
+        }
+        if (LOG.isLoggable(Level.DEBUG)) {
+            LOG.log(Level.DEBUG,
+                    "ejb-module: rewriting AnnotatedType for {0} — before={1} adding={2}",
+                    beanClass.getName(),
+                    describeExistingAnnotations(annotatedType),
+                    describeAdditions(result));
         }
         AnnotatedTypeConfigurator<T> configurator = event.configureAnnotatedType();
         for (Annotation annotation : result) {
@@ -188,17 +246,47 @@ public class EjbAnnotationExtension implements Extension {
         }
     }
 
-    private List<Annotation> invokeChain(Class<?> beanClass, BeanManager beanManager) {
+    private List<Annotation> invokeChain(Class<?> beanClass,
+                                         BeanManager beanManager,
+                                         boolean runTerminal) {
         for (EjbAnnotationMapper mapper : additionalMappers) {
+            if (!classMatchesObservedAnnotations(mapper, beanClass)) {
+                continue;
+            }
             List<Annotation> result = mapper.mapBeanMetadata(beanClass, beanManager);
             if (result != null) {
                 return result;
             }
         }
-        if (terminalMapper != null) {
+        if (runTerminal && terminalMapper != null) {
             return terminalMapper.mapBeanMetadata(beanClass, beanManager);
         }
         return null;
+    }
+
+    private static boolean classMatchesObservedAnnotations(EjbAnnotationMapper mapper, Class<?> beanClass) {
+        Set<Class<? extends Annotation>> observed = mapper.observedAnnotations();
+        if (observed.isEmpty()) {
+            return true;
+        }
+        for (Class<? extends Annotation> annotationType : observed) {
+            if (beanClass.isAnnotationPresent(annotationType)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String describeExistingAnnotations(AnnotatedType<?> annotatedType) {
+        return annotatedType.getAnnotations().stream()
+                .map(annotation -> "@" + annotation.annotationType().getSimpleName())
+                .collect(Collectors.joining(", ", "[", "]"));
+    }
+
+    private static String describeAdditions(List<Annotation> additions) {
+        return additions.stream()
+                .map(annotation -> "@" + annotation.annotationType().getSimpleName())
+                .collect(Collectors.joining(", ", "[", "]"));
     }
 
     private void resolveMapperChain() {

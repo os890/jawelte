@@ -19,6 +19,7 @@ import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import jakarta.annotation.Priority;
 import jakarta.ejb.Singleton;
@@ -28,6 +29,7 @@ import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.context.NormalScope;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.inject.Scope;
+import jakarta.transaction.Transactional;
 
 import org.os890.jawelte.core.api.port.ScopeBinding;
 import org.os890.jawelte.core.api.port.TestContext;
@@ -97,6 +99,15 @@ public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
     }
 
     @Override
+    public Set<Class<? extends Annotation>> observedAnnotations() {
+        // The default mapper only acts on the two standard EJB
+        // session-bean annotations; declaring them here lets the CDI
+        // Extension restrict its fast-path PAT observer via
+        // @WithAnnotations.
+        return Set.of(Singleton.class, Stateless.class);
+    }
+
+    @Override
     public List<Annotation> mapBeanMetadata(Class<?> beanClass, BeanManager beanManager) {
         boolean ejbSingleton = beanClass.isAnnotationPresent(Singleton.class);
         boolean ejbStateless = beanClass.isAnnotationPresent(Stateless.class);
@@ -105,6 +116,7 @@ public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
         }
 
         boolean userDeclaredScope = hasUserDeclaredCdiScope(beanClass);
+        boolean userDeclaredTransactional = beanClass.isAnnotationPresent(Transactional.class);
         List<Annotation> additions = new ArrayList<>(2);
 
         if (!userDeclaredScope) {
@@ -119,7 +131,15 @@ public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
             }
         }
 
-        additions.add(TransactionalLiteral.INSTANCE);
+        // User-declared-wins precedence applies to @Transactional too:
+        // a class that already carries @jakarta.transaction.Transactional
+        // (with any TxType / rollbackOn / dontRollbackOn the author
+        // chose) keeps those attributes — adding the default
+        // TxType.REQUIRED literal on top would silently combine with
+        // the user's binding in an implementation-defined way.
+        if (!userDeclaredTransactional) {
+            additions.add(TransactionalLiteral.INSTANCE);
+        }
         return additions;
     }
 

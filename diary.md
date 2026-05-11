@@ -2240,3 +2240,48 @@ with a unique PU name (testEjbPU05, ...PU06, ...PU07, ...PU12).
   mechanic; dropped the now-stale `JtaTransactionStrategy` mention
   from the "Planned" line (TICKET-006 shipped already). Diff
   approved by os890 via AskUserQuestion before committing.
+
+## 2026-05-12 — TICKET-007 follow-ups: PAT filter, user-`@Transactional`, debug logging
+
+Three improvements on top of the merged-to-branch ejb-module:
+
+1. **`@WithAnnotations` perf filter on the PAT observer.** Split the
+   single observer into two:
+   - **Narrow** observer with
+     `@WithAnnotations({Singleton.class, Stateless.class})` — fires
+     only for classes carrying these annotations; runs the full mapper
+     chain (additionals + default).
+   - **Broad** observer (no filter) — fires for every class but skips
+     the ones already handled by narrow; only runs the additional
+     mappers (the default never claims a non-EJB class anyway).
+   - SPI escape hatch: optional `observedAnnotations()` on
+     `EjbAnnotationMapper`. Default returns `Set.of()` (observe
+     everything — backwards compatible). `DefaultEjbAnnotationMapper`
+     overrides to `Set.of(Singleton.class, Stateless.class)`. Custom
+     additional mappers stay broad by default; mappers that only care
+     about specific annotations can narrow.
+
+2. **User-declared `@Transactional` preserved.** Extended the
+   user-declared-wins precedence (previously only for CDI scopes) to
+   interceptor bindings: `DefaultEjbAnnotationMapper` skips the
+   implicit `TxType.REQUIRED` literal when the class already carries
+   `@jakarta.transaction.Transactional`. So
+   `@Singleton @Transactional(REQUIRES_NEW)` keeps `REQUIRES_NEW`
+   intact. New scenario 28 verifies via
+   `BeanManager.createAnnotatedType(...).getAnnotations()` that the
+   resolved AnnotatedType holds exactly one `@Transactional` with
+   `TxType.REQUIRES_NEW`.
+
+3. **Per-class debug logging at the apply point.** `System.Logger` at
+   `DEBUG` level emits one entry per transformed class with
+   before-annotations and added-annotations. Silent under default JUL
+   root config (DEBUG = FINE = below default INFO threshold); easy to
+   turn on per-project via
+   `-Djava.util.logging.config.file=...` for
+   "did ejb-module touch this class?" diagnostics. Smoke-test under
+   OWB produces e.g.
+   `FEIN: ejb-module: rewriting AnnotatedType for ...Greeter — before=[@Singleton] adding=[@ApplicationScoped, @Transactional]`.
+
+All 27 scenarios green (26 existing + scenario 28) under
+`-P owb verify` and `-P weld verify`. Coverage-report aggregator
+includes scenario 28.
