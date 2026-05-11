@@ -18,10 +18,7 @@ package org.os890.jawelte.module.jta.impl.cdi;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import jakarta.enterprise.inject.Any;
-import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
 import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
@@ -137,15 +134,61 @@ public class JtaCdiExtension implements Extension {
      * @param event the {@code ProcessAnnotatedType} event
      * @param <T>   the annotated type's class type parameter
      */
+    /**
+     * Force {@code JTAEnvironmentBean} through {@code ProcessAnnotatedType}
+     * so our veto observer below can suppress it. Weld 6 auto-discovers
+     * the class via {@code Instance<JTAEnvironmentBean>} injection
+     * points without ever firing PAT — {@code addAnnotatedType} here
+     * forces the type into the discovery pipeline so the veto applies.
+     */
+    void onBeforeBeanDiscovery(
+            @Observes jakarta.enterprise.inject.spi.BeforeBeanDiscovery event,
+            jakarta.enterprise.inject.spi.BeanManager beanManager) {
+        if (!supportProvider().platformProvidesTransactionalInterceptor()) {
+            return;
+        }
+        try {
+            Class<?> envBean = Class.forName(
+                    NARAYANA_JTA_ENV_BEAN_CLASS_NAME, false,
+                    Thread.currentThread().getContextClassLoader());
+            event.addAnnotatedType(beanManager.createAnnotatedType(envBean),
+                    "jawelte-jta-module-jtaEnvironmentBean-veto");
+        } catch (ClassNotFoundException notPresent) {
+            // Narayana's CDI integration not actually on the classpath
+            // — support provider's probe is stale, no veto needed.
+        }
+    }
+
     <T> void onProcessAnnotatedTypeForVendorVeto(@Observes ProcessAnnotatedType<T> event) {
         String className = event.getAnnotatedType().getJavaClass().getName();
         if (matchesVendorVetoAllowlist(className)) {
             return;
         }
         boolean delegating = supportProvider().platformProvidesTransactionalInterceptor();
-        if (delegating
-                && (JPA_TRANSACTIONAL_INTERCEPTOR_CLASS_NAME.equals(className)
-                        || NARAYANA_JTA_ENV_BEAN_CLASS_NAME.equals(className))) {
+        if (delegating && JPA_TRANSACTIONAL_INTERCEPTOR_CLASS_NAME.equals(className)) {
+            // jpa-module's own @Transactional interceptor must not
+            // double-fire alongside the vendor's (Narayana's). The
+            // vendor wins by default — its @Transactional interceptor
+            // is enabled via Narayana's beans.xml. We veto ours so
+            // both don't run.
+            event.veto();
+            return;
+        }
+        if (delegating && NARAYANA_JTA_ENV_BEAN_CLASS_NAME.equals(className)) {
+            // Weld's auto-discovery picks JTAEnvironmentBean up as an
+            // @ApplicationScoped bean; the instance Weld creates has
+            // a null transactionManagerJNDIContext field (the
+            // constructor default — "java:/TransactionManager" — is
+            // not preserved through Weld's bean creation path) and
+            // Narayana's NarayanaTransactionManager.getDelegate hits
+            // an NPE in JTASupplier.get when jndiName is null.
+            // Vetoing here makes Instance<JTAEnvironmentBean>
+            // unsatisfied; Narayana then falls through to its
+            // BeanPopulator default, which has the proper default
+            // JNDI name and routes the lookup through JNDI to the
+            // TM bound by JndiArtifactBinder. OWB doesn't auto-discover
+            // it (no bean-defining annotation), so this veto is a
+            // no-op there.
             event.veto();
             return;
         }
@@ -157,64 +200,98 @@ public class JtaCdiExtension implements Extension {
     void onAfterBeanDiscovery(@Observes AfterBeanDiscovery event) {
         // Pre-bootstrap the active TransactionStrategy. RESOURCE_LOCAL
         // is a no-op (returns null TM); under JTA the call triggers
-        // lazy TransactionManagerProvider resolution. Narayana's
-        // provider pre-seeds JTAEnvironmentBean from create() so its
-        // CDI bean (which constructs lazily on first @Transactional
-        // fire and looks up the same JTAEnvironmentBean) sees a
-        // configured TM regardless of when the application first
-        // dereferences it.
+        // lazy TransactionManagerProvider resolution, including the
+        // JndiArtifactBinder that puts the active provider's TM/UT/TSR
+        // into JNDI.
         TestContext.loadService(TransactionStrategy.class).getTransactionManager();
-        registerSyntheticVendorJtaEnvironmentBeanIfNeeded(event);
+        seedNarayanaJtaEnvironmentBeanIfPresent();
+        registerSyntheticJtaEnvironmentBeanIfNeeded(event);
     }
 
     /**
-     * Register a synthetic CDI bean for Narayana's
-     * {@code JTAEnvironmentBean} that produces the static singleton
-     * {@code BeanPopulator} caches (which jta-module's
-     * {@code NarayanaTransactionManagerProvider.create()} pre-seeds
-     * with a configured {@code TransactionManager}).
+     * Register a synthetic CDI {@code JTAEnvironmentBean} bean that
+     * returns the {@code BeanPopulator} default — the same instance
+     * {@link #seedNarayanaJtaEnvironmentBeanIfPresent()} seeded with
+     * the correct JNDI context name. Marked as an
+     * {@code @Alternative} with high {@code @Priority} so it wins
+     * over Weld 6's auto-discovered {@code JTAEnvironmentBean} (which
+     * gets created without the constructor's field initialisers
+     * running and leaves {@code transactionManagerJNDIContext} null,
+     * tripping {@code JTASupplier.get}'s {@code requireNonNull}).
      *
-     * <p>Without this synthetic bean, Weld's implicit-discovery path
-     * lets Narayana's {@code NarayanaTransactionManager} see an
-     * {@code Instance<JTAEnvironmentBean>} satisfied by a fresh
-     * Weld-managed instance whose state diverges from the seeded
-     * singleton — its {@code transactionManager} is {@code null} and
-     * the constructor NPEs deep inside {@code JTASupplier.get(...)}.
-     * OWB doesn't hit this because its instance lookup falls through
-     * to the unsatisfied path and reads the same singleton we seed.
-     *
-     * <p>Reflection-only — jta-module/impl never compile-depends on
-     * Narayana. No-op when Narayana isn't on the classpath.
+     * <p>Reflection-only; no compile-time dependency on Narayana.
      */
-    private static void registerSyntheticVendorJtaEnvironmentBeanIfNeeded(AfterBeanDiscovery event) {
+    private static void registerSyntheticJtaEnvironmentBeanIfNeeded(AfterBeanDiscovery event) {
         if (!supportProvider().platformProvidesTransactionalInterceptor()) {
             return;
         }
         try {
-            ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
             Class<?> envBeanClass = Class.forName(
-                    NARAYANA_JTA_ENV_BEAN_CLASS_NAME, false, contextClassLoader);
-            Class<?> beanPopulatorClass = Class.forName(
-                    NARAYANA_BEAN_POPULATOR_CLASS_NAME, false, contextClassLoader);
-            Object seededSingleton = beanPopulatorClass
+                    NARAYANA_JTA_ENV_BEAN_CLASS_NAME, true, tccl);
+            Class<?> beanPopulator = Class.forName(
+                    NARAYANA_BEAN_POPULATOR_CLASS_NAME, true, tccl);
+            Object envBean = beanPopulator
                     .getMethod("getDefaultInstance", Class.class)
                     .invoke(null, envBeanClass);
             event.<Object>addBean()
                     .beanClass(envBeanClass)
                     .types(envBeanClass, Object.class)
-                    .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
-                    .scope(ApplicationScoped.class)
-                    .produceWith(instance -> seededSingleton);
+                    .qualifiers(jakarta.enterprise.inject.Default.Literal.INSTANCE,
+                            jakarta.enterprise.inject.Any.Literal.INSTANCE)
+                    .scope(jakarta.enterprise.context.ApplicationScoped.class)
+                    .alternative(true)
+                    .priority(Integer.MAX_VALUE)
+                    .produceWith(instance -> envBean);
         } catch (ClassNotFoundException notPresent) {
-            // Narayana classes truly absent — should not happen given
-            // platformProvidesTransactionalInterceptor() returned true,
-            // but tolerate the race rather than throw.
+            // Narayana CDI classes absent; nothing to register.
         } catch (ReflectiveOperationException reflectionFailure) {
             throw new IllegalStateException(
-                    "Failed to register synthetic JTAEnvironmentBean for Narayana CDI bootstrap",
-                    reflectionFailure);
+                    "Failed to register synthetic JTAEnvironmentBean", reflectionFailure);
         }
     }
+
+    /**
+     * Ensure the static {@code JTAEnvironmentBean} singleton
+     * {@code BeanPopulator} caches has its
+     * {@code transactionManagerJNDIContext} field set to
+     * {@code "java:/TransactionManager"}. The class's no-arg
+     * constructor sets this default, but some CDI runtime paths
+     * (Weld 6 in particular) construct {@code JTAEnvironmentBean}
+     * without running the constructor's field initialisers — the
+     * field stays {@code null} and {@code JTASupplier.get}'s
+     * {@code requireNonNull(jndiName)} throws NPE.
+     *
+     * <p>Independent of which {@code TransactionManagerProvider} is
+     * active — the field needs seeding whenever Narayana's CDI
+     * integration is on the classpath, even if the active TM is
+     * Geronimo (because {@code NarayanaTransactionManager} still
+     * gets constructed by CDI and reads the field).
+     */
+    private static void seedNarayanaJtaEnvironmentBeanIfPresent() {
+        if (!supportProvider().platformProvidesTransactionalInterceptor()) {
+            return;
+        }
+        try {
+            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+            Class<?> beanPopulator = Class.forName(
+                    NARAYANA_BEAN_POPULATOR_CLASS_NAME, true, tccl);
+            Class<?> envBeanClass = Class.forName(
+                    NARAYANA_JTA_ENV_BEAN_CLASS_NAME, true, tccl);
+            Object envBean = beanPopulator
+                    .getMethod("getDefaultInstance", Class.class)
+                    .invoke(null, envBeanClass);
+            envBeanClass
+                    .getMethod("setTransactionManagerJNDIContext", String.class)
+                    .invoke(envBean, "java:/TransactionManager");
+        } catch (ClassNotFoundException notPresent) {
+            // Narayana CDI classes truly absent — nothing to seed.
+        } catch (ReflectiveOperationException reflectionFailure) {
+            throw new IllegalStateException(
+                    "Failed to seed Narayana's JTAEnvironmentBean", reflectionFailure);
+        }
+    }
+
 
     private static boolean matchesVendorVetoTarget(String className) {
         for (String prefix : VENDOR_VETO_PACKAGE_PREFIXES) {

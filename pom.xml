@@ -363,6 +363,24 @@
                 <version>${xbean.version}</version>
                 <scope>provided</scope>
             </dependency>
+            <!--
+                xbean-naming — JNDI provider used by jta-module's
+                JndiArtifactBinder to bind the active provider's
+                TransactionManager / UserTransaction /
+                TransactionSynchronizationRegistry under standard
+                JNDI names. Narayana's CDI integration (and any
+                vendor that follows the same convention) then resolves
+                them through JNDI regardless of which TM is actually
+                active. Test scope — production deployments ship their
+                own JNDI (real Jakarta-EE container) or pull this
+                themselves.
+            -->
+            <dependency>
+                <groupId>org.apache.xbean</groupId>
+                <artifactId>xbean-naming</artifactId>
+                <version>${xbean.version}</version>
+                <scope>test</scope>
+            </dependency>
 
             <!--
                 Hibernate ORM and H2 are test-only across the project:

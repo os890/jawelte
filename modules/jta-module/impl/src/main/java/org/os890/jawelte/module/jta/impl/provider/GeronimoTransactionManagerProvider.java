@@ -19,6 +19,7 @@ import java.util.ServiceLoader;
 
 import jakarta.annotation.Priority;
 import jakarta.transaction.TransactionManager;
+import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
 
 import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
@@ -107,6 +108,14 @@ public class GeronimoTransactionManagerProvider implements TransactionManagerPro
                     "Failed to instantiate Geronimo UserTransactionImpl via reflection",
                     reflectionFailure);
         }
+    }
+
+    @Override
+    public TransactionSynchronizationRegistry transactionSynchronizationRegistry() {
+        // GeronimoTransactionManager implements
+        // TransactionSynchronizationRegistry directly — same instance
+        // serves both roles, no additional construction needed.
+        return (TransactionSynchronizationRegistry) create();
     }
 
     @Override

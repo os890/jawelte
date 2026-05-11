@@ -1624,3 +1624,51 @@ beans are kept (delegation depends on them); a regular bean still
 resolves.
 
 verify-all.sh: 13 phases, 14m 48s, all green.
+
+## 2026-05-11 — Vendor-CDI delegation via JNDI binding
+
+Pivoted the JTA test-matrix architecture per user direction. The
+project no longer reimplements `@Transactional` / `@TransactionScoped`
+under JTA — when Narayana's CDI integration is on the classpath we
+defer to its bundled interceptors and `TransactionContext`, with the
+active provider's `TransactionManager` / `UserTransaction` /
+`TransactionSynchronizationRegistry` bound into JNDI under the
+standard Jakarta-EE names so the vendor finds them regardless of
+which provider is actually active underneath.
+
+Major moves:
+
+- New `JndiBootstrap` + `JndiArtifactBinder` in `jta-module/impl`,
+  using `xbean-naming` as the in-process JNDI provider. The
+  `JtaTransactionStrategy`'s lazy bootstrap binds the chosen
+  provider's TM/UT/TSR at `java:/TransactionManager` /
+  `java:/UserTransaction` / `java:/TransactionSynchronizationRegistry`.
+- `TransactionManagerProvider` SPI grows
+  `transactionSynchronizationRegistry()`. Geronimo's
+  `GeronimoTransactionManager` implements TSR directly; Narayana's
+  ships `TransactionSynchronizationRegistryImple`; Atomikos likewise.
+- Test profile `jta-narayana` goes back to the uber `narayana-jta`
+  artifact (Narayana's CDI bits live there). `jta-geronimo` now
+  pulls the uber jar too on top of `geronimo-transaction` — same
+  CDI integration, different TM underneath.
+- `JpaCdiExtension` under JTA registers the synthetic `EntityManager`
+  bean as `@TransactionScoped` with producer =
+  `factory.createEntityManager()` (no manual `joinTransaction()`).
+  Hibernate's `JtaPlatform` + the new
+  `DeferredExtendedBeanManager` (handed via the
+  `jakarta.persistence.bean.manager` EMF property) handle per-tx
+  Session routing. `EntityManagerProxy` is RESOURCE_LOCAL-only.
+- Explicit `hibernate.dialect=H2Dialect` in the EMF property bag —
+  the JTA-only data-source path doesn't reliably reach the
+  metadata-probe.
+- `JtaCdiExtension` registers a synthetic `JTAEnvironmentBean`
+  marked `@Alternative` with `Integer.MAX_VALUE` priority. Weld 6
+  auto-discovers `JTAEnvironmentBean` via
+  `Instance<JTAEnvironmentBean>` injection-points without firing
+  PAT (so a regular veto can't suppress it), and the auto-discovered
+  instance has `transactionManagerJNDIContext == null` because Weld's
+  bean-creation skips the constructor's field initialisers — the
+  alternative wins, the BeanPopulator default is seeded, and
+  Narayana's `JTASupplier` resolves through JNDI to our bound TM.
+
+Final state: 13/13 verify-all phases green, 14m 28s total.

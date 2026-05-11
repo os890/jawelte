@@ -379,6 +379,13 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             provider = chosen;
             transactionManager = chosen.create();
             userTransaction = chosen.userTransaction();
+            // Bind the chosen provider's artifacts into JNDI so vendor
+            // CDI integrations (Narayana, future Quarkus) that look up
+            // TransactionManager / UserTransaction / TSR via JNDI
+            // resolve them to *this* provider's instances — works
+            // uniformly whether the active TM is Geronimo, Narayana
+            // or something else.
+            org.os890.jawelte.module.jta.impl.jndi.JndiArtifactBinder.bind(chosen);
             LOG.log(Level.INFO,
                     "JTA TransactionManager bootstrapped via provider '" + chosen.name() + "'");
             return transactionManager;

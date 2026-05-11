@@ -21,6 +21,7 @@ import java.util.ServiceLoader;
 
 import jakarta.annotation.Priority;
 import jakarta.transaction.TransactionManager;
+import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
 
 import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
@@ -86,6 +87,21 @@ public class AtomikosTransactionManagerProvider implements TransactionManagerPro
     @Override
     public UserTransaction userTransaction() {
         return (UserTransaction) ensureUserTransactionManager();
+    }
+
+    @Override
+    public TransactionSynchronizationRegistry transactionSynchronizationRegistry() {
+        try {
+            Class<?> tsrClass = Class.forName(
+                    "com.atomikos.icatch.jta.TransactionSynchronizationRegistryImp",
+                    true, Thread.currentThread().getContextClassLoader());
+            return (TransactionSynchronizationRegistry)
+                    tsrClass.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException reflectionFailure) {
+            throw new IllegalStateException(
+                    "Failed to instantiate Atomikos TransactionSynchronizationRegistry via reflection",
+                    reflectionFailure);
+        }
     }
 
     @Override

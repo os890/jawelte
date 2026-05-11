@@ -19,6 +19,7 @@ import java.util.ServiceLoader;
 
 import jakarta.annotation.Priority;
 import jakarta.transaction.TransactionManager;
+import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
 
 import org.os890.jawelte.module.jta.api.port.TransactionManagerProvider;
@@ -71,6 +72,9 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
 
     private static final String NARAYANA_CORE_ENV_BEAN_CLASS =
             "com.arjuna.ats.arjuna.common.CoreEnvironmentBean";
+
+    private static final String NARAYANA_TSR_IMPLE_CLASS =
+            "com.arjuna.ats.internal.jta.transaction.arjunacore.TransactionSynchronizationRegistryImple";
 
     /** No-arg constructor required by {@link ServiceLoader}. */
     public NarayanaTransactionManagerProvider() {
@@ -145,9 +149,6 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
             envBeanClass
                     .getMethod("setTransactionManager", TransactionManager.class)
                     .invoke(envBean, tm);
-            envBeanClass
-                    .getMethod("setTransactionManagerJNDIContext", String.class)
-                    .invoke(envBean, "");
         } catch (ReflectiveOperationException notSeedable) {
             // best-effort
         }
@@ -161,6 +162,19 @@ public class NarayanaTransactionManagerProvider implements TransactionManagerPro
         } catch (ReflectiveOperationException reflectionFailure) {
             throw new IllegalStateException(
                     "Failed to obtain Narayana UserTransaction via reflection",
+                    reflectionFailure);
+        }
+    }
+
+    @Override
+    public TransactionSynchronizationRegistry transactionSynchronizationRegistry() {
+        try {
+            Class<?> tsrClass = forName(NARAYANA_TSR_IMPLE_CLASS);
+            return (TransactionSynchronizationRegistry)
+                    tsrClass.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException reflectionFailure) {
+            throw new IllegalStateException(
+                    "Failed to instantiate Narayana TransactionSynchronizationRegistryImple via reflection",
                     reflectionFailure);
         }
     }

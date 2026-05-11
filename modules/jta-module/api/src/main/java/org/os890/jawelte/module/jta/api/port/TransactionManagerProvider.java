@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.jta.api.port;
 
 import jakarta.transaction.TransactionManager;
+import jakarta.transaction.TransactionSynchronizationRegistry;
 import jakarta.transaction.UserTransaction;
 
 /**
@@ -70,6 +71,21 @@ public interface TransactionManagerProvider {
      *                          expose one
      */
     UserTransaction userTransaction();
+
+    /**
+     * Returns the standard {@link TransactionSynchronizationRegistry}
+     * provided by this JTA implementation. Bound into JNDI under
+     * {@code java:/TransactionSynchronizationRegistry} (and the
+     * {@code java:comp} equivalent) by jta-module's JNDI artifact
+     * binder so vendor CDI integrations (Narayana, future Quarkus,
+     * etc.) that resolve TSR through JNDI find it.
+     *
+     * @return the JTA implementation's standard
+     *         {@code TransactionSynchronizationRegistry}
+     * @throws RuntimeException if the JTA implementation does not
+     *                          expose one
+     */
+    TransactionSynchronizationRegistry transactionSynchronizationRegistry();
 
     /**
      * Release any resources held by the provider. Idempotent; errors

@@ -150,12 +150,25 @@ public class JpaCdiExtension implements Extension {
     public JpaCdiExtension() {
     }
 
+    /**
+     * Hibernate {@code ExtendedBeanManager} passed to the EMF as the
+     * {@code jakarta.persistence.bean.manager} property. The
+     * {@code BeanManager} a CDI extension sees during
+     * {@code BeforeBeanDiscovery} is a bootstrap-phase reference, not
+     * the final runtime instance — we hand Hibernate this deferred
+     * wrapper instead, and notify it from the
+     * {@code @Initialized(ApplicationScoped.class)} observer below
+     * once the runtime {@code BeanManager} is available.
+     */
+    private org.os890.jawelte.module.jpa.impl.util.DeferredExtendedBeanManager deferredBeanManager;
+
     void onBeforeBeanDiscovery(@Observes BeforeBeanDiscovery event) {
         TestContext testContext = activeContextOrNull();
         if (testContext == null) {
             return;
         }
         active = true;
+        deferredBeanManager = new org.os890.jawelte.module.jpa.impl.util.DeferredExtendedBeanManager();
         Class<?> testClass = testContext.getTestClass();
         PersistenceConfig persistenceConfig = testClass.getAnnotation(PersistenceConfig.class);
 
@@ -178,6 +191,13 @@ public class JpaCdiExtension implements Extension {
             }
             resolvedActivePersistenceUnits.add(unit.name());
             Map<String, Object> properties = computeProperties(unit, persistenceConfig, testClass);
+            // Hand Hibernate a deferred ExtendedBeanManager. Resolved
+            // lazily after CDI bootstrap completes (see the
+            // @Initialized(ApplicationScoped.class) observer in this
+            // extension), so Hibernate's CDI integration talks to the
+            // final runtime BeanManager and not the bootstrap-phase
+            // reference an Extension observer holds.
+            properties.put("jakarta.persistence.bean.manager", deferredBeanManager);
             persistenceUnitProperties.put(unit.name(), properties);
             EmfCache.getOrCreate(unit.name(),
                     () -> bootstrapEntityManagerFactory(unit, properties, emfTransactionType));
@@ -255,11 +275,16 @@ public class JpaCdiExtension implements Extension {
             return;
         }
         boolean singlePersistenceUnit = activePersistenceUnits.size() == 1;
+        // Strategy SPI returns jakarta.persistence.PersistenceUnitTransactionType
+        // (the public enum); JpaCdiExtension imports the spi enum to
+        // talk to Hibernate. Compare by name() so the public-vs-spi
+        // split doesn't matter at this branching point.
+        boolean jtaMode = "JTA".equals(
+                TestContext.loadService(TransactionStrategy.class).getTransactionType().name());
         for (String persistenceUnitName : activePersistenceUnits) {
             EntityManagerFactory factory = EmfCache.getCached(persistenceUnitName)
                     .orElseThrow(() -> new IllegalStateException(
                             "EntityManagerFactory for '" + persistenceUnitName + "' missing from cache"));
-            EntityManager managerProxy = EntityManagerProxy.create(persistenceUnitName);
             String backoffKey = singlePersistenceUnit ? "" : persistenceUnitName;
 
             if (!userProducedFactoryQualifiers.contains(backoffKey)) {
@@ -272,12 +297,42 @@ public class JpaCdiExtension implements Extension {
             }
 
             if (!userProducedManagerQualifiers.contains(backoffKey)) {
-                event.addBean()
-                        .beanClass(EntityManager.class)
-                        .scope(ApplicationScoped.class)
-                        .types(EntityManager.class, Object.class)
-                        .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
-                        .produceWith(instance -> managerProxy);
+                if (jtaMode) {
+                    // Under JTA the EM is produced fresh per JTA tx by
+                    // the vendor's @TransactionScoped Context
+                    // (Narayana's, registered by its CDI integration).
+                    // Hibernate's JtaPlatform + the
+                    // jakarta.persistence.bean.manager property handle
+                    // per-tx Session routing; we just hand back what
+                    // factory.createEntityManager() returns and let the
+                    // context close it at tx-completion.
+                    event.addBean()
+                            .beanClass(EntityManager.class)
+                            .scope(jakarta.transaction.TransactionScoped.class)
+                            .types(EntityManager.class, Object.class)
+                            .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
+                            .produceWith(instance -> {
+                                // Bind lifecycle events to the active JTA
+                                // tx so TransactionStarted /
+                                // BeforeCompletion / Committed / RolledBack
+                                // fire even when the vendor's
+                                // @Transactional interceptor drives the tx
+                                // (we no longer go through our strategy's
+                                // begin / commit here).
+                                TestContext.loadService(TransactionStrategy.class)
+                                        .bindLifecycleEventsToCurrentTransaction();
+                                return factory.createEntityManager();
+                            })
+                            .destroyWith((em, ctx) -> em.close());
+                } else {
+                    EntityManager managerProxy = EntityManagerProxy.create(persistenceUnitName);
+                    event.addBean()
+                            .beanClass(EntityManager.class)
+                            .scope(ApplicationScoped.class)
+                            .types(EntityManager.class, Object.class)
+                            .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
+                            .produceWith(instance -> managerProxy);
+                }
             }
         }
 
@@ -300,6 +355,24 @@ public class JpaCdiExtension implements Extension {
         // bean-store ownership of @TransactionScoped resolution.
         if (!cdiTransactionalSupport().platformProvidesTransactionScopedContext()) {
             event.addContext(new TransactionScopedContext());
+        }
+    }
+
+    /**
+     * Fires once the CDI container has finished bootstrap and the
+     * runtime {@link jakarta.enterprise.inject.spi.BeanManager} is
+     * available. Notifies the deferred {@code ExtendedBeanManager}
+     * handed to Hibernate's CDI integration via the
+     * {@code jakarta.persistence.bean.manager} property so any beans
+     * Hibernate needs to resolve from now on use the runtime
+     * {@code BeanManager}, not the bootstrap-phase reference an
+     * Extension observer would see.
+     */
+    void onContainerInitialized(
+            @Observes @jakarta.enterprise.context.Initialized(ApplicationScoped.class) Object event,
+            jakarta.enterprise.inject.spi.BeanManager beanManager) {
+        if (deferredBeanManager != null) {
+            deferredBeanManager.onBeanManagerInitialized(beanManager);
         }
     }
 
@@ -371,6 +444,11 @@ public class JpaCdiExtension implements Extension {
         properties.put("jakarta.persistence.jdbc.password", "");
         properties.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
         properties.put("jakarta.persistence.schema-generation.database.action", "drop-and-create");
+        // Define the dialect explicitly so Hibernate's bootstrap does
+        // not need to open a probe Connection to determine it from
+        // JDBC metadata — under JTA the data source is XA-only and
+        // Hibernate's metadata-probe path doesn't always reach it.
+        properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 
         // Route the persistence-property prefix walk through JpaConfig (and
         // therefore through the active ConfigResolver) so a consumer-supplied
