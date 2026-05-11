@@ -26,9 +26,14 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 /**
- * TICKET-007 scenario 15 — user-declared {@code @RequestScoped} wins
- * over ejb-module's default {@code @Dependent} mapping for
- * {@code @Stateless}.
+ * TICKET-007 scenario 15 — a {@code @Stateless} class that already
+ * carries a CDI scope (here {@code @RequestScoped}) keeps that
+ * scope: ejb-module skips the EJB-mapped {@code @Dependent}
+ * because the class is bean-defining through its own scope. The
+ * implicit {@code @Transactional} is still added by the mapper —
+ * scope and transactional decisions are independent — and the
+ * end-to-end transactional behaviour is verified in scenarios
+ * 05, 06.
  */
 @EnableTestBeans
 class Scenario15Test {
@@ -37,7 +42,7 @@ class Scenario15Test {
     BeanManager beanManager;
 
     @Test
-    void userDeclaredRequestScopedWinsOverDependent() {
+    void statelessWithUserDeclaredScopeKeepsThatScope() {
         Bean<?> bean = beanManager.resolve(beanManager.getBeans(RequestScopedStateless.class));
         assertThat(bean).isNotNull();
         assertThat(bean.getScope()).isEqualTo(RequestScoped.class);

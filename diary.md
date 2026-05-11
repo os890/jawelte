@@ -2315,3 +2315,24 @@ Scenario 23 (additional mapper for `@Stateful`) got a small
 the observed-annotations list, otherwise the broad observer never
 reaches `StatefulSubject` under the new design. All 27 scenarios
 green on OWB and Weld.
+
+## 2026-05-12 — TICKET-007 contract reframing: scope skipped (not "user wins")
+
+Reframed the user-declared CDI scope precedence in both the
+default mapper Javadoc and the issue body: instead of "user-declared
+scope wins over EJB-mapped" (which suggests a conflict and an arbiter),
+the contract is now "the EJB-mapped scope is not added when the class
+already carries a CDI scope, because the class is bean-defining
+through its own scope". Observable behaviour is unchanged for the
+existing scenarios — the bean's resolved scope is still the
+user-declared one. `@Transactional` is added unconditionally for
+every class the mapper claims; the user-declared-`@Transactional`
+precedence (scenario 28) is the only addition the mapper skips.
+
+Scenarios 15, 16, 17, 21 had their docstrings updated to the new
+framing and their assertion names renamed; the load-bearing
+assertion is still `bean.getScope() == <user-declared>`. A
+`@Transactional`-presence assertion via `createAnnotatedType(class)`
+was tried and dropped — that API returns raw class annotations and
+does NOT reflect PAT modifications, so the end-to-end check in
+scenarios 5/6 stays the authoritative `@Transactional` test.

@@ -56,10 +56,13 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  *       stateless bean does not benefit).</li>
  * </ul>
  *
- * <p>A user-declared CDI scope on the type wins over both the
- * EJB-mapped scope and the {@code TestBeanDefaultScope} override.
- * The {@code @Transactional} addition is independent of the scope
- * decision — every EJB-mapped bean gets it.
+ * <p>The EJB-mapped scope is added only when the class does not
+ * already carry a CDI scope (a normal-scope annotation or
+ * {@code @Dependent}); when it does, the mapper skips the scope
+ * addition because the class is bean-defining through its own
+ * scope. The implicit {@code @Transactional} is added either way —
+ * the scope decision and the transactional addition are
+ * independent.
  *
  * <p>The other class-level EJB annotations
  * ({@code @Stateful}, {@code @MessageDriven}, {@code @Lock},
@@ -106,28 +109,32 @@ public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
         }
 
         boolean userDeclaredScope = hasUserDeclaredCdiScope(beanClass);
-        boolean userDeclaredTransactional = beanClass.isAnnotationPresent(Transactional.class);
         List<Annotation> additions = new ArrayList<>(2);
 
+        // Scope: the EJB-mapped scope is added only when the class
+        // has no CDI scope of its own. A class that already declares
+        // a CDI scope is bean-defining through that scope; adding
+        // the EJB-mapped scope on top would be redundant.
         if (!userDeclaredScope) {
             if (ejbSingleton) {
                 additions.add(singletonScopeLiteral());
             } else {
-                // @Stateless — always @Dependent, scope-module is
-                // ignored here on purpose (a per-injection-point
-                // fresh instance does not benefit from a long-lived
-                // test scope).
+                // @Stateless — always @Dependent. scope-module's
+                // TestBeanDefaultScope is not consulted here on
+                // purpose: a per-injection-point fresh instance does
+                // not benefit from a long-lived test scope.
                 additions.add(Dependent.Literal.INSTANCE);
             }
         }
 
-        // User-declared-wins precedence applies to @Transactional too:
+        // @Transactional is added unconditionally for every class
+        // the mapper claims, independent of the scope decision.
+        // User-declared @Transactional precedence still applies:
         // a class that already carries @jakarta.transaction.Transactional
-        // (with any TxType / rollbackOn / dontRollbackOn the author
-        // chose) keeps those attributes — adding the default
-        // TxType.REQUIRED literal on top would silently combine with
-        // the user's binding in an implementation-defined way.
-        if (!userDeclaredTransactional) {
+        // keeps the author's TxType / rollbackOn / dontRollbackOn
+        // attributes — adding the default TxType.REQUIRED literal
+        // on top would silently combine with the user's binding.
+        if (!beanClass.isAnnotationPresent(Transactional.class)) {
             additions.add(TransactionalLiteral.INSTANCE);
         }
         return additions;

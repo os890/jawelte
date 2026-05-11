@@ -26,10 +26,14 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 /**
- * TICKET-007 scenario 21 — user-declared {@code @ApplicationScoped}
- * wins over the scope-module-supplied
- * {@code ScopeBinding.TestBeanDefaultScope} (which would have picked
- * {@code @TestClassScoped}).
+ * TICKET-007 scenario 21 — a {@code @Singleton} class that already
+ * carries {@code @ApplicationScoped} keeps that scope even when
+ * scope-module is on the classpath. ejb-module skips the
+ * EJB-mapped scope (and the
+ * {@code ScopeBinding.TestBeanDefaultScope} override that would
+ * otherwise pick {@code @TestClassScoped}) because the class is
+ * bean-defining through its own scope. The implicit
+ * {@code @Transactional} is still added by the mapper.
  */
 @EnableTestBeans
 class Scenario21Test {
@@ -38,7 +42,7 @@ class Scenario21Test {
     BeanManager beanManager;
 
     @Test
-    void userDeclaredApplicationScopedWinsOverScopeModuleOverride() {
+    void singletonWithExplicitApplicationScopedKeepsThatScope() {
         Bean<?> bean = beanManager.resolve(beanManager.getBeans(ExplicitlyAppScopedSingleton.class));
         assertThat(bean).isNotNull();
         assertThat(bean.getScope()).isEqualTo(ApplicationScoped.class);

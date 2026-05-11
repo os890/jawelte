@@ -26,11 +26,13 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 
 /**
- * TICKET-007 scenario 17 — user-declared {@code @TestClassScoped}
- * on a {@code @Singleton} is preserved. The scope-module is on
- * the classpath, but the user's explicit annotation wins over the
- * {@code ScopeBinding.TestBeanDefaultScope} override (and over
- * ejb-module's default {@code @ApplicationScoped}).
+ * TICKET-007 scenario 17 — a {@code @Singleton} class that already
+ * carries {@code @TestClassScoped} keeps that scope: ejb-module
+ * skips the EJB-mapped {@code @ApplicationScoped} (and the
+ * scope-module-supplied
+ * {@code ScopeBinding.TestBeanDefaultScope} override) because the
+ * class is bean-defining through its own scope. The implicit
+ * {@code @Transactional} is still added by the mapper.
  */
 @EnableTestBeans
 class Scenario17Test {
@@ -39,7 +41,7 @@ class Scenario17Test {
     BeanManager beanManager;
 
     @Test
-    void userDeclaredTestClassScopedWins() {
+    void singletonWithUserDeclaredTestClassScopedKeepsThatScope() {
         Bean<?> bean = beanManager.resolve(beanManager.getBeans(UserScopedSingleton.class));
         assertThat(bean).isNotNull();
         assertThat(bean.getScope()).isEqualTo(TestClassScoped.class);
