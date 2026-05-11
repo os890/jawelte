@@ -1966,3 +1966,17 @@ Coverage delta:
 - NarayanaTransactionManagerProvider: 1.2% → 81.4%
 - jta-module-impl: 60.5/46.1 → 68.7/48.3
 - aggregate: 76.0/62.5 → 77.9/62.8
+
+## 2026-05-11 — add scenario-54 + 55 (Geronimo-pinned scenarios)
+
+Final pair completes the symmetric scenario layout:
+- 50, 51: Atomikos (pin via services + scenario pulls in transactions-jta:jakarta + transactions-jdbc:jakarta)
+- 52, 53: Narayana (pin via services; narayana-jta already on classpath under jta-geronimo)
+- 54, 55: Geronimo (pin via services + scenario pulls in geronimo-transaction so it works under -P jta-narayana too)
+
+Aggregate coverage barely moves (Geronimo was already exercised at
+high % by the 32 default scenarios under the activeByDefault
+profile), but the per-vendor scenarios document the SPI pinning
+pattern uniformly. GeronimoTransactionManagerProvider now reports
+81.1% (was already high), AtomikosTransactionManagerProvider 70.4%,
+NarayanaTransactionManagerProvider 81.4%.

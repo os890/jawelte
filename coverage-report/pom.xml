@@ -1131,6 +1131,16 @@
             <artifactId>jawelte-tests-jta-module-scenario-53-narayana-multi-pu-xa</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jta-module-scenario-54-geronimo-tm-bootstrap</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jta-module-scenario-55-geronimo-multi-pu-xa</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

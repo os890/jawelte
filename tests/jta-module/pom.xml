@@ -70,6 +70,8 @@
         <module>scenario-51-atomikos-multi-pu-xa</module>
         <module>scenario-52-narayana-tm-bootstrap</module>
         <module>scenario-53-narayana-multi-pu-xa</module>
+        <module>scenario-54-geronimo-tm-bootstrap</module>
+        <module>scenario-55-geronimo-multi-pu-xa</module>
     </modules>
 
     <dependencies>
