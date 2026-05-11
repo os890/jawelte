@@ -72,6 +72,7 @@ for cdi in owb weld; do
     run "tests/cdi-module [$cdi]"   "$REPO_ROOT/tests/cdi-module"   -P "$cdi" verify
     run "tests/scope-module [$cdi]" "$REPO_ROOT/tests/scope-module" -P "$cdi" verify
     run "tests/jpa-module [$cdi]"   "$REPO_ROOT/tests/jpa-module"   -P "$cdi" verify
+    run "tests/ejb-module [$cdi]"   "$REPO_ROOT/tests/ejb-module"   -P "$cdi" verify
 done
 
 # tests/jta-module: CDI-runtime × JTA-impl sweep.

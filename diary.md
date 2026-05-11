@@ -2223,3 +2223,20 @@ All 26 scenarios green on OWB + Weld.
 Per-scenario pom pulls jpa-module-api + jpa-module-impl + hibernate
 + h2 + asm at test scope. Each scenario ships its own persistence.xml
 with a unique PU name (testEjbPU05, ...PU06, ...PU07, ...PU12).
+
+### 2026-05-11 — coverage-report + verify-all + arch.md
+
+- `coverage-report/pom.xml`: added `jawelte-ejb-module-api` /
+  `-impl` class deps + all 26 ejb-module test scenarios. Local
+  aggregate run shows ejb-module/impl at 95% instruction / 85%
+  branch.
+- `verify-all.sh`: phase 2 inner loop adds `tests/ejb-module
+  [$cdi]`, bringing the matrix to 10 phases (`{owb, weld}` ×
+  `{cdi, scope, jpa, ejb}` + tests/core + jta-module 4-combo +
+  coverage-report).
+- `architecture.md`: appended row to the Integration Layer table
+  and the Adapters table; added `**ejb-module additions**` block
+  describing `EjbAnnotationMapper` and the BBD classpath-scan
+  mechanic; dropped the now-stale `JtaTransactionStrategy` mention
+  from the "Planned" line (TICKET-006 shipped already). Diff
+  approved by os890 via AskUserQuestion before committing.
