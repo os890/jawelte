@@ -2425,3 +2425,15 @@ Wiring: `modules/pom.xml` registers the new aggregator; parent `pom.xml` adds `j
 Ticket: deleted the POC Scope section (full production design) and rewrote the api-row `Compile-time deps` cell to drop `jakarta.el-api` (the api carries `withValues(Map<String, Object>)` only — no EL types).
 
 `mvn -pl modules/content-diff-module/api -am verify` is green (checkstyle, javadoc, RAT, compile).
+
+## 2026-05-12 — TICKET-008: content-diff-module/impl
+
+JSON and XML engine implementations + EL interpolation glue.
+
+- `JsonIgnoreMatcher` / `XmlIgnoreMatcher`: compile JSON-path / XPath patterns to regex with tolerance for optional 1-based `[N]` predicates on XML. Mixed-syntax patterns compile to a `(?!)` regex that matches nothing.
+- `JsonDiffEngine`: Jackson `ObjectMapper.readTree` for both sides + a parallel `JsonParser` pass on expected to collect a `Map<String, Integer>` of path → line. Recursive parallel walk emits `Difference` records; null-vs-missing distinguished (`isNull()` returns "null" sentinel, absent field returns `<missing>`). Unordered-array mode does greedy multiset match (boolean[] marks consumed actual elements; unmatched on either side become differences).
+- `XmlDiffEngine`: DOM parse via `DocumentBuilder` (FEATURE_SECURE_PROCESSING + disallow-doctype-decl); SAX pass via `LineCollectingHandler` for path → line collection (always-`[N]` per same-named sibling). Children grouped by tagName for ordered comparison; attributes compared as unordered sets at path `/parent/@attr`. Text comparison only for leaf elements (no element children).
+- `ELInterpolator`: Jakarta EL `StandardELContext` + `VariableMapper`-bound `${expr}` substitution. Fresh `ExpressionFactory` per call; no sandbox; missing variables surface as `PropertyNotFoundException` from `getValue(...)`.
+- `META-INF/services/.../DiffEngine` lists both engines with a header comment; license-header present per RAT.
+
+`mvn -pl modules/content-diff-module/impl -am verify` is green.

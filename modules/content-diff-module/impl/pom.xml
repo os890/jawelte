@@ -43,6 +43,18 @@
             <artifactId>jawelte-core-api</artifactId>
         </dependency>
 
+        <!--
+            jakarta.annotation-api supplies the @Priority annotation
+            stamped on the built-in engines. provided scope at the
+            depMgmt level; the engines are loaded via ServiceLoader
+            and their @Priority is read reflectively by the
+            ServicePriorityResolver.
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
