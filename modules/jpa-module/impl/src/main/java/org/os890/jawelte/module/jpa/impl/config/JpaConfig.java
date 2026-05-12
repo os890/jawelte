@@ -15,21 +15,14 @@
  */
 package org.os890.jawelte.module.jpa.impl.config;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.regex.Pattern;
 
 import jakarta.annotation.PostConstruct;
 
 import org.os890.jawelte.core.api.ConfigBean;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
-import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 
 /**
  * Type-safe facade over jpa-module's MicroProfile Config keys. One
@@ -58,74 +51,10 @@ public class JpaConfig {
     /** MP Config prefix whose remainder maps onto JPA bootstrap properties verbatim. */
     public static final String PERSISTENCE_PROPERTY_PREFIX = "org.os890.jawelte.module.jpa.persistence-property.";
 
-    private static final String APP_LABEL_KEY = "org.os890.jawelte.module.jpa.app-label";
-
-    private static final String SCAN_EXCLUDE_PACKAGES_KEY =
-            "org.os890.jawelte.module.jpa.scan-exclude-packages";
-
-    private static final String ENTITY_SCAN_WHITELIST_PACKAGES_KEY =
-            "org.os890.jawelte.module.jpa.entity-scan.whitelist.packages";
-
-    private static final String ENTITY_SCAN_WHITELIST_PATTERNS_KEY =
-            "org.os890.jawelte.module.jpa.entity-scan.whitelist.patterns";
-
     private ConfigResolver resolver;
 
     /** No-arg constructor used both by CDI and by direct {@code new}. */
     public JpaConfig() {
-    }
-
-    /**
-     * Optional app-label override used for the file-mode H2 file
-     * directory when {@code @PersistenceConfig.filePath} is empty.
-     *
-     * @return the configured label, or {@link Optional#empty()}
-     */
-    public Optional<String> appLabel() {
-        return lookupResolver().resolve(APP_LABEL_KEY);
-    }
-
-    /**
-     * Excluded package prefixes for {@code EntityScanner}. Comma-
-     * separated value read from MP Config under
-     * {@code org.os890.jawelte.module.jpa.scan-exclude-packages};
-     * jpa-module/impl ships the defaults in its
-     * {@code META-INF/microprofile-config.properties}. Empty
-     * entries are dropped.
-     *
-     * @param fallback returned when the key isn't set on any
-     *                 reachable MP Config source
-     * @return the configured prefixes, or {@code fallback} when unset
-     */
-    public Set<String> scanExcludePackages(Set<String> fallback) {
-        return lookupResolver().resolve(SCAN_EXCLUDE_PACKAGES_KEY)
-                .map(JpaConfig::splitCsvToOrderedSet)
-                .orElse(fallback);
-    }
-
-    /**
-     * The optional {@code @Entity}-scan positive filter compiled
-     * from the literal-prefixes key plus the regex-patterns key.
-     * An {@linkplain EntityScanner.Whitelist#isEmpty() empty}
-     * whitelist (both lists empty) means "no whitelist filtering".
-     *
-     * @return the compiled whitelist; never {@code null}
-     */
-    public EntityScanner.Whitelist entityScanWhitelist() {
-        List<String> literals = lookupResolver().resolve(ENTITY_SCAN_WHITELIST_PACKAGES_KEY)
-                .map(JpaConfig::splitCsv)
-                .orElseGet(List::of);
-        List<String> patternStrings = lookupResolver().resolve(ENTITY_SCAN_WHITELIST_PATTERNS_KEY)
-                .map(JpaConfig::splitCsv)
-                .orElseGet(List::of);
-        if (literals.isEmpty() && patternStrings.isEmpty()) {
-            return EntityScanner.Whitelist.empty();
-        }
-        List<Pattern> compiled = new ArrayList<>(patternStrings.size());
-        for (String regex : patternStrings) {
-            compiled.add(Pattern.compile(regex));
-        }
-        return new EntityScanner.Whitelist(List.copyOf(literals), List.copyOf(compiled));
     }
 
     /**
@@ -178,25 +107,4 @@ public class JpaConfig {
         return local;
     }
 
-    private static Set<String> splitCsvToOrderedSet(String csv) {
-        Set<String> result = new LinkedHashSet<>();
-        for (String entry : csv.split(",")) {
-            String trimmed = entry.trim();
-            if (!trimmed.isEmpty()) {
-                result.add(trimmed);
-            }
-        }
-        return result;
-    }
-
-    private static List<String> splitCsv(String csv) {
-        List<String> result = new ArrayList<>();
-        for (String entry : csv.split(",")) {
-            String trimmed = entry.trim();
-            if (!trimmed.isEmpty()) {
-                result.add(trimmed);
-            }
-        }
-        return result;
-    }
 }

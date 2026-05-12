@@ -2374,3 +2374,22 @@ Scenario-07 (jpa) updated to use the new key + config_ordinal=200
 so its test-specific override beats the impl's shipped defaults.
 
 verify-all: all 15 phases green.
+
+## 2026-05-12 — Scenario 11 on annotated mode + JpaConfig dead code
+
+Last bean-discovery-mode="all" archive (scenario 11) switched to
+"annotated". The scenario's microprofile-config.properties extends
+ejb-module's bean-defining-annotations with jakarta.inject.Singleton,
+so the xbean-finder scan registers InjectSingletonBean via
+addAnnotatedType. The default mapper still ignores it (acts only
+on jakarta.ejb.*), so the bean's resolved scope stays
+@jakarta.inject.Singleton as the test asserts.
+
+JpaConfig pruned: appLabel(), scanExcludePackages(fallback), and
+entityScanWhitelist() were dead (every consumer reads MP Config
+directly via JpaCdiExtension's local helpers). Removed those three
+methods plus their 4 unused key constants and the two unused CSV
+helpers; the class is now just @ConfigBean +
+additionalPersistenceProperties() + PERSISTENCE_PROPERTY_PREFIX.
+
+verify-all: all 15 phases green (17m 38s).
