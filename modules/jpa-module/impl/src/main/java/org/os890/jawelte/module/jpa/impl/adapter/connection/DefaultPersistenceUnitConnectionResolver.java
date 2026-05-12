@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.jpa.impl.adapter.connection;
 
 import java.sql.Connection;
+import java.util.Set;
 
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManager;
@@ -56,5 +57,24 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
                             + "UserTransaction.begin() boundary?");
         }
         return entityManager.unwrap(Connection.class);
+    }
+
+    @Override
+    public Connection connectionForActivePersistenceUnit() {
+        Set<String> activeUnits = TransactionScopedEmHolder.currentFramePersistenceUnits();
+        if (activeUnits.isEmpty()) {
+            throw new IllegalStateException(
+                    "No active persistence unit on the calling thread. "
+                            + "Was the call made outside a @Transactional or "
+                            + "UserTransaction.begin() boundary?");
+        }
+        if (activeUnits.size() > 1) {
+            throw new IllegalStateException(
+                    "Multiple active persistence units on the calling thread: "
+                            + activeUnits + ". Use connectionFor(String) with an "
+                            + "explicit persistence unit name.");
+        }
+        String onlyActiveUnit = activeUnits.iterator().next();
+        return connectionFor(onlyActiveUnit);
     }
 }
