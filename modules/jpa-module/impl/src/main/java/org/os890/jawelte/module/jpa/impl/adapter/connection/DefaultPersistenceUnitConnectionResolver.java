@@ -21,6 +21,7 @@ import java.util.Set;
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManager;
 
+import org.hibernate.Session;
 import org.os890.jawelte.module.jpa.api.port.PersistenceUnitConnectionResolver;
 import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 
@@ -56,7 +57,14 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
                             + "'. Was the call made outside a @Transactional or "
                             + "UserTransaction.begin() boundary?");
         }
-        return entityManager.unwrap(Connection.class);
+        // JPA's spec-portable em.unwrap(Connection.class) is not
+        // supported by Hibernate; route through Session.doReturningWork
+        // which surfaces the active JDBC connection without enrolling
+        // new work. The returned connection is the same one Hibernate
+        // already drives, so seed / cleanup code shares the active
+        // transaction.
+        Session session = entityManager.unwrap(Session.class);
+        return session.doReturningWork(connection -> connection);
     }
 
     @Override

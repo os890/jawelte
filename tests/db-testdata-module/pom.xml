@@ -79,6 +79,8 @@
         <module>scenario-45-custom-diff-engine</module>
         <module>scenario-46-custom-pu-resolver</module>
         <module>scenario-36b-for-pu-outside-transaction</module>
+        <module>scenario-36-for-pu-default-single-active</module>
+        <module>scenario-37-for-pu-named</module>
     </modules>
 
     <dependencies>
@@ -252,6 +254,8 @@
                 <module>scenario-45-custom-diff-engine</module>
                 <module>scenario-46-custom-pu-resolver</module>
                 <module>scenario-36b-for-pu-outside-transaction</module>
+                <module>scenario-36-for-pu-default-single-active</module>
+                <module>scenario-37-for-pu-named</module>
             </modules>
         </profile>
     </profiles>
