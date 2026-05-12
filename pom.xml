@@ -81,6 +81,7 @@
         <jackson.version>2.18.2</jackson.version>
         <jakarta.el.version>6.0.1</jakarta.el.version>
         <expressly.version>6.0.0</expressly.version>
+        <tomcat.el.version>11.0.7</tomcat.el.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -310,19 +311,27 @@
             </dependency>
 
             <!--
-                Jakarta EL: API on the production side is provided
-                (content-diff-module/impl ships EL interpolation but
-                consumers bring their own EL implementation — same
-                rationale as the CDI / MP-Config split above); Expressly
-                is the test-scope reference impl pulled in by
-                content-diff-module/impl's tests and by the
-                tests/content-diff-module aggregator.
+                Jakarta EL: api on the production side is provided —
+                content-diff-module/impl's JakartaELInterpolator routes
+                through ExpressionFactory.newInstance() and so works
+                against any compliant provider. The project pins
+                Apache Tomcat's tomcat-embed-el as the default
+                test-scope provider; GlassFish Expressly is also pinned
+                here, also at test scope, and consumers swap to it (or
+                anywhere else) by replacing the dep in their own pom
+                without a code change.
             -->
             <dependency>
                 <groupId>jakarta.el</groupId>
                 <artifactId>jakarta.el-api</artifactId>
                 <version>${jakarta.el.version}</version>
                 <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
+                <version>${tomcat.el.version}</version>
+                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.glassfish.expressly</groupId>

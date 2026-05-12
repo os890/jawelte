@@ -32,3 +32,18 @@ Action: move the CDI extension + the default mapper + `TransactionalLiteral` + `
 Touches: `modules/ejb-module/impl`, two `META-INF/services` files, every scenario test class that imports any of the moved types. Tests/scenarios that don't import the impl types (most of them) need no change. No semantic change — pure refactor.
 
 Defer until the current content-diff topic ships.
+
+## content-diff-module: flexible ObjectMapper cache
+
+Context: `JsonDiffEngine` currently holds a single `static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();` — works for the engine's stateless use (parse a string to `JsonNode`) and matches Jackson's documented thread-safety. Limitations:
+
+- A consumer that needs Jackson modules (`JavaTimeModule`, `Jdk8Module`, custom de/serializers) can't influence the mapper.
+- A consumer that wants different parser features (lenient JSON, comments allowed, single-quoted strings) has no hook.
+- The mapper can't be reset or torn down between test classes — across-JVM cache lifetime is the full process lifetime.
+
+Possible directions when the need arises:
+- New SPI port `JsonObjectMapperProvider` resolved via `TestContext.loadService(...)`; default implementation returns the current shared instance. Consumers ship their own provider at lower `@Priority` to plug in their configuration.
+- Or: a small `Supplier<ObjectMapper>`-shaped MP Config knob naming the FQCN of a factory class (rare exception to the project-wide "no per-port FQCN MP Config key" rule).
+- Or: lazy-but-mutable cache keyed by configuration fingerprint so multiple consumers cohabit (probably overkill for a test framework).
+
+Defer until a consumer asks. Document the existing behaviour in the api-side docs once the design lands.

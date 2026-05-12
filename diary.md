@@ -2485,3 +2485,17 @@ Wip pass green: 6 scenarios in ~4.7 s.
 XML engine now trims leading / trailing whitespace from leaf-element `textContent` before equality and DOM-normalises both documents after parsing. Indentation, trailing newlines from serialisers, and adjacent text nodes (CDATA / comments boundaries) no longer surface as diffs.
 
 Scenario 31 (`xml-text-whitespace-trim`) asserts a leaf with padded whitespace equals the clean expected. Spot-checked the existing XML scenarios (14-17) — all green, no regression from the trim/normalise step.
+
+## 2026-05-12 — content-diff: cached ObjectMapper + pluggable EL interpolator
+
+Two related changes wrapping up the engine-internals revisions.
+
+- `JsonDiffEngine` now holds a single `static final ObjectMapper` shared across calls. Jackson documents the type as thread-safe after configuration; we never mutate it after construction. Eliminates the per-call instantiation cost (Jackson's type-cache rebuild). Future-flex note appended to `todo.md` for a more configurable cache (modules, parser features) when a consumer asks.
+
+- New SPI port `ELInterpolator` in `api/port` (single method `interpolate(template, values) -> String`). The previous static-utility `ELInterpolator` is renamed to `JakartaELInterpolator` and reborn as the default SPI impl at `@Priority(Integer.MAX_VALUE)`, registered in services. Engines resolve the impl via `TestContext.loadService(ELInterpolator.class)` per call. Consumers swap in their own interpolator (no-op, MVEL, …) by registering an alternative at a lower priority value.
+
+- Default EL provider switched from GlassFish Expressly to Apache Tomcat `tomcat-embed-el` at the depMgmt level. The `JakartaELInterpolator` is provider-agnostic (routes through `ExpressionFactory.newInstance()`), so the swap is a build-time choice — Expressly remains pinned in depMgmt and consumers select it by replacing the dep in their own pom.
+
+- Scenario 32 ships a test-scoped pass-through interpolator + `META-INF/services` line; verifies that the alternative impl wins through the SPI lookup and the diff sees the un-interpolated template.
+
+Wip pass green (8 scenarios). Spot-checked scenarios 18–21 (Jakarta EL behaviour) against the new Tomcat dep — all green.

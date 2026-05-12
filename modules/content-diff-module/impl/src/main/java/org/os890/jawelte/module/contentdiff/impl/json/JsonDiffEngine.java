@@ -28,10 +28,11 @@ import java.util.Set;
 
 import jakarta.annotation.Priority;
 
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.contentdiff.api.DiffOptions;
 import org.os890.jawelte.module.contentdiff.api.Difference;
 import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
-import org.os890.jawelte.module.contentdiff.impl.el.ELInterpolator;
+import org.os890.jawelte.module.contentdiff.api.port.ELInterpolator;
 import org.os890.jawelte.module.contentdiff.impl.internal.JsonPathMatcher;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -54,8 +55,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * pick out a top-level array and leave nested arrays index-wise,
  * or vice versa.
  *
- * <p>Stateless and thread-safe — every {@link #diff(String, String, DiffOptions)}
- * call creates its own {@link ObjectMapper} and matcher instances.
+ * <p>Stateless and thread-safe — a single {@link ObjectMapper} is
+ * shared across every call (Jackson documents it as thread-safe
+ * once configured), and the per-call matchers + line maps are
+ * stack-locals that never escape the {@link #diff(String, String, DiffOptions)}
+ * invocation.
  *
  * <p>Ships at {@link Priority}({@link Integer#MAX_VALUE}); consumers
  * override per content type by registering a competing impl with a
@@ -65,6 +69,20 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class JsonDiffEngine implements DiffEngine {
 
     private static final String ROOT_PATH = "$";
+
+    /**
+     * Shared {@link ObjectMapper} reused across every
+     * {@link #diff(String, String, DiffOptions)} call. Jackson
+     * documents the type as thread-safe once configuration is
+     * complete; we never mutate it after construction, so the
+     * single-instance / many-callers contract holds.
+     *
+     * <p>The instance carries no module registrations beyond
+     * Jackson's defaults. A future iteration may want a more
+     * flexible cache — see the corresponding entry in
+     * {@code todo.md}.
+     */
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public JsonDiffEngine() {
@@ -77,22 +95,22 @@ public class JsonDiffEngine implements DiffEngine {
 
     @Override
     public List<Difference> diff(String expected, String actual, DiffOptions options) {
-        String interpolatedExpected = ELInterpolator.interpolate(expected, options.elValues());
-        ObjectMapper objectMapper = new ObjectMapper();
+        ELInterpolator interpolator = TestContext.loadService(ELInterpolator.class);
+        String interpolatedExpected = interpolator.interpolate(expected, options.elValues());
         Map<String, Integer> expectedLines = new HashMap<>();
         JsonNode expectedTree;
         JsonNode actualTree;
         try {
-            expectedTree = objectMapper.readTree(interpolatedExpected);
+            expectedTree = OBJECT_MAPPER.readTree(interpolatedExpected);
         } catch (IOException parseException) {
             throw new IllegalArgumentException("Malformed expected JSON", parseException);
         }
         try {
-            actualTree = objectMapper.readTree(actual);
+            actualTree = OBJECT_MAPPER.readTree(actual);
         } catch (IOException parseException) {
             throw new IllegalArgumentException("Malformed actual JSON", parseException);
         }
-        collectLines(objectMapper.getFactory(), interpolatedExpected, expectedLines);
+        collectLines(OBJECT_MAPPER.getFactory(), interpolatedExpected, expectedLines);
         JsonPathMatcher ignoreMatcher = JsonPathMatcher.of(options.ignorePatterns());
         JsonPathMatcher unorderedMatcher = JsonPathMatcher.of(options.unorderedArrayPaths());
         List<Difference> differences = new ArrayList<>();

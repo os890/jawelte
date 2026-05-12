@@ -34,10 +34,11 @@ import javax.xml.parsers.SAXParserFactory;
 
 import jakarta.annotation.Priority;
 
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.contentdiff.api.DiffOptions;
 import org.os890.jawelte.module.contentdiff.api.Difference;
 import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
-import org.os890.jawelte.module.contentdiff.impl.el.ELInterpolator;
+import org.os890.jawelte.module.contentdiff.api.port.ELInterpolator;
 import org.os890.jawelte.module.contentdiff.impl.internal.XmlPathMatcher;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -92,7 +93,8 @@ public class XmlDiffEngine implements DiffEngine {
 
     @Override
     public List<Difference> diff(String expected, String actual, DiffOptions options) {
-        String interpolatedExpected = ELInterpolator.interpolate(expected, options.elValues());
+        ELInterpolator interpolator = TestContext.loadService(ELInterpolator.class);
+        String interpolatedExpected = interpolator.interpolate(expected, options.elValues());
         Document expectedDocument = parseDocument(interpolatedExpected, "expected");
         Document actualDocument = parseDocument(actual, "actual");
         // normalize() merges adjacent text nodes and discards empty

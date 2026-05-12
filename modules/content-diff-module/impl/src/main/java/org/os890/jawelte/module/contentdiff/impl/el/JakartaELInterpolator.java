@@ -17,6 +17,7 @@ package org.os890.jawelte.module.contentdiff.impl.el;
 
 import java.util.Map;
 
+import jakarta.annotation.Priority;
 import jakarta.el.ELContext;
 import jakarta.el.ELException;
 import jakarta.el.ExpressionFactory;
@@ -24,22 +25,38 @@ import jakarta.el.StandardELContext;
 import jakarta.el.ValueExpression;
 import jakarta.el.VariableMapper;
 
+import org.os890.jawelte.module.contentdiff.api.port.ELInterpolator;
+
 /**
- * Wraps Jakarta EL with the {@code ${expr}} interpolation flow the
- * two built-in {@link org.os890.jawelte.module.contentdiff.api.port.DiffEngine}
- * implementations need.
+ * Default {@link ELInterpolator} — evaluates {@code ${expr}}
+ * occurrences in the template through Jakarta EL.
  *
- * <p>Interpolation is full Jakarta EL — ternaries, method calls,
- * property access. No sandboxing: methods on objects passed via
- * {@code values} are callable from the expected template. Missing
- * variables surface as the EL implementation's
- * {@code jakarta.el.PropertyNotFoundException} thrown from
+ * <p>The concrete EL provider is selected by the Jakarta EL spec's
+ * own {@code ExpressionFactory.newInstance()} mechanism: whichever
+ * {@code jakarta.el.ExpressionFactory} implementation sits on the
+ * classpath wins. The project pins Apache Tomcat's
+ * {@code tomcat-embed-el} as the default test-scope provider and
+ * also ships GlassFish Expressly as an alternative — both work with
+ * this impl unchanged.
+ *
+ * <p>Full Jakarta EL semantics: ternaries, method invocations,
+ * property access, no sandboxing. Missing variables surface as
+ * {@code jakarta.el.PropertyNotFoundException} from
  * {@link #interpolate(String, Map)}.
  *
- * <p>Each call creates a fresh {@link ExpressionFactory} and
- * {@link StandardELContext}; the helper holds no shared mutable state.
+ * <p>Ships at {@code @Priority(Integer.MAX_VALUE)} and is the only
+ * implementation registered in
+ * {@code META-INF/services/org.os890.jawelte.module.contentdiff.api.port.ELInterpolator}
+ * by default. Consumers swap in their own interpolator (e.g. a
+ * no-op for fixtures that should NOT be interpolated) by
+ * registering it at a lower priority value.
+ *
+ * <p>Stateless and thread-safe — a fresh {@link ExpressionFactory}
+ * and {@link StandardELContext} are constructed per call, so the
+ * single shared instance holds no mutable state.
  */
-public abstract class ELInterpolator {
+@Priority(Integer.MAX_VALUE)
+public class JakartaELInterpolator implements ELInterpolator {
 
     private static final char DOLLAR = '$';
 
@@ -47,23 +64,18 @@ public abstract class ELInterpolator {
 
     private static final char CLOSING_BRACE = '}';
 
-    private ELInterpolator() {
+    /** No-arg constructor required by {@link java.util.ServiceLoader}. */
+    public JakartaELInterpolator() {
     }
 
     /**
-     * Replace every {@code ${expression}} occurrence in
-     * {@code template} with the EL-evaluated value computed against
-     * {@code values}. Both literals around the expressions and the
-     * empty case (no expressions present) are returned verbatim.
+     * {@inheritDoc}
      *
-     * @param template the expected document template
-     * @param values   bindings the EL context can resolve
-     * @return the interpolated string
-     * @throws ELException        on EL evaluation failure (missing
-     *                            variable, method-not-found, parse
-     *                            error)
+     * @throws ELException on EL evaluation failure — missing
+     *                     variable, method not found, parse error
      */
-    public static String interpolate(String template, Map<String, Object> values) {
+    @Override
+    public String interpolate(String template, Map<String, Object> values) {
         if (template.indexOf(DOLLAR) < 0) {
             return template;
         }

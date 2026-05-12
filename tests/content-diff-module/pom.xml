@@ -84,9 +84,13 @@
         </dependency>
 
         <!--
-            Jakarta EL: api on the test classpath plus Expressly as
-            the reference implementation that the built-in
-            ELInterpolator binds against at runtime.
+            Jakarta EL: api on the test classpath plus Apache Tomcat's
+            tomcat-embed-el as the default EL provider that the
+            built-in JakartaELInterpolator binds against at runtime.
+            Consumers preferring GlassFish Expressly swap this dep for
+            `org.glassfish.expressly:expressly` in their own pom; the
+            interpolator code is provider-agnostic so no other change
+            is required.
         -->
         <dependency>
             <groupId>jakarta.el</groupId>
@@ -94,8 +98,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.glassfish.expressly</groupId>
-            <artifactId>expressly</artifactId>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-el</artifactId>
         </dependency>
 
         <!--
@@ -193,6 +197,7 @@
                 <module>scenario-29-glob-dialect-activated</module>
                 <module>scenario-30-xml-glob-dialect-activated</module>
                 <module>scenario-31-xml-text-whitespace-trim</module>
+                <module>scenario-32-alternative-el-interpolator</module>
             </modules>
         </profile>
 
@@ -212,6 +217,7 @@
                 <module>scenario-29-glob-dialect-activated</module>
                 <module>scenario-30-xml-glob-dialect-activated</module>
                 <module>scenario-31-xml-text-whitespace-trim</module>
+                <module>scenario-32-alternative-el-interpolator</module>
             </modules>
         </profile>
     </profiles>
