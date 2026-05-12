@@ -75,6 +75,11 @@ for cdi in owb weld; do
     run "tests/ejb-module [$cdi]"   "$REPO_ROOT/tests/ejb-module"   -P "$cdi" verify
 done
 
+# tests/content-diff-module: utility library — does not bootstrap a
+# CDI container, so the owb/weld profiles are no-ops. One verify pass
+# covers all 28 scenarios.
+run "tests/content-diff-module" "$REPO_ROOT/tests/content-diff-module" verify
+
 # tests/jta-module: CDI-runtime × JTA-impl sweep.
 # 4 combos: {owb, weld} × {jta-geronimo, jta-narayana}.
 for cdi in owb weld; do
