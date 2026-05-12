@@ -924,11 +924,6 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-jpa-module-scenario-58-vendor-bean-veto</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-jpa-module-scenario-59-persistence-xml-parser</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -1437,6 +1432,31 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-content-diff-module-scenario-28-no-maximum-cap</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-29-glob-dialect-activated</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-30-xml-glob-dialect-activated</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-31-xml-text-whitespace-trim</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-32-alternative-el-interpolator</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-33-glob-dialect-exact-path-portable</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>
