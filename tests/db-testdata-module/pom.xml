@@ -63,6 +63,12 @@
         <module>scenario-27-ignore-specific-column</module>
         <module>scenario-28-unordered-tables-multiset</module>
         <module>scenario-29-unordered-tables-missing-row</module>
+        <module>scenario-30-el-with-values</module>
+        <module>scenario-31-el-with-bean</module>
+        <module>scenario-32-el-with-function</module>
+        <module>scenario-33-el-with-function-non-static</module>
+        <module>scenario-34-el-with-function-missing</module>
+        <module>scenario-35-el-bean-overrides-value</module>
     </modules>
 
     <dependencies>
@@ -220,6 +226,12 @@
                 <module>scenario-27-ignore-specific-column</module>
                 <module>scenario-28-unordered-tables-multiset</module>
                 <module>scenario-29-unordered-tables-missing-row</module>
+                <module>scenario-30-el-with-values</module>
+                <module>scenario-31-el-with-bean</module>
+                <module>scenario-32-el-with-function</module>
+                <module>scenario-33-el-with-function-non-static</module>
+                <module>scenario-34-el-with-function-missing</module>
+                <module>scenario-35-el-bean-overrides-value</module>
             </modules>
         </profile>
     </profiles>
