@@ -35,6 +35,13 @@
 
     <modules>
         <module>scenario-01-clean-insert-seeds-data</module>
+        <module>scenario-02-clean-insert-fk-ordering</module>
+        <module>scenario-03-clean-insert-circular-fk</module>
+        <module>scenario-04-insert-mode</module>
+        <module>scenario-05-insert-duplicate-pk</module>
+        <module>scenario-06-update-mode</module>
+        <module>scenario-07-update-missing-row</module>
+        <module>scenario-08-refresh-mode</module>
     </modules>
 
     <dependencies>
@@ -164,6 +171,13 @@
             <id>wip</id>
             <modules>
                 <module>scenario-01-clean-insert-seeds-data</module>
+                <module>scenario-02-clean-insert-fk-ordering</module>
+                <module>scenario-03-clean-insert-circular-fk</module>
+                <module>scenario-04-insert-mode</module>
+                <module>scenario-05-insert-duplicate-pk</module>
+                <module>scenario-06-update-mode</module>
+                <module>scenario-07-update-missing-row</module>
+                <module>scenario-08-refresh-mode</module>
             </modules>
         </profile>
     </profiles>
