@@ -2534,3 +2534,41 @@ Wip pass green (9 scenarios).
 - Ticket NFR section: removed the wip / full-test bullet (those
   are project-level developer scaffolding, not part of the
   module's contract).
+
+## 2026-05-12 — content-diff: lift impl coverage from 68% to 98%
+
+Eight new scenarios (34-41) target the previously-untested
+branches inside the impl module:
+
+- **34** XML attribute diff (missing / extra / different value)
+  — exercises `XmlDiffEngine.diffAttributes` and the
+  `attributes(...)` helper that nothing reached before.
+- **35** XML element count mismatch on same-name siblings +
+  root element name mismatch + `summarise(...)` leaf-text,
+  empty self-closing, and parent-with-children branches.
+- **36** Malformed content: bad JSON expected, bad JSON actual,
+  bad XML — covers the three `catch (IOException|Exception)`
+  paths that throw `IllegalArgumentException`.
+- **37** JSON type mismatch (object vs array) + ordered-array
+  size mismatch (extras on actual, missing on actual) +
+  unordered "extra in actual" path.
+- **38** Dialect edge shapes: JSON specific-index pattern,
+  XML explicit predicate, malformed-pattern throws (unclosed
+  bracket + empty step name), non-slash-starting XML pattern
+  resolving to MATCHES_NOTHING.
+- **39** XmlGlob single-segment wildcard (`/*/elem`) + predicate
+  inside literal segment + non-slash-starting MATCHES_NOTHING
+  on the glob side.
+- **40** EL interpolator unbalanced `${` (the `closing == -1`
+  break path that copies the remainder verbatim and exits the
+  substitution loop).
+- **41** Unordered multiset matching of complex nested
+  structures — exercises every branch of
+  `JsonDiffEngine.structurallyEqual` (`visibleFields` helper,
+  type-mismatch return-false, recursive object/array compares).
+
+All eight added to `coverage-report/pom.xml` so `report-aggregate`
+sees their `jacoco.exec`. Aggregate impl coverage moved from
+68% / 58% to **98% / 89%** (instructions / branches). Every
+package now sits at >= 81% branch coverage; the matchers in
+`impl.util` are at 100%.

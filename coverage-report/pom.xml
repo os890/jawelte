@@ -1459,6 +1459,46 @@
             <artifactId>jawelte-tests-content-diff-module-scenario-33-glob-dialect-exact-path-portable</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-34-xml-attribute-diffs</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-35-xml-element-count-and-summarise</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-36-malformed-content</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-37-array-and-type-mismatch</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-38-dialect-edge-shapes</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-39-xml-glob-single-segment-wildcard</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-40-el-unbalanced-template</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-content-diff-module-scenario-41-unordered-structural-equality</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -67,6 +67,14 @@
         <module>scenario-31-xml-text-whitespace-trim</module>
         <module>scenario-32-alternative-el-interpolator</module>
         <module>scenario-33-glob-dialect-exact-path-portable</module>
+        <module>scenario-34-xml-attribute-diffs</module>
+        <module>scenario-35-xml-element-count-and-summarise</module>
+        <module>scenario-36-malformed-content</module>
+        <module>scenario-37-array-and-type-mismatch</module>
+        <module>scenario-38-dialect-edge-shapes</module>
+        <module>scenario-39-xml-glob-single-segment-wildcard</module>
+        <module>scenario-40-el-unbalanced-template</module>
+        <module>scenario-41-unordered-structural-equality</module>
     </modules>
 
     <dependencies>
