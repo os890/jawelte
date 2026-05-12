@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-db-testdata-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/db-testdata-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-db-testdata-module. The always-needed stack is core-api + core-impl (for the SPI bootstrap), db-testdata-module-api + db-testdata-module-impl, DbUnit, H2 (for the in-memory database), SmallRye Config, the Jakarta EL implementation (Tomcat embed-el), and the test-side JUnit / AssertJ jars. forPersistenceUnit(...) scenarios additionally pull jpa-module + Hibernate.</description>
+
+    <modules>
+        <module>scenario-01-clean-insert-seeds-data</module>
+    </modules>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            jpa-module-api on the test classpath: db-testdata-module-api
+            compile-depends on it for the
+            PersistenceUnitConnectionResolver port reference. Scenarios
+            that drive forPersistenceUnit(...) end-to-end additionally
+            pull jpa-module-impl in their own poms.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            DbUnit is a compile-scope dep of db-testdata-module-impl;
+            stated again here so test-only tooling that does not walk
+            transitive scopes still sees it on the classpath.
+        -->
+        <dependency>
+            <groupId>org.dbunit</groupId>
+            <artifactId>dbunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- H2 in-memory database for every scenario. -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <!--
+            Jakarta EL: api on the test classpath plus Apache Tomcat's
+            tomcat-embed-el as the default provider for the
+            JakartaELInterpolator. Consumers can swap to GlassFish
+            Expressly in their own pom with no code change.
+        -->
+        <dependency>
+            <groupId>jakarta.el</groupId>
+            <artifactId>jakarta.el-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-el</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.enterprise.cdi-api supplies the CDI surface
+            TestContext.loadService(...) probes via tryCdiFirst before
+            falling back to reflective instantiation. db-testdata
+            scenarios that do NOT bootstrap CDI still need the api on
+            the classpath so the bootstrap probe doesn't LinkageError.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+        <profile>
+            <id>weld</id>
+        </profile>
+        <!--
+            The wip profile drives the per-topic narrow build loop:
+            `bash verify-all.sh wip` scans tests/*/pom.xml for the
+            `<id>wip</id>` profile and runs only the listed scenarios.
+            Mirrors the default `<modules>` list during the topic and
+            is emptied before the topic ships.
+        -->
+        <profile>
+            <id>wip</id>
+            <modules>
+                <module>scenario-01-clean-insert-seeds-data</module>
+            </modules>
+        </profile>
+    </profiles>
+</project>
