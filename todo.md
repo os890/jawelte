@@ -22,3 +22,13 @@ Options if a real consumer needs full reset:
 - Or document the POC's `SCRIPT NODATA` + `DROP ALL OBJECTS` heavyweight variant as the "nuclear option" cleanup strategy a consumer can register at `META-INF/services` if they need fully-fresh state.
 
 Defer Layer 2 until a consumer asks for it.
+
+## ejb-module/impl: align with the `adapter` package layout
+
+Context: jpa-module/impl is organised under `…module.jpa.impl.adapter.{context,extension,util}` (and similar sub-packages elsewhere). ejb-module/impl was created flat — `…module.ejb.impl.EjbAnnotationExtension`, `…module.ejb.impl.DefaultEjbAnnotationMapper`, etc. — without an `adapter` package boundary.
+
+Action: move the CDI extension + the default mapper + `TransactionalLiteral` + `AnnotationInstanceFactory` under an `adapter` sub-package (matching jpa-module's split into `adapter.extension`, `adapter.context`, `adapter.util`). Keep the test-only port-impl prefix `TestScenario…` in the scenarios. Update the `META-INF/services/jakarta.enterprise.inject.spi.Extension` and `META-INF/services/org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper` files to point at the new FQCNs.
+
+Touches: `modules/ejb-module/impl`, two `META-INF/services` files, every scenario test class that imports any of the moved types. Tests/scenarios that don't import the impl types (most of them) need no change. No semantic change — pure refactor.
+
+Defer until the current content-diff topic ships.
