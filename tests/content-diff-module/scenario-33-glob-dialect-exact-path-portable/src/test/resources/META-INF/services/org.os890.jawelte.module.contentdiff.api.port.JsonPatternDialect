@@ -17,4 +17,4 @@
 # glob patterns — top-level, nested, and explicit-index shapes —
 # and confirms they ignore the matching field the same way the
 # JSONPath default does for equivalent input.
-org.os890.jawelte.module.contentdiff.impl.dialect.JsonGlobDialect
+org.os890.jawelte.module.contentdiff.impl.adapter.dialect.JsonGlobDialect

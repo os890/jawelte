@@ -16,5 +16,5 @@
 # @Priority(Integer.MAX_VALUE); engines with distinct contentType()
 # never compete, so the equal priority is the right starting position
 # for consumer overrides at lower priority values.
-org.os890.jawelte.module.contentdiff.impl.json.JsonDiffEngine
-org.os890.jawelte.module.contentdiff.impl.xml.XmlDiffEngine
+org.os890.jawelte.module.contentdiff.impl.adapter.json.JsonDiffEngine
+org.os890.jawelte.module.contentdiff.impl.adapter.xml.XmlDiffEngine

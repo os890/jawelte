@@ -16,4 +16,4 @@
 # through the same SPI the built-in default uses. XmlGlobDialect
 # ships at @Priority(Integer.MAX_VALUE - 1), one step lower than the
 # XPathStyleDialect default, so the priority resolver picks it.
-org.os890.jawelte.module.contentdiff.impl.dialect.XmlGlobDialect
+org.os890.jawelte.module.contentdiff.impl.adapter.dialect.XmlGlobDialect

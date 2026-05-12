@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.contentdiff.impl.xml;
+package org.os890.jawelte.module.contentdiff.impl.adapter.xml;
 
 import java.io.StringReader;
 import java.util.ArrayDeque;
@@ -39,7 +39,7 @@ import org.os890.jawelte.module.contentdiff.api.DiffOptions;
 import org.os890.jawelte.module.contentdiff.api.Difference;
 import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
 import org.os890.jawelte.module.contentdiff.api.port.ELInterpolator;
-import org.os890.jawelte.module.contentdiff.impl.internal.XmlPathMatcher;
+import org.os890.jawelte.module.contentdiff.impl.util.XmlPathMatcher;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;

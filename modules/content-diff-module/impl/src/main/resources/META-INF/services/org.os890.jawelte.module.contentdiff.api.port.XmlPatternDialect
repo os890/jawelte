@@ -17,4 +17,4 @@
 # registering an alternative implementation (e.g. XmlGlobDialect,
 # which ships in this same jar but is NOT registered by default) at
 # a lower priority value.
-org.os890.jawelte.module.contentdiff.impl.dialect.XPathStyleDialect
+org.os890.jawelte.module.contentdiff.impl.adapter.dialect.XPathStyleDialect

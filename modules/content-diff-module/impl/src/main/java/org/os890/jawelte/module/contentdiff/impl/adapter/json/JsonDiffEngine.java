@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.contentdiff.impl.json;
+package org.os890.jawelte.module.contentdiff.impl.adapter.json;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -33,7 +33,7 @@ import org.os890.jawelte.module.contentdiff.api.DiffOptions;
 import org.os890.jawelte.module.contentdiff.api.Difference;
 import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
 import org.os890.jawelte.module.contentdiff.api.port.ELInterpolator;
-import org.os890.jawelte.module.contentdiff.impl.internal.JsonPathMatcher;
+import org.os890.jawelte.module.contentdiff.impl.util.JsonPathMatcher;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;

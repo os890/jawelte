@@ -16,4 +16,4 @@
 # the same SPI the built-in default uses. JsonGlobDialect ships at
 # @Priority(Integer.MAX_VALUE - 1), one step lower than the
 # JsonPathStyleDialect default, so the priority resolver picks it.
-org.os890.jawelte.module.contentdiff.impl.dialect.JsonGlobDialect
+org.os890.jawelte.module.contentdiff.impl.adapter.dialect.JsonGlobDialect

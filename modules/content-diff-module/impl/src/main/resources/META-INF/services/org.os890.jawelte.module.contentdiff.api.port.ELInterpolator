@@ -16,4 +16,4 @@
 # EL provider (Tomcat embed-el by default, GlassFish Expressly as an
 # alternative) is selected by Jakarta EL's own
 # ExpressionFactory.newInstance() lookup, not by this services file.
-org.os890.jawelte.module.contentdiff.impl.el.JakartaELInterpolator
+org.os890.jawelte.module.contentdiff.impl.adapter.el.JakartaELInterpolator

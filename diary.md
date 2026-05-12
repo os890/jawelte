@@ -2499,3 +2499,19 @@ Two related changes wrapping up the engine-internals revisions.
 - Scenario 32 ships a test-scoped pass-through interpolator + `META-INF/services` line; verifies that the alternative impl wins through the SPI lookup and the diff sees the un-interpolated template.
 
 Wip pass green (8 scenarios). Spot-checked scenarios 18–21 (Jakarta EL behaviour) against the new Tomcat dep — all green.
+
+## 2026-05-12 — content-diff: align impl package layout with jpa-module
+
+Restructured `content-diff-module/impl` to match the project's
+convention of port impls under `impl.adapter.<concern>` and
+non-adapter helpers under `impl.util`.
+
+- `impl.json.JsonDiffEngine` → `impl.adapter.json.JsonDiffEngine`
+- `impl.xml.XmlDiffEngine` → `impl.adapter.xml.XmlDiffEngine`
+- `impl.dialect.{Json,Xml}{PathStyle,Glob}Dialect` → `impl.adapter.dialect.…`
+- `impl.el.JakartaELInterpolator` → `impl.adapter.el.JakartaELInterpolator`
+- `impl.internal.{Json,Xml}PathMatcher` → `impl.util.…`
+
+Engines update their imports for the relocated `…util.JsonPathMatcher` / `…util.XmlPathMatcher`. Four main `META-INF/services` files updated to reference the new FQCNs; three test-scoped scenario services files (29, 30, 33) updated likewise.
+
+Wip pass green (9 scenarios).
