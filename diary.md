@@ -2407,3 +2407,21 @@ Deleted JpaConfig.java and its now-empty config/ package; cleaned
 up a stale Javadoc reference in JtaConfig.
 
 verify-all: all 15 phases green (18m 34s).
+
+## 2026-05-12 — TICKET-008: content-diff-module/api skeleton
+
+Branch `16-content-diff-module-content-diff-module` (PR-bound, off issue #16).
+
+Created the `modules/content-diff-module/` aggregator + `content-diff-module/api`:
+
+- Records: `Difference(path, expected, actual, expectedLineNumber)` with a public `MISSING = "<missing>"` sentinel; `DiffOptions(ignorePatterns, unorderedArrays, elValues)` — added `elValues` to the record so EL interpolation values can flow to the engine without the api module pulling in `jakarta.el-api`.
+- Port: `DiffEngine` with `contentType()` + `diff(expected, actual, options)`.
+- Fluent api: `ContentDiff.forJson(...)` / `forXml(...)` resolve the engine through `ServiceLoader.load(DiffEngine.class)` + filter by `contentType()` + `ServicePriorityResolver` from `TestContext.loadService(...)`. Cached per content type in a static `ConcurrentMap`.
+- `AbstractContentBuilder` (package-private, self-typed) holds the shared mutual-exclusion check for `expected(...)` / `expectedContent(...)`, accumulator state for `ignoring(...)` / `unorderedArrays()` / `withValues(...)`, and the multi-line `AssertionError` formatter. `JsonBuilder` / `XmlBuilder` are thin subclasses contributing only `formatName()`.
+- MP Config keys for default ignore patterns (`…ContentDiff.json.ignore` / `…ContentDiff.xml.ignore`) — read once via `ConfigResolver` and prepended to caller-supplied patterns.
+
+Wiring: `modules/pom.xml` registers the new aggregator; parent `pom.xml` adds `jackson.version` / `jakarta.el.version` / `expressly.version` properties and the four depMgmt entries (jackson-databind, jakarta.el-api provided, expressly test, internal content-diff-module api+impl cross-refs).
+
+Ticket: deleted the POC Scope section (full production design) and rewrote the api-row `Compile-time deps` cell to drop `jakarta.el-api` (the api carries `withValues(Map<String, Object>)` only — no EL types).
+
+`mvn -pl modules/content-diff-module/api -am verify` is green (checkstyle, javadoc, RAT, compile).

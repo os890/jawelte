@@ -78,6 +78,9 @@
         <narayana.jta.version>7.0.0.Final</narayana.jta.version>
         <jboss.transaction.spi.version>8.0.0.Final</jboss.transaction.spi.version>
         <atomikos.version>6.0.1</atomikos.version>
+        <jackson.version>2.18.2</jackson.version>
+        <jakarta.el.version>6.0.1</jakarta.el.version>
+        <expressly.version>6.0.0</expressly.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -278,6 +281,54 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-ejb-module-impl</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal content-diff-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-content-diff-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-content-diff-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!--
+                Jackson supplies the JSON tree + parser-level line-number
+                tracking that content-diff-module/impl's JsonDiffEngine
+                consumes. compile scope — content-diff-module/impl ships
+                Jackson transitively to its consumers, matching the
+                project pattern that "compile-scope deps in
+                modules/.../impl are part of the public surface".
+            -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!--
+                Jakarta EL: API on the production side is provided
+                (content-diff-module/impl ships EL interpolation but
+                consumers bring their own EL implementation — same
+                rationale as the CDI / MP-Config split above); Expressly
+                is the test-scope reference impl pulled in by
+                content-diff-module/impl's tests and by the
+                tests/content-diff-module aggregator.
+            -->
+            <dependency>
+                <groupId>jakarta.el</groupId>
+                <artifactId>jakarta.el-api</artifactId>
+                <version>${jakarta.el.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.expressly</groupId>
+                <artifactId>expressly</artifactId>
+                <version>${expressly.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <!--
