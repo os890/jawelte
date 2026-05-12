@@ -2467,3 +2467,15 @@ Two changes on the open branch.
 Workflow: `mvn -P wip ...` during iteration (fast), then `verify-all.sh` (full-test) before finishing the topic.
 
 Wip pass green locally (~3.5 s for 4 scenarios).
+
+## 2026-05-12 — content-diff: pluggable pattern dialects (JSON + XML)
+
+Introduced SPI ports for the user-facing path-pattern grammar so consumers can swap the default JSONPath / XPath compilers for alternatives without touching the engines.
+
+- `JsonPatternDialect` + `XmlPatternDialect` ports in `api/port`; each exposes `compile(String) -> Pattern`.
+- Default impls in `impl/dialect/`: `JsonPathStyleDialect` and `XPathStyleDialect`, each at `@Priority(Integer.MAX_VALUE)`, registered in `META-INF/services`. Behaviour unchanged from before.
+- Alternative impls `JsonGlobDialect` and `XmlGlobDialect` ship in the same jar at `@Priority(Integer.MAX_VALUE - 1)` but are NOT in the default services file. Consumers activate one by dropping a one-line `META-INF/services/.../JsonPatternDialect` (or `…XmlPatternDialect`) into their test resources — the project-wide priority resolver then picks the alternative over the default.
+- `JsonPathMatcher` (already renamed earlier in this session) now resolves the dialect via `TestContext.loadService` and delegates `compile`. `XmlIgnoreMatcher` renamed to `XmlPathMatcher` for symmetry; same delegation shape. The matchers stayed lightweight (compile-time list + runtime `matches(...)` loop).
+- Scenarios 29 / 30: per-scenario sub-modules ship a `META-INF/services` entry to activate the corresponding glob dialect and verify the grammar-specific patterns (`$.*.createdAt` for JSON, `/**/timestamp` for XML) hit at any depth.
+
+Wip pass green: 6 scenarios in ~4.7 s.

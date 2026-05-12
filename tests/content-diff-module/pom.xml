@@ -190,6 +190,8 @@
                 <module>scenario-26-no-fqcn-override-key</module>
                 <module>scenario-27-error-message-format</module>
                 <module>scenario-28-no-maximum-cap</module>
+                <module>scenario-29-glob-dialect-activated</module>
+                <module>scenario-30-xml-glob-dialect-activated</module>
             </modules>
         </profile>
 
@@ -206,6 +208,8 @@
                 <module>scenario-11-json-unordered-mismatch</module>
                 <module>scenario-12-json-unordered-duplicate-sensitivity</module>
                 <module>scenario-13-json-unordered-nested</module>
+                <module>scenario-29-glob-dialect-activated</module>
+                <module>scenario-30-xml-glob-dialect-activated</module>
             </modules>
         </profile>
     </profiles>

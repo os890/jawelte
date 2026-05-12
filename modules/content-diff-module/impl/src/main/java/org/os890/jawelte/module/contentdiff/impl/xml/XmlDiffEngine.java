@@ -38,7 +38,7 @@ import org.os890.jawelte.module.contentdiff.api.DiffOptions;
 import org.os890.jawelte.module.contentdiff.api.Difference;
 import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
 import org.os890.jawelte.module.contentdiff.impl.el.ELInterpolator;
-import org.os890.jawelte.module.contentdiff.impl.internal.XmlIgnoreMatcher;
+import org.os890.jawelte.module.contentdiff.impl.internal.XmlPathMatcher;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NamedNodeMap;
@@ -90,7 +90,7 @@ public class XmlDiffEngine implements DiffEngine {
         Document expectedDocument = parseDocument(interpolatedExpected, "expected");
         Document actualDocument = parseDocument(actual, "actual");
         Map<String, Integer> expectedLines = collectLines(interpolatedExpected);
-        XmlIgnoreMatcher ignoreMatcher = XmlIgnoreMatcher.of(options.ignorePatterns());
+        XmlPathMatcher ignoreMatcher = XmlPathMatcher.of(options.ignorePatterns());
         List<Difference> differences = new ArrayList<>();
         Element expectedRoot = expectedDocument.getDocumentElement();
         Element actualRoot = actualDocument.getDocumentElement();
@@ -139,7 +139,7 @@ public class XmlDiffEngine implements DiffEngine {
             String currentPath,
             Element expected,
             Element actual,
-            XmlIgnoreMatcher ignoreMatcher,
+            XmlPathMatcher ignoreMatcher,
             Map<String, Integer> expectedLines,
             List<Difference> out) {
         if (ignoreMatcher.matches(currentPath)) {
@@ -165,7 +165,7 @@ public class XmlDiffEngine implements DiffEngine {
             String currentPath,
             Element expected,
             Element actual,
-            XmlIgnoreMatcher ignoreMatcher,
+            XmlPathMatcher ignoreMatcher,
             Map<String, Integer> expectedLines,
             List<Difference> out) {
         Map<String, String> expectedAttributes = attributes(expected);
@@ -197,7 +197,7 @@ public class XmlDiffEngine implements DiffEngine {
             String currentPath,
             List<Element> expectedChildren,
             List<Element> actualChildren,
-            XmlIgnoreMatcher ignoreMatcher,
+            XmlPathMatcher ignoreMatcher,
             Map<String, Integer> expectedLines,
             List<Difference> out) {
         Map<String, List<Element>> expectedGrouped = groupByLocalName(expectedChildren);

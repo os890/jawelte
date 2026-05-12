@@ -13,20 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.contentdiff.impl.internal;
+package org.os890.jawelte.module.contentdiff.impl.dialect;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import jakarta.annotation.Priority;
+
+import org.os890.jawelte.module.contentdiff.api.port.XmlPatternDialect;
+
 /**
- * Compiles a list of XPath-style ignore patterns into regular
- * expressions and tests concrete document paths against the
- * compiled set. Patterns the matcher does not understand
- * (e.g. JSON-path syntax accidentally fed to an XML builder)
- * compile to regular expressions that match nothing, matching
- * the api contract that "mixing pattern syntaxes is silently a
- * no-op".
+ * Default {@link XmlPatternDialect} — compiles XPath-flavoured
+ * patterns into anchored regular expressions.
  *
  * <h2>Supported pattern shapes</h2>
  *
@@ -34,63 +33,41 @@ import java.util.regex.Pattern;
  *   <li>{@code /root/field} — absolute XPath; matches whether the
  *       concrete document path carries explicit 1-based predicates
  *       or not (so {@code /orders/order/id} matches both
- *       {@code /orders/order/id} and {@code /orders/order[1]/id});</li>
- *   <li>{@code /a/b[2]/c} — explicit 1-based predicate;</li>
- *   <li>{@code //field} — recursive: element at any depth.</li>
+ *       {@code /orders/order/id} and {@code /orders/order[1]/id[1]}).</li>
+ *   <li>{@code /a/b[2]/c} — explicit 1-based predicate.</li>
+ *   <li>{@code //field} — descendant-or-self axis; element at any
+ *       depth.</li>
  * </ul>
+ *
+ * <p>Patterns that don't start with {@code /} compile to a regex
+ * that matches nothing — the api contract states that mixing
+ * pattern syntaxes (e.g. JSON-path strings fed to an XML builder)
+ * is a no-op.
+ *
+ * <p>Ships at {@link Priority}({@link Integer#MAX_VALUE}) and is the
+ * only dialect registered in
+ * {@code META-INF/services/org.os890.jawelte.module.contentdiff.api.port.XmlPatternDialect}
+ * by default. Consumers swap in
+ * {@link XmlGlobDialect} (or their own implementation) by
+ * registering it at a lower priority value.
+ *
+ * <p>Stateless and thread-safe.
  */
-public class XmlIgnoreMatcher {
+@Priority(Integer.MAX_VALUE)
+public class XPathStyleDialect implements XmlPatternDialect {
 
-    private final List<Pattern> compiledPatterns;
+    private static final Pattern MATCHES_NOTHING = Pattern.compile("(?!)");
 
-    private XmlIgnoreMatcher(List<Pattern> compiledPatterns) {
-        this.compiledPatterns = compiledPatterns;
+    /** No-arg constructor required by {@link java.util.ServiceLoader}. */
+    public XPathStyleDialect() {
     }
 
-    /**
-     * Compile {@code patterns} into a matcher. Malformed individual
-     * patterns are silently mapped to a regex that matches nothing —
-     * the api contract states that mixing pattern syntaxes (JSON
-     * patterns fed to the XML matcher and vice versa) is a no-op.
-     * The XML matcher therefore never throws on shape mismatches,
-     * only on patterns it recognises as malformed XPath (e.g. an
-     * unclosed predicate bracket).
-     *
-     * @param patterns the patterns to compile
-     * @return the compiled matcher
-     * @throws IllegalArgumentException if an XPath-shaped pattern
-     *         has an unclosed {@code [} predicate
-     */
-    public static XmlIgnoreMatcher of(List<String> patterns) {
-        List<Pattern> compiled = new ArrayList<>(patterns.size());
-        for (String pattern : patterns) {
-            compiled.add(toRegex(pattern));
-        }
-        return new XmlIgnoreMatcher(List.copyOf(compiled));
-    }
-
-    /**
-     * Whether {@code path} (an XPath of the form
-     * {@code /orders/order[1]/id}) is matched by any of the
-     * configured ignore patterns.
-     *
-     * @param path the document path to test
-     * @return {@code true} when at least one pattern matches
-     */
-    public boolean matches(String path) {
-        for (Pattern compiledPattern : compiledPatterns) {
-            if (compiledPattern.matcher(path).matches()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static Pattern toRegex(String pattern) {
-        if (pattern.isEmpty() || pattern.charAt(0) != '/') {
+    @Override
+    public Pattern compile(String userPattern) {
+        if (userPattern.isEmpty() || userPattern.charAt(0) != '/') {
             return MATCHES_NOTHING;
         }
-        List<Step> steps = parseSteps(pattern);
+        List<Step> steps = parseSteps(userPattern);
         StringBuilder regex = new StringBuilder("^");
         for (Step step : steps) {
             if (step.descendantAxis()) {
@@ -146,8 +123,6 @@ public class XmlIgnoreMatcher {
         }
         return result;
     }
-
-    private static final Pattern MATCHES_NOTHING = Pattern.compile("(?!)");
 
     private record Step(boolean descendantAxis, String name, String predicate) {
     }
