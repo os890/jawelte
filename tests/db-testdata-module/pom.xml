@@ -69,6 +69,12 @@
         <module>scenario-33-el-with-function-non-static</module>
         <module>scenario-34-el-with-function-missing</module>
         <module>scenario-35-el-bean-overrides-value</module>
+        <module>scenario-38-for-connection-ownership</module>
+        <module>scenario-39-for-connection-auto-commit-on</module>
+        <module>scenario-40-for-connection-auto-commit-off</module>
+        <module>scenario-41-row-count-match</module>
+        <module>scenario-42-row-count-mismatch</module>
+        <module>scenario-43-row-count-empty-table</module>
     </modules>
 
     <dependencies>
@@ -232,6 +238,12 @@
                 <module>scenario-33-el-with-function-non-static</module>
                 <module>scenario-34-el-with-function-missing</module>
                 <module>scenario-35-el-bean-overrides-value</module>
+                <module>scenario-38-for-connection-ownership</module>
+                <module>scenario-39-for-connection-auto-commit-on</module>
+                <module>scenario-40-for-connection-auto-commit-off</module>
+                <module>scenario-41-row-count-match</module>
+                <module>scenario-42-row-count-mismatch</module>
+                <module>scenario-43-row-count-empty-table</module>
             </modules>
         </profile>
     </profiles>
