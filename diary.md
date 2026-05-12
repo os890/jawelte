@@ -2572,3 +2572,9 @@ sees their `jacoco.exec`. Aggregate impl coverage moved from
 68% / 58% to **98% / 89%** (instructions / branches). Every
 package now sits at >= 81% branch coverage; the matchers in
 `impl.util` are at 100%.
+
+## 2026-05-12 — TICKET-009 kickoff
+
+- Reconciled `tickets/009-db-testdata-module.md` to match the existing `jpa-module` port shape: `Connection connectionFor(String)` (single active resolver via `TestContext.loadService(...)`, lowest `@Priority` wins, no Optional / no fall-through chain). Dropped chain-selection test scenario (#47); tightened scenario #46 wording.
+- Opened issue #18 "DB Test-Data Module (db-testdata-module)" with the reconciled ticket body, branch `18-db-test-data-module-db-testdata-module` checked out via `gh issue develop`.
+- Pinned `org.dbunit:dbunit:3.0.0` in root pom dependencyManagement; added `dbunit.version` property; added internal `db-testdata-module-api` / `-impl` cross-refs.
