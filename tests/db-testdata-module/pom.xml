@@ -59,6 +59,10 @@
         <module>scenario-23-boolean-mp-config-extras</module>
         <module>scenario-24-boolean-non-recognised</module>
         <module>scenario-25-numeric-precision</module>
+        <module>scenario-26-ignore-wildcard-column</module>
+        <module>scenario-27-ignore-specific-column</module>
+        <module>scenario-28-unordered-tables-multiset</module>
+        <module>scenario-29-unordered-tables-missing-row</module>
     </modules>
 
     <dependencies>
@@ -212,6 +216,10 @@
                 <module>scenario-23-boolean-mp-config-extras</module>
                 <module>scenario-24-boolean-non-recognised</module>
                 <module>scenario-25-numeric-precision</module>
+                <module>scenario-26-ignore-wildcard-column</module>
+                <module>scenario-27-ignore-specific-column</module>
+                <module>scenario-28-unordered-tables-multiset</module>
+                <module>scenario-29-unordered-tables-missing-row</module>
             </modules>
         </profile>
     </profiles>
