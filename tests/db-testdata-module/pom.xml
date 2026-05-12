@@ -47,6 +47,18 @@
         <module>scenario-11-dbdiff-missing-row</module>
         <module>scenario-12-dbdiff-extra-row</module>
         <module>scenario-13-dbdiff-subset-only</module>
+        <module>scenario-14-null-marker-is-sql-null</module>
+        <module>scenario-15-null-lowercase-is-literal</module>
+        <module>scenario-16-null-titlecase-is-literal</module>
+        <module>scenario-17-regex-match</module>
+        <module>scenario-18-regex-mismatch</module>
+        <module>scenario-19-tilde-literal-via-regex</module>
+        <module>scenario-20-uuid-literal</module>
+        <module>scenario-21-boolean-normalisation-true</module>
+        <module>scenario-22-boolean-normalisation-false</module>
+        <module>scenario-23-boolean-mp-config-extras</module>
+        <module>scenario-24-boolean-non-recognised</module>
+        <module>scenario-25-numeric-precision</module>
     </modules>
 
     <dependencies>
@@ -188,6 +200,18 @@
                 <module>scenario-11-dbdiff-missing-row</module>
                 <module>scenario-12-dbdiff-extra-row</module>
                 <module>scenario-13-dbdiff-subset-only</module>
+                <module>scenario-14-null-marker-is-sql-null</module>
+                <module>scenario-15-null-lowercase-is-literal</module>
+                <module>scenario-16-null-titlecase-is-literal</module>
+                <module>scenario-17-regex-match</module>
+                <module>scenario-18-regex-mismatch</module>
+                <module>scenario-19-tilde-literal-via-regex</module>
+                <module>scenario-20-uuid-literal</module>
+                <module>scenario-21-boolean-normalisation-true</module>
+                <module>scenario-22-boolean-normalisation-false</module>
+                <module>scenario-23-boolean-mp-config-extras</module>
+                <module>scenario-24-boolean-non-recognised</module>
+                <module>scenario-25-numeric-precision</module>
             </modules>
         </profile>
     </profiles>
