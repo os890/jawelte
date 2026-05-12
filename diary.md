@@ -2515,3 +2515,22 @@ non-adapter helpers under `impl.util`.
 Engines update their imports for the relocated `…util.JsonPathMatcher` / `…util.XmlPathMatcher`. Four main `META-INF/services` files updated to reference the new FQCNs; three test-scoped scenario services files (29, 30, 33) updated likewise.
 
 Wip pass green (9 scenarios).
+
+## 2026-05-12 — content-diff topic ships; wip workflow generalised
+
+- `tests/content-diff-module/pom.xml`: removed both the
+  `full-test` and `wip` profile wrappers; scenarios are listed
+  directly in the top-level `<modules>` block again, matching
+  the shape every other test aggregator uses. The two profiles
+  were a per-topic scaffold; once a topic ships its profile is
+  taken back out.
+- `verify-all.sh`: parametrised. No args → same full matrix as
+  before. `wip` arg → install phase only, then verify each
+  `tests/<module>/pom.xml` that declares an `<id>wip</id>`
+  profile, activating that profile and skipping the coverage
+  aggregation. The next ticket adds its own wip profile to the
+  relevant test aggregator; the script picks it up
+  automatically.
+- Ticket NFR section: removed the wip / full-test bullet (those
+  are project-level developer scaffolding, not part of the
+  module's contract).

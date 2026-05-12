@@ -14,25 +14,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Full-matrix verification of the jawelte project.
+# Verification driver for the jawelte project.
 #
-#   Phase 1 — full reactor install (-DskipTests) so every test module
-#             can resolve its dependencies from the local Maven repo.
-#   Phase 2 — verify each test module under each applicable profile
-#             combination, sequentially. Sequential is required:
-#             parallel mvn invocations clobber each other's target/
-#             directories.
-#   Phase 3 — aggregate JaCoCo coverage.
+# Two modes:
 #
-# Fails fast: any single phase's non-zero exit aborts the script (the
-# `set -euo pipefail` envelope plus an explicit FAIL banner from the
-# `run` helper).
+#   bash verify-all.sh
+#     Full matrix — install full reactor, then sweep every test
+#     module under every applicable {owb, weld} × {jta-*} profile,
+#     then aggregate coverage. Use before finishing a topic.
+#
+#   bash verify-all.sh wip
+#     Iteration mode — install full reactor, then run only those
+#     test modules whose pom.xml declares a `<id>wip</id>` profile,
+#     activating that profile. Lets the in-flight topic's scenarios
+#     run fast without sweeping everything. Skips the coverage
+#     aggregation phase.
+#
+# Both modes fail fast: any single phase's non-zero exit aborts
+# the script (the `set -euo pipefail` envelope plus an explicit
+# FAIL banner from the `run` helper).
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MVN="$REPO_ROOT/mvnw"
 MVN_ARGS=(-B -ntp)
+
+WIP_MODE=false
+case "${1:-}" in
+    "")
+        ;;
+    wip|--wip)
+        WIP_MODE=true
+        ;;
+    *)
+        echo "Usage: $(basename "$0") [wip]" >&2
+        exit 2
+        ;;
+esac
 
 start_epoch=$(date +%s)
 phase=0
@@ -62,48 +81,79 @@ run() {
 run "install full reactor (-DskipTests)" \
     "$REPO_ROOT" -DskipTests install
 
-# --- Phase 2: test matrix --------------------------------------------
-# tests/core: no CDI / JTA profile to sweep.
-run "tests/core" "$REPO_ROOT/tests/core" verify
+if [ "$WIP_MODE" = true ]; then
+    # --- wip mode ----------------------------------------------------
+    # Find every tests/<module>/pom.xml that declares a wip profile.
+    # Each ticket-in-flight adds the profile to the relevant test
+    # aggregator; when the ticket ships, the profile is removed.
+    wip_dirs=()
+    while IFS= read -r pom_path; do
+        wip_dirs+=("$(dirname "$pom_path")")
+    done < <(grep -l "<id>wip</id>" "$REPO_ROOT"/tests/*/pom.xml 2>/dev/null || true)
 
-# tests/cdi-module, tests/scope-module, tests/jpa-module:
-# CDI-runtime sweep only (owb default + weld).
-for cdi in owb weld; do
-    run "tests/cdi-module [$cdi]"   "$REPO_ROOT/tests/cdi-module"   -P "$cdi" verify
-    run "tests/scope-module [$cdi]" "$REPO_ROOT/tests/scope-module" -P "$cdi" verify
-    run "tests/jpa-module [$cdi]"   "$REPO_ROOT/tests/jpa-module"   -P "$cdi" verify
-    run "tests/ejb-module [$cdi]"   "$REPO_ROOT/tests/ejb-module"   -P "$cdi" verify
-done
+    if [ ${#wip_dirs[@]} -eq 0 ]; then
+        echo
+        echo "=================================================================="
+        echo "  No tests/*/pom.xml declares a <id>wip</id> profile."
+        echo "  Add a wip profile to the test aggregator of the ticket"
+        echo "  currently in flight, listing the scenarios you want this"
+        echo "  command to run."
+        echo "=================================================================="
+        exit 0
+    fi
 
-# tests/content-diff-module: utility library — does not bootstrap a
-# CDI container, so the owb/weld profiles are no-ops. One verify pass
-# covers all 28 scenarios.
-run "tests/content-diff-module" "$REPO_ROOT/tests/content-diff-module" verify
-
-# tests/jta-module: CDI-runtime × JTA-impl sweep.
-# 4 combos: {owb, weld} × {jta-geronimo, jta-narayana}.
-for cdi in owb weld; do
-    for jta in jta-geronimo jta-narayana; do
-        run "tests/jta-module [$cdi,$jta]" \
-            "$REPO_ROOT/tests/jta-module" -P "$cdi,$jta" verify
+    for wip_dir in "${wip_dirs[@]}"; do
+        run "$(basename "$wip_dir") [wip]" "$wip_dir" -P wip verify
     done
-done
+else
+    # --- full matrix mode --------------------------------------------
+    # tests/core: no CDI / JTA profile to sweep.
+    run "tests/core" "$REPO_ROOT/tests/core" verify
 
-# Atomikos coverage is not a separate axis — scenarios 50 + 51
-# pin Atomikos's jakarta-classifier deps + an AtomikosTransactionManagerProvider
-# META-INF/services override at the scenario level, so they run
-# against Atomikos inside every {owb, weld} × {jta-geronimo,
-# jta-narayana} phase above. The 32 general-purpose scenarios in
-# the same phase remain on the profile-active TM (Geronimo /
-# Narayana) and are unaffected.
+    # tests/cdi-module, tests/scope-module, tests/jpa-module,
+    # tests/ejb-module: CDI-runtime sweep only (owb default + weld).
+    for cdi in owb weld; do
+        run "tests/cdi-module [$cdi]"   "$REPO_ROOT/tests/cdi-module"   -P "$cdi" verify
+        run "tests/scope-module [$cdi]" "$REPO_ROOT/tests/scope-module" -P "$cdi" verify
+        run "tests/jpa-module [$cdi]"   "$REPO_ROOT/tests/jpa-module"   -P "$cdi" verify
+        run "tests/ejb-module [$cdi]"   "$REPO_ROOT/tests/ejb-module"   -P "$cdi" verify
+    done
 
-# --- Phase 3: aggregated coverage ------------------------------------
-run "coverage-report" "$REPO_ROOT/coverage-report" verify
+    # tests/content-diff-module: utility library — does not bootstrap a
+    # CDI container, so the owb/weld profiles are no-ops. One verify
+    # pass covers every scenario.
+    run "tests/content-diff-module" "$REPO_ROOT/tests/content-diff-module" verify
+
+    # tests/jta-module: CDI-runtime × JTA-impl sweep.
+    # 4 combos: {owb, weld} × {jta-geronimo, jta-narayana}.
+    for cdi in owb weld; do
+        for jta in jta-geronimo jta-narayana; do
+            run "tests/jta-module [$cdi,$jta]" \
+                "$REPO_ROOT/tests/jta-module" -P "$cdi,$jta" verify
+        done
+    done
+
+    # Atomikos coverage is not a separate axis — scenarios 50 + 51
+    # pin Atomikos's jakarta-classifier deps + an
+    # AtomikosTransactionManagerProvider META-INF/services override
+    # at the scenario level, so they run against Atomikos inside every
+    # {owb, weld} × {jta-geronimo, jta-narayana} phase above. The 32
+    # general-purpose scenarios in the same phase remain on the
+    # profile-active TM (Geronimo / Narayana) and are unaffected.
+
+    # --- Coverage aggregation ----------------------------------------
+    run "coverage-report" "$REPO_ROOT/coverage-report" verify
+fi
 
 # --- Summary ---------------------------------------------------------
 total_elapsed=$(( $(date +%s) - start_epoch ))
 echo
 echo "=================================================================="
-printf "  ALL %d PHASES GREEN  —  total %dm %ds\n" \
-       "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+if [ "$WIP_MODE" = true ]; then
+    printf "  WIP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
+           "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+else
+    printf "  ALL %d PHASES GREEN  —  total %dm %ds\n" \
+           "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+fi
 echo "=================================================================="
