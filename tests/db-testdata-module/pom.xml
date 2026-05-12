@@ -78,6 +78,7 @@
         <module>scenario-44-custom-seed-engine</module>
         <module>scenario-45-custom-diff-engine</module>
         <module>scenario-46-custom-pu-resolver</module>
+        <module>scenario-36b-for-pu-outside-transaction</module>
     </modules>
 
     <dependencies>
@@ -250,6 +251,7 @@
                 <module>scenario-44-custom-seed-engine</module>
                 <module>scenario-45-custom-diff-engine</module>
                 <module>scenario-46-custom-pu-resolver</module>
+                <module>scenario-36b-for-pu-outside-transaction</module>
             </modules>
         </profile>
     </profiles>
