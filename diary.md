@@ -2393,3 +2393,17 @@ helpers; the class is now just @ConfigBean +
 additionalPersistenceProperties() + PERSISTENCE_PROPERTY_PREFIX.
 
 verify-all: all 15 phases green (17m 38s).
+
+## 2026-05-12 — Delete JpaConfig entirely
+
+JpaConfig's last remaining method (additionalPersistenceProperties)
+was only used via new JpaConfig() during BBD bootstrap, never via
+@Inject — so the @ConfigBean stereotype was meaningless.
+
+Moved the prefix-walk into JpaCdiExtension as a private static
+helper (readAdditionalPersistenceProperties) that reuses the
+existing resolver() helper and PERSISTENCE_PROPERTY_PREFIX constant.
+Deleted JpaConfig.java and its now-empty config/ package; cleaned
+up a stale Javadoc reference in JtaConfig.
+
+verify-all: all 15 phases green (18m 34s).

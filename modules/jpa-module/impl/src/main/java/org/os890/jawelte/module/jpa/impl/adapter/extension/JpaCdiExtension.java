@@ -64,7 +64,6 @@ import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
-import org.os890.jawelte.module.jpa.impl.config.JpaConfig;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.EntityManagerProxy;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
@@ -135,6 +134,14 @@ public class JpaCdiExtension implements Extension {
             "org.os890.jawelte.module.jpa.entity-scan.whitelist.packages";
     private static final String ENTITY_SCAN_WHITELIST_PATTERNS_KEY =
             "org.os890.jawelte.module.jpa.entity-scan.whitelist.patterns";
+
+    /**
+     * MP Config prefix whose remainder maps onto JPA bootstrap
+     * properties verbatim. Every key under this prefix contributes
+     * to the EMF property bag with the prefix stripped.
+     */
+    private static final String PERSISTENCE_PROPERTY_PREFIX =
+            "org.os890.jawelte.module.jpa.persistence-property.";
 
     private boolean active;
 
@@ -450,11 +457,10 @@ public class JpaCdiExtension implements Extension {
         // Hibernate's metadata-probe path doesn't always reach it.
         properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 
-        // Route the persistence-property prefix walk through JpaConfig (and
-        // therefore through the active ConfigResolver) so a consumer-supplied
-        // resolver controls every key jpa-module reads — including this prefix
-        // (punch-list §5.4).
-        properties.putAll(new JpaConfig().additionalPersistenceProperties());
+        // Persistence-property prefix walk goes through the active
+        // ConfigResolver so a consumer-supplied resolver controls every
+        // key jpa-module reads — including this prefix (punch-list §5.4).
+        properties.putAll(readAdditionalPersistenceProperties());
 
         PersistencePropertyResolver resolver = TestContext.loadService(PersistencePropertyResolver.class);
         if (resolver != null) {
@@ -576,6 +582,28 @@ public class JpaCdiExtension implements Extension {
                     return prefixes;
                 })
                 .orElseGet(Set::of);
+    }
+
+    /**
+     * Snapshot of every config entry whose key starts with
+     * {@link #PERSISTENCE_PROPERTY_PREFIX}; the prefix is stripped so
+     * the resulting map keys are JPA property names suitable for
+     * direct merge into the bootstrap property bag. Goes through the
+     * active {@link ConfigResolver} so a consumer-supplied resolver
+     * controls the full set of keys jpa-module reads, including this
+     * prefix walk.
+     */
+    private static Map<String, String> readAdditionalPersistenceProperties() {
+        ConfigResolver configResolver = resolver();
+        Map<String, String> additional = new LinkedHashMap<>();
+        for (String key : configResolver.resolveKeys()) {
+            if (!key.startsWith(PERSISTENCE_PROPERTY_PREFIX)) {
+                continue;
+            }
+            String propertyName = key.substring(PERSISTENCE_PROPERTY_PREFIX.length());
+            configResolver.resolve(key).ifPresent(value -> additional.put(propertyName, value));
+        }
+        return Map.copyOf(additional);
     }
 
     private static String defaultFilePath(Class<?> testClass) {
