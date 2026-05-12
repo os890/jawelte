@@ -42,6 +42,11 @@
         <module>scenario-06-update-mode</module>
         <module>scenario-07-update-missing-row</module>
         <module>scenario-08-refresh-mode</module>
+        <module>scenario-09-dbdiff-match</module>
+        <module>scenario-10-dbdiff-cell-mismatch</module>
+        <module>scenario-11-dbdiff-missing-row</module>
+        <module>scenario-12-dbdiff-extra-row</module>
+        <module>scenario-13-dbdiff-subset-only</module>
     </modules>
 
     <dependencies>
@@ -178,6 +183,11 @@
                 <module>scenario-06-update-mode</module>
                 <module>scenario-07-update-missing-row</module>
                 <module>scenario-08-refresh-mode</module>
+                <module>scenario-09-dbdiff-match</module>
+                <module>scenario-10-dbdiff-cell-mismatch</module>
+                <module>scenario-11-dbdiff-missing-row</module>
+                <module>scenario-12-dbdiff-extra-row</module>
+                <module>scenario-13-dbdiff-subset-only</module>
             </modules>
         </profile>
     </profiles>
