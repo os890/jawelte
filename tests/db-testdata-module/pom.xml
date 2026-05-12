@@ -81,6 +81,7 @@
         <module>scenario-36b-for-pu-outside-transaction</module>
         <module>scenario-36-for-pu-default-single-active</module>
         <module>scenario-37-for-pu-named</module>
+        <module>scenario-36a-for-pu-ambiguous</module>
     </modules>
 
     <dependencies>
@@ -256,6 +257,7 @@
                 <module>scenario-36b-for-pu-outside-transaction</module>
                 <module>scenario-36-for-pu-default-single-active</module>
                 <module>scenario-37-for-pu-named</module>
+                <module>scenario-36a-for-pu-ambiguous</module>
             </modules>
         </profile>
     </profiles>
