@@ -29,36 +29,45 @@ import java.util.Map;
  * document via Jakarta EL using this map, but a custom engine for a
  * different content type is free to ignore it.
  *
- * @param ignorePatterns  paths to skip; pattern dialect is engine-specific
- *                        (JSON-path for {@code application/json}, XPath
- *                        for {@code application/xml}); never {@code null}
- *                        (use an empty list for "no patterns")
- * @param unorderedArrays {@code true} switches array comparison to
- *                        multiset; default {@code false} means
- *                        index-wise comparison
- * @param elValues        key-value pairs the engine feeds to Jakarta EL
- *                        when interpolating the expected document;
- *                        never {@code null} (use an empty map for
- *                        "no values"); the value side accepts arbitrary
- *                        objects so EL can resolve property access and
- *                        method calls
+ * @param ignorePatterns      paths to skip; pattern dialect is
+ *                            engine-specific (JSON-path for
+ *                            {@code application/json}, XPath for
+ *                            {@code application/xml}); never
+ *                            {@code null} (use an empty list for
+ *                            "no patterns")
+ * @param unorderedArrayPaths path patterns identifying arrays the
+ *                            engine should compare with multiset
+ *                            semantics; an array is treated as
+ *                            unordered when its full path matches
+ *                            at least one entry. JSON-path dialect
+ *                            for the JSON engine; the XML engine
+ *                            ignores this field (XML carries no
+ *                            JSON-array notion). Never {@code null};
+ *                            empty means "all arrays index-wise"
+ * @param elValues            key-value pairs the engine feeds to
+ *                            Jakarta EL when interpolating the
+ *                            expected document; never {@code null}
+ *                            (use an empty map for "no values"); the
+ *                            value side accepts arbitrary objects so
+ *                            EL can resolve property access and
+ *                            method calls
  */
 public record DiffOptions(
         List<String> ignorePatterns,
-        boolean unorderedArrays,
+        List<String> unorderedArrayPaths,
         Map<String, Object> elValues) {
 
     /**
-     * Defensively copies {@code ignorePatterns} and {@code elValues}
-     * so a caller mutating the source collections after construction
-     * cannot affect the record's view.
+     * Defensively copies the three collections so a caller mutating
+     * the source after construction cannot affect the record's view.
      *
-     * @param ignorePatterns  paths to skip
-     * @param unorderedArrays multiset array comparison toggle
-     * @param elValues        Jakarta EL interpolation values
+     * @param ignorePatterns      paths to skip
+     * @param unorderedArrayPaths array paths to compare as multiset
+     * @param elValues            Jakarta EL interpolation values
      */
     public DiffOptions {
         ignorePatterns = List.copyOf(ignorePatterns);
+        unorderedArrayPaths = List.copyOf(unorderedArrayPaths);
         elValues = Map.copyOf(elValues);
     }
 }

@@ -29,7 +29,7 @@ class Scenario12Test {
         assertThatThrownBy(() ->
                 ContentDiff.forJson(actual)
                         .expectedContent(expected)
-                        .unorderedArrays()
+                        .unorderedArrays("$")
                         .assertEquals())
                 .isInstanceOf(AssertionError.class);
     }

@@ -58,8 +58,10 @@ import org.xml.sax.helpers.DefaultHandler;
  * mismatched element appears in the expected source.
  *
  * <p>Element ordering matters by default; attribute sets are
- * compared as unordered sets. The {@link DiffOptions#unorderedArrays()}
- * option is a no-op for XML (JSON arrays have no XML analogue).
+ * compared as unordered sets. {@link
+ * DiffOptions#unorderedArrayPaths()} is a no-op for XML (JSON
+ * arrays have no XML analogue) and the
+ * {@code XmlBuilder} factory always passes an empty list there.
  *
  * <p>Path representation: every non-root element step carries a
  * 1-based predicate ({@code /orders/order[1]/id[1]}). The matcher

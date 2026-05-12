@@ -33,36 +33,23 @@
     <name>jawelte (tests/content-diff-module aggregator and parent)</name>
     <description>Aggregator AND parent for the per-scenario test modules covering jawelte-content-diff-module. content-diff-module is a utility library — it does not bootstrap CDI in the scenarios, so the always-needed stack is core-api + core-impl (for the SPI bootstrap), content-diff-module-api + content-diff-module-impl, SmallRye Config + the Jakarta EL implementation (Expressly).</description>
 
-    <modules>
-        <module>scenario-01-json-match</module>
-        <module>scenario-02-json-mismatch</module>
-        <module>scenario-03-json-multiple-differences</module>
-        <module>scenario-04-json-ignoring-top-level-field</module>
-        <module>scenario-05-json-ignoring-recursive</module>
-        <module>scenario-06-json-ignoring-array-element-field</module>
-        <module>scenario-07-json-null-vs-missing</module>
-        <module>scenario-08-json-missing-vs-present</module>
-        <module>scenario-09-json-null-vs-null</module>
-        <module>scenario-10-json-unordered-match</module>
-        <module>scenario-11-json-unordered-mismatch</module>
-        <module>scenario-12-json-unordered-duplicate-sensitivity</module>
-        <module>scenario-13-json-unordered-nested</module>
-        <module>scenario-14-xml-match</module>
-        <module>scenario-15-xml-mismatch</module>
-        <module>scenario-16-xml-ignoring-absolute-path</module>
-        <module>scenario-17-xml-ignoring-recursive</module>
-        <module>scenario-18-el-simple-substitution</module>
-        <module>scenario-19-el-missing-variable</module>
-        <module>scenario-20-el-method-call</module>
-        <module>scenario-21-el-no-sandboxing</module>
-        <module>scenario-22-classpath-resource</module>
-        <module>scenario-23-classpath-resource-not-found</module>
-        <module>scenario-24-custom-engine-via-spi</module>
-        <module>scenario-25-priority-wins-same-content-type</module>
-        <module>scenario-26-no-fqcn-override-key</module>
-        <module>scenario-27-error-message-format</module>
-        <module>scenario-28-no-maximum-cap</module>
-    </modules>
+    <!--
+        Modules are aggregated via the `full-test` / `wip` Maven
+        profiles below, NOT in this top-level <modules> block.
+
+        - `full-test` is active by default — `mvn verify`,
+          `verify-all.sh`, and any uncoloured invocation aggregate
+          the full set of scenarios.
+        - `wip` is opt-in via `-P wip`. It lists only the scenarios
+          for the topic currently in flight. Explicit `-P wip`
+          deactivates `full-test` (Maven's standard activeByDefault
+          override rule), so the wip pass touches only its own
+          subset.
+
+        When a topic ships, drop its scenarios from `wip` (they stay
+        in `full-test`). When starting a new topic, add the new
+        scenarios to both.
+    -->
 
     <dependencies>
         <dependency>
@@ -161,6 +148,65 @@
         </profile>
         <profile>
             <id>weld</id>
+        </profile>
+
+        <!--
+            full-test: every scenario. Active by default so plain
+            `mvn verify` and `verify-all.sh` build the full reactor.
+            Explicitly invoking `-P wip` deactivates this profile per
+            Maven's activeByDefault override rule.
+        -->
+        <profile>
+            <id>full-test</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <modules>
+                <module>scenario-01-json-match</module>
+                <module>scenario-02-json-mismatch</module>
+                <module>scenario-03-json-multiple-differences</module>
+                <module>scenario-04-json-ignoring-top-level-field</module>
+                <module>scenario-05-json-ignoring-recursive</module>
+                <module>scenario-06-json-ignoring-array-element-field</module>
+                <module>scenario-07-json-null-vs-missing</module>
+                <module>scenario-08-json-missing-vs-present</module>
+                <module>scenario-09-json-null-vs-null</module>
+                <module>scenario-10-json-unordered-match</module>
+                <module>scenario-11-json-unordered-mismatch</module>
+                <module>scenario-12-json-unordered-duplicate-sensitivity</module>
+                <module>scenario-13-json-unordered-nested</module>
+                <module>scenario-14-xml-match</module>
+                <module>scenario-15-xml-mismatch</module>
+                <module>scenario-16-xml-ignoring-absolute-path</module>
+                <module>scenario-17-xml-ignoring-recursive</module>
+                <module>scenario-18-el-simple-substitution</module>
+                <module>scenario-19-el-missing-variable</module>
+                <module>scenario-20-el-method-call</module>
+                <module>scenario-21-el-no-sandboxing</module>
+                <module>scenario-22-classpath-resource</module>
+                <module>scenario-23-classpath-resource-not-found</module>
+                <module>scenario-24-custom-engine-via-spi</module>
+                <module>scenario-25-priority-wins-same-content-type</module>
+                <module>scenario-26-no-fqcn-override-key</module>
+                <module>scenario-27-error-message-format</module>
+                <module>scenario-28-no-maximum-cap</module>
+            </modules>
+        </profile>
+
+        <!--
+            wip: only the scenarios in flight for the topic currently
+            being worked on. Updated when a topic starts (add) and
+            when a topic ships (remove). Run via `mvn -P wip verify`
+            for fast iteration.
+        -->
+        <profile>
+            <id>wip</id>
+            <modules>
+                <module>scenario-10-json-unordered-match</module>
+                <module>scenario-11-json-unordered-mismatch</module>
+                <module>scenario-12-json-unordered-duplicate-sensitivity</module>
+                <module>scenario-13-json-unordered-nested</module>
+            </modules>
         </profile>
     </profiles>
 </project>

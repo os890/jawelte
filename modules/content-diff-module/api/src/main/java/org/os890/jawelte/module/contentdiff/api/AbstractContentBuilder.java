@@ -32,6 +32,11 @@ import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
  * content; subclasses contribute their format name to the error
  * message format. Single-use, not thread-safe.
  *
+ * <p>The {@code unorderedArrayPaths} state is mutated only by
+ * subclasses that expose a public setter (JSON does, XML doesn't).
+ * It lives on the base because {@link #assertEquals()} consumes it
+ * when constructing {@link DiffOptions}.
+ *
  * @param <S> the self-type used to keep the fluent chain typed
  */
 abstract class AbstractContentBuilder<S extends AbstractContentBuilder<S>> {
@@ -43,13 +48,18 @@ abstract class AbstractContentBuilder<S extends AbstractContentBuilder<S>> {
     private String expectedResource;
     private String expectedContent;
     private final List<String> additionalIgnorePatterns = new ArrayList<>();
-    private boolean unorderedArrays;
+    private final List<String> unorderedArrayPaths;
     private final Map<String, Object> elValues = new LinkedHashMap<>();
 
-    AbstractContentBuilder(DiffEngine engine, String actualContent, List<String> ignoreDefaults) {
+    AbstractContentBuilder(
+            DiffEngine engine,
+            String actualContent,
+            List<String> ignoreDefaults,
+            List<String> unorderedDefaults) {
         this.engine = engine;
         this.actualContent = actualContent;
         this.ignoreDefaults = ignoreDefaults;
+        this.unorderedArrayPaths = new ArrayList<>(unorderedDefaults);
     }
 
     /**
@@ -114,20 +124,6 @@ abstract class AbstractContentBuilder<S extends AbstractContentBuilder<S>> {
     }
 
     /**
-     * Enable order-independent array comparison for the whole
-     * document. Two arrays match when they contain the same elements
-     * with the same multiplicities (multiset semantics). Nested
-     * arrays are compared recursively with the same unordered
-     * strategy.
-     *
-     * @return this builder for chaining
-     */
-    public S unorderedArrays() {
-        this.unorderedArrays = true;
-        return self();
-    }
-
-    /**
      * Provide key-value pairs for Jakarta EL interpolation in the
      * expected document. Cumulative — multiple calls merge (later
      * keys override earlier ones).
@@ -159,12 +155,23 @@ abstract class AbstractContentBuilder<S extends AbstractContentBuilder<S>> {
         List<String> mergedPatterns = new ArrayList<>(ignoreDefaults.size() + additionalIgnorePatterns.size());
         mergedPatterns.addAll(ignoreDefaults);
         mergedPatterns.addAll(additionalIgnorePatterns);
-        DiffOptions options = new DiffOptions(mergedPatterns, unorderedArrays, elValues);
+        DiffOptions options = new DiffOptions(mergedPatterns, unorderedArrayPaths, elValues);
         List<Difference> differences = engine.diff(resolvedExpected, actualContent, options);
         if (differences.isEmpty()) {
             return;
         }
         throw new AssertionError(formatMessage(differences));
+    }
+
+    /**
+     * Accumulator visible to subclasses that expose a public
+     * setter for unordered-array paths.
+     *
+     * @return the mutable list backing the builder's per-path
+     *         unordered-array state
+     */
+    List<String> unorderedArrayPaths() {
+        return unorderedArrayPaths;
     }
 
     /**

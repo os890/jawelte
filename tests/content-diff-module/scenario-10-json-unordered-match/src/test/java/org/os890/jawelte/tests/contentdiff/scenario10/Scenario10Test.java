@@ -26,7 +26,7 @@ class Scenario10Test {
         String actual = "[3,1,2]";
         ContentDiff.forJson(actual)
                 .expectedContent(expected)
-                .unorderedArrays()
+                .unorderedArrays("$")
                 .assertEquals();
     }
 }

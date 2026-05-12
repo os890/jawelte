@@ -32,7 +32,7 @@ import org.os890.jawelte.module.contentdiff.api.DiffOptions;
 import org.os890.jawelte.module.contentdiff.api.Difference;
 import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
 import org.os890.jawelte.module.contentdiff.impl.el.ELInterpolator;
-import org.os890.jawelte.module.contentdiff.impl.internal.JsonIgnoreMatcher;
+import org.os890.jawelte.module.contentdiff.impl.internal.JsonPathMatcher;
 
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
@@ -48,8 +48,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * map via {@code JsonParser} so each {@link Difference} carries the
  * 1-based line in the expected source.
  *
+ * <p>Arrays use multiset semantics only when their concrete path
+ * matches a pattern in {@link DiffOptions#unorderedArrayPaths()};
+ * the check is performed at every array level, so a pattern can
+ * pick out a top-level array and leave nested arrays index-wise,
+ * or vice versa.
+ *
  * <p>Stateless and thread-safe — every {@link #diff(String, String, DiffOptions)}
- * call creates its own {@link ObjectMapper} and matcher instance.
+ * call creates its own {@link ObjectMapper} and matcher instances.
  *
  * <p>Ships at {@link Priority}({@link Integer#MAX_VALUE}); consumers
  * override per content type by registering a competing impl with a
@@ -87,10 +93,11 @@ public class JsonDiffEngine implements DiffEngine {
             throw new IllegalArgumentException("Malformed actual JSON", parseException);
         }
         collectLines(objectMapper.getFactory(), interpolatedExpected, expectedLines);
-        JsonIgnoreMatcher ignoreMatcher = JsonIgnoreMatcher.of(options.ignorePatterns());
+        JsonPathMatcher ignoreMatcher = JsonPathMatcher.of(options.ignorePatterns());
+        JsonPathMatcher unorderedMatcher = JsonPathMatcher.of(options.unorderedArrayPaths());
         List<Difference> differences = new ArrayList<>();
-        diffNodes(ROOT_PATH, expectedTree, actualTree, options.unorderedArrays(),
-                ignoreMatcher, expectedLines, differences);
+        diffNodes(ROOT_PATH, expectedTree, actualTree, ignoreMatcher, unorderedMatcher,
+                expectedLines, differences);
         return List.copyOf(differences);
     }
 
@@ -133,8 +140,8 @@ public class JsonDiffEngine implements DiffEngine {
             String path,
             JsonNode expected,
             JsonNode actual,
-            boolean unorderedArrays,
-            JsonIgnoreMatcher ignoreMatcher,
+            JsonPathMatcher ignoreMatcher,
+            JsonPathMatcher unorderedMatcher,
             Map<String, Integer> expectedLines,
             List<Difference> out) {
         if (ignoreMatcher.matches(path)) {
@@ -146,9 +153,11 @@ public class JsonDiffEngine implements DiffEngine {
             return;
         }
         if (expected.isObject()) {
-            diffObjects(path, expected, actual, unorderedArrays, ignoreMatcher, expectedLines, out);
+            diffObjects(path, expected, actual, ignoreMatcher, unorderedMatcher,
+                    expectedLines, out);
         } else if (expected.isArray()) {
-            diffArrays(path, expected, actual, unorderedArrays, ignoreMatcher, expectedLines, out);
+            diffArrays(path, expected, actual, ignoreMatcher, unorderedMatcher,
+                    expectedLines, out);
         } else if (!expected.equals(actual)) {
             out.add(new Difference(path, formatValue(expected), formatValue(actual),
                     lineFor(path, expectedLines)));
@@ -159,8 +168,8 @@ public class JsonDiffEngine implements DiffEngine {
             String path,
             JsonNode expected,
             JsonNode actual,
-            boolean unorderedArrays,
-            JsonIgnoreMatcher ignoreMatcher,
+            JsonPathMatcher ignoreMatcher,
+            JsonPathMatcher unorderedMatcher,
             Map<String, Integer> expectedLines,
             List<Difference> out) {
         Set<String> allFieldNames = new LinkedHashSet<>();
@@ -180,8 +189,8 @@ public class JsonDiffEngine implements DiffEngine {
                 out.add(new Difference(childPath, formatValue(expectedChild), Difference.MISSING,
                         lineFor(childPath, expectedLines)));
             } else {
-                diffNodes(childPath, expectedChild, actualChild, unorderedArrays,
-                        ignoreMatcher, expectedLines, out);
+                diffNodes(childPath, expectedChild, actualChild, ignoreMatcher,
+                        unorderedMatcher, expectedLines, out);
             }
         }
     }
@@ -190,12 +199,13 @@ public class JsonDiffEngine implements DiffEngine {
             String path,
             JsonNode expected,
             JsonNode actual,
-            boolean unorderedArrays,
-            JsonIgnoreMatcher ignoreMatcher,
+            JsonPathMatcher ignoreMatcher,
+            JsonPathMatcher unorderedMatcher,
             Map<String, Integer> expectedLines,
             List<Difference> out) {
-        if (unorderedArrays) {
-            diffArraysUnordered(path, expected, actual, ignoreMatcher, expectedLines, out);
+        if (unorderedMatcher.matches(path)) {
+            diffArraysUnordered(path, expected, actual, ignoreMatcher, unorderedMatcher,
+                    expectedLines, out);
             return;
         }
         int sharedLength = Math.min(expected.size(), actual.size());
@@ -205,7 +215,7 @@ public class JsonDiffEngine implements DiffEngine {
                 continue;
             }
             diffNodes(childPath, expected.get(index), actual.get(index),
-                    false, ignoreMatcher, expectedLines, out);
+                    ignoreMatcher, unorderedMatcher, expectedLines, out);
         }
         for (int index = sharedLength; index < expected.size(); index++) {
             String childPath = path + "[" + index + "]";
@@ -228,7 +238,8 @@ public class JsonDiffEngine implements DiffEngine {
             String path,
             JsonNode expected,
             JsonNode actual,
-            JsonIgnoreMatcher ignoreMatcher,
+            JsonPathMatcher ignoreMatcher,
+            JsonPathMatcher unorderedMatcher,
             Map<String, Integer> expectedLines,
             List<Difference> out) {
         boolean[] matched = new boolean[actual.size()];
@@ -245,7 +256,7 @@ public class JsonDiffEngine implements DiffEngine {
                     continue;
                 }
                 if (structurallyEqual(expectedElement, actual.get(actualIndex),
-                        childPath, ignoreMatcher, true)) {
+                        childPath, ignoreMatcher, unorderedMatcher)) {
                     matched[actualIndex] = true;
                     matchIndex = actualIndex;
                     break;
@@ -277,8 +288,8 @@ public class JsonDiffEngine implements DiffEngine {
             JsonNode left,
             JsonNode right,
             String basePath,
-            JsonIgnoreMatcher ignoreMatcher,
-            boolean unorderedArrays) {
+            JsonPathMatcher ignoreMatcher,
+            JsonPathMatcher unorderedMatcher) {
         if (left.getNodeType() != right.getNodeType()) {
             return false;
         }
@@ -291,7 +302,7 @@ public class JsonDiffEngine implements DiffEngine {
             for (String fieldName : leftFields) {
                 String childPath = basePath + "." + fieldName;
                 if (!structurallyEqual(left.get(fieldName), right.get(fieldName),
-                        childPath, ignoreMatcher, unorderedArrays)) {
+                        childPath, ignoreMatcher, unorderedMatcher)) {
                     return false;
                 }
             }
@@ -301,13 +312,13 @@ public class JsonDiffEngine implements DiffEngine {
             if (left.size() != right.size()) {
                 return false;
             }
-            if (unorderedArrays) {
-                return multisetEqual(left, right, basePath, ignoreMatcher, true);
+            if (unorderedMatcher.matches(basePath)) {
+                return multisetEqual(left, right, basePath, ignoreMatcher, unorderedMatcher);
             }
             for (int index = 0; index < left.size(); index++) {
                 String childPath = basePath + "[" + index + "]";
                 if (!structurallyEqual(left.get(index), right.get(index),
-                        childPath, ignoreMatcher, unorderedArrays)) {
+                        childPath, ignoreMatcher, unorderedMatcher)) {
                     return false;
                 }
             }
@@ -320,8 +331,8 @@ public class JsonDiffEngine implements DiffEngine {
             JsonNode left,
             JsonNode right,
             String basePath,
-            JsonIgnoreMatcher ignoreMatcher,
-            boolean unorderedArrays) {
+            JsonPathMatcher ignoreMatcher,
+            JsonPathMatcher unorderedMatcher) {
         boolean[] matched = new boolean[right.size()];
         for (int leftIndex = 0; leftIndex < left.size(); leftIndex++) {
             String childPath = basePath + "[" + leftIndex + "]";
@@ -331,7 +342,7 @@ public class JsonDiffEngine implements DiffEngine {
                     continue;
                 }
                 if (structurallyEqual(left.get(leftIndex), right.get(rightIndex),
-                        childPath, ignoreMatcher, unorderedArrays)) {
+                        childPath, ignoreMatcher, unorderedMatcher)) {
                     matched[rightIndex] = true;
                     found = true;
                     break;
@@ -347,7 +358,7 @@ public class JsonDiffEngine implements DiffEngine {
     private static Set<String> visibleFields(
             Iterator<String> fieldIterator,
             String basePath,
-            JsonIgnoreMatcher ignoreMatcher) {
+            JsonPathMatcher ignoreMatcher) {
         Set<String> result = new HashSet<>();
         while (fieldIterator.hasNext()) {
             String fieldName = fieldIterator.next();

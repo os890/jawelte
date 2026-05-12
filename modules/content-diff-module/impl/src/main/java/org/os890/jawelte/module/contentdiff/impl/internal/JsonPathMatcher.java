@@ -20,9 +20,12 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * Compiles a list of JSON-path-style ignore patterns into regular
+ * Compiles a list of JSON-path-style patterns into regular
  * expressions and tests concrete document paths against the
- * compiled set. Patterns the matcher does not understand (e.g.
+ * compiled set. Used by the JSON engine for two independent
+ * concerns: matching ignore patterns (paths to skip) and matching
+ * unordered-array patterns (paths whose arrays should be compared
+ * as multisets). Patterns the matcher does not understand (e.g.
  * XPath syntax accidentally fed to a JSON builder) compile to
  * regular expressions that match nothing, matching the api
  * contract that "mixing pattern syntaxes is silently a no-op".
@@ -30,17 +33,19 @@ import java.util.regex.Pattern;
  * <h2>Supported pattern shapes</h2>
  *
  * <ul>
+ *   <li>{@code $} — the root.</li>
  *   <li>{@code $.field} — top-level field;</li>
  *   <li>{@code $.parent.child} — nested field;</li>
+ *   <li>{@code $.items[*]} — every element of an array;</li>
  *   <li>{@code $.items[*].field} — field in every array element;</li>
  *   <li>{@code $..field} — recursive descent; field at any depth.</li>
  * </ul>
  */
-public class JsonIgnoreMatcher {
+public class JsonPathMatcher {
 
     private final List<Pattern> compiledPatterns;
 
-    private JsonIgnoreMatcher(List<Pattern> compiledPatterns) {
+    private JsonPathMatcher(List<Pattern> compiledPatterns) {
         this.compiledPatterns = compiledPatterns;
     }
 
@@ -55,18 +60,18 @@ public class JsonIgnoreMatcher {
      * @throws IllegalArgumentException if a pattern has an unclosed
      *         {@code [} bracket
      */
-    public static JsonIgnoreMatcher of(List<String> patterns) {
+    public static JsonPathMatcher of(List<String> patterns) {
         List<Pattern> compiled = new ArrayList<>(patterns.size());
         for (String pattern : patterns) {
             compiled.add(toRegex(pattern));
         }
-        return new JsonIgnoreMatcher(List.copyOf(compiled));
+        return new JsonPathMatcher(List.copyOf(compiled));
     }
 
     /**
      * Whether {@code path} (a JSON path of the form
      * {@code $.items[0].id}) is matched by any of the configured
-     * ignore patterns.
+     * patterns.
      *
      * @param path the document path to test
      * @return {@code true} when at least one pattern matches
@@ -100,7 +105,7 @@ public class JsonIgnoreMatcher {
                 int closing = pattern.indexOf(']', index);
                 if (closing == -1) {
                     throw new IllegalArgumentException(
-                            "Unclosed [ in JSON ignore pattern: " + pattern);
+                            "Unclosed [ in JSON path pattern: " + pattern);
                 }
                 String inside = pattern.substring(index + 1, closing);
                 if ("*".equals(inside)) {

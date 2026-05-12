@@ -44,20 +44,25 @@ import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
  * cached per content type for the JVM lifetime — subsequent
  * {@code forJson(...)} / {@code forXml(...)} calls skip the resolver.
  *
- * <h2>Default ignore patterns</h2>
+ * <h2>MicroProfile Config defaults</h2>
  *
- * <p>Two MicroProfile Config keys carry per-content-type defaults
- * that are <em>prepended</em> to whatever the caller adds via
- * {@code ignoring(...)}:
+ * <p>Three keys carry JVM-wide defaults that are <em>prepended</em>
+ * to whatever the caller adds through the builder:
  *
  * <ul>
- *   <li>{@value #JSON_IGNORE_DEFAULTS_KEY}</li>
- *   <li>{@value #XML_IGNORE_DEFAULTS_KEY}</li>
+ *   <li>{@value #JSON_IGNORE_DEFAULTS_KEY} —
+ *       JSON-path patterns to skip during JSON diffs.</li>
+ *   <li>{@value #XML_IGNORE_DEFAULTS_KEY} —
+ *       XPath patterns to skip during XML diffs.</li>
+ *   <li>{@value #JSON_UNORDERED_DEFAULTS_KEY} —
+ *       JSON-path patterns identifying arrays that should be
+ *       compared as multisets (the JSON analogue of
+ *       {@link JsonBuilder#unorderedArrays(String...)}).</li>
  * </ul>
  *
- * <p>Both accept a comma-separated list of patterns and default to
- * empty (no defaults). The values are read once on first use, via
- * the active {@link ConfigResolver}, and cached for the JVM lifetime.
+ * <p>All three accept a comma-separated list and default to empty.
+ * Values are read once on first use via the active
+ * {@link ConfigResolver} and cached for the JVM lifetime.
  *
  * <h2>Util-class convention</h2>
  *
@@ -84,6 +89,17 @@ public abstract class ContentDiff {
     public static final String XML_IGNORE_DEFAULTS_KEY =
             "org.os890.jawelte.module.contentdiff.api.ContentDiff.xml.ignore";
 
+    /**
+     * MP Config key for the per-JVM default list of array paths the
+     * JSON engine should compare with multiset semantics. Same shape
+     * as {@link #JSON_IGNORE_DEFAULTS_KEY}; consumed by
+     * {@link #forJson(String)} and merged with any paths the caller
+     * adds through
+     * {@link JsonBuilder#unorderedArrays(String...)}.
+     */
+    public static final String JSON_UNORDERED_DEFAULTS_KEY =
+            "org.os890.jawelte.module.contentdiff.api.ContentDiff.json.unordered-arrays";
+
     static final String JSON_CONTENT_TYPE = "application/json";
 
     static final String XML_CONTENT_TYPE = "application/xml";
@@ -94,7 +110,7 @@ public abstract class ContentDiff {
 
     private static final ConcurrentMap<String, DiffEngine> CACHED_ENGINES = new ConcurrentHashMap<>();
 
-    private static final ConcurrentMap<String, List<String>> CACHED_IGNORE_DEFAULTS = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, List<String>> CACHED_CSV_DEFAULTS = new ConcurrentHashMap<>();
 
     private ContentDiff() {
     }
@@ -112,8 +128,9 @@ public abstract class ContentDiff {
     public static JsonBuilder forJson(String actualContent) {
         Objects.requireNonNull(actualContent, "actualContent");
         DiffEngine engine = resolveEngine(JSON_CONTENT_TYPE);
-        List<String> defaults = resolveIgnoreDefaults(JSON_IGNORE_DEFAULTS_KEY);
-        return new JsonBuilder(engine, actualContent, defaults);
+        List<String> ignoreDefaults = resolveCsvDefaults(JSON_IGNORE_DEFAULTS_KEY);
+        List<String> unorderedDefaults = resolveCsvDefaults(JSON_UNORDERED_DEFAULTS_KEY);
+        return new JsonBuilder(engine, actualContent, ignoreDefaults, unorderedDefaults);
     }
 
     /**
@@ -129,8 +146,8 @@ public abstract class ContentDiff {
     public static XmlBuilder forXml(String actualContent) {
         Objects.requireNonNull(actualContent, "actualContent");
         DiffEngine engine = resolveEngine(XML_CONTENT_TYPE);
-        List<String> defaults = resolveIgnoreDefaults(XML_IGNORE_DEFAULTS_KEY);
-        return new XmlBuilder(engine, actualContent, defaults);
+        List<String> ignoreDefaults = resolveCsvDefaults(XML_IGNORE_DEFAULTS_KEY);
+        return new XmlBuilder(engine, actualContent, ignoreDefaults);
     }
 
     private static DiffEngine resolveEngine(String contentType) {
@@ -153,17 +170,17 @@ public abstract class ContentDiff {
         return resolved;
     }
 
-    private static List<String> resolveIgnoreDefaults(String configKey) {
-        List<String> cached = CACHED_IGNORE_DEFAULTS.get(configKey);
+    private static List<String> resolveCsvDefaults(String configKey) {
+        List<String> cached = CACHED_CSV_DEFAULTS.get(configKey);
         if (cached != null) {
             return cached;
         }
         ConfigResolver configResolver = TestContext.loadService(ConfigResolver.class);
-        List<String> patterns = configResolver.resolve(configKey)
+        List<String> entries = configResolver.resolve(configKey)
                 .map(ContentDiff::splitCsv)
                 .orElseGet(List::of);
-        CACHED_IGNORE_DEFAULTS.put(configKey, patterns);
-        return patterns;
+        CACHED_CSV_DEFAULTS.put(configKey, entries);
+        return entries;
     }
 
     private static List<String> splitCsv(String csv) {

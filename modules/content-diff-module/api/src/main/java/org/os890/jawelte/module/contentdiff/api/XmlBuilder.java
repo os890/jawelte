@@ -29,11 +29,16 @@ import org.os890.jawelte.module.contentdiff.api.port.DiffEngine;
  *   <li>{@code /root/field} — absolute XPath;</li>
  *   <li>{@code //field} — recursive: skip the element at any depth.</li>
  * </ul>
+ *
+ * <p>XML has no JSON-array analogue, so this builder does not
+ * expose the {@code unorderedArrays(...)} hook of
+ * {@link JsonBuilder}. The underlying {@code DiffOptions} field
+ * is always passed empty by the XML factory.
  */
 public class XmlBuilder extends AbstractContentBuilder<XmlBuilder> {
 
     XmlBuilder(DiffEngine engine, String actualContent, List<String> ignoreDefaults) {
-        super(engine, actualContent, ignoreDefaults);
+        super(engine, actualContent, ignoreDefaults, List.of());
     }
 
     @Override

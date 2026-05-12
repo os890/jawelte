@@ -2447,3 +2447,23 @@ Test-only port-impl classes prefixed with `TestScenario`: `TestScenarioCsvEngine
 Aggregator depMgmt + plugins inherited from parent. Tests need jakarta.enterprise.cdi-api at test scope (TestContext.loadService(ServicePriorityResolver.class) calls `CDI.current()` first inside a try/catch, and the absence of the class triggers `NoClassDefFoundError` which the catch-block doesn't catch).
 
 `mvn test` from `tests/content-diff-module/` is green: 28 successes in ~16s.
+
+## 2026-05-12 — content-diff: per-path unorderedArrays + wip / full-test profiles
+
+Two changes on the open branch.
+
+1. `JsonBuilder.unorderedArrays(String... paths)` accepts JSON-path patterns instead of a global boolean. Arrays whose concrete path matches a configured pattern compare with multiset semantics; arrays whose path matches none stay index-wise. The check is per-array at every level, so a pattern picking out a top-level array can leave nested arrays index-wise, and `["$", "$[*]"]` recovers the old recursive behaviour.
+   - `DiffOptions`: `boolean unorderedArrays` → `List<String> unorderedArrayPaths`.
+   - `AbstractContentBuilder`: drops `unorderedArrays()`; subclasses pick whether to expose it (only `JsonBuilder` does).
+   - `ContentDiff`: new MP Config key `…ContentDiff.json.unordered-arrays`, read once via `ConfigResolver` and prepended to caller patterns the same way the ignore-defaults key is.
+   - `JsonDiffEngine`: builds a `JsonPathMatcher` from `options.unorderedArrayPaths()` and consults it in `diffArrays` + `structurallyEqual` (so multiset semantics propagate via pattern match, not via a recursive flag).
+   - `JsonIgnoreMatcher` → `JsonPathMatcher` (same class is now used for both ignore and unordered concerns).
+   - Scenarios 10/11/12 pass `"$"`; scenario 13 passes `"$"` + `"$[*]"` to match the old nested behaviour.
+
+2. `tests/content-diff-module/pom.xml` now declares two profiles:
+   - `full-test` (`activeByDefault=true`): every scenario. Plain `mvn verify` and `verify-all.sh` activate it.
+   - `wip`: only the scenarios for the topic currently in flight. Activated via `-P wip`; explicit activation deactivates `full-test`, so the wip pass touches only its subset. For this topic the wip profile lists scenarios 10–13.
+
+Workflow: `mvn -P wip ...` during iteration (fast), then `verify-all.sh` (full-test) before finishing the topic.
+
+Wip pass green locally (~3.5 s for 4 scenarios).
