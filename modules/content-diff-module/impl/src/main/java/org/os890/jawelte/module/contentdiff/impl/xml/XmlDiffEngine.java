@@ -69,6 +69,12 @@ import org.xml.sax.helpers.DefaultHandler;
  * predicates ({@code /orders/order/id}), so the diff engine emits
  * unambiguous paths while user patterns stay readable.
  *
+ * <p>Leaf-element text comparison ignores surrounding whitespace —
+ * both sides are {@code String.trim()}-ed before equality. The
+ * document is also DOM-normalised after parsing so adjacent text
+ * nodes (rare but possible around CDATA / comments) collapse into
+ * a single text child before the comparison.
+ *
  * <p>Stateless and thread-safe — every {@link #diff(String, String, DiffOptions)}
  * call constructs its own factories.
  */
@@ -89,6 +95,11 @@ public class XmlDiffEngine implements DiffEngine {
         String interpolatedExpected = ELInterpolator.interpolate(expected, options.elValues());
         Document expectedDocument = parseDocument(interpolatedExpected, "expected");
         Document actualDocument = parseDocument(actual, "actual");
+        // normalize() merges adjacent text nodes and discards empty
+        // ones — turns "<a>hello<!-- comment --> world</a>" into a
+        // single text-node child for the leaf-text comparison below.
+        expectedDocument.getDocumentElement().normalize();
+        actualDocument.getDocumentElement().normalize();
         Map<String, Integer> expectedLines = collectLines(interpolatedExpected);
         XmlPathMatcher ignoreMatcher = XmlPathMatcher.of(options.ignorePatterns());
         List<Difference> differences = new ArrayList<>();
@@ -149,8 +160,12 @@ public class XmlDiffEngine implements DiffEngine {
         List<Element> expectedChildren = elementChildren(expected);
         List<Element> actualChildren = elementChildren(actual);
         if (expectedChildren.isEmpty() && actualChildren.isEmpty()) {
-            String expectedText = expected.getTextContent();
-            String actualText = actual.getTextContent();
+            // Leaf-element text comparison ignores surrounding
+            // whitespace on either side. Indentation, trailing
+            // newlines from XML serialisers, and tab vs space drift
+            // between fixtures shouldn't manifest as diffs.
+            String expectedText = expected.getTextContent().trim();
+            String actualText = actual.getTextContent().trim();
             if (!expectedText.equals(actualText)) {
                 out.add(new Difference(currentPath, expectedText, actualText,
                         lineFor(currentPath, expectedLines)));

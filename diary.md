@@ -2479,3 +2479,9 @@ Introduced SPI ports for the user-facing path-pattern grammar so consumers can s
 - Scenarios 29 / 30: per-scenario sub-modules ship a `META-INF/services` entry to activate the corresponding glob dialect and verify the grammar-specific patterns (`$.*.createdAt` for JSON, `/**/timestamp` for XML) hit at any depth.
 
 Wip pass green: 6 scenarios in ~4.7 s.
+
+## 2026-05-12 — content-diff: whitespace-tolerant XML leaf text
+
+XML engine now trims leading / trailing whitespace from leaf-element `textContent` before equality and DOM-normalises both documents after parsing. Indentation, trailing newlines from serialisers, and adjacent text nodes (CDATA / comments boundaries) no longer surface as diffs.
+
+Scenario 31 (`xml-text-whitespace-trim`) asserts a leaf with padded whitespace equals the clean expected. Spot-checked the existing XML scenarios (14-17) — all green, no regression from the trim/normalise step.

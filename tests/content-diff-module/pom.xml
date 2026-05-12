@@ -192,6 +192,7 @@
                 <module>scenario-28-no-maximum-cap</module>
                 <module>scenario-29-glob-dialect-activated</module>
                 <module>scenario-30-xml-glob-dialect-activated</module>
+                <module>scenario-31-xml-text-whitespace-trim</module>
             </modules>
         </profile>
 
@@ -210,6 +211,7 @@
                 <module>scenario-13-json-unordered-nested</module>
                 <module>scenario-29-glob-dialect-activated</module>
                 <module>scenario-30-xml-glob-dialect-activated</module>
+                <module>scenario-31-xml-text-whitespace-trim</module>
             </modules>
         </profile>
     </profiles>
