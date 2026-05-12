@@ -198,6 +198,7 @@
                 <module>scenario-30-xml-glob-dialect-activated</module>
                 <module>scenario-31-xml-text-whitespace-trim</module>
                 <module>scenario-32-alternative-el-interpolator</module>
+                <module>scenario-33-glob-dialect-exact-path-portable</module>
             </modules>
         </profile>
 
@@ -218,6 +219,7 @@
                 <module>scenario-30-xml-glob-dialect-activated</module>
                 <module>scenario-31-xml-text-whitespace-trim</module>
                 <module>scenario-32-alternative-el-interpolator</module>
+                <module>scenario-33-glob-dialect-exact-path-portable</module>
             </modules>
         </profile>
     </profiles>
