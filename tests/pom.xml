@@ -40,5 +40,6 @@
         <module>jpa-module</module>
         <module>jta-module</module>
         <module>ejb-module</module>
+        <module>content-diff-module</module>
     </modules>
 </project>

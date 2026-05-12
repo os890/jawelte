@@ -2407,3 +2407,168 @@ Deleted JpaConfig.java and its now-empty config/ package; cleaned
 up a stale Javadoc reference in JtaConfig.
 
 verify-all: all 15 phases green (18m 34s).
+
+## 2026-05-12 — TICKET-008: content-diff-module/api skeleton
+
+Branch `16-content-diff-module-content-diff-module` (PR-bound, off issue #16).
+
+Created the `modules/content-diff-module/` aggregator + `content-diff-module/api`:
+
+- Records: `Difference(path, expected, actual, expectedLineNumber)` with a public `MISSING = "<missing>"` sentinel; `DiffOptions(ignorePatterns, unorderedArrays, elValues)` — added `elValues` to the record so EL interpolation values can flow to the engine without the api module pulling in `jakarta.el-api`.
+- Port: `DiffEngine` with `contentType()` + `diff(expected, actual, options)`.
+- Fluent api: `ContentDiff.forJson(...)` / `forXml(...)` resolve the engine through `ServiceLoader.load(DiffEngine.class)` + filter by `contentType()` + `ServicePriorityResolver` from `TestContext.loadService(...)`. Cached per content type in a static `ConcurrentMap`.
+- `AbstractContentBuilder` (package-private, self-typed) holds the shared mutual-exclusion check for `expected(...)` / `expectedContent(...)`, accumulator state for `ignoring(...)` / `unorderedArrays()` / `withValues(...)`, and the multi-line `AssertionError` formatter. `JsonBuilder` / `XmlBuilder` are thin subclasses contributing only `formatName()`.
+- MP Config keys for default ignore patterns (`…ContentDiff.json.ignore` / `…ContentDiff.xml.ignore`) — read once via `ConfigResolver` and prepended to caller-supplied patterns.
+
+Wiring: `modules/pom.xml` registers the new aggregator; parent `pom.xml` adds `jackson.version` / `jakarta.el.version` / `expressly.version` properties and the four depMgmt entries (jackson-databind, jakarta.el-api provided, expressly test, internal content-diff-module api+impl cross-refs).
+
+Ticket: deleted the POC Scope section (full production design) and rewrote the api-row `Compile-time deps` cell to drop `jakarta.el-api` (the api carries `withValues(Map<String, Object>)` only — no EL types).
+
+`mvn -pl modules/content-diff-module/api -am verify` is green (checkstyle, javadoc, RAT, compile).
+
+## 2026-05-12 — TICKET-008: content-diff-module/impl
+
+JSON and XML engine implementations + EL interpolation glue.
+
+- `JsonIgnoreMatcher` / `XmlIgnoreMatcher`: compile JSON-path / XPath patterns to regex with tolerance for optional 1-based `[N]` predicates on XML. Mixed-syntax patterns compile to a `(?!)` regex that matches nothing.
+- `JsonDiffEngine`: Jackson `ObjectMapper.readTree` for both sides + a parallel `JsonParser` pass on expected to collect a `Map<String, Integer>` of path → line. Recursive parallel walk emits `Difference` records; null-vs-missing distinguished (`isNull()` returns "null" sentinel, absent field returns `<missing>`). Unordered-array mode does greedy multiset match (boolean[] marks consumed actual elements; unmatched on either side become differences).
+- `XmlDiffEngine`: DOM parse via `DocumentBuilder` (FEATURE_SECURE_PROCESSING + disallow-doctype-decl); SAX pass via `LineCollectingHandler` for path → line collection (always-`[N]` per same-named sibling). Children grouped by tagName for ordered comparison; attributes compared as unordered sets at path `/parent/@attr`. Text comparison only for leaf elements (no element children).
+- `ELInterpolator`: Jakarta EL `StandardELContext` + `VariableMapper`-bound `${expr}` substitution. Fresh `ExpressionFactory` per call; no sandbox; missing variables surface as `PropertyNotFoundException` from `getValue(...)`.
+- `META-INF/services/.../DiffEngine` lists both engines with a header comment; license-header present per RAT.
+
+`mvn -pl modules/content-diff-module/impl -am verify` is green.
+
+## 2026-05-12 — TICKET-008: 28 scenario sub-modules + tests aggregator
+
+Created `tests/content-diff-module/` aggregator + 28 per-scenario Maven sub-modules covering every section of the ticket: JSON match / mismatch / multi-diff / ignore variants (1-13), XML match / mismatch / ignore (14-17), EL substitution / missing variable / method call / no-sandboxing (18-21), classpath resource present + missing (22-23), SPI custom engine + priority-based override + no-FQCN-key documentation (24-26), and output format + no-max-cap (27-28).
+
+Test-only port-impl classes prefixed with `TestScenario`: `TestScenarioCsvEngine` (scenario 24), `TestScenarioWinningJsonEngine` (scenario 25). Both registered via per-scenario `META-INF/services/.../DiffEngine`.
+
+Aggregator depMgmt + plugins inherited from parent. Tests need jakarta.enterprise.cdi-api at test scope (TestContext.loadService(ServicePriorityResolver.class) calls `CDI.current()` first inside a try/catch, and the absence of the class triggers `NoClassDefFoundError` which the catch-block doesn't catch).
+
+`mvn test` from `tests/content-diff-module/` is green: 28 successes in ~16s.
+
+## 2026-05-12 — content-diff: per-path unorderedArrays + wip / full-test profiles
+
+Two changes on the open branch.
+
+1. `JsonBuilder.unorderedArrays(String... paths)` accepts JSON-path patterns instead of a global boolean. Arrays whose concrete path matches a configured pattern compare with multiset semantics; arrays whose path matches none stay index-wise. The check is per-array at every level, so a pattern picking out a top-level array can leave nested arrays index-wise, and `["$", "$[*]"]` recovers the old recursive behaviour.
+   - `DiffOptions`: `boolean unorderedArrays` → `List<String> unorderedArrayPaths`.
+   - `AbstractContentBuilder`: drops `unorderedArrays()`; subclasses pick whether to expose it (only `JsonBuilder` does).
+   - `ContentDiff`: new MP Config key `…ContentDiff.json.unordered-arrays`, read once via `ConfigResolver` and prepended to caller patterns the same way the ignore-defaults key is.
+   - `JsonDiffEngine`: builds a `JsonPathMatcher` from `options.unorderedArrayPaths()` and consults it in `diffArrays` + `structurallyEqual` (so multiset semantics propagate via pattern match, not via a recursive flag).
+   - `JsonIgnoreMatcher` → `JsonPathMatcher` (same class is now used for both ignore and unordered concerns).
+   - Scenarios 10/11/12 pass `"$"`; scenario 13 passes `"$"` + `"$[*]"` to match the old nested behaviour.
+
+2. `tests/content-diff-module/pom.xml` now declares two profiles:
+   - `full-test` (`activeByDefault=true`): every scenario. Plain `mvn verify` and `verify-all.sh` activate it.
+   - `wip`: only the scenarios for the topic currently in flight. Activated via `-P wip`; explicit activation deactivates `full-test`, so the wip pass touches only its subset. For this topic the wip profile lists scenarios 10–13.
+
+Workflow: `mvn -P wip ...` during iteration (fast), then `verify-all.sh` (full-test) before finishing the topic.
+
+Wip pass green locally (~3.5 s for 4 scenarios).
+
+## 2026-05-12 — content-diff: pluggable pattern dialects (JSON + XML)
+
+Introduced SPI ports for the user-facing path-pattern grammar so consumers can swap the default JSONPath / XPath compilers for alternatives without touching the engines.
+
+- `JsonPatternDialect` + `XmlPatternDialect` ports in `api/port`; each exposes `compile(String) -> Pattern`.
+- Default impls in `impl/dialect/`: `JsonPathStyleDialect` and `XPathStyleDialect`, each at `@Priority(Integer.MAX_VALUE)`, registered in `META-INF/services`. Behaviour unchanged from before.
+- Alternative impls `JsonGlobDialect` and `XmlGlobDialect` ship in the same jar at `@Priority(Integer.MAX_VALUE - 1)` but are NOT in the default services file. Consumers activate one by dropping a one-line `META-INF/services/.../JsonPatternDialect` (or `…XmlPatternDialect`) into their test resources — the project-wide priority resolver then picks the alternative over the default.
+- `JsonPathMatcher` (already renamed earlier in this session) now resolves the dialect via `TestContext.loadService` and delegates `compile`. `XmlIgnoreMatcher` renamed to `XmlPathMatcher` for symmetry; same delegation shape. The matchers stayed lightweight (compile-time list + runtime `matches(...)` loop).
+- Scenarios 29 / 30: per-scenario sub-modules ship a `META-INF/services` entry to activate the corresponding glob dialect and verify the grammar-specific patterns (`$.*.createdAt` for JSON, `/**/timestamp` for XML) hit at any depth.
+
+Wip pass green: 6 scenarios in ~4.7 s.
+
+## 2026-05-12 — content-diff: whitespace-tolerant XML leaf text
+
+XML engine now trims leading / trailing whitespace from leaf-element `textContent` before equality and DOM-normalises both documents after parsing. Indentation, trailing newlines from serialisers, and adjacent text nodes (CDATA / comments boundaries) no longer surface as diffs.
+
+Scenario 31 (`xml-text-whitespace-trim`) asserts a leaf with padded whitespace equals the clean expected. Spot-checked the existing XML scenarios (14-17) — all green, no regression from the trim/normalise step.
+
+## 2026-05-12 — content-diff: cached ObjectMapper + pluggable EL interpolator
+
+Two related changes wrapping up the engine-internals revisions.
+
+- `JsonDiffEngine` now holds a single `static final ObjectMapper` shared across calls. Jackson documents the type as thread-safe after configuration; we never mutate it after construction. Eliminates the per-call instantiation cost (Jackson's type-cache rebuild). Future-flex note appended to `todo.md` for a more configurable cache (modules, parser features) when a consumer asks.
+
+- New SPI port `ELInterpolator` in `api/port` (single method `interpolate(template, values) -> String`). The previous static-utility `ELInterpolator` is renamed to `JakartaELInterpolator` and reborn as the default SPI impl at `@Priority(Integer.MAX_VALUE)`, registered in services. Engines resolve the impl via `TestContext.loadService(ELInterpolator.class)` per call. Consumers swap in their own interpolator (no-op, MVEL, …) by registering an alternative at a lower priority value.
+
+- Default EL provider switched from GlassFish Expressly to Apache Tomcat `tomcat-embed-el` at the depMgmt level. The `JakartaELInterpolator` is provider-agnostic (routes through `ExpressionFactory.newInstance()`), so the swap is a build-time choice — Expressly remains pinned in depMgmt and consumers select it by replacing the dep in their own pom.
+
+- Scenario 32 ships a test-scoped pass-through interpolator + `META-INF/services` line; verifies that the alternative impl wins through the SPI lookup and the diff sees the un-interpolated template.
+
+Wip pass green (8 scenarios). Spot-checked scenarios 18–21 (Jakarta EL behaviour) against the new Tomcat dep — all green.
+
+## 2026-05-12 — content-diff: align impl package layout with jpa-module
+
+Restructured `content-diff-module/impl` to match the project's
+convention of port impls under `impl.adapter.<concern>` and
+non-adapter helpers under `impl.util`.
+
+- `impl.json.JsonDiffEngine` → `impl.adapter.json.JsonDiffEngine`
+- `impl.xml.XmlDiffEngine` → `impl.adapter.xml.XmlDiffEngine`
+- `impl.dialect.{Json,Xml}{PathStyle,Glob}Dialect` → `impl.adapter.dialect.…`
+- `impl.el.JakartaELInterpolator` → `impl.adapter.el.JakartaELInterpolator`
+- `impl.internal.{Json,Xml}PathMatcher` → `impl.util.…`
+
+Engines update their imports for the relocated `…util.JsonPathMatcher` / `…util.XmlPathMatcher`. Four main `META-INF/services` files updated to reference the new FQCNs; three test-scoped scenario services files (29, 30, 33) updated likewise.
+
+Wip pass green (9 scenarios).
+
+## 2026-05-12 — content-diff topic ships; wip workflow generalised
+
+- `tests/content-diff-module/pom.xml`: removed both the
+  `full-test` and `wip` profile wrappers; scenarios are listed
+  directly in the top-level `<modules>` block again, matching
+  the shape every other test aggregator uses. The two profiles
+  were a per-topic scaffold; once a topic ships its profile is
+  taken back out.
+- `verify-all.sh`: parametrised. No args → same full matrix as
+  before. `wip` arg → install phase only, then verify each
+  `tests/<module>/pom.xml` that declares an `<id>wip</id>`
+  profile, activating that profile and skipping the coverage
+  aggregation. The next ticket adds its own wip profile to the
+  relevant test aggregator; the script picks it up
+  automatically.
+- Ticket NFR section: removed the wip / full-test bullet (those
+  are project-level developer scaffolding, not part of the
+  module's contract).
+
+## 2026-05-12 — content-diff: lift impl coverage from 68% to 98%
+
+Eight new scenarios (34-41) target the previously-untested
+branches inside the impl module:
+
+- **34** XML attribute diff (missing / extra / different value)
+  — exercises `XmlDiffEngine.diffAttributes` and the
+  `attributes(...)` helper that nothing reached before.
+- **35** XML element count mismatch on same-name siblings +
+  root element name mismatch + `summarise(...)` leaf-text,
+  empty self-closing, and parent-with-children branches.
+- **36** Malformed content: bad JSON expected, bad JSON actual,
+  bad XML — covers the three `catch (IOException|Exception)`
+  paths that throw `IllegalArgumentException`.
+- **37** JSON type mismatch (object vs array) + ordered-array
+  size mismatch (extras on actual, missing on actual) +
+  unordered "extra in actual" path.
+- **38** Dialect edge shapes: JSON specific-index pattern,
+  XML explicit predicate, malformed-pattern throws (unclosed
+  bracket + empty step name), non-slash-starting XML pattern
+  resolving to MATCHES_NOTHING.
+- **39** XmlGlob single-segment wildcard (`/*/elem`) + predicate
+  inside literal segment + non-slash-starting MATCHES_NOTHING
+  on the glob side.
+- **40** EL interpolator unbalanced `${` (the `closing == -1`
+  break path that copies the remainder verbatim and exits the
+  substitution loop).
+- **41** Unordered multiset matching of complex nested
+  structures — exercises every branch of
+  `JsonDiffEngine.structurallyEqual` (`visibleFields` helper,
+  type-mismatch return-false, recursive object/array compares).
+
+All eight added to `coverage-report/pom.xml` so `report-aggregate`
+sees their `jacoco.exec`. Aggregate impl coverage moved from
+68% / 58% to **98% / 89%** (instructions / branches). Every
+package now sits at >= 81% branch coverage; the matchers in
+`impl.util` are at 100%.

@@ -78,6 +78,10 @@
         <narayana.jta.version>7.0.0.Final</narayana.jta.version>
         <jboss.transaction.spi.version>8.0.0.Final</jboss.transaction.spi.version>
         <atomikos.version>6.0.1</atomikos.version>
+        <jackson.version>2.18.2</jackson.version>
+        <jakarta.el.version>6.0.1</jakarta.el.version>
+        <expressly.version>6.0.0</expressly.version>
+        <tomcat.el.version>11.0.7</tomcat.el.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -278,6 +282,62 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-ejb-module-impl</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal content-diff-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-content-diff-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-content-diff-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!--
+                Jackson supplies the JSON tree + parser-level line-number
+                tracking that content-diff-module/impl's JsonDiffEngine
+                consumes. compile scope — content-diff-module/impl ships
+                Jackson transitively to its consumers, matching the
+                project pattern that "compile-scope deps in
+                modules/.../impl are part of the public surface".
+            -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+
+            <!--
+                Jakarta EL: api on the production side is provided —
+                content-diff-module/impl's JakartaELInterpolator routes
+                through ExpressionFactory.newInstance() and so works
+                against any compliant provider. The project pins
+                Apache Tomcat's tomcat-embed-el as the default
+                test-scope provider; GlassFish Expressly is also pinned
+                here, also at test scope, and consumers swap to it (or
+                anywhere else) by replacing the dep in their own pom
+                without a code change.
+            -->
+            <dependency>
+                <groupId>jakarta.el</groupId>
+                <artifactId>jakarta.el-api</artifactId>
+                <version>${jakarta.el.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.tomcat.embed</groupId>
+                <artifactId>tomcat-embed-el</artifactId>
+                <version>${tomcat.el.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.glassfish.expressly</groupId>
+                <artifactId>expressly</artifactId>
+                <version>${expressly.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <!--
