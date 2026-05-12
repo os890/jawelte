@@ -29,8 +29,7 @@ import org.os890.jawelte.core.api.port.TestContext;
  *
  * <p>Lives in {@code impl.config} (not under {@code impl.adapter}) —
  * a {@code @ConfigBean} facade is config <em>for</em> the adapters,
- * not an adapter / port impl in its own right. Mirrors jpa-module's
- * {@code JpaConfig}.
+ * not an adapter / port impl in its own right.
  *
  * <p>The {@code @ConfigBean} stereotype meta-applies
  * {@code @ApplicationScoped}, so the CDI-managed instance lives once

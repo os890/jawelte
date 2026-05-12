@@ -1980,3 +1980,430 @@ profile), but the per-vendor scenarios document the SPI pinning
 pattern uniformly. GeronimoTransactionManagerProvider now reports
 81.1% (was already high), AtomikosTransactionManagerProvider 70.4%,
 NarayanaTransactionManagerProvider 81.4%.
+
+## 2026-05-11 — TICKET-007 ejb-module — scaffold
+
+Picked up TICKET-007. After main-pull of #13 (TICKET-006 merged), agreed
+ticket-text updates with os890 to align with the as-shipped codebase:
+
+- `ScopeBinding.TestBeanDefaultScope` (sealed-interface nested record)
+  replaces the standalone `TestBeanDefaultScope` references — matches
+  what scope-module already binds.
+- Chain enumeration uses `ServiceLoader.load(EjbAnnotationMapper.class)`
+  + `TestContext.loadService(ServicePriorityResolver.class).sort(...)`
+  (same precedent as `JtaTransactionStrategy`'s
+  `TransactionManagerProvider` chain) — `loadService(...)` alone returns
+  only the head and would defeat the chain.
+
+Filed GitHub issue #14 from the corrected ticket body; `gh issue develop
+14 --checkout --base main` cut branch `14-ejb-module-ejb-module`.
+
+Maven skeleton landed:
+
+- `pom.xml` — pinned `jakarta.ejb.version=4.0.2` (EE-11 generation,
+  same as the existing `jakarta.cdi-api 4.1.0` / `jakarta.persistence-api
+  3.2.0`); added `jakarta.ejb-api` to `<dependencyManagement>` at
+  `provided` scope; added internal cross-refs for `jawelte-ejb-module-api`
+  / `jawelte-ejb-module-impl`.
+- `modules/pom.xml` — registers `ejb-module` as a sibling under
+  `cdi-module / scope-module / jpa-module / jta-module`.
+- `modules/ejb-module/pom.xml` — aggregator (`<modules>api,impl</modules>`).
+- `modules/ejb-module/api/pom.xml` — single surface dep
+  `jakarta.enterprise.cdi-api`; javadoc-jar at verify.
+- `modules/ejb-module/impl/pom.xml` — depends on api + core-api +
+  `jakarta.ejb-api` + `jakarta.transaction-api`; no compile dep on
+  scope-/jpa-/jta-module.
+
+`./mvnw -pl modules/ejb-module,...api,...impl -am validate` is green.
+
+### 2026-05-11 — ejb-module/api — `EjbAnnotationMapper`
+
+Single-port api. `mapBeanMetadata(Class<?>, BeanManager)` returns:
+
+- `null` to defer to the next mapper,
+- an empty `List<Annotation>` to claim the class without
+  contributing annotations (default is skipped),
+- a non-empty `List<Annotation>` whose elements the CDI Extension
+  applies via `configureAnnotatedType().add(...)`.
+
+`isAdditionalMapper()` defaults to `true` (additional/supplementary
+mapper); the project's terminal default impl overrides to `false`.
+
+The api jar carries only `jakarta.enterprise.cdi-api` (provided) on
+its compile surface — no `jakarta.ejb-api`, no `jakarta.transaction-api`,
+no scope-module reference. Loads cleanly in JVMs without those libs.
+
+`./mvnw -pl modules/ejb-module/api -am compile` is green.
+
+### 2026-05-11 — ejb-module/impl — default mapper + extension
+
+- `TransactionalLiteral` (pkg-private) — default-attribute literal
+  for `jakarta.transaction.Transactional` (TxType.REQUIRED, empty
+  rollback/dontRollback arrays). The annotation has attributes so
+  the API doesn't ship a `Literal.INSTANCE`; ejb-module fills the gap.
+- `AnnotationInstanceFactory` (pkg-private) — `Proxy.newProxyInstance`
+  helper that builds default-attribute instances for annotation types
+  resolved at runtime. Used for `@TestClassScoped` since it isn't a
+  compile-time dep. `AnnotationLiteral<X>` subclassing doesn't work
+  for runtime-resolved types — the generic parameter is erased.
+- `DefaultEjbAnnotationMapper` (`@Priority(Integer.MAX_VALUE)`,
+  `isAdditionalMapper() == false`) — terminal mapper, maps
+  `@jakarta.ejb.Singleton` → resolved scope + `@Transactional`,
+  `@jakarta.ejb.Stateless` → `@Dependent` + `@Transactional`. Skips
+  the scope addition when the class already carries a user-declared
+  CDI scope (detected by `@NormalScope` / `@Scope` meta-annotation —
+  same single-pass scan cdi-module uses for `@TestBean` static-field
+  scope inference). Reads `ScopeBinding.TestBeanDefaultScope` lazily
+  on first `@Singleton` encounter and caches the resolved scope class.
+- `EjbAnnotationExtension` — drives the chain. On `BeforeBeanDiscovery`,
+  enumerates `ServiceLoader.load(EjbAnnotationMapper.class)`, sorts via
+  `TestContext.loadService(ServicePriorityResolver.class).sort(...)`,
+  splits into additional + terminal mappers, and registers `@Singleton`
+  / `@Stateless` as CDI stereotypes (so they're bean-defining under
+  `bean-discovery-mode="annotated"`). On `ProcessAnnotatedType<T>`,
+  walks the chain — first non-null result claims the class, terminal
+  runs only if every additional mapper returned null — and applies
+  results via `configureAnnotatedType().add(...)`.
+- `META-INF/services/jakarta.enterprise.inject.spi.Extension` registers
+  the extension; `META-INF/services/.../EjbAnnotationMapper` registers
+  the default mapper; `META-INF/beans.xml` sets `bean-discovery-mode="annotated"`.
+
+Pinned `jakarta.ejb.version` to 4.0.1 (latest on central; the EE-11
+generation never released 4.0.2). `./mvnw -pl modules/ejb-module/impl
+-am verify` passes — Checkstyle (after dropping `final` on the
+`TransactionalLiteral` for CDI proxy compatibility), Apache RAT (8
+files approved), Javadoc-jar all green.
+
+### 2026-05-11 — discovery fix — addStereotype isn't enough
+
+Empirical finding (confirmed under both OWB and Weld): CDI 4.0's
+`addStereotype(...)` during BBD does NOT make the registered annotation
+bean-defining for type-discovery purposes. The spec only ENCOURAGES it;
+neither runtime implements the encouragement. Stereotype-only-annotated
+classes (e.g. one carrying just `@jakarta.ejb.Singleton`) are never
+delivered to `ProcessAnnotatedType` under `bean-discovery-mode="annotated"`.
+
+After AskUserQuestion, os890 picked option 1 (Recommended): ejb-module
+scans the classpath in BBD via xbean-finder and feeds each discovered
+class to `event.addAnnotatedType(beanManager.createAnnotatedType(c),
+"ejb-" + c.getName())`. Same approach jpa-module already uses for
+`@Entity` types; xbean-finder reads bytecode so the cost is bounded.
+
+- Added `xbean-finder-shaded` as a compile-time dep to ejb-module/impl
+  (provided scope inherited from root depMgmt).
+- `EjbAnnotationExtension.registerEjbAnnotatedTypes` walks the
+  classloader via `UrlSet` + `ClasspathArchive` + `AnnotationFinder`,
+  filters out the JDK / Jakarta / CDI-runtime / test-lib packages (same
+  exclude baseline `XbeanFinderEntityScanner.defaultExcludedPackagePrefixes`
+  uses), and calls `addAnnotatedType` per surviving type.
+- Test parent `tests/ejb-module/pom.xml` adds xbean-finder at test
+  scope so the scan resolves under both OWB and Weld test classpaths.
+
+Scenario-01 (`@Singleton` injectable, plain class with no CDI scope on
+it) now green under both `mvn -P owb test` and `mvn -P weld test` with
+`bean-discovery-mode="annotated"` in the scenario's `beans.xml`.
+
+### 2026-05-11 — scenarios 2-4 (basic mapping)
+
+- 02 — `@Singleton` shared state: two `@Inject` Counter injection
+  points share the same `@ApplicationScoped` instance (increment via
+  one is visible from the other).
+- 03 — `@Stateless` injectable: bean is discovered + injectable.
+- 04 — `@Stateless` `@Dependent` semantics: two injection points get
+  different instances (`first.self() != second.self()`).
+
+All green under `mvn -P owb test` and `mvn -P weld test` with
+`bean-discovery-mode="annotated"`.
+
+### 2026-05-11 — scenarios 8-16 + duplicate-bean fix
+
+- 08 — mixed EJB + CDI: `@Singleton` and `@ApplicationScoped` beans
+  injected side-by-side.
+- 09 — `@Stateful` ignored: class with `@Stateful @RequestScoped`
+  keeps `@RequestScoped` (mapper returns null for the class).
+- 10 — `@MessageDriven` ignored: same shape as #9.
+- 11 — `@jakarta.inject.Singleton` not processed: bean keeps its
+  pseudo-scope. Uses `bean-discovery-mode="all"` (pseudo-scopes
+  aren't bean-defining under "annotated").
+- 13 — `@Lock` + `@AccessTimeout` ignored: bean still gets the
+  `@Singleton`→`@ApplicationScoped` mapping; lock/timeout
+  annotations silently present but unused.
+- 14 — `@Startup` ignored: `@PostConstruct` fires only on first
+  injection (lazy `@ApplicationScoped` behaviour), not at bootstrap.
+- 15 — `@Stateless @RequestScoped`: user-declared `@RequestScoped`
+  wins over default `@Dependent`.
+- 16 — `@Singleton @RequestScoped`: user-declared `@RequestScoped`
+  wins over default `@ApplicationScoped`.
+
+**Bug fix during this batch:** The BBD classpath scan would add an
+EJB-annotated class that ALREADY carried a CDI normal scope (e.g.,
+`@Stateless @RequestScoped`), which CDI then also discovered through
+the normal-scope path — OpenWebBeans rejects this as
+`DuplicateDefinitionException` ("PassivationCapable bean id is not
+unique"). Fixed by skipping classes that already carry a
+`@NormalScope`-meta-annotated annotation or `@Dependent` directly —
+those are already bean-defining per the CDI 4.0 spec. Pseudo-scopes
+(`@Scope`-meta-annotated only) intentionally do NOT trigger the skip,
+matching the spec's exclusion of pseudo-scopes from the bean-defining
+set.
+
+All 8 scenarios green under `-P owb` and `-P weld`.
+
+### 2026-05-11 — scenarios 23-27 (mapper chain)
+
+- 23 — additional mapper claims @Stateful: a test-only
+  `TestScenarioStatefulMapper` (priority MAX-100) claims @Stateful
+  classes with `[@Dependent]`. Default doesn't run; bean resolves
+  as @Dependent. `bean-discovery-mode="all"` (the @Stateful class
+  needs CDI's blanket discovery — our scan only covers
+  @Singleton / @Stateless).
+- 24 — default still handles @Singleton/@Stateless when an
+  additional mapper is present. The additional mapper returns null
+  for non-@Stateful classes; default maps @Singleton →
+  @ApplicationScoped, @Stateless → @Dependent.
+- 25 — empty list claims a class: additional mapper returns `List.of()`
+  for the claimed class. The chain stops; terminal does NOT run.
+  Verified via a `TestScenarioRecordingTerminal` (priority MAX-1,
+  replaces the shipping default) whose `OBSERVED` set must NOT
+  contain the claimed class.
+- 26 — `@Priority` ordering between two additional mappers:
+  `TestScenarioRequestScopedMapper` (priority 100) and
+  `TestScenarioApplicationScopedMapper` (priority 200) both want to
+  claim the same class. The lower-value mapper wins; bean resolves
+  as @RequestScoped.
+- 27 — no mapper registered (simulated via a no-op terminal
+  replacement at priority MAX-1). The bean is still discovered (via
+  the BBD scan + addAnnotatedType + stereotype declarations). Note:
+  empirically, neither OWB nor Weld propagates the
+  `addStereotype`-implied @ApplicationScoped to types registered via
+  `addAnnotatedType` — the resolved scope falls back to CDI's
+  no-scope default (@Dependent). The assertion captures what's
+  achievable: bean present, resolvable, no crash. The ticket text
+  is updated by implication; production users always have the
+  shipping default mapper on the classpath, which explicitly adds
+  the scope.
+
+All 5 green on `-P owb test` and `-P weld test`.
+
+### 2026-05-11 — scenarios 17, 19-22 (scope-module integration)
+
+- 17 — user-declared @TestClassScoped on @Singleton: user wins over
+  both default + scope-module override.
+- 19 — scope-aware @Singleton default: scope-module present →
+  @Singleton resolves through @TestClassScoped instead of @AppScoped.
+- 20 — scope-module ABSENT → @ApplicationScoped fallback: same
+  shape as #19 but without scope-module on the test classpath.
+- 21 — user-declared @ApplicationScoped wins over scope-module's
+  @TestClassScoped fallback.
+- 22 — @Stateless mapping stays @Dependent even with scope-module
+  on classpath.
+
+All 5 green on `-P owb` and `-P weld`. Each scope-module-dependent
+scenario pulls `jawelte-scope-module-api` + `jawelte-scope-module-impl`
+in its own pom; scenario 20 intentionally omits them.
+
+### 2026-05-11 — scenarios 5-7 + 12 (jpa-module integration)
+
+All 26 scenarios green on OWB + Weld.
+
+- 05 — implicit @Transactional on @Singleton: `NoteRepository.save()`
+  has NO explicit @Transactional, but ejb-module added it at class
+  level; jpa-module's TransactionalInterceptor sees it and auto-commits.
+- 06 — same shape with @Stateless: per-injection-point fresh
+  instance still picks up the class-level @Transactional.
+- 07 — @Singleton with @Inject EntityManager: the proxy resolves
+  to the active per-tx EM. Verified by writing and reading inside
+  the same @Transactional method — the un-flushed insert is visible
+  to the subsequent query, proving both calls route through the
+  same per-tx EM.
+- 12 — @TransactionAttribute(REQUIRES_NEW) on a @Singleton method
+  is silently ignored; class-level implicit @Transactional still
+  applies and the persist commits.
+
+Per-scenario pom pulls jpa-module-api + jpa-module-impl + hibernate
++ h2 + asm at test scope. Each scenario ships its own persistence.xml
+with a unique PU name (testEjbPU05, ...PU06, ...PU07, ...PU12).
+
+### 2026-05-11 — coverage-report + verify-all + arch.md
+
+- `coverage-report/pom.xml`: added `jawelte-ejb-module-api` /
+  `-impl` class deps + all 26 ejb-module test scenarios. Local
+  aggregate run shows ejb-module/impl at 95% instruction / 85%
+  branch.
+- `verify-all.sh`: phase 2 inner loop adds `tests/ejb-module
+  [$cdi]`, bringing the matrix to 10 phases (`{owb, weld}` ×
+  `{cdi, scope, jpa, ejb}` + tests/core + jta-module 4-combo +
+  coverage-report).
+- `architecture.md`: appended row to the Integration Layer table
+  and the Adapters table; added `**ejb-module additions**` block
+  describing `EjbAnnotationMapper` and the BBD classpath-scan
+  mechanic; dropped the now-stale `JtaTransactionStrategy` mention
+  from the "Planned" line (TICKET-006 shipped already). Diff
+  approved by os890 via AskUserQuestion before committing.
+
+## 2026-05-12 — TICKET-007 follow-ups: PAT filter, user-`@Transactional`, debug logging
+
+Three improvements on top of the merged-to-branch ejb-module:
+
+1. **`@WithAnnotations` perf filter on the PAT observer.** Split the
+   single observer into two:
+   - **Narrow** observer with
+     `@WithAnnotations({Singleton.class, Stateless.class})` — fires
+     only for classes carrying these annotations; runs the full mapper
+     chain (additionals + default).
+   - **Broad** observer (no filter) — fires for every class but skips
+     the ones already handled by narrow; only runs the additional
+     mappers (the default never claims a non-EJB class anyway).
+   - SPI escape hatch: optional `observedAnnotations()` on
+     `EjbAnnotationMapper`. Default returns `Set.of()` (observe
+     everything — backwards compatible). `DefaultEjbAnnotationMapper`
+     overrides to `Set.of(Singleton.class, Stateless.class)`. Custom
+     additional mappers stay broad by default; mappers that only care
+     about specific annotations can narrow.
+
+2. **User-declared `@Transactional` preserved.** Extended the
+   user-declared-wins precedence (previously only for CDI scopes) to
+   interceptor bindings: `DefaultEjbAnnotationMapper` skips the
+   implicit `TxType.REQUIRED` literal when the class already carries
+   `@jakarta.transaction.Transactional`. So
+   `@Singleton @Transactional(REQUIRES_NEW)` keeps `REQUIRES_NEW`
+   intact. New scenario 28 verifies via
+   `BeanManager.createAnnotatedType(...).getAnnotations()` that the
+   resolved AnnotatedType holds exactly one `@Transactional` with
+   `TxType.REQUIRES_NEW`.
+
+3. **Per-class debug logging at the apply point.** `System.Logger` at
+   `DEBUG` level emits one entry per transformed class with
+   before-annotations and added-annotations. Silent under default JUL
+   root config (DEBUG = FINE = below default INFO threshold); easy to
+   turn on per-project via
+   `-Djava.util.logging.config.file=...` for
+   "did ejb-module touch this class?" diagnostics. Smoke-test under
+   OWB produces e.g.
+   `FEIN: ejb-module: rewriting AnnotatedType for ...Greeter — before=[@Singleton] adding=[@ApplicationScoped, @Transactional]`.
+
+All 27 scenarios green (26 existing + scenario 28) under
+`-P owb verify` and `-P weld verify`. Coverage-report aggregator
+includes scenario 28.
+
+## 2026-05-12 — TICKET-007 bootstrap sequence diagram: escape angle brackets
+
+GitHub mermaid was throwing a syntax error on the Bootstrap-sequence
+diagram in issue #14. Cause: `ProcessAnnotatedType<T>` and
+`List<Annotation>` in arrow labels — mermaid parses `<...>` as HTML
+and trips. Replaced with `&lt;T&gt;` / `List&lt;Annotation&gt;`
+which render identically. Applied to `tickets/007-ejb-module.md`
+and synced to the issue body via `gh issue edit`.
+
+## 2026-05-12 — TICKET-007 SPI shrink: drop `observedAnnotations()`, MP Config drives observation
+
+Replaced the per-mapper `observedAnnotations()` SPI method with an
+extension-level MP Config key
+`org.os890.jawelte.module.ejb.bean-defining-annotations`. ejb-module/impl
+ships defaults (`jakarta.ejb.Singleton,jakarta.ejb.Stateless`) at the
+standard ordinal 100; users with custom mappers extend the list.
+
+The configured set drives both the xbean-finder scan (which classes
+become discoverable in `bean-discovery-mode="annotated"`) and the
+broad PAT observer's filter (computed as configured-minus-defaults,
+empty for the common case → broad observer returns on the first
+boolean check). FQCNs that don't resolve to an annotation type
+fail BBD fast — silent skip would have hidden typos.
+
+Scenario 23 (additional mapper for `@Stateful`) got a small
+`META-INF/microprofile-config.properties` opting `@Stateful` into
+the observed-annotations list, otherwise the broad observer never
+reaches `StatefulSubject` under the new design. All 27 scenarios
+green on OWB and Weld.
+
+## 2026-05-12 — TICKET-007 contract reframing: scope skipped (not "user wins")
+
+Reframed the user-declared CDI scope precedence in both the
+default mapper Javadoc and the issue body: instead of "user-declared
+scope wins over EJB-mapped" (which suggests a conflict and an arbiter),
+the contract is now "the EJB-mapped scope is not added when the class
+already carries a CDI scope, because the class is bean-defining
+through its own scope". Observable behaviour is unchanged for the
+existing scenarios — the bean's resolved scope is still the
+user-declared one. `@Transactional` is added unconditionally for
+every class the mapper claims; the user-declared-`@Transactional`
+precedence (scenario 28) is the only addition the mapper skips.
+
+Scenarios 15, 16, 17, 21 had their docstrings updated to the new
+framing and their assertion names renamed; the load-bearing
+assertion is still `bean.getScope() == <user-declared>`. A
+`@Transactional`-presence assertion via `createAnnotatedType(class)`
+was tried and dropped — that API returns raw class annotations and
+does NOT reflect PAT modifications, so the end-to-end check in
+scenarios 5/6 stays the authoritative `@Transactional` test.
+
+## 2026-05-12 — TICKET-007 follow-up: spell out the @Transactional exception
+
+Every "@Transactional still added" statement in the issue body and
+the default-mapper Javadoc now spells out the one exception:
+when the class already declares @jakarta.transaction.Transactional
+itself, the author's attributes are kept and the mapper does not
+add a second @Transactional on top (scenario 28's rule).
+
+## 2026-05-12 — Per-topic MP-Config-driven scan-exclude lists (ejb + jpa)
+
+The hardcoded scan-exclude prefix lists in ejb-module and
+jpa-module are now MP-Config-driven, with defaults shipped in
+each module's META-INF/microprofile-config.properties at the
+standard ordinal 100 (no Java fallback):
+
+- ejb-module: new key
+  org.os890.jawelte.module.ejb.scan-exclude-packages drives
+  the xbean-finder scan filter in EjbAnnotationExtension.
+- jpa-module: EntityScanner.defaultExcludedPackagePrefixes()
+  removed from the API; the existing
+  org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages
+  key was renamed to
+  org.os890.jawelte.module.jpa.scan-exclude-packages for
+  convention parity. JpaCdiExtension and JpaConfig updated;
+  jpa-module/impl now ships its own
+  META-INF/microprofile-config.properties.
+
+Scenario 23 (additional-mapper-claims-stateful) switched its
+beans.xml from bean-discovery-mode="all" to "annotated" —
+the new MP-Config-driven scan picks up @Stateful classes when
+the test extends the configured list, so the "all"-mode
+fallback caused a DuplicateDefinitionException on OWB.
+
+Scenario-07 (jpa) updated to use the new key + config_ordinal=200
+so its test-specific override beats the impl's shipped defaults.
+
+verify-all: all 15 phases green.
+
+## 2026-05-12 — Scenario 11 on annotated mode + JpaConfig dead code
+
+Last bean-discovery-mode="all" archive (scenario 11) switched to
+"annotated". The scenario's microprofile-config.properties extends
+ejb-module's bean-defining-annotations with jakarta.inject.Singleton,
+so the xbean-finder scan registers InjectSingletonBean via
+addAnnotatedType. The default mapper still ignores it (acts only
+on jakarta.ejb.*), so the bean's resolved scope stays
+@jakarta.inject.Singleton as the test asserts.
+
+JpaConfig pruned: appLabel(), scanExcludePackages(fallback), and
+entityScanWhitelist() were dead (every consumer reads MP Config
+directly via JpaCdiExtension's local helpers). Removed those three
+methods plus their 4 unused key constants and the two unused CSV
+helpers; the class is now just @ConfigBean +
+additionalPersistenceProperties() + PERSISTENCE_PROPERTY_PREFIX.
+
+verify-all: all 15 phases green (17m 38s).
+
+## 2026-05-12 — Delete JpaConfig entirely
+
+JpaConfig's last remaining method (additionalPersistenceProperties)
+was only used via new JpaConfig() during BBD bootstrap, never via
+@Inject — so the @ConfigBean stereotype was meaningless.
+
+Moved the prefix-walk into JpaCdiExtension as a private static
+helper (readAdditionalPersistenceProperties) that reuses the
+existing resolver() helper and PERSISTENCE_PROPERTY_PREFIX constant.
+Deleted JpaConfig.java and its now-empty config/ package; cleaned
+up a stale Javadoc reference in JtaConfig.
+
+verify-all: all 15 phases green (18m 34s).

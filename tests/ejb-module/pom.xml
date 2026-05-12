@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-ejb-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/ejb-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-ejb-module. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld). Scenarios that need scope-module or jpa-module pull those deps in their own pom; the parent only ships the always-needed stack (core + cdi-module + ejb-module).</description>
+
+    <modules>
+        <module>scenario-01-singleton-injectable</module>
+        <module>scenario-02-singleton-shared-state</module>
+        <module>scenario-03-stateless-injectable</module>
+        <module>scenario-04-stateless-dependent-semantics</module>
+        <module>scenario-08-mixed-ejb-and-cdi</module>
+        <module>scenario-09-stateful-ignored</module>
+        <module>scenario-10-messagedriven-ignored</module>
+        <module>scenario-11-inject-singleton-not-processed</module>
+        <module>scenario-13-lock-and-accesstimeout-ignored</module>
+        <module>scenario-14-startup-ignored</module>
+        <module>scenario-15-stateless-requestscoped</module>
+        <module>scenario-16-singleton-requestscoped</module>
+        <module>scenario-23-additional-mapper-claims-stateful</module>
+        <module>scenario-24-default-still-handles-singleton-stateless-with-additional</module>
+        <module>scenario-25-empty-list-claims-class</module>
+        <module>scenario-26-priority-ordering-between-additional-mappers</module>
+        <module>scenario-27-no-mapper-registered</module>
+        <module>scenario-17-user-declared-testclassscoped-on-singleton</module>
+        <module>scenario-19-scope-aware-singleton-default</module>
+        <module>scenario-20-scope-module-absent-applicationscoped-fallback</module>
+        <module>scenario-21-singleton-applicationscoped-explicit-with-scope-module</module>
+        <module>scenario-22-stateless-unaffected-by-scope-module</module>
+        <module>scenario-05-implicit-transactional-on-singleton</module>
+        <module>scenario-06-implicit-transactional-on-stateless</module>
+        <module>scenario-07-singleton-injecting-entitymanager</module>
+        <module>scenario-12-transactionattribute-ignored</module>
+        <module>scenario-28-user-declared-transactional-preserved</module>
+    </modules>
+
+    <dependencies>
+        <!--
+            Always-needed stack. core-api + core-impl, cdi-module-api +
+            cdi-module-impl, ejb-module-api + ejb-module-impl. SmallRye
+            Config supplies MP Config at test time. jakarta APIs default
+            to provided in depMgmt; tests need them on the test classpath,
+            hence the explicit test scope.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-ejb-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-ejb-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.ejb</groupId>
+            <artifactId>jakarta.ejb-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <!--
+            mockito-core is needed because cdi-module/impl's
+            TestBeansCdiExtension uses MockitoMockFactory in
+            AfterBeanDiscovery — every scenario boots the cdi-module
+            extension so mockito must be on the test classpath even
+            when the scenario itself does not use mocks.
+        -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+        </dependency>
+
+        <!--
+            xbean-finder-shaded backs ejb-module/impl's
+            BeforeBeanDiscovery scan for @Singleton / @Stateless
+            types. provided scope at the root depMgmt level; tests
+            need it on the test classpath.
+        -->
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-testkit</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-se</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.weld.se</groupId>
+                    <artifactId>weld-se-shaded</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>

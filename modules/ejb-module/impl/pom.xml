@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-ejb-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-ejb-module-impl</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (ejb-module/impl)</name>
+    <description>Default EjbAnnotationMapper plus the CDI Extension that drives the mapper chain. Registers @jakarta.ejb.Singleton / @jakarta.ejb.Stateless as CDI stereotypes during BeforeBeanDiscovery, walks the priority-sorted mapper chain during ProcessAnnotatedType, and applies the resulting annotations via configureAnnotatedType. No compile-time dependency on scope-module / jpa-module / jta-module — scope-aware behaviour goes through the sealed ScopeBinding metadata record on TestContext; the implicit @jakarta.transaction.Transactional is interpreted by whichever module supplies the interceptor.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-ejb-module-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+        <!--
+            jakarta.ejb-api ships the session-bean annotations the
+            default mapper inspects (@Singleton, @Stateless, ...).
+            provided scope.
+        -->
+        <dependency>
+            <groupId>jakarta.ejb</groupId>
+            <artifactId>jakarta.ejb-api</artifactId>
+        </dependency>
+        <!--
+            jakarta.transaction-api ships the standard
+            @jakarta.transaction.Transactional and its TxType enum.
+            ejb-module adds the annotation at class level; the
+            interceptor that handles it lives in jpa-module /
+            jta-module. provided scope.
+        -->
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+        </dependency>
+
+        <!--
+            MP Config supplies the bean-defining-annotations list that
+            drives the xbean-finder scan AND the broad PAT observer's
+            filter. Read via core/api's ConfigResolver port (same
+            pattern cdi-module's FrameworkAllowlist follows), so the
+            dot-then-underscore key fallback and any user-supplied
+            @Alternative ConfigResolver apply uniformly. Defaults ship
+            in this module's META-INF/microprofile-config.properties
+            at the standard ordinal 100; consumers override by setting
+            the same key in a higher-priority source.
+        -->
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+        </dependency>
+
+        <!--
+            xbean-finder hosts the @Singleton / @Stateless classpath
+            scan that ejb-module performs during BeforeBeanDiscovery.
+            Neither OpenWebBeans nor Weld treat
+            BeforeBeanDiscovery.addStereotype(...) as bean-defining
+            for type-discovery purposes (the CDI 4.0 spec only
+            ENCOURAGES this — it is not required), so the only
+            portable way to make a class carrying only
+            @jakarta.ejb.Singleton / @jakarta.ejb.Stateless
+            discoverable under bean-discovery-mode="annotated" is for
+            ejb-module to enumerate the candidates itself and feed
+            them to BeforeBeanDiscovery.addAnnotatedType(...). Same
+            xbean-finder dep jpa-module's EntityScanner uses; provided
+            scope.
+        -->
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

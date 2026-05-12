@@ -40,6 +40,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 | Module | Technology | Purpose |
 |---|---|---|
 | `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
+| `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
 | `jawelte-jaxrs` | JAX-RS | Embedded REST container for endpoint testing |
 | `jawelte-microprofile` | MicroProfile | Config, Health, Metrics, OpenAPI support |
 | `jawelte-dbunit` | DB-Unit | Dataset-based database state management |
@@ -108,8 +109,15 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `DbCleanupStrategy` | `JpqlDeleteDbCleanupStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process; calls JPA) | `jpa-module/impl` |
 | `EntityResolver` | `JpaMetamodelEntityResolver` (`@Priority(Integer.MAX_VALUE)`) | JPA metamodel | `jpa-module/impl` |
 | `PersistenceUnitConnectionResolver` | `DefaultPersistenceUnitConnectionResolver` (`@Priority(Integer.MAX_VALUE)`) | JDBC | `jpa-module/impl` |
+| `EjbAnnotationMapper` | `DefaultEjbAnnotationMapper` (`@Priority(Integer.MAX_VALUE)`) + `EjbAnnotationExtension` | CDI runtime + xbean-finder classpath scan | `ejb-module/impl` |
 
-**Planned (forward-looking, not yet shipped):** `JtaTransactionStrategy` (a JTA-backed alternative that would substitute the default `TransactionStrategy` via `@Priority`), `JaxRsContainerPort` (embedded REST runtime), `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
+**ejb-module additions (in `ejb-module/api`):**
+
+- `EjbAnnotationMapper` — pluggable mapping from EJB session-bean annotations to CDI scopes plus interceptor bindings. The default impl maps `@jakarta.ejb.Singleton` → `@ApplicationScoped` (or `@TestClassScoped` when `ScopeBinding.TestBeanDefaultScope` is bound on `TestContext`) plus an implicit class-level `@jakarta.transaction.Transactional`, and `@jakarta.ejb.Stateless` → `@Dependent` plus the same `@Transactional`. `@Stateful`, `@MessageDriven`, `@Lock`, `@AccessTimeout`, `@Startup`, `@DependsOn`, `@Schedule`, `@Asynchronous`, `@TransactionAttribute` are silently ignored by the default; a custom additional mapper at lower `@Priority` can claim any of them.
+
+`ejb-module/impl` scans the classpath for `@Singleton` / `@Stateless` types during `BeforeBeanDiscovery` and feeds them to `addAnnotatedType` — neither OpenWebBeans nor Weld treats `BeforeBeanDiscovery.addStereotype(...)`-registered annotations as bean-defining for type discovery (the CDI 4.0 spec only encourages this), so the scan is required to keep `bean-discovery-mode="annotated"` working for plain EJB-annotated classes.
+
+**Planned (forward-looking, not yet shipped):** `JaxRsContainerPort` (embedded REST runtime), `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 
 New integrations are simply new adapters — the core remains untouched.
 

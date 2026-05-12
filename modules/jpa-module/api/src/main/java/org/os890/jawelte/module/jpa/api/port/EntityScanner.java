@@ -36,37 +36,15 @@ import java.util.regex.Pattern;
  * minus everything that matches one of the supplied exclude prefixes
  * and (when a {@link Whitelist} is provided) restricted further to
  * types that match at least one literal package prefix or regex.
+ *
+ * <p>The exclude-prefix baseline is no longer an API concern.
+ * jpa-module/impl ships the defaults via MP Config under the key
+ * {@code org.os890.jawelte.module.jpa.scan-exclude-packages} in
+ * its {@code META-INF/microprofile-config.properties}; callers
+ * read the resolved list and pass it to {@link #scan(Set)} /
+ * {@link #scan(Set, Whitelist)}.
  */
 public interface EntityScanner {
-
-    /**
-     * Recommended baseline list of excluded package prefixes — covers
-     * the JDK, Jakarta APIs, the bundled Hibernate / H2 / CDI
-     * runtimes, the common test-time libraries (Mockito, ByteBuddy,
-     * JUnit, OpenTest4J, xbean-finder), and jawelte's own internal
-     * packages. Implementations can return their own list instead;
-     * the default covers what every shipping default impl needs.
-     *
-     * @return an unmodifiable, insertion-ordered set; never {@code null}
-     */
-    default Set<String> defaultExcludedPackagePrefixes() {
-        return Set.of(
-                "java.",
-                "javax.",
-                "jakarta.",
-                "org.hibernate.",
-                "org.h2.",
-                "org.jboss.weld.",
-                "org.apache.openwebbeans.",
-                "org.apache.webbeans.",
-                "org.apache.xbean.",
-                "org.mockito.",
-                "net.bytebuddy.",
-                "org.junit.",
-                "org.opentest4j.",
-                "org.os890.jawelte.core.",
-                "org.os890.jawelte.module.");
-    }
 
     /**
      * Convenience overload — scan with no whitelist (exclude-only).

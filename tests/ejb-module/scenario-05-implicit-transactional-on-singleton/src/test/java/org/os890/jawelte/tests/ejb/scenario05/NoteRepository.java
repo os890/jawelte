@@ -1,0 +1,61 @@
+/*
+ * Copyright 2026 os890
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.os890.jawelte.tests.ejb.scenario05;
+
+import jakarta.ejb.Singleton;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+
+/**
+ * {@code @Singleton} EJB-style repository. Methods carry NO explicit
+ * {@code @Transactional} — ejb-module's default mapper adds the
+ * class-level {@code @jakarta.transaction.Transactional} implicitly,
+ * and jpa-module's {@code TransactionalInterceptor} picks it up to
+ * run each method in a {@code REQUIRED} transaction.
+ */
+@Singleton
+public class NoteRepository {
+
+    @Inject
+    private EntityManager entityManager;
+
+    /** Required public no-arg constructor. */
+    public NoteRepository() {
+    }
+
+    /**
+     * Persist a new note and return its generated id.
+     *
+     * @param body the body to persist
+     * @return the assigned id
+     */
+    public Long save(String body) {
+        Note note = new Note(body);
+        entityManager.persist(note);
+        return note.getId();
+    }
+
+    /**
+     * Count the rows currently committed.
+     *
+     * @return the row count
+     */
+    public long count() {
+        return entityManager
+                .createQuery("SELECT COUNT(n) FROM Note n", Long.class)
+                .getSingleResult();
+    }
+}
