@@ -125,6 +125,18 @@ public class EjbAnnotationExtension implements Extension {
             "org.os890.jawelte.module.ejb.bean-defining-annotations";
 
     /**
+     * MP Config key whose comma-separated value lists the package
+     * prefixes the {@code xbean-finder} classpath scan filters out.
+     * ejb-module/impl ships the baseline (JDK + Jakarta APIs + the
+     * common CDI/test-time libraries + jawelte's own internals) in
+     * this module's {@code META-INF/microprofile-config.properties};
+     * consumers override or extend by setting the same key in a
+     * higher-priority MP Config source.
+     */
+    public static final String SCAN_EXCLUDE_PACKAGES_KEY =
+            "org.os890.jawelte.module.ejb.scan-exclude-packages";
+
+    /**
      * Logger emitting one entry per class whose
      * {@code AnnotatedType} the extension transformed. Level
      * {@link Level#DEBUG}: silent under default JUL/SLF4J root
@@ -132,31 +144,6 @@ public class EjbAnnotationExtension implements Extension {
      * "did ejb-module touch this class?" diagnostics.
      */
     private static final Logger LOG = System.getLogger(EjbAnnotationExtension.class.getName());
-
-    /**
-     * Packages skipped by the {@code @Singleton} / {@code @Stateless}
-     * classpath scan. Same baseline as
-     * {@code XbeanFinderEntityScanner.defaultExcludedPackagePrefixes()}
-     * — the JDK, the Jakarta APIs, the CDI runtimes, common test-time
-     * libraries, jawelte's own packages.
-     */
-    private static final Set<String> SCAN_EXCLUDE_PREFIXES = Set.of(
-            "java.",
-            "javax.",
-            "jakarta.",
-            "org.hibernate.",
-            "org.h2.",
-            "org.jboss.weld.",
-            "org.apache.openwebbeans.",
-            "org.apache.webbeans.",
-            "org.apache.xbean.",
-            "org.mockito.",
-            "net.bytebuddy.",
-            "org.junit.",
-            "org.opentest4j.",
-            "io.smallrye.",
-            "org.os890.jawelte.core.",
-            "org.os890.jawelte.module.");
 
     /**
      * Annotations hardcoded into the fast-path
@@ -181,6 +168,13 @@ public class EjbAnnotationExtension implements Extension {
      * {@code xbean-finder} scan and the broad observer's filter.
      */
     private Set<Class<? extends Annotation>> configuredAnnotations = Set.of();
+
+    /**
+     * Package prefixes the xbean-finder scan filters out, resolved
+     * from {@link #SCAN_EXCLUDE_PACKAGES_KEY} at
+     * {@code BeforeBeanDiscovery} time.
+     */
+    private Set<String> scanExcludePackages = Set.of();
 
     /**
      * Configured annotations minus the hardcoded fast-path set. The
@@ -212,7 +206,9 @@ public class EjbAnnotationExtension implements Extension {
      *                    non-{@code null}
      */
     void onBeforeBeanDiscovery(@Observes BeforeBeanDiscovery event, BeanManager beanManager) {
-        resolveConfiguredAnnotations();
+        ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
+        resolveConfiguredAnnotations(resolver);
+        resolveScanExcludePackages(resolver);
         resolveMapperChain();
         event.addStereotype(Singleton.class,
                 ApplicationScoped.Literal.INSTANCE,
@@ -420,8 +416,7 @@ public class EjbAnnotationExtension implements Extension {
      * the bootstrap fast — a quiet skip would silently disable
      * observation of the misconfigured entry.
      */
-    private void resolveConfiguredAnnotations() {
-        ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
+    private void resolveConfiguredAnnotations(ConfigResolver resolver) {
         List<String> fqcns = resolver.resolve(BEAN_DEFINING_ANNOTATIONS_KEY)
                 .map(value -> Arrays.stream(value.split(","))
                         .map(String::trim)
@@ -440,6 +435,23 @@ public class EjbAnnotationExtension implements Extension {
         Set<Class<? extends Annotation>> extras = new LinkedHashSet<>(resolved);
         extras.removeAll(FAST_PATH_ANNOTATIONS);
         extraAnnotations = Set.copyOf(extras);
+    }
+
+    /**
+     * Resolve {@link #SCAN_EXCLUDE_PACKAGES_KEY} from MP Config
+     * into the set of package prefixes the xbean-finder scan
+     * filters out. Defaults ship in this module's
+     * {@code META-INF/microprofile-config.properties}; an explicit
+     * empty value means "no exclusions" — every package on the
+     * classpath becomes eligible.
+     */
+    private void resolveScanExcludePackages(ConfigResolver resolver) {
+        scanExcludePackages = resolver.resolve(SCAN_EXCLUDE_PACKAGES_KEY)
+                .map(value -> Arrays.stream(value.split(","))
+                        .map(String::trim)
+                        .filter(token -> !token.isEmpty())
+                        .collect(Collectors.toUnmodifiableSet()))
+                .orElseGet(Set::of);
     }
 
     private static Class<? extends Annotation> loadAnnotationClass(String fqcn, ClassLoader classLoader) {
@@ -464,8 +476,8 @@ public class EjbAnnotationExtension implements Extension {
         return annotationType;
     }
 
-    private static boolean isExcluded(String className) {
-        for (String prefix : SCAN_EXCLUDE_PREFIXES) {
+    private boolean isExcluded(String className) {
+        for (String prefix : scanExcludePackages) {
             if (className.startsWith(prefix)) {
                 return true;
             }

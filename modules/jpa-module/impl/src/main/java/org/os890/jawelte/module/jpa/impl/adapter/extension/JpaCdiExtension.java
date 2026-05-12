@@ -120,8 +120,8 @@ public class JpaCdiExtension implements Extension {
 
     private static final String APP_LABEL_KEY = "org.os890.jawelte.module.jpa.app-label";
 
-    private static final String PROTECTED_PACKAGES_KEY =
-            "org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages";
+    private static final String SCAN_EXCLUDE_PACKAGES_KEY =
+            "org.os890.jawelte.module.jpa.scan-exclude-packages";
 
     /**
      * MicroProfile Config keys for the optional entity-scan whitelist.
@@ -507,7 +507,7 @@ public class JpaCdiExtension implements Extension {
         }
         EntityScanner entityScanner = TestContext.loadService(EntityScanner.class);
         Set<String> scannedEntityNames = entityScanner.scan(
-                readProtectedPackagePrefixes(entityScanner), readEntityScanWhitelist());
+                readScanExcludePackages(), readEntityScanWhitelist());
         java.util.LinkedHashSet<String> mergedEntities = new java.util.LinkedHashSet<>(unit.classes());
         mergedEntities.addAll(scannedEntityNames);
         Properties propertiesAsJavaProperties = new Properties();
@@ -563,8 +563,8 @@ public class JpaCdiExtension implements Extension {
                 .orElseGet(List::of);
     }
 
-    private static Set<String> readProtectedPackagePrefixes(EntityScanner entityScanner) {
-        return resolver().resolve(PROTECTED_PACKAGES_KEY)
+    private static Set<String> readScanExcludePackages() {
+        return resolver().resolve(SCAN_EXCLUDE_PACKAGES_KEY)
                 .map(value -> {
                     Set<String> prefixes = new LinkedHashSet<>();
                     for (String entry : value.split(",")) {
@@ -575,7 +575,7 @@ public class JpaCdiExtension implements Extension {
                     }
                     return prefixes;
                 })
-                .orElseGet(entityScanner::defaultExcludedPackagePrefixes);
+                .orElseGet(Set::of);
     }
 
     private static String defaultFilePath(Class<?> testClass) {

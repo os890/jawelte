@@ -2344,3 +2344,33 @@ the default-mapper Javadoc now spells out the one exception:
 when the class already declares @jakarta.transaction.Transactional
 itself, the author's attributes are kept and the mapper does not
 add a second @Transactional on top (scenario 28's rule).
+
+## 2026-05-12 — Per-topic MP-Config-driven scan-exclude lists (ejb + jpa)
+
+The hardcoded scan-exclude prefix lists in ejb-module and
+jpa-module are now MP-Config-driven, with defaults shipped in
+each module's META-INF/microprofile-config.properties at the
+standard ordinal 100 (no Java fallback):
+
+- ejb-module: new key
+  org.os890.jawelte.module.ejb.scan-exclude-packages drives
+  the xbean-finder scan filter in EjbAnnotationExtension.
+- jpa-module: EntityScanner.defaultExcludedPackagePrefixes()
+  removed from the API; the existing
+  org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages
+  key was renamed to
+  org.os890.jawelte.module.jpa.scan-exclude-packages for
+  convention parity. JpaCdiExtension and JpaConfig updated;
+  jpa-module/impl now ships its own
+  META-INF/microprofile-config.properties.
+
+Scenario 23 (additional-mapper-claims-stateful) switched its
+beans.xml from bean-discovery-mode="all" to "annotated" —
+the new MP-Config-driven scan picks up @Stateful classes when
+the test extends the configured list, so the "all"-mode
+fallback caused a DuplicateDefinitionException on OWB.
+
+Scenario-07 (jpa) updated to use the new key + config_ordinal=200
+so its test-specific override beats the impl's shipped defaults.
+
+verify-all: all 15 phases green.

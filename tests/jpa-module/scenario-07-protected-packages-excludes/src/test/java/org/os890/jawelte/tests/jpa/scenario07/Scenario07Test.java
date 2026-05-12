@@ -27,10 +27,12 @@ import org.os890.jawelte.tests.jpa.scenario07.included.IncludedMarker;
 
 /**
  * The MP Config key
- * {@code org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages}
- * (set in {@code microprofile-config.properties}) excludes the
- * {@code …scenario07.exclude.} sub-package from {@code EntityScanner}'s
- * auto-discovery on top of the default exclude baseline.
+ * {@code org.os890.jawelte.module.jpa.scan-exclude-packages}
+ * (set in {@code microprofile-config.properties} at
+ * {@code config_ordinal=200} so it overrides jpa-module/impl's
+ * shipped defaults) replaces the exclude list with the
+ * {@code …scenario07.exclude.} sub-package; that sub-package
+ * is therefore dropped from {@code EntityScanner}'s auto-discovery.
  */
 @EnableTestBeans
 public class Scenario07Test {

@@ -60,8 +60,8 @@ public class JpaConfig {
 
     private static final String APP_LABEL_KEY = "org.os890.jawelte.module.jpa.app-label";
 
-    private static final String PROTECTED_PACKAGES_KEY =
-            "org.os890.jawelte.module.jpa.api.PersistenceConfig.protected-packages";
+    private static final String SCAN_EXCLUDE_PACKAGES_KEY =
+            "org.os890.jawelte.module.jpa.scan-exclude-packages";
 
     private static final String ENTITY_SCAN_WHITELIST_PACKAGES_KEY =
             "org.os890.jawelte.module.jpa.entity-scan.whitelist.packages";
@@ -87,13 +87,18 @@ public class JpaConfig {
 
     /**
      * Excluded package prefixes for {@code EntityScanner}. Comma-
-     * separated value; empty entries are dropped.
+     * separated value read from MP Config under
+     * {@code org.os890.jawelte.module.jpa.scan-exclude-packages};
+     * jpa-module/impl ships the defaults in its
+     * {@code META-INF/microprofile-config.properties}. Empty
+     * entries are dropped.
      *
-     * @param fallback returned when the key isn't set
+     * @param fallback returned when the key isn't set on any
+     *                 reachable MP Config source
      * @return the configured prefixes, or {@code fallback} when unset
      */
-    public Set<String> protectedPackages(Set<String> fallback) {
-        return lookupResolver().resolve(PROTECTED_PACKAGES_KEY)
+    public Set<String> scanExcludePackages(Set<String> fallback) {
+        return lookupResolver().resolve(SCAN_EXCLUDE_PACKAGES_KEY)
                 .map(JpaConfig::splitCsvToOrderedSet)
                 .orElse(fallback);
     }
