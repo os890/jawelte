@@ -75,6 +75,9 @@
         <module>scenario-41-row-count-match</module>
         <module>scenario-42-row-count-mismatch</module>
         <module>scenario-43-row-count-empty-table</module>
+        <module>scenario-44-custom-seed-engine</module>
+        <module>scenario-45-custom-diff-engine</module>
+        <module>scenario-46-custom-pu-resolver</module>
     </modules>
 
     <dependencies>
@@ -244,6 +247,9 @@
                 <module>scenario-41-row-count-match</module>
                 <module>scenario-42-row-count-mismatch</module>
                 <module>scenario-43-row-count-empty-table</module>
+                <module>scenario-44-custom-seed-engine</module>
+                <module>scenario-45-custom-diff-engine</module>
+                <module>scenario-46-custom-pu-resolver</module>
             </modules>
         </profile>
     </profiles>
