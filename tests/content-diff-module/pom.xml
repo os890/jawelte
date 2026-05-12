@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-content-diff-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/content-diff-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-content-diff-module. content-diff-module is a utility library — it does not bootstrap CDI in the scenarios, so the always-needed stack is core-api + core-impl (for the SPI bootstrap), content-diff-module-api + content-diff-module-impl, SmallRye Config + the Jakarta EL implementation (Expressly).</description>
+
+    <modules>
+        <module>scenario-01-json-match</module>
+        <module>scenario-02-json-mismatch</module>
+        <module>scenario-03-json-multiple-differences</module>
+        <module>scenario-04-json-ignoring-top-level-field</module>
+        <module>scenario-05-json-ignoring-recursive</module>
+        <module>scenario-06-json-ignoring-array-element-field</module>
+        <module>scenario-07-json-null-vs-missing</module>
+        <module>scenario-08-json-missing-vs-present</module>
+        <module>scenario-09-json-null-vs-null</module>
+        <module>scenario-10-json-unordered-match</module>
+        <module>scenario-11-json-unordered-mismatch</module>
+        <module>scenario-12-json-unordered-duplicate-sensitivity</module>
+        <module>scenario-13-json-unordered-nested</module>
+        <module>scenario-14-xml-match</module>
+        <module>scenario-15-xml-mismatch</module>
+        <module>scenario-16-xml-ignoring-absolute-path</module>
+        <module>scenario-17-xml-ignoring-recursive</module>
+        <module>scenario-18-el-simple-substitution</module>
+        <module>scenario-19-el-missing-variable</module>
+        <module>scenario-20-el-method-call</module>
+        <module>scenario-21-el-no-sandboxing</module>
+        <module>scenario-22-classpath-resource</module>
+        <module>scenario-23-classpath-resource-not-found</module>
+        <module>scenario-24-custom-engine-via-spi</module>
+        <module>scenario-25-priority-wins-same-content-type</module>
+        <module>scenario-26-no-fqcn-override-key</module>
+        <module>scenario-27-error-message-format</module>
+        <module>scenario-28-no-maximum-cap</module>
+    </modules>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-content-diff-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-content-diff-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <!--
+            Jakarta EL: api on the test classpath plus Expressly as
+            the reference implementation that the built-in
+            ELInterpolator binds against at runtime.
+        -->
+        <dependency>
+            <groupId>jakarta.el</groupId>
+            <artifactId>jakarta.el-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.expressly</groupId>
+            <artifactId>expressly</artifactId>
+        </dependency>
+
+        <!--
+            jackson-databind is transitively pulled in by
+            content-diff-module-impl at compile scope — explicit here
+            so the test compile-time classpath is unambiguous in
+            tooling that doesn't enumerate transitive scopes.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            jakarta.enterprise.cdi-api supplies jakarta.enterprise.inject.spi.CDI
+            which TestContext.loadService(ServicePriorityResolver.class)
+            attempts to use via `tryCdiFirst=true` before falling back to
+            reflective instantiation. The class needs to be reachable
+            (LinkageError isn't caught by the loadService fallback);
+            content-diff tests never actually bootstrap CDI.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+        <profile>
+            <id>weld</id>
+        </profile>
+    </profiles>
+</project>

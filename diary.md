@@ -2437,3 +2437,13 @@ JSON and XML engine implementations + EL interpolation glue.
 - `META-INF/services/.../DiffEngine` lists both engines with a header comment; license-header present per RAT.
 
 `mvn -pl modules/content-diff-module/impl -am verify` is green.
+
+## 2026-05-12 — TICKET-008: 28 scenario sub-modules + tests aggregator
+
+Created `tests/content-diff-module/` aggregator + 28 per-scenario Maven sub-modules covering every section of the ticket: JSON match / mismatch / multi-diff / ignore variants (1-13), XML match / mismatch / ignore (14-17), EL substitution / missing variable / method call / no-sandboxing (18-21), classpath resource present + missing (22-23), SPI custom engine + priority-based override + no-FQCN-key documentation (24-26), and output format + no-max-cap (27-28).
+
+Test-only port-impl classes prefixed with `TestScenario`: `TestScenarioCsvEngine` (scenario 24), `TestScenarioWinningJsonEngine` (scenario 25). Both registered via per-scenario `META-INF/services/.../DiffEngine`.
+
+Aggregator depMgmt + plugins inherited from parent. Tests need jakarta.enterprise.cdi-api at test scope (TestContext.loadService(ServicePriorityResolver.class) calls `CDI.current()` first inside a try/catch, and the absence of the class triggers `NoClassDefFoundError` which the catch-block doesn't catch).
+
+`mvn test` from `tests/content-diff-module/` is green: 28 successes in ~16s.
