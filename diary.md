@@ -2723,3 +2723,30 @@ implicit byte[] -> string heuristics required.
 verify-all.sh wip green (2 phases, 1m 0s) — scenario 55 (seed
 only) + scenario 56 (round-trip) both pass under the wip profile.
 
+
+## 2026-05-13 — TICKET-009 D4: hex'…' marker for non-UUID binary
+
+Adds the `hex'…'` marker on both seed and diff sides, mirroring the
+shape of `uuid'…'` for non-UUID `byte[]` columns.
+
+- `MarkerComparator` gains `HEX_PREFIX` / `HEX_SUFFIX` constants and
+  a `hexMatches(...)` branch that parses the inner string with
+  `java.util.HexFormat`, then compares the resulting `byte[]`
+  bytewise against the actual cell when it is a `byte[]`.
+- `DbUnitXmlSeedEngine.rewriteHexMarkersAsBase64(...)` runs a
+  text-level pre-pass that converts every `hex'(hex)' ` occurrence
+  in the dataset to the Base64 of the parsed bytes — DbUnit's stock
+  `BytesDataType.typeCast(...)` decodes Base64 natively, so the
+  bytes reach the database as a typed `byte[]`. Malformed inner hex
+  (odd length / non-hex chars) raises `IllegalArgumentException`
+  citing the offending marker text — fail-fast, not silent
+  pass-through.
+
+Scenario 57 round-trips a 20-byte (SHA-1) hash through an H2
+`BINARY(20)` column: seed via `hex'da39a3ee…'`, verify the stored
+bytes via raw JDBC, then diff via the same `hex'…'` marker. Wired
+into the wip profile alongside scenarios 55 / 56.
+
+verify-all.sh wip green — 3 in-flight scenarios + the 54 default
+ones, 1m 0s end-to-end.
+

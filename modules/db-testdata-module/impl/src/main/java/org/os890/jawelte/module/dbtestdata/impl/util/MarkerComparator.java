@@ -16,7 +16,9 @@
 package org.os890.jawelte.module.dbtestdata.impl.util;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -41,6 +43,11 @@ import java.util.regex.Pattern;
  *   <li>{@code uuid'…'} — parse the expected as a UUID and compare
  *       against the actual (binary 16-byte form or canonical hex
  *       string);</li>
+ *   <li>{@code hex'…'} — parse the inner string as a continuous hex
+ *       sequence (no dashes, no spaces) and compare the resulting
+ *       {@code byte[]} bytewise against the actual cell when it is
+ *       a {@code byte[]}. Mirrors {@code uuid'…'} for non-UUID
+ *       binary columns.</li>
  *   <li>boolean normalisation — case-insensitive built-in lists,
  *       extended by builder / MP Config values;</li>
  *   <li>numeric ({@link BigDecimal#compareTo(BigDecimal)}) —
@@ -72,6 +79,10 @@ public class MarkerComparator {
     private static final String UUID_PREFIX = "uuid'";
 
     private static final String UUID_SUFFIX = "'";
+
+    private static final String HEX_PREFIX = "hex'";
+
+    private static final String HEX_SUFFIX = "'";
 
     private static final List<String> DEFAULT_TRUE_VALUES = List.of("true", "1", "yes", "y", "on");
 
@@ -146,6 +157,10 @@ public class MarkerComparator {
                 && expected.length() > UUID_PREFIX.length() + UUID_SUFFIX.length()) {
             return uuidMatches(expected, actual);
         }
+        if (expected.startsWith(HEX_PREFIX) && expected.endsWith(HEX_SUFFIX)
+                && expected.length() > HEX_PREFIX.length() + HEX_SUFFIX.length()) {
+            return hexMatches(expected, actual);
+        }
         if (isBoolean(expected)) {
             String actualString = asString(actual);
             if (isBoolean(actualString)) {
@@ -196,6 +211,20 @@ public class MarkerComparator {
         } catch (IllegalArgumentException parseFailure) {
             return false;
         }
+    }
+
+    private static boolean hexMatches(String expected, Object actual) {
+        String hex = expected.substring(HEX_PREFIX.length(), expected.length() - HEX_SUFFIX.length());
+        byte[] expectedBytes;
+        try {
+            expectedBytes = HexFormat.of().parseHex(hex);
+        } catch (IllegalArgumentException invalidHex) {
+            return false;
+        }
+        if (actual instanceof byte[] actualBytes) {
+            return Arrays.equals(actualBytes, expectedBytes);
+        }
+        return false;
     }
 
     private static UUID uuidFromBytes(byte[] bytes) {

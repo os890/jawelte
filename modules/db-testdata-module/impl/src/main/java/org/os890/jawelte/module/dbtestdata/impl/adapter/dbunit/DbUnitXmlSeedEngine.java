@@ -17,8 +17,12 @@ package org.os890.jawelte.module.dbtestdata.impl.adapter.dbunit;
 
 import java.io.StringReader;
 import java.sql.Connection;
+import java.util.Base64;
 import java.util.EnumMap;
+import java.util.HexFormat;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import jakarta.annotation.Priority;
 
@@ -61,6 +65,8 @@ public class DbUnitXmlSeedEngine implements DbSeedEngine {
     /** Format identifier this engine claims. */
     public static final String FORMAT = "dbunit-xml";
 
+    private static final Pattern HEX_MARKER_PATTERN = Pattern.compile("hex'([0-9a-fA-F]+)'");
+
     private static final Map<SeedMode, DatabaseOperation> MODE_TO_OPERATION = new EnumMap<>(SeedMode.class);
 
     static {
@@ -81,11 +87,12 @@ public class DbUnitXmlSeedEngine implements DbSeedEngine {
 
     @Override
     public void seed(Connection connection, String datasetContent, SeedSpec options) {
+        String preprocessed = rewriteHexMarkersAsBase64(datasetContent);
         IDataSet dataset;
         try {
             FlatXmlDataSetBuilder builder = new FlatXmlDataSetBuilder();
             builder.setColumnSensing(true);
-            IDataSet flatDataset = builder.build(new StringReader(datasetContent));
+            IDataSet flatDataset = builder.build(new StringReader(preprocessed));
             ReplacementDataSet replacements = new ReplacementDataSet(flatDataset);
             replacements.addReplacementObject("[NULL]", null);
             dataset = replacements;
@@ -110,5 +117,50 @@ public class DbUnitXmlSeedEngine implements DbSeedEngine {
             dbunitConnection.getConfig()
                     .setProperty(DatabaseConfig.PROPERTY_DATATYPE_FACTORY, factory);
         }
+    }
+
+    /**
+     * Rewrites every {@code hex'…'} marker in the dataset content with
+     * the Base64-encoded form of the same byte sequence so DbUnit's
+     * stock {@code BytesDataType.typeCast(...)} can decode it through
+     * its Base64 path. The marker mirrors the existing
+     * {@code uuid'…'} shape used for UUID binary columns; the
+     * substitution is text-level so columns whose declared type is
+     * not {@code BYTES} pass straight through DbUnit's regular
+     * string-cell path (a non-binary column carrying
+     * {@code hex'…'} as literal content is the same edge case as a
+     * VARCHAR column legitimately storing {@code [NULL]}: rare in
+     * practice; the marker syntax is reserved by api contract).
+     *
+     * @param content the raw dataset XML text
+     * @return the rewritten text with {@code hex'…'} occurrences
+     *         replaced by their Base64 equivalent
+     * @throws IllegalArgumentException when an {@code hex'…'} marker
+     *         contains an odd-length / non-hex inner sequence; the
+     *         message includes the offending marker text so the
+     *         test author can correct it
+     */
+    private static String rewriteHexMarkersAsBase64(String content) {
+        if (!content.contains("hex'")) {
+            return content;
+        }
+        Matcher matcher = HEX_MARKER_PATTERN.matcher(content);
+        StringBuilder rewritten = new StringBuilder(content.length());
+        while (matcher.find()) {
+            String hex = matcher.group(1);
+            byte[] bytes;
+            try {
+                bytes = HexFormat.of().parseHex(hex);
+            } catch (IllegalArgumentException invalidHex) {
+                throw new IllegalArgumentException(
+                        "Malformed hex'…' marker: " + matcher.group()
+                                + " (inner hex must be an even-length string of 0-9a-fA-F)",
+                        invalidHex);
+            }
+            String base64 = Base64.getEncoder().encodeToString(bytes);
+            matcher.appendReplacement(rewritten, Matcher.quoteReplacement(base64));
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
     }
 }
