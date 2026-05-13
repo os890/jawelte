@@ -22,15 +22,18 @@ import java.util.Map;
 
 import jakarta.annotation.Priority;
 
+import org.dbunit.database.DatabaseConfig;
 import org.dbunit.database.DatabaseConnection;
 import org.dbunit.database.IDatabaseConnection;
 import org.dbunit.dataset.IDataSet;
 import org.dbunit.dataset.ReplacementDataSet;
+import org.dbunit.dataset.datatype.IDataTypeFactory;
 import org.dbunit.dataset.xml.FlatXmlDataSetBuilder;
 import org.dbunit.operation.DatabaseOperation;
 import org.os890.jawelte.module.dbtestdata.api.SeedSpec;
 import org.os890.jawelte.module.dbtestdata.api.SeedSpec.SeedMode;
 import org.os890.jawelte.module.dbtestdata.api.port.DbSeedEngine;
+import org.os890.jawelte.module.dbtestdata.impl.util.DataTypeFactoryResolver;
 
 /**
  * Default {@link DbSeedEngine} for the {@code "dbunit-xml"} format.
@@ -93,9 +96,19 @@ public class DbUnitXmlSeedEngine implements DbSeedEngine {
         DatabaseOperation operation = MODE_TO_OPERATION.get(options.mode());
         try {
             IDatabaseConnection dbunitConnection = new DatabaseConnection(connection);
+            applyVendorDataTypeFactory(dbunitConnection, connection);
             operation.execute(dbunitConnection, dataset);
         } catch (Exception executionFailure) {
             throw new RuntimeException(executionFailure.getMessage(), executionFailure);
+        }
+    }
+
+    private static void applyVendorDataTypeFactory(
+            IDatabaseConnection dbunitConnection, Connection connection) {
+        IDataTypeFactory factory = DataTypeFactoryResolver.resolveFactory(connection);
+        if (factory != null) {
+            dbunitConnection.getConfig()
+                    .setProperty(DatabaseConfig.PROPERTY_DATATYPE_FACTORY, factory);
         }
     }
 }

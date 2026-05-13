@@ -2681,3 +2681,31 @@ modules in numeric order.
 Smoke-tested all 8 on OWB and Weld profiles individually — green on
 both. Full `verify-all.sh` matrix to follow.
 
+
+## 2026-05-13 — TICKET-009 D2: vendor-aware DbUnit DataTypeFactory
+
+New `impl/util/DataTypeFactoryResolver` reflectively loads the
+matching `org.dbunit.ext.<vendor>.*DataTypeFactory` by JDBC product
+name (H2 / PostgreSQL / MySQL / MariaDB / Oracle). Reflection keeps
+the impl module free of a compile-time dependency on the optional
+`org.dbunit.ext.*` packages. Probing failures, unknown vendors, and
+missing extension classes all return `null` — caller falls back to
+DbUnit's default factory.
+
+`DbUnitXmlSeedEngine.seed(...)` invokes the resolver after wrapping
+the JDBC connection in `DatabaseConnection` and sets the resulting
+factory on `DatabaseConfig.PROPERTY_DATATYPE_FACTORY` when non-null.
+Lets the seed path accept e.g. `uuid'…'` against an H2 `BINARY(16)`
+column via H2DataTypeFactory's `UuidAwareBytesDataType`, where
+DbUnit's default factory rejects the marker.
+
+Scenario 55 covers the H2 `BINARY(16)` UUID seed path: it inserts a
+single row via the marker, then verifies via raw JDBC that the
+byte content matches the canonical big-endian byte layout of the
+expected `UUID`. Lives in the in-flight wip profile of
+`tests/db-testdata-module/pom.xml` until the topic ships; default
+`<modules>` and `coverage-report/pom.xml` are unchanged for now.
+
+`verify-all.sh wip` green: install reactor + run db-testdata-module
+aggregator under `-P wip` — 56 scenarios, 1m 2s end-to-end.
+

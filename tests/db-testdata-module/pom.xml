@@ -208,5 +208,11 @@
         <profile>
             <id>weld</id>
         </profile>
+        <profile>
+            <id>wip</id>
+            <modules>
+                <module>scenario-55-vendor-data-type-factory-h2-binary-uuid</module>
+            </modules>
+        </profile>
     </profiles>
 </project>
