@@ -75,6 +75,8 @@ public class JakartaELInterpolator implements ELInterpolator {
 
     private static final char DOLLAR = '$';
 
+    private static final char HASH = '#';
+
     private static final char OPENING_BRACE = '{';
 
     private static final char CLOSING_BRACE = '}';
@@ -88,8 +90,75 @@ public class JakartaELInterpolator implements ELInterpolator {
         if (template.indexOf(DOLLAR) < 0) {
             return template;
         }
+        return substituteTemplate(template, context, false);
+    }
+
+    @Override
+    public String interpolateAll(String template, InterpolationContext context) {
+        if (template.indexOf(DOLLAR) < 0 && template.indexOf(HASH) < 0) {
+            return template;
+        }
+        return substituteTemplate(template, context, true);
+    }
+
+    @Override
+    public boolean evaluatePredicate(
+            String expression, InterpolationContext context, Object actualValue) {
         ExpressionFactory expressionFactory = ExpressionFactory.newInstance();
         StandardELContext standardELContext = new StandardELContext(expressionFactory);
+        bindContext(standardELContext, expressionFactory, context);
+        VariableMapper variableMapper = standardELContext.getVariableMapper();
+        variableMapper.setVariable(
+                "value", expressionFactory.createValueExpression(actualValue, Object.class));
+        Double numericBinding = tryParseDouble(actualValue);
+        if (numericBinding != null) {
+            variableMapper.setVariable(
+                    "num", expressionFactory.createValueExpression(numericBinding, Double.class));
+        }
+        ELContext elContext = context.functions().isEmpty()
+                ? standardELContext
+                : new DelegatingELContext(standardELContext, context.functions());
+        ValueExpression valueExpression =
+                expressionFactory.createValueExpression(elContext, expression, Object.class);
+        Object result = valueExpression.getValue(elContext);
+        if (result == null) {
+            throw new RuntimeException(
+                    "Predicate " + expression + " returned null; expected Boolean");
+        }
+        if (!(result instanceof Boolean)) {
+            throw new RuntimeException(
+                    "Predicate " + expression + " returned " + result.getClass().getName()
+                            + "; expected Boolean");
+        }
+        return (Boolean) result;
+    }
+
+    private static Double tryParseDouble(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String substituteTemplate(
+            String template, InterpolationContext context, boolean includeHashSyntax) {
+        ExpressionFactory expressionFactory = ExpressionFactory.newInstance();
+        StandardELContext standardELContext = new StandardELContext(expressionFactory);
+        bindContext(standardELContext, expressionFactory, context);
+        ELContext elContext = context.functions().isEmpty()
+                ? standardELContext
+                : new DelegatingELContext(standardELContext, context.functions());
+        return substituteAll(template, expressionFactory, elContext, includeHashSyntax);
+    }
+
+    private static void bindContext(
+            StandardELContext standardELContext,
+            ExpressionFactory expressionFactory,
+            InterpolationContext context) {
         VariableMapper variableMapper = standardELContext.getVariableMapper();
         for (Map.Entry<String, Object> entry : context.values().entrySet()) {
             variableMapper.setVariable(
@@ -101,21 +170,25 @@ public class JakartaELInterpolator implements ELInterpolator {
                     entry.getKey(),
                     expressionFactory.createValueExpression(entry.getValue(), Object.class));
         }
-        ELContext elContext = context.functions().isEmpty()
-                ? standardELContext
-                : new DelegatingELContext(standardELContext, context.functions());
-        return substituteAll(template, expressionFactory, elContext);
     }
 
     private static String substituteAll(
-            String template, ExpressionFactory expressionFactory, ELContext elContext) {
+            String template,
+            ExpressionFactory expressionFactory,
+            ELContext elContext,
+            boolean includeHashSyntax) {
         StringBuilder output = new StringBuilder(template.length());
         int index = 0;
         while (index < template.length()) {
             char current = template.charAt(index);
-            if (current == DOLLAR
+            boolean dollarOpen = current == DOLLAR
                     && index + 1 < template.length()
-                    && template.charAt(index + 1) == OPENING_BRACE) {
+                    && template.charAt(index + 1) == OPENING_BRACE;
+            boolean hashOpen = includeHashSyntax
+                    && current == HASH
+                    && index + 1 < template.length()
+                    && template.charAt(index + 1) == OPENING_BRACE;
+            if (dollarOpen || hashOpen) {
                 int closing = template.indexOf(CLOSING_BRACE, index + 2);
                 if (closing == -1) {
                     output.append(template, index, template.length());

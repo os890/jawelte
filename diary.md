@@ -2596,3 +2596,18 @@ package now sits at >= 81% branch coverage; the matchers in
 - Scenario 36a (forPersistenceUnit ambiguous — multiple PUs active): two PUs in persistence.xml, service touches both EMs via createNativeQuery (which goes through the EM proxy's peekOrAutoBegin and pushes both onto the @Transactional frame), then DbSeed.forPersistenceUnit() (no-arg) calls connectionForActivePersistenceUnit() which sees two PUs and raises IllegalStateException("Multiple active persistence units...").
 - Added all 48 db-testdata-module scenarios to coverage-report/pom.xml so JaCoCo report-aggregate picks up their exec data for the project-wide report. Also added jawelte-db-testdata-module-api / -impl as compile deps so the report knows about the production classes.
 - TICKET-009 shipping: full `bash verify-all.sh` matrix green in 20m37s across all 16 phases (every module on both OWB and Weld profiles). Removed the `<id>wip</id>` profile from `tests/db-testdata-module/pom.xml` and reordered the default `<modules>` list into strict numeric order (36, 36a, 36b, 37 in line with the other scenarios).
+
+## 2026-05-13 — TICKET-009 D1/D9: #{...} per-cell predicate, part 1
+
+Extended the `ELInterpolator` port with two new abstract methods:
+- `interpolateAll(template, context)` — pre-parse substitution recognising
+  both `${...}` and `#{...}` immediately (for the seed builder).
+- `evaluatePredicate(expression, context, actualValue)` — deferred boolean
+  predicate evaluation against the actual DB cell, with `value` (Object) and
+  `num` (Double when parseable) bound on top of the caller's
+  `InterpolationContext`. Strict: non-Boolean result raises.
+
+Implemented all three methods in `JakartaELInterpolator`, refactoring the
+existing `substituteAll` to accept an `includeHashSyntax` flag so the same
+walker handles both `${...}`-only and `${...}+#{...}` modes.
+
