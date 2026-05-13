@@ -90,6 +90,15 @@
         <module>scenario-52-deferred-el-non-boolean-raises</module>
         <module>scenario-53-deferred-el-mismatch-shows-expression</module>
         <module>scenario-54-hash-marker-on-seed-immediate</module>
+        <module>scenario-55-vendor-data-type-factory-h2-binary-uuid</module>
+        <module>scenario-56-binary16-uuid-round-trip</module>
+        <module>scenario-57-hex-marker-binary-round-trip</module>
+        <module>scenario-58-empty-table-marker-matches-empty</module>
+        <module>scenario-59-empty-table-marker-reports-extras</module>
+        <module>scenario-60-boolean-defaults-postgres-tf</module>
+        <module>scenario-61-label-pk-fk-match</module>
+        <module>scenario-62-label-fk-mismatch</module>
+        <module>scenario-63-label-chain-three-tables</module>
     </modules>
 
     <dependencies>
@@ -207,20 +216,6 @@
         </profile>
         <profile>
             <id>weld</id>
-        </profile>
-        <profile>
-            <id>wip</id>
-            <modules>
-                <module>scenario-55-vendor-data-type-factory-h2-binary-uuid</module>
-                <module>scenario-56-binary16-uuid-round-trip</module>
-                <module>scenario-57-hex-marker-binary-round-trip</module>
-                <module>scenario-58-empty-table-marker-matches-empty</module>
-                <module>scenario-59-empty-table-marker-reports-extras</module>
-                <module>scenario-60-boolean-defaults-postgres-tf</module>
-                <module>scenario-61-label-pk-fk-match</module>
-                <module>scenario-62-label-fk-mismatch</module>
-                <module>scenario-63-label-chain-three-tables</module>
-            </modules>
         </profile>
     </profiles>
 </project>

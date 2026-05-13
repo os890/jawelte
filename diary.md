@@ -2880,3 +2880,17 @@ bound value in the error message, and a three-table chain.
 verify-all.sh wip green — 9 in-flight + 54 default scenarios,
 1m 5s.
 
+
+## 2026-05-13 — TICKET-009 round wrap-up: graduate scenarios 55-63
+
+Scenarios 55 (vendor DataTypeFactory), 56 (`uuid'…'` round-trip),
+57 (`hex'…'` round-trip), 58 / 59 (empty-table assertions),
+60 (`t` / `f` boolean defaults), 61 / 62 / 63 (`@label`
+back-references) move from the `<id>wip</id>` profile in
+`tests/db-testdata-module/pom.xml` into the default
+`<modules>` list; the wip profile itself is removed. They are
+also registered in `coverage-report/pom.xml` so the aggregated
+JaCoCo report covers their classes.
+
+Full `verify-all.sh` matrix to follow.
+

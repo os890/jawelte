@@ -1789,6 +1789,51 @@
             <artifactId>jawelte-tests-db-testdata-module-scenario-54-hash-marker-on-seed-immediate</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-55-vendor-data-type-factory-h2-binary-uuid</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-56-binary16-uuid-round-trip</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-57-hex-marker-binary-round-trip</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-58-empty-table-marker-matches-empty</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-59-empty-table-marker-reports-extras</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-60-boolean-defaults-postgres-tf</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-61-label-pk-fk-match</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-62-label-fk-mismatch</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-63-label-chain-three-tables</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
