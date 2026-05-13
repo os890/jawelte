@@ -17,7 +17,7 @@ package org.os890.jawelte.module.dbtestdata.api.port;
 
 import java.sql.Connection;
 
-import org.os890.jawelte.module.dbtestdata.api.SeedSpec;
+import org.os890.jawelte.module.dbtestdata.api.DbSeed;
 
 /**
  * Pluggable dataset-loader. The {@code DbSeed} fluent api resolves
@@ -50,7 +50,7 @@ public interface DbSeedEngine {
 
     /**
      * Write the dataset {@code datasetContent} to {@code connection}
-     * according to the chosen {@link SeedSpec#mode()}. The connection
+     * according to the chosen {@link DbSeed.SeedSpec#mode()}. The connection
      * is supplied by the caller (either directly via
      * {@code DbSeed.forConnection(...)} or unwrapped from the active
      * persistence unit via
@@ -66,5 +66,5 @@ public interface DbSeedEngine {
      *                          dataset: " + cause} prefix before it
      *                          reaches the caller
      */
-    void seed(Connection connection, String datasetContent, SeedSpec options);
+    void seed(Connection connection, String datasetContent, DbSeed.SeedSpec options);
 }

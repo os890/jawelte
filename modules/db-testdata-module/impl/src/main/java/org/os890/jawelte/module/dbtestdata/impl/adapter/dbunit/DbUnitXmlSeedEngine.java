@@ -34,8 +34,8 @@ import org.dbunit.dataset.ReplacementDataSet;
 import org.dbunit.dataset.datatype.IDataTypeFactory;
 import org.dbunit.dataset.xml.FlatXmlDataSetBuilder;
 import org.dbunit.operation.DatabaseOperation;
-import org.os890.jawelte.module.dbtestdata.api.SeedSpec;
-import org.os890.jawelte.module.dbtestdata.api.SeedSpec.SeedMode;
+import org.os890.jawelte.module.dbtestdata.api.DbSeed.SeedSpec;
+import org.os890.jawelte.module.dbtestdata.api.DbSeed.SeedSpec.SeedMode;
 import org.os890.jawelte.module.dbtestdata.api.port.DbSeedEngine;
 import org.os890.jawelte.module.dbtestdata.impl.util.DataTypeFactoryResolver;
 

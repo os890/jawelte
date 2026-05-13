@@ -23,7 +23,6 @@ import java.util.Objects;
 import java.util.function.Supplier;
 
 import org.os890.jawelte.core.api.port.TestContext;
-import org.os890.jawelte.module.dbtestdata.api.SeedSpec.SeedMode;
 import org.os890.jawelte.module.dbtestdata.api.port.DbSeedEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
 import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;
@@ -147,7 +146,7 @@ public abstract class DbSeed {
 
         private String format = DatasetSupport.DEFAULT_FORMAT;
 
-        private SeedMode mode = SeedMode.CLEAN_INSERT;
+        private SeedSpec.SeedMode mode = SeedSpec.SeedMode.CLEAN_INSERT;
 
         private final Map<String, Object> values = new LinkedHashMap<>();
 
@@ -208,48 +207,48 @@ public abstract class DbSeed {
         }
 
         /**
-         * Select {@link SeedMode#CLEAN_INSERT} — the default mode. DELETE
+         * Select {@link SeedSpec.SeedMode#CLEAN_INSERT} — the default mode. DELETE
          * every row in the dataset's tables in reverse foreign-key order,
          * then INSERT.
          *
          * @return this builder for chaining
          */
         public Builder cleanInsert() {
-            this.mode = SeedMode.CLEAN_INSERT;
+            this.mode = SeedSpec.SeedMode.CLEAN_INSERT;
             return this;
         }
 
         /**
-         * Select {@link SeedMode#INSERT}. INSERT only; duplicate PK
+         * Select {@link SeedSpec.SeedMode#INSERT}. INSERT only; duplicate PK
          * propagates as {@link RuntimeException}.
          *
          * @return this builder for chaining
          */
         public Builder insert() {
-            this.mode = SeedMode.INSERT;
+            this.mode = SeedSpec.SeedMode.INSERT;
             return this;
         }
 
         /**
-         * Select {@link SeedMode#UPDATE}. UPDATE existing rows by PK;
+         * Select {@link SeedSpec.SeedMode#UPDATE}. UPDATE existing rows by PK;
          * missing rows propagate as {@link RuntimeException}.
          *
          * @return this builder for chaining
          */
         public Builder update() {
-            this.mode = SeedMode.UPDATE;
+            this.mode = SeedSpec.SeedMode.UPDATE;
             return this;
         }
 
         /**
-         * Select {@link SeedMode#REFRESH}. Upsert (INSERT when absent,
+         * Select {@link SeedSpec.SeedMode#REFRESH}. Upsert (INSERT when absent,
          * UPDATE when present). Safe under circular foreign-key
          * dependencies.
          *
          * @return this builder for chaining
          */
         public Builder refresh() {
-            this.mode = SeedMode.REFRESH;
+            this.mode = SeedSpec.SeedMode.REFRESH;
             return this;
         }
 
@@ -302,6 +301,55 @@ public abstract class DbSeed {
                         "Neither dataset(...) nor datasetContent(...) was called");
             }
             return DatasetSupport.loadClasspathResource(classpathResource);
+        }
+    }
+
+    /**
+     * Carrier for the options {@link Builder} hands to the active
+     * {@link DbSeedEngine}. The single field is the chosen seed
+     * {@link SeedMode}; the record is immutable and
+     * {@code null}-rejecting by canonical-constructor validation.
+     *
+     * @param mode the SQL-shape the engine performs against the dataset
+     */
+    public record SeedSpec(SeedMode mode) {
+
+        /** Canonical constructor; null {@code mode} is rejected up-front. */
+        public SeedSpec {
+            Objects.requireNonNull(mode, "mode");
+        }
+
+        /**
+         * Strategy the {@link DbSeedEngine} runs against a dataset.
+         */
+        public enum SeedMode {
+
+            /**
+             * DELETE every row in the dataset's tables (in reverse
+             * foreign-key dependency order), then INSERT the dataset.
+             * The default mode of {@code DbSeed.Builder.cleanInsert()}.
+             */
+            CLEAN_INSERT,
+
+            /**
+             * INSERT only; duplicate PK propagates as
+             * {@link RuntimeException} wrapping the underlying
+             * {@link java.sql.SQLException}.
+             */
+            INSERT,
+
+            /**
+             * UPDATE existing rows by primary key; missing rows propagate
+             * as {@link RuntimeException}.
+             */
+            UPDATE,
+
+            /**
+             * Upsert by primary key — INSERT when the row is absent,
+             * UPDATE when present. Safe under circular foreign-key
+             * dependencies because no DELETE step fires.
+             */
+            REFRESH
         }
     }
 }

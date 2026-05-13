@@ -21,7 +21,7 @@ import java.sql.Statement;
 
 import jakarta.annotation.Priority;
 
-import org.os890.jawelte.module.dbtestdata.api.SeedSpec;
+import org.os890.jawelte.module.dbtestdata.api.DbSeed;
 import org.os890.jawelte.module.dbtestdata.api.port.DbSeedEngine;
 
 /**
@@ -43,7 +43,7 @@ public class TestScenarioCsvSeedEngine implements DbSeedEngine {
     }
 
     @Override
-    public void seed(Connection connection, String datasetContent, SeedSpec options) {
+    public void seed(Connection connection, String datasetContent, DbSeed.SeedSpec options) {
         try (Statement statement = connection.createStatement()) {
             for (String line : datasetContent.split("\\r?\\n")) {
                 String trimmed = line.trim();

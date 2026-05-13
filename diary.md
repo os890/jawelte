@@ -2964,3 +2964,16 @@ keeping every call site terse.
 
 verify-all.sh wip green — 1m 8s.
 
+
+## 2026-05-13 — Nest SeedSpec (with its SeedMode enum) inside DbSeed
+
+Moved `SeedSpec` from a top-level record to a nested record inside
+`DbSeed` (now `DbSeed.SeedSpec`); the `SeedMode` enum stays nested
+inside the record (`DbSeed.SeedSpec.SeedMode`). Standalone
+`SeedSpec.java` deleted. `DbSeedEngine` port signature, the bundled
+`DbUnitXmlSeedEngine` impl, the custom `TestScenarioCsvSeedEngine`
+in scenario 44, and `DbSeed.Builder`'s internal references all
+updated.
+
+verify-all.sh wip green — 1m 10s.
+
