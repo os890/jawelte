@@ -62,7 +62,7 @@ import java.util.regex.Pattern;
  * by the builder (built-in plus extensions) so it can run the
  * normalisation step without re-resolving MP Config on every call,
  * plus a {@link CellPredicateEvaluator} the diff engine pre-binds to
- * the active EL interpolator + per-call {@code InterpolationContext}.
+ * the active EL interpolator + per-call {@code ELInterpolator.Context}.
  * Instances are immutable and thread-safe.
  */
 public class MarkerComparator {

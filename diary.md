@@ -2995,3 +2995,23 @@ was package-private so never exposed anyway).
 
 verify-all.sh wip green — 1m 9s.
 
+
+## 2026-05-13 — Rename InterpolationContext to ELInterpolator.Context
+
+Moved `InterpolationContext` (with its nested `ELFunctionDescriptor`)
+from a top-level type in `db-testdata-module/api` into a nested
+record inside the `ELInterpolator` port at
+`db-testdata-module/api/port`, renaming to `ELInterpolator.Context`
+(and the inner descriptor to `Context.FunctionDescriptor`). The
+port is the consumer of the context, so the nesting is
+semantically clean; the renames shorten the leaf names so call
+sites stay tight.
+
+References in `DbSeed`, `DbDiff` (including its `DiffSpec` field),
+`JakartaELInterpolator`, `DbUnitXmlDiffEngine`, and the doc
+comments on `MarkerComparator` / `CellPredicateEvaluator` all
+switched to the new path. Standalone `InterpolationContext.java`
+deleted.
+
+verify-all.sh wip green — 1m 7s.
+

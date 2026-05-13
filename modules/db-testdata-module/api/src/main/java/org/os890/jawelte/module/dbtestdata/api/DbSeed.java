@@ -33,6 +33,7 @@ import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.port.DbSeedEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
+import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context;
 import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.PersistenceUnitConnectionResolver;
@@ -353,7 +354,7 @@ public abstract class DbSeed {
         public void execute() {
             String content = loadContent();
             ELInterpolator interpolator = resolveInterpolator();
-            InterpolationContext context = new InterpolationContext(values, Map.of(), List.of());
+            Context context = new Context(values, Map.of(), List.of());
             String interpolated = interpolator.interpolateAll(content, context);
             DbSeedEngine engine = resolveSeedEngine(format);
             Connection connection = connectionSupplier.get();

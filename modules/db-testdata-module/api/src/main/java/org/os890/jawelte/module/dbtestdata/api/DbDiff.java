@@ -39,9 +39,10 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
-import org.os890.jawelte.module.dbtestdata.api.InterpolationContext.ELFunctionDescriptor;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
+import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context;
+import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context.FunctionDescriptor;
 import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.PersistenceUnitConnectionResolver;
@@ -205,7 +206,7 @@ public abstract class DbDiff {
      * {@link DbDiffEngine}. The six fields collapse the builder's
      * {@code ignoring(...)} / {@code subsetOnly()} /
      * {@code unorderedTables(...)} / boolean-extension lists plus
-     * the EL {@link InterpolationContext} into a single immutable
+     * the EL {@link Context} into a single immutable
      * struct.
      *
      * @param ignorePatterns       column patterns to skip; values
@@ -242,7 +243,7 @@ public abstract class DbDiff {
             List<String> unorderedTables,
             List<String> booleanTrueValues,
             List<String> booleanFalseValues,
-            InterpolationContext interpolationContext) {
+            Context interpolationContext) {
 
         /**
          * Canonical constructor. Defensively copies every list so the
@@ -299,7 +300,7 @@ public abstract class DbDiff {
 
         private final Map<String, Object> beans = new LinkedHashMap<>();
 
-        private final List<ELFunctionDescriptor> functions = new ArrayList<>();
+        private final List<FunctionDescriptor> functions = new ArrayList<>();
 
         /** Constructor visible to {@link DbDiff} only. */
         Builder(Supplier<Connection> connectionSupplier) {
@@ -448,7 +449,7 @@ public abstract class DbDiff {
             Objects.requireNonNull(declaringClass, "declaringClass");
             Objects.requireNonNull(methodName, "methodName");
             validatePublicStaticMethod(declaringClass, methodName, prefix, name);
-            this.functions.add(new ELFunctionDescriptor(prefix, name, declaringClass, methodName));
+            this.functions.add(new FunctionDescriptor(prefix, name, declaringClass, methodName));
             return this;
         }
 
@@ -489,7 +490,7 @@ public abstract class DbDiff {
         public void assertEquals() {
             String content = loadContent();
             ELInterpolator interpolator = resolveInterpolator();
-            InterpolationContext context = new InterpolationContext(values, beans, functions);
+            Context context = new Context(values, beans, functions);
             String interpolated = interpolator.interpolate(content, context);
             DbDiffEngine engine = resolveDiffEngine(format);
             DiffSpec spec = buildSpec(context);
@@ -552,7 +553,7 @@ public abstract class DbDiff {
             return loadClasspathResource(classpathResource);
         }
 
-        private DiffSpec buildSpec(InterpolationContext interpolationContext) {
+        private DiffSpec buildSpec(Context interpolationContext) {
             List<String> mergedIgnore = mergeWithCsvDefaults(ignorePatterns, IGNORE_CONFIG_KEY);
             List<String> mergedUnordered = mergeWithCsvDefaults(unorderedTables, UNORDERED_CONFIG_KEY);
             List<String> trueExtras = csvDefaults(BOOLEAN_TRUE_CONFIG_KEY);

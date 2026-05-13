@@ -18,7 +18,7 @@ package org.os890.jawelte.module.dbtestdata.impl.util;
 /**
  * Callback the diff engine hands to {@link MarkerComparator} so the
  * comparator can dispatch {@code #{&hellip;}} markers without pulling
- * the api-side EL interpolator and {@code InterpolationContext} into
+ * the api-side EL interpolator and {@code ELInterpolator.Context} into
  * its own surface. The diff engine constructs the lambda from the
  * active {@code ELInterpolator} plus the per-call interpolation
  * bindings; the comparator only ever sees the abstract predicate.

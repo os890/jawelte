@@ -31,9 +31,9 @@ import jakarta.el.StandardELContext;
 import jakarta.el.ValueExpression;
 import jakarta.el.VariableMapper;
 
-import org.os890.jawelte.module.dbtestdata.api.InterpolationContext;
-import org.os890.jawelte.module.dbtestdata.api.InterpolationContext.ELFunctionDescriptor;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
+import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context;
+import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context.FunctionDescriptor;
 
 /**
  * Default {@link ELInterpolator} — evaluates {@code ${expr}}
@@ -48,14 +48,14 @@ import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
  * <p>Bindings:
  *
  * <ul>
- *   <li>{@link InterpolationContext#values()} → {@link VariableMapper}
+ *   <li>{@link Context#values()} → {@link VariableMapper}
  *       entries — flat name -&gt; object.</li>
- *   <li>{@link InterpolationContext#beans()} → also wired through
+ *   <li>{@link Context#beans()} → also wired through
  *       the variable mapper; EL resolves property access /
  *       method calls on the bean object.</li>
- *   <li>{@link InterpolationContext#functions()} → exposed via a
+ *   <li>{@link Context#functions()} → exposed via a
  *       lazy {@link FunctionMapper}: the static method on
- *       {@link ELFunctionDescriptor#declaringClass()} is looked up
+ *       {@link FunctionDescriptor#declaringClass()} is looked up
  *       on first reference; missing or non-{@code public static}
  *       methods raise {@link RuntimeException} at that point —
  *       evaluation time, never registration time.</li>
@@ -86,7 +86,7 @@ public class JakartaELInterpolator implements ELInterpolator {
     }
 
     @Override
-    public String interpolate(String template, InterpolationContext context) {
+    public String interpolate(String template, Context context) {
         if (template.indexOf(DOLLAR) < 0) {
             return template;
         }
@@ -94,7 +94,7 @@ public class JakartaELInterpolator implements ELInterpolator {
     }
 
     @Override
-    public String interpolateAll(String template, InterpolationContext context) {
+    public String interpolateAll(String template, Context context) {
         if (template.indexOf(DOLLAR) < 0 && template.indexOf(HASH) < 0) {
             return template;
         }
@@ -103,7 +103,7 @@ public class JakartaELInterpolator implements ELInterpolator {
 
     @Override
     public boolean evaluatePredicate(
-            String expression, InterpolationContext context, Object actualValue) {
+            String expression, Context context, Object actualValue) {
         ExpressionFactory expressionFactory = ExpressionFactory.newInstance();
         StandardELContext standardELContext = new StandardELContext(expressionFactory);
         bindContext(standardELContext, expressionFactory, context);
@@ -145,7 +145,7 @@ public class JakartaELInterpolator implements ELInterpolator {
     }
 
     private static String substituteTemplate(
-            String template, InterpolationContext context, boolean includeHashSyntax) {
+            String template, Context context, boolean includeHashSyntax) {
         ExpressionFactory expressionFactory = ExpressionFactory.newInstance();
         StandardELContext standardELContext = new StandardELContext(expressionFactory);
         bindContext(standardELContext, expressionFactory, context);
@@ -158,7 +158,7 @@ public class JakartaELInterpolator implements ELInterpolator {
     private static void bindContext(
             StandardELContext standardELContext,
             ExpressionFactory expressionFactory,
-            InterpolationContext context) {
+            Context context) {
         VariableMapper variableMapper = standardELContext.getVariableMapper();
         for (Map.Entry<String, Object> entry : context.values().entrySet()) {
             variableMapper.setVariable(
@@ -208,7 +208,7 @@ public class JakartaELInterpolator implements ELInterpolator {
         return output.toString();
     }
 
-    private static Method resolveStaticMethod(ELFunctionDescriptor descriptor) {
+    private static Method resolveStaticMethod(FunctionDescriptor descriptor) {
         Method match = null;
         for (Method candidate : descriptor.declaringClass().getDeclaredMethods()) {
             if (!candidate.getName().equals(descriptor.methodName())) {
@@ -241,7 +241,7 @@ public class JakartaELInterpolator implements ELInterpolator {
     /**
      * {@link ELContext} delegating to {@link StandardELContext} but
      * routing {@link #getFunctionMapper()} through a lazy lookup
-     * built from the {@link ELFunctionDescriptor} list.
+     * built from the {@link FunctionDescriptor} list.
      */
     private static class DelegatingELContext extends ELContext {
 
@@ -249,7 +249,7 @@ public class JakartaELInterpolator implements ELInterpolator {
 
         private final FunctionMapper functionMapper;
 
-        DelegatingELContext(StandardELContext delegate, List<ELFunctionDescriptor> functions) {
+        DelegatingELContext(StandardELContext delegate, List<FunctionDescriptor> functions) {
             this.delegate = delegate;
             this.functionMapper = new LazyFunctionMapper(functions);
         }
@@ -278,11 +278,11 @@ public class JakartaELInterpolator implements ELInterpolator {
      */
     private static class LazyFunctionMapper extends FunctionMapper {
 
-        private final List<ELFunctionDescriptor> descriptors;
+        private final List<FunctionDescriptor> descriptors;
 
         private final Map<String, Method> resolved = new HashMap<>();
 
-        LazyFunctionMapper(List<ELFunctionDescriptor> descriptors) {
+        LazyFunctionMapper(List<FunctionDescriptor> descriptors) {
             this.descriptors = descriptors;
         }
 
@@ -293,7 +293,7 @@ public class JakartaELInterpolator implements ELInterpolator {
             if (cached != null) {
                 return cached;
             }
-            for (ELFunctionDescriptor descriptor : descriptors) {
+            for (FunctionDescriptor descriptor : descriptors) {
                 if (descriptor.prefix().equals(prefix) && descriptor.name().equals(localName)) {
                     Method method = resolveStaticMethod(descriptor);
                     resolved.put(key, method);

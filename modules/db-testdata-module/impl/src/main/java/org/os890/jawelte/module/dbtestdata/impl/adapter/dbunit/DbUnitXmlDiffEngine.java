@@ -44,9 +44,9 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.DbDiff;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
-import org.os890.jawelte.module.dbtestdata.api.InterpolationContext;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
+import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context;
 import org.os890.jawelte.module.dbtestdata.impl.util.CellPredicateEvaluator;
 import org.os890.jawelte.module.dbtestdata.impl.util.ExpectedXmlLineLocator;
 import org.os890.jawelte.module.dbtestdata.impl.util.IgnorePatternMatcher;
@@ -114,7 +114,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     public List<DbDifference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options) {
         IDataSet expectedDataset = parseExpected(expectedContent);
         ExpectedXmlLineLocator lineLocator = ExpectedXmlLineLocator.parse(expectedContent);
-        InterpolationContext interpolationContext = options.interpolationContext();
+        Context interpolationContext = options.interpolationContext();
         ELInterpolator interpolator = resolveInterpolator();
         CellPredicateEvaluator predicateEvaluator =
                 (expression, actualValue) ->
