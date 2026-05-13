@@ -31,8 +31,8 @@ import jakarta.el.StandardELContext;
 import jakarta.el.ValueExpression;
 import jakarta.el.VariableMapper;
 
-import org.os890.jawelte.module.dbtestdata.api.ELFunctionDescriptor;
 import org.os890.jawelte.module.dbtestdata.api.InterpolationContext;
+import org.os890.jawelte.module.dbtestdata.api.InterpolationContext.ELFunctionDescriptor;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
 
 /**

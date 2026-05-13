@@ -32,6 +32,7 @@ import java.util.function.Supplier;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
+import org.os890.jawelte.module.dbtestdata.api.InterpolationContext.ELFunctionDescriptor;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
 import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;

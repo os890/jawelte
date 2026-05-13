@@ -2948,3 +2948,19 @@ not change) then running `verify-all.sh wip` — 1m 7s green for
 the in-flight scenario 64 plus the 63 default scenarios that all
 go through the new nested types.
 
+
+## 2026-05-13 — Nest ELFunctionDescriptor inside InterpolationContext
+
+Moved the `ELFunctionDescriptor` record from a top-level type to
+a nested record inside `InterpolationContext`
+(`InterpolationContext.ELFunctionDescriptor`). The descriptor is
+only meaningful in the context of an interpolation pass, so the
+nesting collapses the api surface onto a single import path.
+
+References in `DbDiff` and `JakartaELInterpolator` switched to
+the nested name via static-friendly `import
+org.os890.jawelte.module.dbtestdata.api.InterpolationContext.ELFunctionDescriptor;`,
+keeping every call site terse.
+
+verify-all.sh wip green — 1m 8s.
+

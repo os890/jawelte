@@ -57,4 +57,35 @@ public record InterpolationContext(
 
     /** Convenience constant for the empty context (no bindings). */
     public static final InterpolationContext EMPTY = new InterpolationContext(Map.of(), Map.of(), List.of());
+
+    /**
+     * Typed registration for a Jakarta EL function the diff-builder
+     * advertises through {@code DbDiff.Builder.withFunction(...)}. The
+     * declaring class and method name are carried as data rather than
+     * as a {@link java.lang.reflect.Method} so the api jar stays
+     * reflection-free at compile time; validation of the actual method
+     * existence and {@code public static} modifier happens at
+     * registration time inside the builder.
+     *
+     * @param prefix         the function prefix, e.g. {@code "fn"} for
+     *                       {@code ${fn:now()}}
+     * @param name           the function name, e.g. {@code "now"}
+     * @param declaringClass the class that hosts the static method
+     * @param methodName     the static-method name inside
+     *                       {@code declaringClass}
+     */
+    public record ELFunctionDescriptor(
+            String prefix,
+            String name,
+            Class<?> declaringClass,
+            String methodName) {
+
+        /** Canonical constructor; every field is mandatory. */
+        public ELFunctionDescriptor {
+            Objects.requireNonNull(prefix, "prefix");
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(declaringClass, "declaringClass");
+            Objects.requireNonNull(methodName, "methodName");
+        }
+    }
 }
