@@ -38,7 +38,6 @@ import java.util.function.Supplier;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
-import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context;
@@ -257,6 +256,81 @@ public abstract class DbDiff {
             booleanTrueValues = List.copyOf(Objects.requireNonNull(booleanTrueValues, "booleanTrueValues"));
             booleanFalseValues = List.copyOf(Objects.requireNonNull(booleanFalseValues, "booleanFalseValues"));
             Objects.requireNonNull(interpolationContext, "interpolationContext");
+        }
+    }
+
+    /**
+     * Typed record describing a single mismatch between the expected
+     * dataset and the database state. {@link DbDiffEngine} returns one
+     * {@link Difference} per cell mismatch and one per missing /
+     * unexpected row; the api carries the formatting of the resulting
+     * {@link AssertionError} message so engines never produce strings.
+     *
+     * @param kind               the difference category
+     * @param tableName          the table the difference is reported
+     *                           against
+     * @param rowIndex           0-based row index within the table — the
+     *                           expected dataset's index for
+     *                           {@link Kind#MISSING_ROW} and
+     *                           {@link Kind#VALUE_MISMATCH};
+     *                           the actual database index for
+     *                           {@link Kind#EXTRA_ROW}
+     * @param columnName         the column the cell mismatch is reported
+     *                           against; {@code null} when {@code kind}
+     *                           is not {@link Kind#VALUE_MISMATCH}
+     *                           because the difference is row-level
+     * @param expected           the expected value as a string — the
+     *                           special markers ({@code [NULL]},
+     *                           {@code [MATCH:&hellip;]}, {@code uuid'&hellip;'})
+     *                           are carried verbatim so the error
+     *                           message shows what the test author wrote
+     * @param actual             the database value as a string;
+     *                           {@code null} for {@link Kind#MISSING_ROW}
+     * @param expectedLineNumber 1-based line number in the expected
+     *                           dataset file the difference resolves to;
+     *                           {@code 0} when the engine cannot
+     *                           determine a meaningful line (e.g.
+     *                           inline {@code expectedContent(...)})
+     */
+    public record Difference(
+            Kind kind,
+            String tableName,
+            int rowIndex,
+            String columnName,
+            String expected,
+            String actual,
+            int expectedLineNumber) {
+
+        /**
+         * Canonical constructor. {@code kind} and {@code tableName} are
+         * mandatory; {@code columnName} is required when
+         * {@code kind == VALUE_MISMATCH} and forbidden otherwise.
+         */
+        public Difference {
+            Objects.requireNonNull(kind, "kind");
+            Objects.requireNonNull(tableName, "tableName");
+            if (kind == Kind.VALUE_MISMATCH) {
+                Objects.requireNonNull(columnName, "columnName");
+            }
+        }
+
+        /**
+         * Difference category emitted by {@link DbDiffEngine}.
+         */
+        public enum Kind {
+
+            /** Cell value differs at ({@code tableName}, {@code rowIndex}, {@code columnName}). */
+            VALUE_MISMATCH,
+
+            /** A row present in the expected dataset is absent from the database. */
+            MISSING_ROW,
+
+            /**
+             * A row present in the database is absent from the expected
+             * dataset. Only emitted when {@link DiffSpec#subsetOnly()}
+             * is {@code false}.
+             */
+            EXTRA_ROW
         }
     }
 
@@ -495,7 +569,7 @@ public abstract class DbDiff {
             DbDiffEngine engine = resolveDiffEngine(format);
             DiffSpec spec = buildSpec(context);
             Connection connection = connectionSupplier.get();
-            List<DbDifference> differences;
+            List<Difference> differences;
             try {
                 differences = engine.diff(connection, interpolated, spec);
             } catch (RuntimeException diffFailure) {
@@ -583,24 +657,24 @@ public abstract class DbDiff {
                     .orElse(List.of());
         }
 
-        private static String formatMessage(List<DbDifference> differences) {
+        private static String formatMessage(List<Difference> differences) {
             StringBuilder message = new StringBuilder();
             message.append("DB diff found ")
                     .append(differences.size())
                     .append(" difference(s):");
-            for (DbDifference difference : differences) {
+            for (Difference difference : differences) {
                 message.append(System.lineSeparator()).append("  ");
                 appendDifferenceLine(message, difference);
             }
             return message.toString();
         }
 
-        private static void appendDifferenceLine(StringBuilder message, DbDifference difference) {
+        private static void appendDifferenceLine(StringBuilder message, Difference difference) {
             message.append(difference.tableName())
                     .append('[')
                     .append(difference.rowIndex())
                     .append(']');
-            if (difference.kind() == DifferenceType.VALUE_MISMATCH) {
+            if (difference.kind() == Difference.Kind.VALUE_MISMATCH) {
                 message.append('.')
                         .append(difference.columnName())
                         .append(": expected=\"")
@@ -608,7 +682,7 @@ public abstract class DbDiff {
                         .append("\" actual=\"")
                         .append(difference.actual())
                         .append('"');
-            } else if (difference.kind() == DifferenceType.MISSING_ROW) {
+            } else if (difference.kind() == Difference.Kind.MISSING_ROW) {
                 message.append(": missing row in database");
             } else {
                 message.append(": unexpected row in database");

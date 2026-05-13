@@ -42,8 +42,8 @@ import org.dbunit.dataset.xml.FlatXmlDataSetBuilder;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.DbDiff;
-import org.os890.jawelte.module.dbtestdata.api.DbDifference;
-import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
+import org.os890.jawelte.module.dbtestdata.api.DbDiff.Difference;
+import org.os890.jawelte.module.dbtestdata.api.DbDiff.Difference.Kind;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context;
@@ -60,7 +60,7 @@ import org.os890.jawelte.module.dbtestdata.impl.util.MarkerComparator;
  * {@link IDataSet} the engine walks for table and column metadata,
  * and the second via {@link ExpectedXmlLineLocator} captures the
  * 1-based line number of every row element so the resulting
- * {@link DbDifference} records point the test author at the failing
+ * {@link Difference} records point the test author at the failing
  * fixture line.
  *
  * <p>Per expected table the engine issues a single
@@ -94,7 +94,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
      * cell whose entire expected value matches {@code @<identifier>}
      * binds the label to whatever actual value the database returned;
      * every other cell sharing the same label must surface the same
-     * actual or a {@link DifferenceType#VALUE_MISMATCH} is emitted.
+     * actual or a {@link Kind#VALUE_MISMATCH} is emitted.
      * Identifier characters are restricted to {@code [A-Za-z0-9_]} so
      * arbitrary VARCHAR content starting with {@code @} (e-mail-like
      * strings) is not silently captured as a binding.
@@ -111,7 +111,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     }
 
     @Override
-    public List<DbDifference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options) {
+    public List<Difference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options) {
         IDataSet expectedDataset = parseExpected(expectedContent);
         ExpectedXmlLineLocator lineLocator = ExpectedXmlLineLocator.parse(expectedContent);
         Context interpolationContext = options.interpolationContext();
@@ -131,7 +131,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                 options.subsetOnly(),
                 labelBindings);
 
-        List<DbDifference> differences = new ArrayList<>();
+        List<Difference> differences = new ArrayList<>();
         Set<String> tablesHandledByDbunit = new HashSet<>();
         try {
             ITableIterator iterator = expectedDataset.iterator();
@@ -174,7 +174,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     }
 
     private static void validateLabelBindings(
-            List<DbDifference> differences, Map<String, List<RecordedBinding>> labelBindings) {
+            List<Difference> differences, Map<String, List<RecordedBinding>> labelBindings) {
         for (Map.Entry<String, List<RecordedBinding>> entry : labelBindings.entrySet()) {
             String label = entry.getKey();
             List<RecordedBinding> bindings = entry.getValue();
@@ -185,8 +185,8 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
             for (int i = 1; i < bindings.size(); i++) {
                 RecordedBinding binding = bindings.get(i);
                 if (!Objects.equals(canonical, binding.actualValue())) {
-                    differences.add(new DbDifference(
-                            DifferenceType.VALUE_MISMATCH,
+                    differences.add(new Difference(
+                            Kind.VALUE_MISMATCH,
                             binding.tableName(),
                             binding.rowIndex(),
                             binding.columnName(),
@@ -199,7 +199,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     }
 
     private static void checkEmptyTableAssertion(
-            List<DbDifference> differences,
+            List<Difference> differences,
             Connection connection,
             String emptyTable,
             boolean subsetOnly) throws SQLException {
@@ -208,8 +208,8 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
         }
         List<Map<String, Object>> actualRows = readTable(connection, emptyTable);
         for (int rowIndex = 0; rowIndex < actualRows.size(); rowIndex++) {
-            differences.add(new DbDifference(
-                    DifferenceType.EXTRA_ROW,
+            differences.add(new Difference(
+                    Kind.EXTRA_ROW,
                     emptyTable,
                     rowIndex,
                     null,
@@ -284,13 +284,13 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     }
 
     private static void compareOrdered(
-            List<DbDifference> differences, TableScope scope, DiffContext context) throws Exception {
+            List<Difference> differences, TableScope scope, DiffContext context) throws Exception {
         int expectedRowCount = scope.expectedTable().getRowCount();
         for (int rowIndex = 0; rowIndex < expectedRowCount; rowIndex++) {
             int lineNumber = context.lineLocator().lineFor(scope.tableName(), rowIndex);
             if (rowIndex >= scope.actualRows().size()) {
-                differences.add(new DbDifference(
-                        DifferenceType.MISSING_ROW,
+                differences.add(new Difference(
+                        Kind.MISSING_ROW,
                         scope.tableName(),
                         rowIndex,
                         null,
@@ -303,8 +303,8 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
         }
         if (!context.subsetOnly() && scope.actualRows().size() > expectedRowCount) {
             for (int extraRowIndex = expectedRowCount; extraRowIndex < scope.actualRows().size(); extraRowIndex++) {
-                differences.add(new DbDifference(
-                        DifferenceType.EXTRA_ROW,
+                differences.add(new Difference(
+                        Kind.EXTRA_ROW,
                         scope.tableName(),
                         extraRowIndex,
                         null,
@@ -316,14 +316,14 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     }
 
     private static void compareUnordered(
-            List<DbDifference> differences, TableScope scope, DiffContext context) throws Exception {
+            List<Difference> differences, TableScope scope, DiffContext context) throws Exception {
         int expectedRowCount = scope.expectedTable().getRowCount();
         boolean[] actualClaimed = new boolean[scope.actualRows().size()];
         for (int rowIndex = 0; rowIndex < expectedRowCount; rowIndex++) {
             int claimedIndex = findMatchingActualRow(scope, context, rowIndex, actualClaimed);
             if (claimedIndex < 0) {
-                differences.add(new DbDifference(
-                        DifferenceType.MISSING_ROW,
+                differences.add(new Difference(
+                        Kind.MISSING_ROW,
                         scope.tableName(),
                         rowIndex,
                         null,
@@ -342,8 +342,8 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
         }
         for (int actualIndex = 0; actualIndex < scope.actualRows().size(); actualIndex++) {
             if (!actualClaimed[actualIndex]) {
-                differences.add(new DbDifference(
-                        DifferenceType.EXTRA_ROW,
+                differences.add(new Difference(
+                        Kind.EXTRA_ROW,
                         scope.tableName(),
                         actualIndex,
                         null,
@@ -391,7 +391,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     }
 
     private static void compareRow(
-            List<DbDifference> differences,
+            List<Difference> differences,
             TableScope scope,
             DiffContext context,
             int rowIndex,
@@ -415,8 +415,8 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                     ? actualValue == null
                     : context.comparator().matches(expectedString, actualValue);
             if (!cellMatches) {
-                differences.add(new DbDifference(
-                        DifferenceType.VALUE_MISMATCH,
+                differences.add(new Difference(
+                        Kind.VALUE_MISMATCH,
                         scope.tableName(),
                         rowIndex,
                         columnName,
@@ -525,7 +525,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
      *                     {@code @<label>}
      * @param lineNumber   the 1-based line in the expected dataset
      *                     where the row sits (for the
-     *                     {@code DbDifference.expectedLineNumber} field)
+     *                     {@code Difference.expectedLineNumber} field)
      * @param actualValue  the database value as a string;
      *                     {@code "[NULL]"} when the cell is SQL NULL
      */

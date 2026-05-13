@@ -19,13 +19,13 @@ import java.sql.Connection;
 import java.util.List;
 
 import org.os890.jawelte.module.dbtestdata.api.DbDiff;
-import org.os890.jawelte.module.dbtestdata.api.DbDifference;
+import org.os890.jawelte.module.dbtestdata.api.DbDiff.Difference;
 
 /**
  * Pluggable dataset-verifier. Mirror of {@link DbSeedEngine} for the
  * diff side: {@code DbDiff} matches {@link #format()} against the
  * builder's {@code format(...)} value, and the active impl returns a
- * list of typed {@link DbDifference}s — the api owns the
+ * list of typed {@link Difference}s — the api owns the
  * {@link AssertionError} formatting; engines never produce strings.
  *
  * <p>Implementations are JVM-lifetime singletons, loaded via
@@ -49,7 +49,7 @@ public interface DbDiffEngine {
     /**
      * Compare the database state on {@code connection} against
      * {@code expectedContent}, returning every cell-, row-, or
-     * column-level discrepancy as a {@link DbDifference}.
+     * column-level discrepancy as a {@link Difference}.
      *
      * <p>The returned list is immutable and possibly empty (empty
      * == no differences). The engine does not commit, close, or
@@ -67,5 +67,5 @@ public interface DbDiffEngine {
      *                          database: " + cause} prefix before it
      *                          reaches the caller
      */
-    List<DbDifference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options);
+    List<Difference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options);
 }

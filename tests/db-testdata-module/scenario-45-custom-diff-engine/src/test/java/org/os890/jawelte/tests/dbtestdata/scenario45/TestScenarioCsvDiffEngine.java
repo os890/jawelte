@@ -25,15 +25,15 @@ import java.util.List;
 import jakarta.annotation.Priority;
 
 import org.os890.jawelte.module.dbtestdata.api.DbDiff;
-import org.os890.jawelte.module.dbtestdata.api.DbDifference;
-import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
+import org.os890.jawelte.module.dbtestdata.api.DbDiff.Difference;
+import org.os890.jawelte.module.dbtestdata.api.DbDiff.Difference.Kind;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 
 /**
  * Test-only {@link DbDiffEngine} for the {@code text/csv} format.
  * Parses each non-empty CSV line as {@code ID,NAME} and compares
  * against the {@code CUSTOMER} table in row-order. Produces typed
- * {@link DbDifference} records — exactly how the bundled engine
+ * {@link Difference} records — exactly how the bundled engine
  * does — to demonstrate that the api carries the
  * {@link AssertionError} formatting.
  */
@@ -49,7 +49,7 @@ public class TestScenarioCsvDiffEngine implements DbDiffEngine {
     }
 
     @Override
-    public List<DbDifference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options) {
+    public List<Difference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options) {
         List<String[]> expected = new ArrayList<>();
         for (String line : expectedContent.split("\\r?\\n")) {
             String trimmed = line.trim();
@@ -57,15 +57,15 @@ public class TestScenarioCsvDiffEngine implements DbDiffEngine {
                 expected.add(trimmed.split(","));
             }
         }
-        List<DbDifference> differences = new ArrayList<>();
+        List<Difference> differences = new ArrayList<>();
         try (Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery("SELECT ID, NAME FROM CUSTOMER ORDER BY ID")) {
             int rowIndex = 0;
             while (resultSet.next() && rowIndex < expected.size()) {
                 String[] row = expected.get(rowIndex);
                 if (!resultSet.getString(2).equals(row[1].trim())) {
-                    differences.add(new DbDifference(
-                            DifferenceType.VALUE_MISMATCH,
+                    differences.add(new Difference(
+                            Kind.VALUE_MISMATCH,
                             "CUSTOMER",
                             rowIndex,
                             "NAME",

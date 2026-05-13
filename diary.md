@@ -3015,3 +3015,20 @@ deleted.
 
 verify-all.sh wip green — 1m 7s.
 
+
+## 2026-05-13 — Nest DbDifference inside DbDiff (with shortened names)
+
+Moved `DbDifference` from a top-level record to a nested record
+inside `DbDiff`, renamed: `DbDifference` -> `DbDiff.Difference`,
+its nested enum `DifferenceType` -> `DbDiff.Difference.Kind`. The
+short names work inside the nesting context (`Difference` /
+`Kind`); call sites import them as nested types so the bodies
+stay tight.
+
+References in the `DbDiffEngine` port, `DbUnitXmlDiffEngine`,
+`DbDiff.Builder`'s message formatter, scenario 45's
+`TestScenarioCsvDiffEngine`, and the line-locator's javadoc all
+switched. Standalone `DbDifference.java` deleted.
+
+verify-all.sh wip green — 1m 10s.
+

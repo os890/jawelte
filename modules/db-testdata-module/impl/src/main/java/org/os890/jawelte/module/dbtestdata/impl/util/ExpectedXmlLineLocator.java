@@ -28,7 +28,7 @@ import java.util.Set;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
-import org.os890.jawelte.module.dbtestdata.api.DbDifference;
+import org.os890.jawelte.module.dbtestdata.api.DbDiff;
 import org.xml.sax.Attributes;
 import org.xml.sax.Locator;
 import org.xml.sax.SAXException;
@@ -37,7 +37,7 @@ import org.xml.sax.helpers.DefaultHandler;
 /**
  * Pre-parses a DbUnit-flat XML dataset to extract the 1-based
  * line numbers of each row element. Used by the diff engine to
- * populate {@link DbDifference#expectedLineNumber()} so test authors
+ * populate {@link DbDiff.Difference#expectedLineNumber()} so test authors
  * can navigate directly to the failing row in their expected
  * fixture.
  *
