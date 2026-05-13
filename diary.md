@@ -3042,3 +3042,22 @@ into the default `<modules>` list and registered it in
 `verify-all.sh` matrix to follow before pushing the seven queued
 commits.
 
+
+## 2026-05-13: PersistenceUnitNameSupplier port replaces JpaConfiguredPersistenceUnit
+
+Reworked the wiring for `DbSeed.forPersistenceUnit()` / `DbDiff.forPersistenceUnit()`. The old design used a JVM-wide static holder (`JpaConfiguredPersistenceUnit` in `jpa-module/api`) that the jpa-module lifecycle adapter set in `beforeAll` and cleared in `afterAll`. The new design is CDI-native and owns its state inside db-testdata-module:
+
+- New port `PersistenceUnitNameSupplier` in `db-testdata-module/api/port/` with a single `String get()` method. `DbSeed` / `DbDiff` look it up at `@Test`-method time via `CDI.current().select(PersistenceUnitNameSupplier.class).get().get()`.
+- CDI extension `AnnotationDrivenPersistenceUnitExtension` in `db-testdata-module/impl/adapter/extension/`. During `BeforeBeanDiscovery` it calls `TestContext.get()` (which still resolves in that bootstrap window) and stores `@PersistenceConfig.persistenceUnitName()` on itself. Exposed via `capturedName()`.
+- Default impl `DefaultPersistenceUnitNameSupplier` in `db-testdata-module/impl/adapter/persistence/`, `@ApplicationScoped`. Its `@Initialized(ApplicationScoped.class)` observer takes a `BeanManager` parameter, calls `bm.getExtension(AnnotationDrivenPersistenceUnitExtension.class).capturedName()`, and stores the value on itself. The bean serves as the per-CDI-container cache for the captured value (room for additional cached info later).
+- Removed `JpaConfiguredPersistenceUnit` entirely; trimmed the `set`/`reset` calls from `JpaLifecycleAdapter.beforeAll` / `afterAll`.
+
+Path of an in-flight lookup:
+1. `DelegatingJUnitExtension.beforeAll` sets the per-thread `TestContext`.
+2. CDI container starts. `AnnotationDrivenPersistenceUnitExtension.onBeforeBeanDiscovery` runs, calls `TestContext.get()`, reads the annotation, stores the captured name on the extension instance.
+3. Still inside the CDI bootstrap, `@Initialized(ApplicationScoped.class)` fires. The default `PersistenceUnitNameSupplier` bean's observer pulls the captured value from the extension via `bm.getExtension(...)` and sets it on itself.
+4. `DelegatingJUnitExtension.beforeAll` returns; `testContext.reset()` clears the per-thread accessor.
+5. The `@Test` method runs. `DbSeed.forPersistenceUnit()` calls `CDI.current().select(PersistenceUnitNameSupplier.class).get().get()`, gets the captured name, routes to the named PU.
+
+Tested under OWB: scenarios 01, 36, 36a, 37, 44, 46, 64 all green. Under Weld: scenario 01 green; scenarios 36 and 64 fail with a pre-existing `NoClassDefFoundError: org/mockito/Mockito` from `TestBeansCdiExtension`'s auto-mock loop — verified the same failure exists at HEAD baseline without my changes (`mockito-core` is `provided` in the parent depMgmt and `cdi-module/impl`'s auto-mock loop tries to instantiate Mockito for any unsatisfied `@Inject` IP found in the test class). Separate bug; out of scope for this rework.
+

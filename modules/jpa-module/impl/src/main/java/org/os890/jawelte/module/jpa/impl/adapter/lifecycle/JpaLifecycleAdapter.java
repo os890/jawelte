@@ -26,7 +26,6 @@ import org.opentest4j.TestAbortedException;
 import org.os890.jawelte.core.api.event.AfterTestTransaction;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
-import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
@@ -96,9 +95,6 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void beforeAll(TestContext testContext) {
-        PersistenceConfig persistenceConfig = testContext.getTestClass().getAnnotation(PersistenceConfig.class);
-        JpaConfiguredPersistenceUnit.set(
-                persistenceConfig == null ? "" : persistenceConfig.persistenceUnitName());
         if (isFileMode(testContext)) {
             String filePath = resolveFileModePath(testContext);
             testContext.bindMetadata(FileModeState.class, new FileModeState(filePath));
@@ -193,7 +189,6 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         }
         TransactionScopedEmHolder.clearForCurrentThread();
         JpaActivePersistenceUnits.reset();
-        JpaConfiguredPersistenceUnit.reset();
     }
 
     private static void beginTransactionForTransactionalTestMethod(TestContext testContext) {

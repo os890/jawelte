@@ -35,6 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 
+import jakarta.enterprise.inject.spi.CDI;
+
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
@@ -42,7 +44,7 @@ import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context.FunctionDescriptor;
-import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;
+import org.os890.jawelte.module.dbtestdata.api.port.PersistenceUnitNameSupplier;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.PersistenceUnitConnectionResolver;
 
@@ -86,22 +88,34 @@ public abstract class DbDiff {
     /**
      * Resolve the persistence-unit connection driven by the active
      * test class's {@link PersistenceConfig#persistenceUnitName()}.
-     * The annotation value is read once during jpa-module's
-     * {@code beforeAll} hook and stored in
-     * {@link JpaConfiguredPersistenceUnit}; when the stored value is
-     * non-empty its value names the PU; when empty &mdash; including
-     * the path where jpa-module is not on the classpath at all
-     * &mdash; this method delegates to
+     * The annotation value is captured by db-testdata-module/impl's
+     * CDI Extension during {@code BeforeBeanDiscovery} (when
+     * {@code TestContext.get()} still resolves) and pushed onto the
+     * default {@link PersistenceUnitNameSupplier} CDI bean during the
+     * {@code @Initialized(ApplicationScoped.class)} observer;
+     * {@code forPersistenceUnit()} reads the bean via
+     * {@code CDI.current().select(PersistenceUnitNameSupplier.class).get().get()}.
+     * When the resolved name is non-empty its value names the PU;
+     * when empty &mdash; including the path where the annotation is
+     * absent, db-testdata-module/impl is not on the classpath, or no
+     * CDI container is active &mdash; this method delegates to
      * {@link #forCurrentPersistenceUnit()}.
      *
      * @return a fresh {@link Builder}
      */
     public static Builder forPersistenceUnit() {
-        String configuredName = JpaConfiguredPersistenceUnit.get();
+        String configuredName = "";
+        try {
+            configuredName = CDI.current().select(PersistenceUnitNameSupplier.class).get().get();
+        } catch (RuntimeException noSupplier) {
+            // No CDI container active or no PersistenceUnitNameSupplier
+            // bean registered. Fall through and delegate.
+        }
         if (configuredName.isEmpty()) {
             return forCurrentPersistenceUnit();
         }
-        return new Builder(() -> resolver().connectionFor(configuredName));
+        String resolvedName = configuredName;
+        return new Builder(() -> resolver().connectionFor(resolvedName));
     }
 
     /**

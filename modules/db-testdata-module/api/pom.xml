@@ -56,6 +56,20 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-jpa-module-api</artifactId>
         </dependency>
+
+        <!--
+            jakarta.cdi-api is referenced at compile time by
+            DbSeed.forPersistenceUnit() / DbDiff.forPersistenceUnit()
+            for the CDI.current() lookup of the synthetic TestContext
+            bean. scope=provided (inherited from the parent pom's
+            dependencyManagement): consumers bring their own CDI
+            implementation jar (OWB, Weld, Quarkus, ...) on the test
+            classpath.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

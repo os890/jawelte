@@ -74,6 +74,36 @@
             <groupId>jakarta.el</groupId>
             <artifactId>jakarta.el-api</artifactId>
         </dependency>
+
+        <!--
+            jakarta.cdi-api supports the
+            AnnotationDrivenPersistenceUnitExtension and the default
+            @ApplicationScoped PersistenceUnitNameSupplier bean. The
+            extension captures @PersistenceConfig.persistenceUnitName
+            from the active test class during BeforeBeanDiscovery (when
+            TestContext.get() still resolves); the supplier bean pulls
+            the captured value from the extension via
+            BeanManager.getExtension(...) in its
+            @Initialized(ApplicationScoped.class) observer. provided
+            scope (inherited from the parent pom): the CDI
+            implementation jar is brought by the consuming test module.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jpa-module/api is reachable transitively via
+            db-testdata-module/api, but the CDI Extension directly
+            references @PersistenceConfig; declared here so this
+            module's compile classpath records the dependency
+            explicitly.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
