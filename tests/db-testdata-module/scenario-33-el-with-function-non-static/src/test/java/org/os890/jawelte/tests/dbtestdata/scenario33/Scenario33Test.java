@@ -51,21 +51,21 @@ class Scenario33Test {
     }
 
     @Test
-    void registeringANonStaticMethodSurfacesAtEvaluationTimeNotRegistrationTime() {
-        // Registration succeeds — validation is deferred.
-        DbDiff diffBuilderTrigger = null;
+    void registeringANonStaticMethodRaisesAtRegistrationTime() {
+        // The builder validates the method's modifiers before storing
+        // the descriptor — instance methods raise here, not later
+        // inside assertEquals().
         org.os890.jawelte.module.dbtestdata.api.DbDiffBuilder builder =
                 DbDiff.forConnection(connection)
                         .expectedContent(
                                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                                         + "<dataset>"
                                         + "<EVENT ID=\"1\" V=\"${fn:bad()}\"/>"
-                                        + "</dataset>")
-                        .withFunction("fn", "bad", Functions.class, "instanceMethod");
-        // Evaluation surfaces the failure.
-        assertThatThrownBy(builder::assertEquals)
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("public static");
+                                        + "</dataset>");
+        assertThatThrownBy(() -> builder.withFunction("fn", "bad", Functions.class, "instanceMethod"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be public static")
+                .hasMessageContaining("instanceMethod");
     }
 
     public static class Functions {

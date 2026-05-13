@@ -52,17 +52,20 @@ class Scenario34Test {
     }
 
     @Test
-    void registeringAnUnknownMethodNameSurfacesAtEvaluationTimeNotRegistrationTime() {
+    void registeringAnUnknownMethodNameRaisesAtRegistrationTime() {
+        // The builder verifies the method exists on declaringClass at
+        // registration time; an unknown method name raises before the
+        // descriptor is even stored.
         DbDiffBuilder builder = DbDiff.forConnection(connection)
                 .expectedContent(
                         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                                 + "<dataset>"
                                 + "<EVENT ID=\"1\" V=\"${fn:ghost()}\"/>"
-                                + "</dataset>")
-                .withFunction("fn", "ghost", Functions.class, "thereIsNoSuchMethod");
-        assertThatThrownBy(builder::assertEquals)
-                .isInstanceOf(RuntimeException.class)
-                .hasMessageContaining("no public static method");
+                                + "</dataset>");
+        assertThatThrownBy(() -> builder.withFunction("fn", "ghost", Functions.class, "thereIsNoSuchMethod"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no public static method")
+                .hasMessageContaining("thereIsNoSuchMethod");
     }
 
     public static class Functions {

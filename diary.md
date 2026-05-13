@@ -2781,3 +2781,27 @@ DB diff message references the table + row indices).
 verify-all.sh wip green — 5 in-flight + 54 default scenarios,
 1m 4s.
 
+
+## 2026-05-13 — TICKET-009 D8: withFunction fail-fast validation
+
+`DbDiffBuilder.withFunction(prefix, name, declaringClass, methodName)`
+now verifies the method's existence and modifiers at registration
+time. An unknown method name or a non-`public static` method raises
+`IllegalArgumentException` from the `withFunction(...)` call itself,
+not from `assertEquals()` later. Validation iterates
+`declaringClass.getDeclaredMethods()` looking for a name match, then
+checks the modifiers. Error messages carry the
+`prefix:name` label plus the offending class + method names so the
+test author can correct the call site directly.
+
+`JakartaELInterpolator.LazyFunctionMapper.resolveFunction(...)` keeps
+its own resolution + cache path; the builder-time check is a strict
+fail-fast guard, the eval-time path is defensive in case a descriptor
+is constructed without going through the builder.
+
+Scenarios 33 (non-static method) and 34 (missing method) were
+updated to assert the failure surfaces from `withFunction(...)`
+rather than from `assertEquals()`; method names renamed accordingly.
+
+verify-all.sh wip green — 5 in-flight + 54 default scenarios, 1m 2s.
+

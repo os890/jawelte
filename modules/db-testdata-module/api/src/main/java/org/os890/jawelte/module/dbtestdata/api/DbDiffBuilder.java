@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.module.dbtestdata.api;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -197,21 +199,54 @@ public class DbDiffBuilder {
     }
 
     /**
-     * Register a Jakarta EL function. The {@code declaringClass}
-     * must host a {@code public static} method matching
-     * {@code methodName} — validation is deferred until evaluation
-     * time, where mismatch surfaces as a {@link RuntimeException}.
+     * Register a Jakarta EL function. The {@code declaringClass} must
+     * host a {@code public static} method matching {@code methodName};
+     * validation runs at registration time and an unknown method name
+     * or a non-{@code public static} method raises
+     * {@link IllegalArgumentException} from this call, not from
+     * {@link #assertEquals()} later.
      *
      * @param prefix         the function prefix, e.g. {@code "fn"}
      * @param name           the function name, e.g. {@code "now"}
      * @param declaringClass the class hosting the static method
      * @param methodName     the static-method name
      * @return this builder for chaining
+     * @throws IllegalArgumentException when {@code declaringClass}
+     *                                  declares no method named
+     *                                  {@code methodName} or when that
+     *                                  method is not
+     *                                  {@code public static}
      */
     public DbDiffBuilder withFunction(
             String prefix, String name, Class<?> declaringClass, String methodName) {
+        Objects.requireNonNull(prefix, "prefix");
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(declaringClass, "declaringClass");
+        Objects.requireNonNull(methodName, "methodName");
+        validatePublicStaticMethod(declaringClass, methodName, prefix, name);
         this.functions.add(new ELFunctionDescriptor(prefix, name, declaringClass, methodName));
         return this;
+    }
+
+    private static void validatePublicStaticMethod(
+            Class<?> declaringClass, String methodName, String prefix, String name) {
+        Method matchedByName = null;
+        for (Method candidate : declaringClass.getDeclaredMethods()) {
+            if (!candidate.getName().equals(methodName)) {
+                continue;
+            }
+            matchedByName = candidate;
+            if (Modifier.isStatic(candidate.getModifiers())
+                    && Modifier.isPublic(candidate.getModifiers())) {
+                return;
+            }
+        }
+        String label = "EL function " + prefix + ":" + name
+                + " — method '" + methodName + "' on " + declaringClass.getName();
+        if (matchedByName == null) {
+            throw new IllegalArgumentException(label + " — no public static method found");
+        }
+        throw new IllegalArgumentException(label + " — must be public static");
     }
 
     /**
