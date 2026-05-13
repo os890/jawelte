@@ -2611,3 +2611,17 @@ Implemented all three methods in `JakartaELInterpolator`, refactoring the
 existing `substituteAll` to accept an `includeHashSyntax` flag so the same
 walker handles both `${...}`-only and `${...}+#{...}` modes.
 
+
+## 2026-05-13 — TICKET-009 D1: thread InterpolationContext through DiffSpec
+
+`DiffSpec` gains an `interpolationContext` field so the diff engine
+can forward values/beans/functions to the active EL interpolator when
+it evaluates `#{...}` per-cell predicate markers. `DbDiffBuilder`
+constructs the context once and passes it to both `interpolator.interpolate(...)`
+and the new `buildSpec(context)` call.
+
+`DbSeedBuilder` switches its pre-parse step from `interpolator.interpolate(...)`
+to `interpolator.interpolateAll(...)` so `#{...}` on the seed side acts
+as a placeholder (immediate eval) — matches Jakarta EL semantics on the
+seed side where no actual DB value exists for deferred evaluation.
+

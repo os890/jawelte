@@ -180,7 +180,7 @@ public class DbSeedBuilder {
         String content = loadContent();
         ELInterpolator interpolator = DatasetSupport.resolveInterpolator();
         InterpolationContext context = new InterpolationContext(values, Map.of(), List.of());
-        String interpolated = interpolator.interpolate(content, context);
+        String interpolated = interpolator.interpolateAll(content, context);
         DbSeedEngine engine = DatasetSupport.resolveSeedEngine(format);
         Connection connection = connectionSupplier.get();
         try {

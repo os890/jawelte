@@ -233,7 +233,7 @@ public class DbDiffBuilder {
         InterpolationContext context = new InterpolationContext(values, beans, functions);
         String interpolated = interpolator.interpolate(content, context);
         DbDiffEngine engine = DatasetSupport.resolveDiffEngine(format);
-        DiffSpec spec = buildSpec();
+        DiffSpec spec = buildSpec(context);
         Connection connection = connectionSupplier.get();
         List<DbDifference> differences;
         try {
@@ -293,12 +293,13 @@ public class DbDiffBuilder {
         return DatasetSupport.loadClasspathResource(classpathResource);
     }
 
-    private DiffSpec buildSpec() {
+    private DiffSpec buildSpec(InterpolationContext interpolationContext) {
         List<String> mergedIgnore = mergeWithCsvDefaults(ignorePatterns, IGNORE_CONFIG_KEY);
         List<String> mergedUnordered = mergeWithCsvDefaults(unorderedTables, UNORDERED_CONFIG_KEY);
         List<String> trueExtras = csvDefaults(BOOLEAN_TRUE_CONFIG_KEY);
         List<String> falseExtras = csvDefaults(BOOLEAN_FALSE_CONFIG_KEY);
-        return new DiffSpec(mergedIgnore, subsetOnly, mergedUnordered, trueExtras, falseExtras);
+        return new DiffSpec(
+                mergedIgnore, subsetOnly, mergedUnordered, trueExtras, falseExtras, interpolationContext);
     }
 
     private static List<String> mergeWithCsvDefaults(List<String> base, String configKey) {
