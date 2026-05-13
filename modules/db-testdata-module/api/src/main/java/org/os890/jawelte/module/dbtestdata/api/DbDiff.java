@@ -19,18 +19,25 @@ import java.sql.Connection;
 import java.util.Objects;
 
 import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;
+import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.PersistenceUnitConnectionResolver;
 
 /**
  * Static entry point for database verification. Mirrors
- * {@link DbSeed} on the read side: three factories return a
+ * {@link DbSeed} on the read side: four factories return a
  * single-use {@link DbDiffBuilder}.
  *
  * <ul>
  *   <li>{@link #forConnection(Connection)} uses the supplied JDBC
  *       connection directly.</li>
- *   <li>{@link #forPersistenceUnit()} resolves the single persistence
- *       unit currently active on the calling thread.</li>
+ *   <li>{@link #forPersistenceUnit()} reads
+ *       {@link PersistenceConfig#persistenceUnitName()} on the
+ *       active test class; non-empty &rarr; named PU, empty / no
+ *       annotation &rarr; delegate to
+ *       {@link #forCurrentPersistenceUnit()}.</li>
+ *   <li>{@link #forCurrentPersistenceUnit()} resolves the single
+ *       persistence unit currently active on the calling thread.</li>
  *   <li>{@link #forPersistenceUnit(String)} resolves the named PU.</li>
  * </ul>
  */
@@ -54,12 +61,33 @@ public abstract class DbDiff {
     }
 
     /**
+     * Resolve the persistence-unit connection driven by the active
+     * test class's {@link PersistenceConfig#persistenceUnitName()}.
+     * The annotation value is read once during jpa-module's
+     * {@code beforeAll} hook and stored in
+     * {@link JpaConfiguredPersistenceUnit}; when the stored value is
+     * non-empty its value names the PU; when empty &mdash; including
+     * the path where jpa-module is not on the classpath at all
+     * &mdash; this method delegates to
+     * {@link #forCurrentPersistenceUnit()}.
+     *
+     * @return a fresh {@link DbDiffBuilder}
+     */
+    public static DbDiffBuilder forPersistenceUnit() {
+        String configuredName = JpaConfiguredPersistenceUnit.get();
+        if (configuredName.isEmpty()) {
+            return forCurrentPersistenceUnit();
+        }
+        return new DbDiffBuilder(() -> resolver().connectionFor(configuredName));
+    }
+
+    /**
      * Resolve the connection of the single currently active
      * persistence unit on the calling thread.
      *
      * @return a fresh {@link DbDiffBuilder}
      */
-    public static DbDiffBuilder forPersistenceUnit() {
+    public static DbDiffBuilder forCurrentPersistenceUnit() {
         return new DbDiffBuilder(() -> resolver().connectionForActivePersistenceUnit());
     }
 

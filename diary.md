@@ -2894,3 +2894,36 @@ JaCoCo report covers their classes.
 
 Full `verify-all.sh` matrix to follow.
 
+
+## 2026-05-13 — Annotation-driven default PU for DbSeed / DbDiff
+
+Renamed the existing `DbSeed.forPersistenceUnit()` /
+`DbDiff.forPersistenceUnit()` to `forCurrentPersistenceUnit()`
+(unchanged "single active PU on the calling thread, ambiguous
+raises" semantics) and added a new `forPersistenceUnit()` that
+consults `@PersistenceConfig.persistenceUnitName` on the active
+test class. A non-empty value routes to that named PU; empty
+(absent annotation, default attribute, or jpa-module not on the
+classpath) delegates to `forCurrentPersistenceUnit()` so the
+existing scenarios 36 / 36a / 36b keep their behaviour without
+changes.
+
+The annotation can't be read from `DbSeed`'s static factory at
+test-execution time (`TestContext.get()` is restricted to the
+bootstrap window), so a new public utility
+`JpaConfiguredPersistenceUnit` lives in `jpa-module/api`. Its
+`AtomicReference<String>` is populated by
+`JpaLifecycleAdapter.beforeAll` from the annotation value and
+cleared by `afterAll`. `DbSeed` / `DbDiff` read it as a JVM-wide
+accessor.
+
+Scenario 64 sits two PUs simultaneously active on the calling
+thread (the call path that would normally make
+`forCurrentPersistenceUnit()` raise) and verifies the annotation
+route picks `testPU64A` for both `DbSeed.forPersistenceUnit()` and
+`DbDiff.forPersistenceUnit()`. Wired through the
+`<id>wip</id>` profile on the test aggregator.
+
+verify-all.sh wip green — 1 in-flight scenario + 63 default
+scenarios, 1m 8s.
+

@@ -19,21 +19,27 @@ import java.sql.Connection;
 import java.util.Objects;
 
 import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jpa.api.JpaConfiguredPersistenceUnit;
+import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.PersistenceUnitConnectionResolver;
 
 /**
- * Static entry point for database fixtures. Three factories return
+ * Static entry point for database fixtures. Four factories return
  * a single-use {@link DbSeedBuilder}:
  *
  * <ul>
  *   <li>{@link #forConnection(Connection)} uses the supplied JDBC
  *       connection directly — the api never closes, commits, or
  *       rolls it back.</li>
- *   <li>{@link #forPersistenceUnit()} resolves the single persistence
- *       unit currently active on the calling thread via the
- *       project-wide
- *       {@link PersistenceUnitConnectionResolver}. Multiple active
- *       PUs raise {@link IllegalStateException}.</li>
+ *   <li>{@link #forPersistenceUnit()} resolves the persistence unit
+ *       by consulting {@link PersistenceConfig#persistenceUnitName()}
+ *       on the active test class; when that attribute is non-empty
+ *       its value is the named PU, otherwise this method delegates to
+ *       {@link #forCurrentPersistenceUnit()}.</li>
+ *   <li>{@link #forCurrentPersistenceUnit()} resolves the single
+ *       persistence unit currently active on the calling thread via
+ *       the project-wide {@link PersistenceUnitConnectionResolver};
+ *       multiple active PUs raise {@link IllegalStateException}.</li>
  *   <li>{@link #forPersistenceUnit(String)} resolves the named PU.</li>
  * </ul>
  */
@@ -58,6 +64,28 @@ public abstract class DbSeed {
     }
 
     /**
+     * Resolve the persistence-unit connection driven by the active
+     * test class's {@link PersistenceConfig#persistenceUnitName()}.
+     * The annotation value is read once during jpa-module's
+     * {@code beforeAll} hook and stored in
+     * {@link JpaConfiguredPersistenceUnit}; when the stored value is
+     * non-empty its value names the PU (resolved via
+     * {@link PersistenceUnitConnectionResolver#connectionFor(String)});
+     * when empty &mdash; including the path where jpa-module is not
+     * on the classpath at all &mdash; this method delegates to
+     * {@link #forCurrentPersistenceUnit()}.
+     *
+     * @return a fresh {@link DbSeedBuilder}
+     */
+    public static DbSeedBuilder forPersistenceUnit() {
+        String configuredName = JpaConfiguredPersistenceUnit.get();
+        if (configuredName.isEmpty()) {
+            return forCurrentPersistenceUnit();
+        }
+        return new DbSeedBuilder(() -> resolver().connectionFor(configuredName));
+    }
+
+    /**
      * Resolve the connection of the single currently active
      * persistence unit on the calling thread. The active
      * {@link PersistenceUnitConnectionResolver}'s
@@ -67,7 +95,7 @@ public abstract class DbSeed {
      *
      * @return a fresh {@link DbSeedBuilder}
      */
-    public static DbSeedBuilder forPersistenceUnit() {
+    public static DbSeedBuilder forCurrentPersistenceUnit() {
         return new DbSeedBuilder(() -> resolver().connectionForActivePersistenceUnit());
     }
 

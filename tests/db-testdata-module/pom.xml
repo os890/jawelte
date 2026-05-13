@@ -217,5 +217,11 @@
         <profile>
             <id>weld</id>
         </profile>
+        <profile>
+            <id>wip</id>
+            <modules>
+                <module>scenario-64-for-persistence-unit-annotation-resolves</module>
+            </modules>
+        </profile>
     </profiles>
 </project>
