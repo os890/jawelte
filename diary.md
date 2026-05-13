@@ -2709,3 +2709,17 @@ expected `UUID`. Lives in the in-flight wip profile of
 `verify-all.sh wip` green: install reactor + run db-testdata-module
 aggregator under `-P wip` — 56 scenarios, 1m 2s end-to-end.
 
+
+## 2026-05-13 — TICKET-009 D3: BINARY(16) uuid'…' round-trip
+
+Confirmed via scenario 56 that the existing `uuid'…'` marker
+handles `BINARY(16)` columns symmetrically: H2DataTypeFactory's
+`UuidAwareBytesDataType.typeCast(...)` parses the marker on the
+seed side, and `MarkerComparator.uuidMatches(...)` parses the
+same marker on the diff side, comparing against the raw
+`byte[16]` returned by JDBC. Same syntax in both directions; no
+implicit byte[] -> string heuristics required.
+
+verify-all.sh wip green (2 phases, 1m 0s) — scenario 55 (seed
+only) + scenario 56 (round-trip) both pass under the wip profile.
+

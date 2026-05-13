@@ -212,6 +212,7 @@
             <id>wip</id>
             <modules>
                 <module>scenario-55-vendor-data-type-factory-h2-binary-uuid</module>
+                <module>scenario-56-binary16-uuid-round-trip</module>
             </modules>
         </profile>
     </profiles>
