@@ -40,18 +40,28 @@ package org.os890.jawelte.module.cdi.api.port;
  * Lower {@code @Priority} value wins.
  *
  * <p>The default implementation lives in {@code cdi-module/impl}
- * ({@code DefaultExcludedPackageFilter}) and reads a comma-separated
- * package-prefix list from the MicroProfile Config key
- * {@code org.os890.jawelte.module.cdi.auto-mock.exclude-packages}
- * (with the standard dot-then-underscore fallback). It excludes a
- * type when any class in the type's supertype hierarchy lives under
- * one of the configured prefixes. The default also carries a
- * built-in framework-internal prefix list applied to
- * {@link #isOwningBeanExcluded(Class)} so common CDI-runtime
- * infrastructure (Weld, OWB, DeltaSpike, SmallRye) is always
- * filtered without any user configuration. Custom implementations
- * replace the default by providing their own {@code ServiceLoader}
- * entry plus a lower-numbered {@code @Priority}.
+ * ({@code DefaultExcludedPackageFilter}) and reads two
+ * comma-separated package-prefix lists from MicroProfile Config (with
+ * the standard dot-then-underscore fallback):
+ *
+ * <ul>
+ *   <li>{@code org.os890.jawelte.module.cdi.auto-mock.exclude-packages}
+ *       drives {@link #isExcluded(Class)} — empty by default; users
+ *       set the key in a higher-priority MP Config source to exclude
+ *       application target types from auto-mocking.</li>
+ *   <li>{@code org.os890.jawelte.module.cdi.auto-mock.exclude-owning-bean-packages}
+ *       drives {@link #isOwningBeanExcluded(Class)} — defaults
+ *       shipped in cdi-module/impl's
+ *       {@code META-INF/microprofile-config.properties} cover the
+ *       CDI-runtime infrastructure ({@code org.jboss.weld.},
+ *       {@code org.apache.webbeans.}, {@code org.apache.deltaspike.},
+ *       {@code io.smallrye.}). Users override or extend by setting
+ *       the same key in a higher-priority MP Config source.</li>
+ * </ul>
+ *
+ * <p>Custom implementations replace the default by providing their
+ * own {@code ServiceLoader} entry plus a lower-numbered
+ * {@code @Priority}.
  *
  * <p>{@code @TestBean}-declared types bypass this filter — explicit
  * user opt-in always wins. The filter only governs <em>implicit</em>
