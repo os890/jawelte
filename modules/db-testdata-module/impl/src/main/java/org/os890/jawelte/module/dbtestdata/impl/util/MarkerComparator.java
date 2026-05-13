@@ -32,10 +32,13 @@ import java.util.regex.Pattern;
  *
  * <ol>
  *   <li>{@code [NULL]} (case-sensitive uppercase) — SQL NULL;</li>
- *   <li>{@code ~regex} — regex match against the actual value (the
- *       regex takes precedence over boolean / numeric normalisation,
- *       so {@code ~true} is the literal regex {@code true} and not
- *       the boolean);</li>
+ *   <li>{@code [MATCH:regex]} — regex match against the actual value
+ *       (regex takes precedence over boolean / numeric normalisation,
+ *       so {@code [MATCH:true]} is the literal regex {@code true} and
+ *       not the boolean). Inner regex may contain any character
+ *       including {@code [} / {@code ]} (character classes); the
+ *       outer {@code ]} that closes the marker is always the final
+ *       character of the cell;</li>
  *   <li>{@code #{expr}} — deferred Jakarta EL predicate; the actual
  *       value is bound as {@code value} (and as {@code num} when it
  *       parses as a {@link Double}). The predicate must return a
@@ -67,8 +70,11 @@ public class MarkerComparator {
     /** {@code [NULL]} sentinel — case-sensitive uppercase only. */
     public static final String NULL_MARKER = "[NULL]";
 
-    /** Regex marker prefix — values starting with {@code ~} are always regex. */
-    public static final String REGEX_PREFIX = "~";
+    /** Regex marker prefix — values inside {@code [MATCH:&hellip;]} are interpreted as a regex pattern. */
+    public static final String MATCH_PREFIX = "[MATCH:";
+
+    /** Regex marker suffix — the closing {@code ]} of {@code [MATCH:&hellip;]}. */
+    public static final String MATCH_SUFFIX = "]";
 
     /** Deferred-EL predicate marker prefix — values starting with {@code #{} and ending with {@code }} are EL. */
     public static final String DEFERRED_EL_PREFIX = "#{";
@@ -145,8 +151,9 @@ public class MarkerComparator {
         if (actual == null) {
             return false;
         }
-        if (expected.startsWith(REGEX_PREFIX)) {
-            String pattern = expected.substring(REGEX_PREFIX.length());
+        if (expected.startsWith(MATCH_PREFIX) && expected.endsWith(MATCH_SUFFIX)
+                && expected.length() > MATCH_PREFIX.length() + MATCH_SUFFIX.length()) {
+            String pattern = expected.substring(MATCH_PREFIX.length(), expected.length() - MATCH_SUFFIX.length());
             return Pattern.matches(pattern, asString(actual));
         }
         if (expected.startsWith(DEFERRED_EL_PREFIX) && expected.endsWith(DEFERRED_EL_SUFFIX)

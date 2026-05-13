@@ -49,13 +49,13 @@ class Scenario19Test {
     }
 
     @Test
-    void escapingTheTildeWithinARegexMatchesALiteralTildePrefixedValue() {
-        // The expected value `~\~literal` is the regex starting with
-        // an escaped tilde (`\~`) followed by `literal` — matches
-        // the literal database value `~literal`.
+    void regexMarkerWithLiteralTildeMatchesTildePrefixedValue() {
+        // Tilde has no special meaning inside the regex any more (the
+        // marker is the bracketed [MATCH:…]); a literal `~literal`
+        // pattern matches the same literal database value.
         String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<dataset>"
-                + "<CUSTOMER ID=\"1\" NICK=\"~\\~literal\"/>"
+                + "<CUSTOMER ID=\"1\" NICK=\"[MATCH:~literal]\"/>"
                 + "</dataset>";
         DbDiff.forConnection(connection).expectedContent(expected).assertEquals();
     }

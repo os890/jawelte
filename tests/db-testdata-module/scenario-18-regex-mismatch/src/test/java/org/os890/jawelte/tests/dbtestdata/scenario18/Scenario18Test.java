@@ -52,9 +52,12 @@ class Scenario18Test {
 
     @Test
     void regexThatDoesNotMatchActualValueSurfacesAsValueMismatch() {
+        // Regex [A-Z]+ does not match "abc"; the diff carries the
+        // raw marker text in the expected= field so the test author
+        // sees what they wrote.
         String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<dataset>"
-                + "<CUSTOMER ID=\"1\" CODE=\"~[A-Z]+\"/>"
+                + "<CUSTOMER ID=\"1\" CODE=\"[MATCH:[A-Z]+]\"/>"
                 + "</dataset>";
         assertThatThrownBy(() ->
                 DbDiff.forConnection(connection)
@@ -62,7 +65,7 @@ class Scenario18Test {
                         .assertEquals())
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("CUSTOMER[0].CODE")
-                .hasMessageContaining("expected=\"~[A-Z]+\"")
+                .hasMessageContaining("expected=\"[MATCH:[A-Z]+]\"")
                 .hasMessageContaining("actual=\"abc\"");
     }
 }

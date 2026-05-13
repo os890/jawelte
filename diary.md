@@ -2805,3 +2805,22 @@ rather than from `assertEquals()`; method names renamed accordingly.
 
 verify-all.sh wip green — 5 in-flight + 54 default scenarios, 1m 2s.
 
+
+## 2026-05-13 — TICKET-009 D6: regex marker is now [MATCH:regex]
+
+Replaced the `~regex` prefix with the bracketed `[MATCH:regex]`
+shape. MarkerComparator's `MATCH_PREFIX = "[MATCH:"` /
+`MATCH_SUFFIX = "]"` constants drive the new branch — the inner
+regex is `expected.substring(7, expected.length() - 1)`, so the
+final `]` is always the marker terminator and any `[`/`]`
+character classes inside the regex pass through unchanged. The
+old `REGEX_PREFIX = "~"` constant and its branch are gone.
+
+Scenarios 17 / 18 / 19 migrated to the new syntax. Scenario 19's
+focus shifts from "escaping a tilde in the marker" to "tilde has
+no special meaning inside the regex any more" — same fixture
+intent, different proof.
+
+verify-all.sh wip green — 5 in-flight + 54 default scenarios,
+1m 3s.
+

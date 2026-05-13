@@ -49,13 +49,14 @@ class Scenario17Test {
     }
 
     @Test
-    void valuePrefixedWithTildeIsMatchedAsRegex() {
-        // ~[A-Z]+ matches "ABC" — the regex marker takes precedence
-        // over literal string comparison and boolean / numeric
-        // normalisation.
+    void valueInsideMatchMarkerIsInterpretedAsRegex() {
+        // [MATCH:[A-Z]+] matches "ABC" — the regex marker takes
+        // precedence over literal string comparison and boolean /
+        // numeric normalisation. Inner [A-Z] is a regex character
+        // class; the outer ] is always the marker terminator.
         String expected = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                 + "<dataset>"
-                + "<CUSTOMER ID=\"1\" CODE=\"~[A-Z]+\"/>"
+                + "<CUSTOMER ID=\"1\" CODE=\"[MATCH:[A-Z]+]\"/>"
                 + "</dataset>";
         DbDiff.forConnection(connection).expectedContent(expected).assertEquals();
     }
