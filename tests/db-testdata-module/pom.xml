@@ -216,6 +216,7 @@
                 <module>scenario-57-hex-marker-binary-round-trip</module>
                 <module>scenario-58-empty-table-marker-matches-empty</module>
                 <module>scenario-59-empty-table-marker-reports-extras</module>
+                <module>scenario-60-boolean-defaults-postgres-tf</module>
             </modules>
         </profile>
     </profiles>

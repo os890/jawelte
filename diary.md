@@ -2824,3 +2824,21 @@ intent, different proof.
 verify-all.sh wip green — 5 in-flight + 54 default scenarios,
 1m 3s.
 
+
+## 2026-05-13 — TICKET-009 D7: t / f join the default boolean buckets
+
+`MarkerComparator.DEFAULT_TRUE_VALUES` gains `"t"`,
+`DEFAULT_FALSE_VALUES` gains `"f"`. Case-insensitive matching is
+already done via `toLowerCase(Locale.ROOT)`, so `"t"` / `"T"` /
+`"f"` / `"F"` all normalise to the boolean buckets out of the box.
+PostgreSQL's BOOLEAN export form (textual `'t'` / `'f'`) now
+compares as TRUE / FALSE against an expected `true` / `false`
+without the test author having to extend the MP Config
+`boolean-true` / `boolean-false` keys.
+
+Scenario 60 sits a VARCHAR column holding `'t'` and `'f'` and
+matches it against `true` / `false` in the expected dataset.
+
+verify-all.sh wip green — 6 in-flight + 54 default scenarios,
+1m 3s.
+

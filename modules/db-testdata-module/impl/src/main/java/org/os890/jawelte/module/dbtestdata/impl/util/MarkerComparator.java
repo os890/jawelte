@@ -90,9 +90,9 @@ public class MarkerComparator {
 
     private static final String HEX_SUFFIX = "'";
 
-    private static final List<String> DEFAULT_TRUE_VALUES = List.of("true", "1", "yes", "y", "on");
+    private static final List<String> DEFAULT_TRUE_VALUES = List.of("true", "1", "yes", "y", "on", "t");
 
-    private static final List<String> DEFAULT_FALSE_VALUES = List.of("false", "0", "no", "n", "off");
+    private static final List<String> DEFAULT_FALSE_VALUES = List.of("false", "0", "no", "n", "off", "f");
 
     private final Set<String> trueValues;
 
