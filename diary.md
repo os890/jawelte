@@ -3032,3 +3032,13 @@ switched. Standalone `DbDifference.java` deleted.
 
 verify-all.sh wip green — 1m 10s.
 
+
+## 2026-05-13 — Graduate scenario 64 + ship the refactor round
+
+Moved `scenario-64-for-persistence-unit-annotation-resolves` from
+the `<id>wip</id>` profile in `tests/db-testdata-module/pom.xml`
+into the default `<modules>` list and registered it in
+`coverage-report/pom.xml`; the wip profile is removed. Full
+`verify-all.sh` matrix to follow before pushing the seven queued
+commits.
+

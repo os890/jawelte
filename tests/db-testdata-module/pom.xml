@@ -99,6 +99,7 @@
         <module>scenario-61-label-pk-fk-match</module>
         <module>scenario-62-label-fk-mismatch</module>
         <module>scenario-63-label-chain-three-tables</module>
+        <module>scenario-64-for-persistence-unit-annotation-resolves</module>
     </modules>
 
     <dependencies>
@@ -216,12 +217,6 @@
         </profile>
         <profile>
             <id>weld</id>
-        </profile>
-        <profile>
-            <id>wip</id>
-            <modules>
-                <module>scenario-64-for-persistence-unit-annotation-resolves</module>
-            </modules>
         </profile>
     </profiles>
 </project>

@@ -1834,6 +1834,11 @@
             <artifactId>jawelte-tests-db-testdata-module-scenario-63-label-chain-three-tables</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-64-for-persistence-unit-annotation-resolves</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
