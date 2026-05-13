@@ -47,3 +47,31 @@ Possible directions when the need arises:
 - Or: lazy-but-mutable cache keyed by configuration fingerprint so multiple consumers cohabit (probably overkill for a test framework).
 
 Defer until a consumer asks. Document the existing behaviour in the api-side docs once the design lands.
+
+## db-testdata-module — configurable marker keywords
+
+Make the marker keyword strings tunable so consumers can pick a
+different naming if our defaults clash with their domain vocabulary.
+The strings currently hard-coded in `impl/util` and `api/DbDiffBuilder`
+are:
+
+- `value` — the actual DB cell value bound inside `#{...}`
+  predicates (`JakartaELInterpolator.evaluatePredicate` /
+  `MarkerComparator` integration).
+- `num` — the `Double`-parsed form of the same cell, bound when the
+  string parses as a number.
+- `MATCH:` — the regex marker keyword inside the bracketed
+  `[MATCH:regex]` (once D6 ships).
+
+Possible shapes for the override:
+- MP Config keys (`org.os890.jawelte.module.dbtestdata.api.markers.value`
+  etc.); FQCN-style, consistent with the existing config keys.
+- A `MarkerKeywords` immutable record / config service the engines
+  consult once at JVM bootstrap (mirrors `ServicePriorityResolver`'s
+  shape).
+- Per-call override via the builder (probably overkill).
+
+Decide the override mechanism before adding any code; the goal is
+ergonomic naming the team can iterate without breaking existing
+fixtures.
+
