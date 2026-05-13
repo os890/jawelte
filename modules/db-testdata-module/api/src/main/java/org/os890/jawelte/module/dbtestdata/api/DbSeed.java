@@ -15,13 +15,21 @@
  */
 package org.os890.jawelte.module.dbtestdata.api;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.ServiceLoader;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 
+import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.port.DbSeedEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
@@ -127,6 +135,71 @@ public abstract class DbSeed {
         return resolver;
     }
 
+    /** Default dataset format identifier when {@link Builder#format(String)} is not called. */
+    private static final String DEFAULT_FORMAT = "dbunit-xml";
+
+    private static final ConcurrentMap<String, DbSeedEngine> CACHED_SEED_ENGINES = new ConcurrentHashMap<>();
+
+    private static volatile ELInterpolator cachedInterpolator;
+
+    private static String loadClasspathResource(String classpathResource) {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        try (InputStream stream = classLoader.getResourceAsStream(classpathResource)) {
+            if (stream == null) {
+                throw new IllegalArgumentException("Resource not found: " + classpathResource);
+            }
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ioException) {
+            throw new IllegalArgumentException(
+                    "Failed to read classpath resource: " + classpathResource, ioException);
+        }
+    }
+
+    private static DbSeedEngine resolveSeedEngine(String format) {
+        DbSeedEngine cached = CACHED_SEED_ENGINES.get(format);
+        if (cached != null) {
+            return cached;
+        }
+        List<DbSeedEngine> matching = new ArrayList<>();
+        for (DbSeedEngine candidate : ServiceLoader.load(DbSeedEngine.class)) {
+            if (format.equals(candidate.format())) {
+                matching.add(candidate);
+            }
+        }
+        if (matching.isEmpty()) {
+            throw new IllegalArgumentException("Unknown dataset format: " + format);
+        }
+        ServicePriorityResolver resolver = TestContext.loadService(ServicePriorityResolver.class);
+        DbSeedEngine resolved = resolver.resolve(matching);
+        CACHED_SEED_ENGINES.put(format, resolved);
+        return resolved;
+    }
+
+    private static ELInterpolator resolveInterpolator() {
+        ELInterpolator local = cachedInterpolator;
+        if (local != null) {
+            return local;
+        }
+        synchronized (DbSeed.class) {
+            local = cachedInterpolator;
+            if (local != null) {
+                return local;
+            }
+            List<ELInterpolator> matching = new ArrayList<>();
+            for (ELInterpolator candidate : ServiceLoader.load(ELInterpolator.class)) {
+                matching.add(candidate);
+            }
+            if (matching.isEmpty()) {
+                throw new IllegalStateException(
+                        "No ELInterpolator registered — was db-testdata-module/impl included?");
+            }
+            ServicePriorityResolver resolver = TestContext.loadService(ServicePriorityResolver.class);
+            local = resolver.resolve(matching);
+            cachedInterpolator = local;
+            return local;
+        }
+    }
+
     /**
      * Single-use fluent configuration returned by {@link DbSeed}'s static
      * factories. Accumulates the dataset source, the SQL-shape mode,
@@ -144,7 +217,7 @@ public abstract class DbSeed {
 
         private String inlineContent;
 
-        private String format = DatasetSupport.DEFAULT_FORMAT;
+        private String format = DEFAULT_FORMAT;
 
         private SeedSpec.SeedMode mode = SeedSpec.SeedMode.CLEAN_INSERT;
 
@@ -279,10 +352,10 @@ public abstract class DbSeed {
          */
         public void execute() {
             String content = loadContent();
-            ELInterpolator interpolator = DatasetSupport.resolveInterpolator();
+            ELInterpolator interpolator = resolveInterpolator();
             InterpolationContext context = new InterpolationContext(values, Map.of(), List.of());
             String interpolated = interpolator.interpolateAll(content, context);
-            DbSeedEngine engine = DatasetSupport.resolveSeedEngine(format);
+            DbSeedEngine engine = resolveSeedEngine(format);
             Connection connection = connectionSupplier.get();
             try {
                 engine.seed(connection, interpolated, new SeedSpec(mode));
@@ -300,7 +373,7 @@ public abstract class DbSeed {
                 throw new IllegalStateException(
                         "Neither dataset(...) nor datasetContent(...) was called");
             }
-            return DatasetSupport.loadClasspathResource(classpathResource);
+            return loadClasspathResource(classpathResource);
         }
     }
 

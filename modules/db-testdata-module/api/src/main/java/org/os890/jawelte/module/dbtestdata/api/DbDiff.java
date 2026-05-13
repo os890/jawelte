@@ -15,8 +15,11 @@
  */
 package org.os890.jawelte.module.dbtestdata.api;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -27,9 +30,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.ServiceLoader;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 
 import org.os890.jawelte.core.api.port.ConfigResolver;
+import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
 import org.os890.jawelte.module.dbtestdata.api.InterpolationContext.ELFunctionDescriptor;
@@ -128,6 +135,71 @@ public abstract class DbDiff {
         return resolver;
     }
 
+    /** Default dataset format identifier when {@link Builder#format(String)} is not called. */
+    private static final String DEFAULT_FORMAT = "dbunit-xml";
+
+    private static final ConcurrentMap<String, DbDiffEngine> CACHED_DIFF_ENGINES = new ConcurrentHashMap<>();
+
+    private static volatile ELInterpolator cachedInterpolator;
+
+    private static String loadClasspathResource(String classpathResource) {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        try (InputStream stream = classLoader.getResourceAsStream(classpathResource)) {
+            if (stream == null) {
+                throw new IllegalArgumentException("Resource not found: " + classpathResource);
+            }
+            return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ioException) {
+            throw new IllegalArgumentException(
+                    "Failed to read classpath resource: " + classpathResource, ioException);
+        }
+    }
+
+    private static DbDiffEngine resolveDiffEngine(String format) {
+        DbDiffEngine cached = CACHED_DIFF_ENGINES.get(format);
+        if (cached != null) {
+            return cached;
+        }
+        List<DbDiffEngine> matching = new ArrayList<>();
+        for (DbDiffEngine candidate : ServiceLoader.load(DbDiffEngine.class)) {
+            if (format.equals(candidate.format())) {
+                matching.add(candidate);
+            }
+        }
+        if (matching.isEmpty()) {
+            throw new IllegalArgumentException("Unknown dataset format: " + format);
+        }
+        ServicePriorityResolver resolver = TestContext.loadService(ServicePriorityResolver.class);
+        DbDiffEngine resolved = resolver.resolve(matching);
+        CACHED_DIFF_ENGINES.put(format, resolved);
+        return resolved;
+    }
+
+    private static ELInterpolator resolveInterpolator() {
+        ELInterpolator local = cachedInterpolator;
+        if (local != null) {
+            return local;
+        }
+        synchronized (DbDiff.class) {
+            local = cachedInterpolator;
+            if (local != null) {
+                return local;
+            }
+            List<ELInterpolator> matching = new ArrayList<>();
+            for (ELInterpolator candidate : ServiceLoader.load(ELInterpolator.class)) {
+                matching.add(candidate);
+            }
+            if (matching.isEmpty()) {
+                throw new IllegalStateException(
+                        "No ELInterpolator registered — was db-testdata-module/impl included?");
+            }
+            ServicePriorityResolver resolver = TestContext.loadService(ServicePriorityResolver.class);
+            local = resolver.resolve(matching);
+            cachedInterpolator = local;
+            return local;
+        }
+    }
+
     /**
      * Carrier for the options {@link Builder} hands to the active
      * {@link DbDiffEngine}. The six fields collapse the builder's
@@ -215,7 +287,7 @@ public abstract class DbDiff {
 
         private String inlineContent;
 
-        private String format = DatasetSupport.DEFAULT_FORMAT;
+        private String format = DEFAULT_FORMAT;
 
         private final List<String> ignorePatterns = new ArrayList<>();
 
@@ -416,10 +488,10 @@ public abstract class DbDiff {
          */
         public void assertEquals() {
             String content = loadContent();
-            ELInterpolator interpolator = DatasetSupport.resolveInterpolator();
+            ELInterpolator interpolator = resolveInterpolator();
             InterpolationContext context = new InterpolationContext(values, beans, functions);
             String interpolated = interpolator.interpolate(content, context);
-            DbDiffEngine engine = DatasetSupport.resolveDiffEngine(format);
+            DbDiffEngine engine = resolveDiffEngine(format);
             DiffSpec spec = buildSpec(context);
             Connection connection = connectionSupplier.get();
             List<DbDifference> differences;
@@ -477,7 +549,7 @@ public abstract class DbDiff {
                 throw new IllegalStateException(
                         "Neither expected(...) nor expectedContent(...) was called");
             }
-            return DatasetSupport.loadClasspathResource(classpathResource);
+            return loadClasspathResource(classpathResource);
         }
 
         private DiffSpec buildSpec(InterpolationContext interpolationContext) {

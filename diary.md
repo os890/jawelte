@@ -2977,3 +2977,21 @@ updated.
 
 verify-all.sh wip green — 1m 10s.
 
+
+## 2026-05-13 — Inline DatasetSupport into DbSeed / DbDiff
+
+Deleted the package-private `DatasetSupport` helper class; its
+plumbing (default format constant, classpath-resource loader,
+per-format engine cache, JVM-wide interpolator cache) is now
+duplicated as private static methods + fields on `DbSeed` and
+`DbDiff` themselves. The interpolator cache is per-class — same
+impl gets ServiceLoader-resolved twice over the JVM lifetime, no
+functional consequence.
+
+Net effect: one fewer source file under
+`modules/db-testdata-module/api/`, each entry-point class is
+self-contained, and the public api drops a name (`DatasetSupport`
+was package-private so never exposed anyway).
+
+verify-all.sh wip green — 1m 9s.
+
