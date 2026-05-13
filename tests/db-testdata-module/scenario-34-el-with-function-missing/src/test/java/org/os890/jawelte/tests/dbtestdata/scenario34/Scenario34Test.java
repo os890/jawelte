@@ -25,7 +25,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.module.dbtestdata.api.DbDiff;
-import org.os890.jawelte.module.dbtestdata.api.DbDiffBuilder;
 
 class Scenario34Test {
 
@@ -56,7 +55,7 @@ class Scenario34Test {
         // The builder verifies the method exists on declaringClass at
         // registration time; an unknown method name raises before the
         // descriptor is even stored.
-        DbDiffBuilder builder = DbDiff.forConnection(connection)
+        var builder = DbDiff.forConnection(connection)
                 .expectedContent(
                         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                                 + "<dataset>"

@@ -29,7 +29,7 @@ import org.os890.jawelte.module.dbtestdata.api.port.DbSeedEngine;
  * each line is parsed as {@code ID,NAME} and inserted into
  * {@code CUSTOMER}. Demonstrates that consumers can ship their own
  * engine via {@link java.util.ServiceLoader} and route to it via
- * {@code DbSeedBuilder.format("text/csv")}.
+ * {@code DbSeed.Builder.format("text/csv")}.
  */
 @Priority(Integer.MAX_VALUE)
 public class TestScenarioCsvSeedEngine implements DbSeedEngine {

@@ -25,7 +25,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.module.dbtestdata.api.DbDiff;
-import org.os890.jawelte.module.dbtestdata.api.DbDiffBuilder;
 
 class Scenario62Test {
 
@@ -67,7 +66,7 @@ class Scenario62Test {
                 + "<CUSTOMER ID=\"@cust1\" NAME=\"Alice\"/>"
                 + "<SALES_ORDER ID=\"@order1\" CUSTOMER_ID=\"@cust1\" ITEM=\"Widget\"/>"
                 + "</dataset>";
-        DbDiffBuilder builder = DbDiff.forConnection(connection).expectedContent(expected);
+        var builder = DbDiff.forConnection(connection).expectedContent(expected);
         assertThatThrownBy(builder::assertEquals)
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("SALES_ORDER[0].CUSTOMER_ID")

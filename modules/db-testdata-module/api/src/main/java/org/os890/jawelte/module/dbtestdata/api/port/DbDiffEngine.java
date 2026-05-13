@@ -18,8 +18,8 @@ package org.os890.jawelte.module.dbtestdata.api.port;
 import java.sql.Connection;
 import java.util.List;
 
+import org.os890.jawelte.module.dbtestdata.api.DbDiff;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference;
-import org.os890.jawelte.module.dbtestdata.api.DiffSpec;
 
 /**
  * Pluggable dataset-verifier. Mirror of {@link DbSeedEngine} for the
@@ -67,5 +67,5 @@ public interface DbDiffEngine {
      *                          database: " + cause} prefix before it
      *                          reaches the caller
      */
-    List<DbDifference> diff(Connection connection, String expectedContent, DiffSpec options);
+    List<DbDifference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options);
 }

@@ -2927,3 +2927,24 @@ route picks `testPU64A` for both `DbSeed.forPersistenceUnit()` and
 verify-all.sh wip green — 1 in-flight scenario + 63 default
 scenarios, 1m 8s.
 
+
+## 2026-05-13 — Nest DbSeed.Builder / DbDiff.Builder / DbDiff.DiffSpec
+
+Moved the previously-standalone `DbSeedBuilder` and `DbDiffBuilder`
+into their entry-point classes as `DbSeed.Builder` and
+`DbDiff.Builder`. The fluent api now has a single import per side
+(`DbSeed` / `DbDiff`); the nested `Builder` types stay on the
+public api so callers can declare typed variables when they want
+to (the existing scenarios use `var` instead).
+
+`DiffSpec` moved into `DbDiff` the same way (now
+`DbDiff.DiffSpec`); the `DbDiffEngine` port signature and every
+import in the engine impl and consumers were updated.
+
+Verified by deleting all `target/` directories under
+`tests/db-testdata-module/` (Maven's incremental compilation
+missed the type-name changes in scenarios whose own source did
+not change) then running `verify-all.sh wip` — 1m 7s green for
+the in-flight scenario 64 plus the 63 default scenarios that all
+go through the new nested types.
+

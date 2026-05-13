@@ -87,7 +87,7 @@ public record DbDifference(
 
         /**
          * A row present in the database is absent from the expected
-         * dataset. Only emitted when {@link DiffSpec#subsetOnly()}
+         * dataset. Only emitted when {@link DbDiff.DiffSpec#subsetOnly()}
          * is {@code false}.
          */
         EXTRA_ROW

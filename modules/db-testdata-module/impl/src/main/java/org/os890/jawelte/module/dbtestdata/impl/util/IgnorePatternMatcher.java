@@ -43,7 +43,7 @@ public class IgnorePatternMatcher {
      * Build a matcher from the (possibly empty) builder pattern list.
      *
      * @param rawPatterns the raw pattern strings as supplied to
-     *                    {@code DbDiffBuilder.ignoring(...)}; any
+     *                    {@code DbDiff.Builder.ignoring(...)}; any
      *                    pattern not matching the two accepted
      *                    syntaxes is silently dropped to match the
      *                    "tolerate noise" rule of the api

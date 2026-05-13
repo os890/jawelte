@@ -41,9 +41,9 @@ import org.dbunit.dataset.ITableIterator;
 import org.dbunit.dataset.xml.FlatXmlDataSetBuilder;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.dbtestdata.api.DbDiff;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
-import org.os890.jawelte.module.dbtestdata.api.DiffSpec;
 import org.os890.jawelte.module.dbtestdata.api.InterpolationContext;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
@@ -76,7 +76,7 @@ import org.os890.jawelte.module.dbtestdata.impl.util.MarkerComparator;
  *   <li>ordered (default) — expected row {@code i} is compared
  *       against actual row {@code i};</li>
  *   <li>unordered (when the table is listed in
- *       {@link DiffSpec#unorderedTables()}) — multiset matching with
+ *       {@link DbDiff.DiffSpec#unorderedTables()}) — multiset matching with
  *       a claim flag per actual row.</li>
  * </ul>
  *
@@ -111,7 +111,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     }
 
     @Override
-    public List<DbDifference> diff(Connection connection, String expectedContent, DiffSpec options) {
+    public List<DbDifference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options) {
         IDataSet expectedDataset = parseExpected(expectedContent);
         ExpectedXmlLineLocator lineLocator = ExpectedXmlLineLocator.parse(expectedContent);
         InterpolationContext interpolationContext = options.interpolationContext();

@@ -55,8 +55,7 @@ class Scenario33Test {
         // The builder validates the method's modifiers before storing
         // the descriptor — instance methods raise here, not later
         // inside assertEquals().
-        org.os890.jawelte.module.dbtestdata.api.DbDiffBuilder builder =
-                DbDiff.forConnection(connection)
+        var builder = DbDiff.forConnection(connection)
                         .expectedContent(
                                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
                                         + "<dataset>"

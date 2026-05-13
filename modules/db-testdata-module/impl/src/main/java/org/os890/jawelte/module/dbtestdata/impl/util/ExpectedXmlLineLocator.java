@@ -105,7 +105,7 @@ public class ExpectedXmlLineLocator {
      * <p>The diff engine reads this to assert "the database table is
      * empty" &mdash; any actual row in such a table surfaces as an
      * {@code EXTRA_ROW} difference (unless
-     * {@code DiffSpec.subsetOnly()} is on, in which case extras are
+     * {@code DbDiff.DiffSpec.subsetOnly()} is on, in which case extras are
      * silently accepted, matching the rest of the engine's
      * subset-only contract).</p>
      *

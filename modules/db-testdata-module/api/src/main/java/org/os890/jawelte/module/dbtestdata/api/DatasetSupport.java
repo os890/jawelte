@@ -32,7 +32,7 @@ import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
 
 /**
  * Package-private bag of static helpers shared by
- * {@link DbSeedBuilder} and {@link DbDiffBuilder}. Three concerns
+ * {@link DbSeed.Builder} and {@link DbDiff.Builder}. Three concerns
  * live here:
  *
  * <ul>
@@ -48,8 +48,7 @@ import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
  *
  * <p>The class is not part of the api contract — it sits at
  * package-private visibility to keep the entry-point types
- * ({@link DbSeed}, {@link DbDiffBuilder}, …) free of resolution
- * plumbing.
+ * ({@link DbSeed}, {@link DbDiff}, …) free of resolution plumbing.
  */
 class DatasetSupport {
 

@@ -19,7 +19,7 @@ import java.util.Objects;
 
 /**
  * Typed registration for a Jakarta EL function the diff-builder
- * advertises through {@code DbDiffBuilder.withFunction(...)}. The
+ * advertises through {@code DbDiff.Builder.withFunction(...)}. The
  * declaring class and method name are carried as data rather than as
  * a {@link java.lang.reflect.Method} so the api jar stays
  * reflection-free at compile time; validation of the actual method

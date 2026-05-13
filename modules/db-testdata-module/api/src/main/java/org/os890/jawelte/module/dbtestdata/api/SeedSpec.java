@@ -42,7 +42,7 @@ public record SeedSpec(SeedMode mode) {
         /**
          * DELETE every row in the dataset's tables (in reverse
          * foreign-key dependency order), then INSERT the dataset.
-         * The default mode of {@code DbSeedBuilder.cleanInsert()}.
+         * The default mode of {@code DbSeed.Builder.cleanInsert()}.
          */
         CLEAN_INSERT,
 

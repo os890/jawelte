@@ -24,9 +24,9 @@ import java.util.List;
 
 import jakarta.annotation.Priority;
 
+import org.os890.jawelte.module.dbtestdata.api.DbDiff;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
-import org.os890.jawelte.module.dbtestdata.api.DiffSpec;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
 
 /**
@@ -49,7 +49,7 @@ public class TestScenarioCsvDiffEngine implements DbDiffEngine {
     }
 
     @Override
-    public List<DbDifference> diff(Connection connection, String expectedContent, DiffSpec options) {
+    public List<DbDifference> diff(Connection connection, String expectedContent, DbDiff.DiffSpec options) {
         List<String[]> expected = new ArrayList<>();
         for (String line : expectedContent.split("\\r?\\n")) {
             String trimmed = line.trim();

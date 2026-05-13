@@ -25,7 +25,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.module.dbtestdata.api.DbDiff;
-import org.os890.jawelte.module.dbtestdata.api.DbDiffBuilder;
 
 class Scenario59Test {
 
@@ -61,7 +60,7 @@ class Scenario59Test {
                 + "<dataset>"
                 + "<CUSTOMER/>"
                 + "</dataset>";
-        DbDiffBuilder builder = DbDiff.forConnection(connection).expectedContent(expected);
+        var builder = DbDiff.forConnection(connection).expectedContent(expected);
         assertThatThrownBy(builder::assertEquals)
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("DB diff found 2 difference(s)")
