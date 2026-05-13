@@ -82,6 +82,14 @@
         <module>scenario-44-custom-seed-engine</module>
         <module>scenario-45-custom-diff-engine</module>
         <module>scenario-46-custom-pu-resolver</module>
+        <module>scenario-47-deferred-el-numeric-num</module>
+        <module>scenario-48-deferred-el-value-string</module>
+        <module>scenario-49-deferred-el-with-bean</module>
+        <module>scenario-50-deferred-el-with-function</module>
+        <module>scenario-51-deferred-el-with-values-visible</module>
+        <module>scenario-52-deferred-el-non-boolean-raises</module>
+        <module>scenario-53-deferred-el-mismatch-shows-expression</module>
+        <module>scenario-54-hash-marker-on-seed-immediate</module>
     </modules>
 
     <dependencies>

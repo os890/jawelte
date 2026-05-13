@@ -1749,6 +1749,46 @@
             <artifactId>jawelte-tests-db-testdata-module-scenario-46-custom-pu-resolver</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-47-deferred-el-numeric-num</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-48-deferred-el-value-string</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-49-deferred-el-with-bean</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-50-deferred-el-with-function</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-51-deferred-el-with-values-visible</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-52-deferred-el-non-boolean-raises</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-53-deferred-el-mismatch-shows-expression</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-db-testdata-module-scenario-54-hash-marker-on-seed-immediate</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

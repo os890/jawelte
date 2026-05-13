@@ -2649,3 +2649,35 @@ and threads it into the new `MarkerComparator` constructor.
 Smoke-tested scenarios 17 / 30 / 31 / 32 (regex + `${...}` value /
 bean / function paths) — all four pass post-refactor.
 
+
+## 2026-05-13 — TICKET-009 D1: scenarios 47-54 plus pom registrations
+
+Eight new scenarios under `tests/db-testdata-module/`:
+
+- **47** `#{num gt 0 and num lt 100}` against an INT column / DECIMAL
+  column — confirms the `num` Double binding works for cell predicates.
+- **48** `#{value.startsWith('Wid')}` against a VARCHAR — confirms
+  String methods resolve through the dynamic `value` Object binding.
+- **49** `#{v.isPositive(value)}` with `withBean("v", ...)` — registered
+  bean methods visible inside per-cell predicates.
+- **50** `#{fn:isPositive(value)}` with
+  `withFunction("fn", "isPositive", Cls.class, "isPositive")` — static
+  function calls.
+- **51** `#{value eq expectedName}` with
+  `withValues(Map.of("expectedName", "Widget"))` — confirms
+  `withValues` bindings are visible inside `#{...}` (per the D1/Q1
+  decision: same bindings as `${...}`).
+- **52** `#{value.length()}` — Integer result raises `RuntimeException`
+  with "expected Boolean" in the message (strict-EL stance).
+- **53** `#{num gt 100}` against PRICE=9.99 — false-result mismatch
+  surfaces the raw expression in the `AssertionError` message.
+- **54** `#{today}` in a *seed* dataset — `interpolateAll` resolves it
+  as an immediate placeholder; the substituted value reaches the DB.
+
+Aggregator (`tests/db-testdata-module/pom.xml`) and coverage-report
+(`coverage-report/pom.xml`) both updated to register the eight new
+modules in numeric order.
+
+Smoke-tested all 8 on OWB and Weld profiles individually — green on
+both. Full `verify-all.sh` matrix to follow.
+
