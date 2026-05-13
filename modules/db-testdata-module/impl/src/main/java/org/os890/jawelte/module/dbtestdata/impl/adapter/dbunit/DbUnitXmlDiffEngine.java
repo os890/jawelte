@@ -27,8 +27,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import jakarta.annotation.Priority;
 
@@ -87,6 +89,18 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     /** Format identifier this engine claims. */
     public static final String FORMAT = "dbunit-xml";
 
+    /**
+     * Recognises {@code @label} back-references on the diff side. A
+     * cell whose entire expected value matches {@code @<identifier>}
+     * binds the label to whatever actual value the database returned;
+     * every other cell sharing the same label must surface the same
+     * actual or a {@link DifferenceType#VALUE_MISMATCH} is emitted.
+     * Identifier characters are restricted to {@code [A-Za-z0-9_]} so
+     * arbitrary VARCHAR content starting with {@code @} (e-mail-like
+     * strings) is not silently captured as a binding.
+     */
+    private static final Pattern LABEL_PATTERN = Pattern.compile("@[A-Za-z0-9_]+");
+
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public DbUnitXmlDiffEngine() {
     }
@@ -105,6 +119,7 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
         CellPredicateEvaluator predicateEvaluator =
                 (expression, actualValue) ->
                         interpolator.evaluatePredicate(expression, interpolationContext, actualValue);
+        Map<String, List<RecordedBinding>> labelBindings = new LinkedHashMap<>();
         DiffContext context = new DiffContext(
                 new MarkerComparator(
                         options.booleanTrueValues(),
@@ -113,7 +128,8 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                 new IgnorePatternMatcher(options.ignorePatterns()),
                 lineLocator,
                 upperCaseSet(options.unorderedTables()),
-                options.subsetOnly());
+                options.subsetOnly(),
+                labelBindings);
 
         List<DbDifference> differences = new ArrayList<>();
         Set<String> tablesHandledByDbunit = new HashSet<>();
@@ -138,12 +154,48 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                 }
                 checkEmptyTableAssertion(differences, connection, emptyTable, context.subsetOnly());
             }
+            validateLabelBindings(differences, labelBindings);
         } catch (SQLException sqlFailure) {
             throw new RuntimeException(sqlFailure.getMessage(), sqlFailure);
         } catch (Exception dbunitFailure) {
             throw new RuntimeException(dbunitFailure.getMessage(), dbunitFailure);
         }
         return List.copyOf(differences);
+    }
+
+    private static String extractLabel(String expected) {
+        if (expected == null) {
+            return null;
+        }
+        if (!LABEL_PATTERN.matcher(expected).matches()) {
+            return null;
+        }
+        return expected.substring(1);
+    }
+
+    private static void validateLabelBindings(
+            List<DbDifference> differences, Map<String, List<RecordedBinding>> labelBindings) {
+        for (Map.Entry<String, List<RecordedBinding>> entry : labelBindings.entrySet()) {
+            String label = entry.getKey();
+            List<RecordedBinding> bindings = entry.getValue();
+            if (bindings.size() < 2) {
+                continue;
+            }
+            String canonical = bindings.get(0).actualValue();
+            for (int i = 1; i < bindings.size(); i++) {
+                RecordedBinding binding = bindings.get(i);
+                if (!Objects.equals(canonical, binding.actualValue())) {
+                    differences.add(new DbDifference(
+                            DifferenceType.VALUE_MISMATCH,
+                            binding.tableName(),
+                            binding.rowIndex(),
+                            binding.columnName(),
+                            "@" + label + " bound to \"" + canonical + "\"",
+                            binding.actualValue(),
+                            binding.lineNumber()));
+                }
+            }
+        }
     }
 
     private static void checkEmptyTableAssertion(
@@ -280,6 +332,9 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                         context.lineLocator().lineFor(scope.tableName(), rowIndex)));
             } else {
                 actualClaimed[claimedIndex] = true;
+                recordLabelBindingsForRow(
+                        scope, context, rowIndex, claimedIndex,
+                        context.lineLocator().lineFor(scope.tableName(), rowIndex));
             }
         }
         if (context.subsetOnly()) {
@@ -315,6 +370,12 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                 }
                 Object expectedRaw = scope.expectedTable().getValue(expectedRowIndex, columnName);
                 String expectedString = expectedRaw == null ? null : expectedRaw.toString();
+                if (extractLabel(expectedString) != null) {
+                    // Label cells are wildcards during row matching;
+                    // the cross-cell value-consistency check happens
+                    // after the row is claimed (see compareRow).
+                    continue;
+                }
                 Object actualValue = actualRow.get(columnName.toUpperCase(Locale.ROOT));
                 if (expectedString == null) {
                     if (actualValue != null) {
@@ -344,6 +405,12 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
             Object expectedRaw = scope.expectedTable().getValue(rowIndex, columnName);
             String expectedString = expectedRaw == null ? null : expectedRaw.toString();
             Object actualValue = actualRow.get(columnName.toUpperCase(Locale.ROOT));
+            String label = extractLabel(expectedString);
+            if (label != null) {
+                recordLabelBinding(context, label, scope.tableName(), rowIndex, columnName,
+                        lineNumber, actualValue);
+                continue;
+            }
             boolean cellMatches = expectedString == null
                     ? actualValue == null
                     : context.comparator().matches(expectedString, actualValue);
@@ -358,6 +425,36 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                         lineNumber));
             }
         }
+    }
+
+    private static void recordLabelBindingsForRow(
+            TableScope scope, DiffContext context, int expectedRowIndex, int actualRowIndex,
+            int lineNumber) throws Exception {
+        Map<String, Object> actualRow = scope.actualRows().get(actualRowIndex);
+        for (Column column : scope.columns()) {
+            String columnName = column.getColumnName();
+            if (context.ignoreMatcher().isIgnored(scope.tableName(), columnName)) {
+                continue;
+            }
+            Object expectedRaw = scope.expectedTable().getValue(expectedRowIndex, columnName);
+            String expectedString = expectedRaw == null ? null : expectedRaw.toString();
+            String label = extractLabel(expectedString);
+            if (label == null) {
+                continue;
+            }
+            Object actualValue = actualRow.get(columnName.toUpperCase(Locale.ROOT));
+            recordLabelBinding(context, label, scope.tableName(), expectedRowIndex, columnName,
+                    lineNumber, actualValue);
+        }
+    }
+
+    private static void recordLabelBinding(
+            DiffContext context, String label, String tableName, int rowIndex,
+            String columnName, int lineNumber, Object actualValue) {
+        context.labelBindings()
+                .computeIfAbsent(label, key -> new ArrayList<>())
+                .add(new RecordedBinding(tableName, rowIndex, columnName, lineNumber,
+                        actualValue == null ? "[NULL]" : actualValue.toString()));
     }
 
     private static String rowSnapshot(ITable expectedTable, int rowIndex, Column[] columns) throws Exception {
@@ -392,14 +489,19 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     /**
      * Per-call comparison settings shared across every table.
      * Carries the comparator, ignore matcher, line locator, the set
-     * of unordered tables (upper-cased), and the subset-only flag.
+     * of unordered tables (upper-cased), the subset-only flag, and
+     * the {@code @label} binding accumulator. The map's reference
+     * is final; the engine appends entries to its lists across the
+     * row comparison passes and reads them back when validating
+     * cross-cell label consistency.
      */
     private record DiffContext(
             MarkerComparator comparator,
             IgnorePatternMatcher ignoreMatcher,
             ExpectedXmlLineLocator lineLocator,
             Set<String> unorderedTables,
-            boolean subsetOnly) { }
+            boolean subsetOnly,
+            Map<String, List<RecordedBinding>> labelBindings) { }
 
     /**
      * Per-table scope shared by the helpers — table name, expected
@@ -411,4 +513,26 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
             ITable expectedTable,
             Column[] columns,
             List<Map<String, Object>> actualRows) { }
+
+    /**
+     * Captures the actual database value seen at a specific
+     * {@code @label} occurrence so the engine can later check every
+     * cell sharing the label agrees on the same actual value.
+     *
+     * @param tableName    the expected table where the label appears
+     * @param rowIndex     the 0-based expected row index
+     * @param columnName   the column whose expected value is
+     *                     {@code @<label>}
+     * @param lineNumber   the 1-based line in the expected dataset
+     *                     where the row sits (for the
+     *                     {@code DbDifference.expectedLineNumber} field)
+     * @param actualValue  the database value as a string;
+     *                     {@code "[NULL]"} when the cell is SQL NULL
+     */
+    private record RecordedBinding(
+            String tableName,
+            int rowIndex,
+            String columnName,
+            int lineNumber,
+            String actualValue) { }
 }

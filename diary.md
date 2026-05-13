@@ -2842,3 +2842,41 @@ matches it against `true` / `false` in the expected dataset.
 verify-all.sh wip green — 6 in-flight + 54 default scenarios,
 1m 3s.
 
+
+## 2026-05-13 — TICKET-009 D12: @label back-reference markers
+
+Authors can now express "this cell holds whatever value the
+matched row's PK ends up with" via the `@label` marker on the
+diff side, then reference the same label from a FK cell in another
+table to assert referential integrity without knowing the dynamic
+PK upfront.
+
+Engine-level (`DbUnitXmlDiffEngine`); `MarkerComparator` is
+unchanged. `LABEL_PATTERN = "@[A-Za-z0-9_]+"` recognises pure
+identifier-style label tokens — arbitrary VARCHAR content like
+`@admin@example.com` does *not* match, so the marker doesn't
+silently capture e-mail strings as bindings.
+
+Algorithm:
+1. Per row, walk the cells. A cell whose entire expected value is
+   `@<id>` records `(label, table, row, col, line, actualValue)`
+   into a per-call `Map<String, List<RecordedBinding>>`; it never
+   produces a `VALUE_MISMATCH` during cell comparison and acts as
+   a wildcard during unordered row matching.
+2. After every table has been compared, walk the binding map. The
+   first recorded actual value per label is the canonical binding;
+   any later occurrence that disagrees emits a `VALUE_MISMATCH`
+   whose `expected=` field reads `@<label> bound to "<canonical>"`
+   so the test author sees both the label name and the value the
+   first occurrence pinned it to.
+
+`compareRow` records bindings inline (ordered path); `compareUnordered`
+calls a new `recordLabelBindingsForRow(...)` helper after a successful
+match so the same accumulator covers both modes.
+
+Scenarios 61 / 62 / 63 cover PK-FK happy path, mismatch with the
+bound value in the error message, and a three-table chain.
+
+verify-all.sh wip green — 9 in-flight + 54 default scenarios,
+1m 5s.
+
