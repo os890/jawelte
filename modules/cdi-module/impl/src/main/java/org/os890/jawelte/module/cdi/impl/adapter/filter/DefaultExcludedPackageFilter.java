@@ -66,6 +66,20 @@ public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
         return supertypeMatches(rawType, prefixes);
     }
 
+    @Override
+    public boolean isOwningBeanExcluded(Class<?> owningBeanClass) {
+        if (owningBeanClass == null) {
+            return false;
+        }
+        String packageName = owningBeanClass.getPackageName() + ".";
+        for (String prefix : prefixes()) {
+            if (packageName.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<String> prefixes() {
         List<String> local = cachedPrefixes;
         if (local != null) {

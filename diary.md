@@ -3061,3 +3061,15 @@ Path of an in-flight lookup:
 
 Tested under OWB: scenarios 01, 36, 36a, 37, 44, 46, 64 all green. Under Weld: scenario 01 green; scenarios 36 and 64 fail with a pre-existing `NoClassDefFoundError: org/mockito/Mockito` from `TestBeansCdiExtension`'s auto-mock loop — verified the same failure exists at HEAD baseline without my changes (`mockito-core` is `provided` in the parent depMgmt and `cdi-module/impl`'s auto-mock loop tries to instantiate Mockito for any unsatisfied `@Inject` IP found in the test class). Separate bug; out of scope for this rework.
 
+
+## 2026-05-13: cdi-module — filter framework-internal IPs out of auto-mocking
+
+`TestBeansCdiExtension.onProcessInjectionPoint` previously collected EVERY injection point — including IPs from CDI-runtime infrastructure beans (Weld-SE's `RunnableDecorator` injecting `Runnable`, SmallRye Config's `ConfigProducer` injecting `InjectionPoint`, etc.). The auto-mock loop then tried to synthesise Mockito mocks for those IPs. With Mockito on the test classpath (jpa-module, scope-module, cdi-module, ejb-module test parents declare `mockito-core` at `provided`), the mocking silently succeeded and produced dead-weight beans never injected anywhere. Without Mockito on the classpath (db-testdata-module's test parent doesn't declare it), the loop blew up with `NoClassDefFoundError: org/mockito/Mockito`.
+
+Fix in two parts:
+
+- Bake a built-in framework-internal owning-bean filter into the extension itself (consistent with the existing `hasSyntheticBeanBinding` DeltaSpike check that also lives there). The prefix list `org.jboss.weld.`, `org.apache.webbeans.`, `org.apache.deltaspike.`, `io.smallrye.` always applies — drops IPs declared by those framework-shipped beans at PIP time, before they enter the auto-mock candidate set. Compile-string-only so cdi-module incurs no compile-time dependency on the listed runtimes.
+- Extend `ExcludedPackageFilter` with a default-method `isOwningBeanExcluded(Class<?>)` so users (and the default impl on top of MP Config) can extend the owning-bean filter beyond the built-in prefixes. `DefaultExcludedPackageFilter` reuses the existing `org.os890.jawelte.module.cdi.auto-mock.exclude-packages` MP Config key for the user-extensible list. The framework-internal list stays in the extension (not in the filter) so it applies regardless of which `ExcludedPackageFilter` impl wins via `@Priority` — including jpa-module's `JpaTypesExcludedPackageFilter` (priority `Integer.MAX_VALUE - 1`), which now inherits the framework-internal filter for free without duplicating the prefix list.
+
+Latent bug introduced when `onProcessInjectionPoint` was added in commit `648d70e UNTESTED: TICKET-003 Phase 3 - cdi-module/impl`. Silent everywhere Mockito was on the test classpath; surfaced as `NoClassDefFoundError` only once db-testdata-module's Weld profile was exercised. Verified `mvn -P weld test` green for sampled scenarios across scope-module / jpa-module / db-testdata-module (scope scenario 14, jpa scenario 03, db-testdata scenarios 36 + 64); OWB green for the same set.
+

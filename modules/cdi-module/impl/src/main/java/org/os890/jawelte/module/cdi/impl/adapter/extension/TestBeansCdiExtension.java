@@ -146,6 +146,14 @@ public class TestBeansCdiExtension implements Extension {
         if (targetType == null) {
             return;
         }
+        Class<?> owningBeanClass = ip.getBean() == null ? null : ip.getBean().getBeanClass();
+        if (owningBeanClass != null && isFrameworkInternalBean(owningBeanClass)) {
+            return;
+        }
+        if (excludedPackageFilter != null && owningBeanClass != null
+                && excludedPackageFilter.isOwningBeanExcluded(owningBeanClass)) {
+            return;
+        }
         unsatisfiedCandidateIps.add(new IpKey(targetType, new LinkedHashSet<>(qualifiers)));
     }
 
@@ -323,6 +331,34 @@ public class TestBeansCdiExtension implements Extension {
             return cls;
         }
         return null;
+    }
+
+    /**
+     * Always-excluded owning-bean package prefixes. IPs declared by
+     * beans under these packages are CDI-runtime infrastructure
+     * (decorators, interceptors, producers shipped by the runtime
+     * itself) which the runtime satisfies internally; the extension
+     * drops them at {@code ProcessInjectionPoint} time so they
+     * never enter the auto-mock candidate set, regardless of which
+     * {@link ExcludedPackageFilter} is active. Mirrors the
+     * compile-string-only convention used by
+     * {@link #hasSyntheticBeanBinding(Class)} so cdi-module incurs
+     * no compile-time dependency on the listed runtimes.
+     */
+    private static final List<String> FRAMEWORK_INTERNAL_OWNING_BEAN_PREFIXES = List.of(
+            "org.jboss.weld.",
+            "org.apache.webbeans.",
+            "org.apache.deltaspike.",
+            "io.smallrye.");
+
+    private static boolean isFrameworkInternalBean(Class<?> beanClass) {
+        String packageName = beanClass.getPackageName() + ".";
+        for (String prefix : FRAMEWORK_INTERNAL_OWNING_BEAN_PREFIXES) {
+            if (packageName.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
