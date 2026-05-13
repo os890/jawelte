@@ -3073,3 +3073,8 @@ Fix in two parts:
 
 Latent bug introduced when `onProcessInjectionPoint` was added in commit `648d70e UNTESTED: TICKET-003 Phase 3 - cdi-module/impl`. Silent everywhere Mockito was on the test classpath; surfaced as `NoClassDefFoundError` only once db-testdata-module's Weld profile was exercised. Verified `mvn -P weld test` green for sampled scenarios across scope-module / jpa-module / db-testdata-module (scope scenario 14, jpa scenario 03, db-testdata scenarios 36 + 64); OWB green for the same set.
 
+
+## 2026-05-13: cdi-module — make the framework-internal IP filter MP Config-extensible
+
+Follow-up to the framework-internal IP filter commit. The previous commit hardcoded the framework-internal owning-bean prefix list (`org.jboss.weld.`, `org.apache.webbeans.`, `org.apache.deltaspike.`, `io.smallrye.`) inside `TestBeansCdiExtension`. Match the configurability of the other exclude filters: keep the built-in baseline (always applies, cannot be removed) but merge in any additional prefixes the user lists under the new MP Config key `org.os890.jawelte.module.cdi.auto-mock.framework-internal-bean-packages` (comma-separated; dot-then-underscore fallback via the active `ConfigResolver`). Same "defaults + user-extension" shape as `JpaTypesExcludedPackageFilter` uses for its target-type filter, so users who pull in a CDI extension shipping infrastructure beans in some other package (e.g. `org.acme.cdi.bridge.`) can add the prefix without forking the framework.
+

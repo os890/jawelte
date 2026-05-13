@@ -20,6 +20,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -53,6 +54,7 @@ import jakarta.inject.Scope;
 import jakarta.inject.Singleton;
 
 import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.ScopeBinding;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
@@ -65,8 +67,21 @@ import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
  * CDI Extension shipped by cdi-module. Discovers {@code @TestBean}
  * declarations on the active test class, registers
  * {@code @Alternative} and synthetic beans, applies the
- * {@code limitToTestBeans=true} whitelist veto when in scope, and
- * synthesises Mockito mocks for unsatisfied injection points.
+ * {@code limitToTestBeans=true} whitelist veto when in scope,
+ * synthesises Mockito mocks for unsatisfied injection points, and
+ * filters IPs declared by framework-internal beans (Weld / OWB /
+ * DeltaSpike / SmallRye) out of the auto-mock candidate set.
+ *
+ * <p>The framework-internal owning-bean filter is configurable via
+ * MP Config: the built-in baseline ({@code org.jboss.weld.},
+ * {@code org.apache.webbeans.}, {@code org.apache.deltaspike.},
+ * {@code io.smallrye.}) always applies, and any additional package
+ * prefixes listed under
+ * {@value #FRAMEWORK_INTERNAL_BEAN_PACKAGES_CONFIG_KEY} (comma-separated;
+ * dot-then-underscore fallback honoured) are merged on top. The
+ * filter runs at {@code ProcessInjectionPoint} time, before IPs
+ * enter the candidate set, so it applies regardless of which
+ * {@link ExcludedPackageFilter} impl wins via {@code @Priority}.
  *
  * <p>The Extension obtains the active {@link TestContext} via
  * {@link TestContext#get()} during {@code BeforeBeanDiscovery};
@@ -80,12 +95,25 @@ import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
  */
 public class TestBeansCdiExtension implements Extension {
 
+    /**
+     * MP Config key for additional framework-internal owning-bean
+     * package prefixes. The configured value is parsed as a
+     * comma-separated list and merged on top of
+     * {@link #FRAMEWORK_INTERNAL_OWNING_BEAN_PREFIXES} (the built-in
+     * baseline cannot be removed; users only extend it).
+     * Dot-then-underscore fallback applies via the active
+     * {@link ConfigResolver}.
+     */
+    public static final String FRAMEWORK_INTERNAL_BEAN_PACKAGES_CONFIG_KEY =
+            "org.os890.jawelte.module.cdi.auto-mock.framework-internal-bean-packages";
+
     private TestContext activeContext;
     private TestBeanScanner.Result scanResult;
     private boolean limitToTestBeans;
     private WhitelistFilter whitelistFilter;
     private ExcludedPackageFilter excludedPackageFilter;
     private MockFactory mockFactory;
+    private List<String> frameworkInternalBeanPrefixes;
     private final Set<IpKey> unsatisfiedCandidateIps = new LinkedHashSet<>();
 
     /** No-arg constructor required by the CDI runtime. */
@@ -115,6 +143,7 @@ public class TestBeansCdiExtension implements Extension {
         this.whitelistFilter = TestContext.loadService(WhitelistFilter.class);
         this.excludedPackageFilter = TestContext.loadService(ExcludedPackageFilter.class);
         this.mockFactory = TestContext.loadService(MockFactory.class);
+        this.frameworkInternalBeanPrefixes = resolveFrameworkInternalBeanPrefixes();
 
         // Force discovery of @TestBean target classes that lack a
         // bean-defining annotation (e.g. @Alternative without an explicit
@@ -147,7 +176,7 @@ public class TestBeansCdiExtension implements Extension {
             return;
         }
         Class<?> owningBeanClass = ip.getBean() == null ? null : ip.getBean().getBeanClass();
-        if (owningBeanClass != null && isFrameworkInternalBean(owningBeanClass)) {
+        if (owningBeanClass != null && isFrameworkInternalBean(owningBeanClass, frameworkInternalBeanPrefixes)) {
             return;
         }
         if (excludedPackageFilter != null && owningBeanClass != null
@@ -334,14 +363,17 @@ public class TestBeansCdiExtension implements Extension {
     }
 
     /**
-     * Always-excluded owning-bean package prefixes. IPs declared by
-     * beans under these packages are CDI-runtime infrastructure
-     * (decorators, interceptors, producers shipped by the runtime
-     * itself) which the runtime satisfies internally; the extension
-     * drops them at {@code ProcessInjectionPoint} time so they
-     * never enter the auto-mock candidate set, regardless of which
-     * {@link ExcludedPackageFilter} is active. Mirrors the
-     * compile-string-only convention used by
+     * Built-in baseline of always-excluded owning-bean package
+     * prefixes. IPs declared by beans under these packages are
+     * CDI-runtime infrastructure (decorators, interceptors,
+     * producers shipped by the runtime itself) which the runtime
+     * satisfies internally; the extension drops them at
+     * {@code ProcessInjectionPoint} time so they never enter the
+     * auto-mock candidate set, regardless of which
+     * {@link ExcludedPackageFilter} is active. Users extend (but
+     * cannot remove) this baseline via the
+     * {@link #FRAMEWORK_INTERNAL_BEAN_PACKAGES_CONFIG_KEY} MP Config
+     * key. Mirrors the compile-string-only convention used by
      * {@link #hasSyntheticBeanBinding(Class)} so cdi-module incurs
      * no compile-time dependency on the listed runtimes.
      */
@@ -351,9 +383,29 @@ public class TestBeansCdiExtension implements Extension {
             "org.apache.deltaspike.",
             "io.smallrye.");
 
-    private static boolean isFrameworkInternalBean(Class<?> beanClass) {
+    private static List<String> resolveFrameworkInternalBeanPrefixes() {
+        List<String> combined = new ArrayList<>(FRAMEWORK_INTERNAL_OWNING_BEAN_PREFIXES);
+        ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
+        if (resolver == null) {
+            return List.copyOf(combined);
+        }
+        resolver.resolve(FRAMEWORK_INTERNAL_BEAN_PACKAGES_CONFIG_KEY).ifPresent(value -> {
+            for (String entry : value.split(",")) {
+                String trimmed = entry.trim();
+                if (!trimmed.isEmpty() && !combined.contains(trimmed)) {
+                    combined.add(trimmed);
+                }
+            }
+        });
+        return List.copyOf(combined);
+    }
+
+    private static boolean isFrameworkInternalBean(Class<?> beanClass, List<String> prefixes) {
+        if (prefixes == null) {
+            return false;
+        }
         String packageName = beanClass.getPackageName() + ".";
-        for (String prefix : FRAMEWORK_INTERNAL_OWNING_BEAN_PREFIXES) {
+        for (String prefix : prefixes) {
             if (packageName.startsWith(prefix)) {
                 return true;
             }
