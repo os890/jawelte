@@ -27,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.Set;
 
 import jakarta.annotation.Priority;
@@ -36,10 +37,15 @@ import org.dbunit.dataset.IDataSet;
 import org.dbunit.dataset.ITable;
 import org.dbunit.dataset.ITableIterator;
 import org.dbunit.dataset.xml.FlatXmlDataSetBuilder;
+import org.os890.jawelte.core.api.port.ServicePriorityResolver;
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference;
 import org.os890.jawelte.module.dbtestdata.api.DbDifference.DifferenceType;
 import org.os890.jawelte.module.dbtestdata.api.DiffSpec;
+import org.os890.jawelte.module.dbtestdata.api.InterpolationContext;
 import org.os890.jawelte.module.dbtestdata.api.port.DbDiffEngine;
+import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator;
+import org.os890.jawelte.module.dbtestdata.impl.util.CellPredicateEvaluator;
 import org.os890.jawelte.module.dbtestdata.impl.util.ExpectedXmlLineLocator;
 import org.os890.jawelte.module.dbtestdata.impl.util.IgnorePatternMatcher;
 import org.os890.jawelte.module.dbtestdata.impl.util.MarkerComparator;
@@ -94,8 +100,16 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
     public List<DbDifference> diff(Connection connection, String expectedContent, DiffSpec options) {
         IDataSet expectedDataset = parseExpected(expectedContent);
         ExpectedXmlLineLocator lineLocator = ExpectedXmlLineLocator.parse(expectedContent);
+        InterpolationContext interpolationContext = options.interpolationContext();
+        ELInterpolator interpolator = resolveInterpolator();
+        CellPredicateEvaluator predicateEvaluator =
+                (expression, actualValue) ->
+                        interpolator.evaluatePredicate(expression, interpolationContext, actualValue);
         DiffContext context = new DiffContext(
-                new MarkerComparator(options.booleanTrueValues(), options.booleanFalseValues()),
+                new MarkerComparator(
+                        options.booleanTrueValues(),
+                        options.booleanFalseValues(),
+                        predicateEvaluator),
                 new IgnorePatternMatcher(options.ignorePatterns()),
                 lineLocator,
                 upperCaseSet(options.unorderedTables()),
@@ -130,6 +144,33 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
             result.add(entry.toUpperCase(Locale.ROOT));
         }
         return result;
+    }
+
+    private static volatile ELInterpolator cachedInterpolator;
+
+    private static ELInterpolator resolveInterpolator() {
+        ELInterpolator local = cachedInterpolator;
+        if (local != null) {
+            return local;
+        }
+        synchronized (DbUnitXmlDiffEngine.class) {
+            local = cachedInterpolator;
+            if (local != null) {
+                return local;
+            }
+            List<ELInterpolator> matching = new ArrayList<>();
+            for (ELInterpolator candidate : ServiceLoader.load(ELInterpolator.class)) {
+                matching.add(candidate);
+            }
+            if (matching.isEmpty()) {
+                throw new IllegalStateException(
+                        "No ELInterpolator registered — was db-testdata-module/impl included?");
+            }
+            ServicePriorityResolver resolver = TestContext.loadService(ServicePriorityResolver.class);
+            local = resolver.resolve(matching);
+            cachedInterpolator = local;
+            return local;
+        }
     }
 
     private static IDataSet parseExpected(String expectedContent) {

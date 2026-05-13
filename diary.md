@@ -2625,3 +2625,27 @@ to `interpolator.interpolateAll(...)` so `#{...}` on the seed side acts
 as a placeholder (immediate eval) — matches Jakarta EL semantics on the
 seed side where no actual DB value exists for deferred evaluation.
 
+
+## 2026-05-13 — TICKET-009 D1: wire #{...} per-cell branch into the diff path
+
+Added `CellPredicateEvaluator` (impl/util) — a one-method functional
+interface the diff engine fills in with a lambda capturing the active
+`ELInterpolator` plus the per-call `InterpolationContext`. Keeps the
+api-side EL surface out of `MarkerComparator`.
+
+`MarkerComparator` gains a third constructor parameter
+(`CellPredicateEvaluator`) and a new branch in `matches(...)` for
+expected cells starting with `#{` and ending with `}` — the marker is
+dispatched to the evaluator before the comparator's existing
+`uuid'…'` / boolean / numeric / fallback branches run.
+
+`DbUnitXmlDiffEngine` resolves the active `ELInterpolator` once via
+ServiceLoader + `ServicePriorityResolver` (cached in a static volatile
+field with double-checked locking, same shape as
+`DatasetSupport.resolveInterpolator()`), builds the per-call evaluator
+lambda from the resolved interpolator plus `spec.interpolationContext()`,
+and threads it into the new `MarkerComparator` constructor.
+
+Smoke-tested scenarios 17 / 30 / 31 / 32 (regex + `${...}` value /
+bean / function paths) — all four pass post-refactor.
+

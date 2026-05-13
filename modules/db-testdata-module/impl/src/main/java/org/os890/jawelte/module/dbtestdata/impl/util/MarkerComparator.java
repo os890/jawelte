@@ -34,6 +34,10 @@ import java.util.regex.Pattern;
  *       regex takes precedence over boolean / numeric normalisation,
  *       so {@code ~true} is the literal regex {@code true} and not
  *       the boolean);</li>
+ *   <li>{@code #{expr}} — deferred Jakarta EL predicate; the actual
+ *       value is bound as {@code value} (and as {@code num} when it
+ *       parses as a {@link Double}). The predicate must return a
+ *       non-{@code null} {@link Boolean} — strict-EL stance.</li>
  *   <li>{@code uuid'…'} — parse the expected as a UUID and compare
  *       against the actual (binary 16-byte form or canonical hex
  *       string);</li>
@@ -46,7 +50,9 @@ import java.util.regex.Pattern;
  *
  * <p>The comparator carries the boolean true / false lists chosen
  * by the builder (built-in plus extensions) so it can run the
- * normalisation step without re-resolving MP Config on every call.
+ * normalisation step without re-resolving MP Config on every call,
+ * plus a {@link CellPredicateEvaluator} the diff engine pre-binds to
+ * the active EL interpolator + per-call {@code InterpolationContext}.
  * Instances are immutable and thread-safe.
  */
 public class MarkerComparator {
@@ -56,6 +62,12 @@ public class MarkerComparator {
 
     /** Regex marker prefix — values starting with {@code ~} are always regex. */
     public static final String REGEX_PREFIX = "~";
+
+    /** Deferred-EL predicate marker prefix — values starting with {@code #{} and ending with {@code }} are EL. */
+    public static final String DEFERRED_EL_PREFIX = "#{";
+
+    /** Deferred-EL predicate marker suffix. */
+    public static final String DEFERRED_EL_SUFFIX = "}";
 
     private static final String UUID_PREFIX = "uuid'";
 
@@ -69,19 +81,29 @@ public class MarkerComparator {
 
     private final Set<String> falseValues;
 
+    private final CellPredicateEvaluator predicateEvaluator;
+
     /**
-     * Build a comparator with the configured boolean extension lists.
-     * Built-in values are always recognised; the {@code extra*}
-     * arguments extend them (no replacement).
+     * Build a comparator with the configured boolean extension lists
+     * and the per-call predicate evaluator.
      *
-     * @param extraTrueValues  extra values that normalise to
-     *                         {@code true}
-     * @param extraFalseValues extra values that normalise to
-     *                         {@code false}
+     * @param extraTrueValues    extra values that normalise to
+     *                           {@code true}
+     * @param extraFalseValues   extra values that normalise to
+     *                           {@code false}
+     * @param predicateEvaluator callback that evaluates a
+     *                           {@code #{&hellip;}} expression against
+     *                           the actual cell value; the diff engine
+     *                           binds this to the active EL interpolator
+     *                           and the per-call interpolation context
      */
-    public MarkerComparator(List<String> extraTrueValues, List<String> extraFalseValues) {
+    public MarkerComparator(
+            List<String> extraTrueValues,
+            List<String> extraFalseValues,
+            CellPredicateEvaluator predicateEvaluator) {
         this.trueValues = buildBooleanSet(DEFAULT_TRUE_VALUES, extraTrueValues);
         this.falseValues = buildBooleanSet(DEFAULT_FALSE_VALUES, extraFalseValues);
+        this.predicateEvaluator = predicateEvaluator;
     }
 
     private static Set<String> buildBooleanSet(List<String> defaults, List<String> extras) {
@@ -115,6 +137,10 @@ public class MarkerComparator {
         if (expected.startsWith(REGEX_PREFIX)) {
             String pattern = expected.substring(REGEX_PREFIX.length());
             return Pattern.matches(pattern, asString(actual));
+        }
+        if (expected.startsWith(DEFERRED_EL_PREFIX) && expected.endsWith(DEFERRED_EL_SUFFIX)
+                && expected.length() > DEFERRED_EL_PREFIX.length() + DEFERRED_EL_SUFFIX.length()) {
+            return predicateEvaluator.evaluate(expected, actual);
         }
         if (expected.startsWith(UUID_PREFIX) && expected.endsWith(UUID_SUFFIX)
                 && expected.length() > UUID_PREFIX.length() + UUID_SUFFIX.length()) {
