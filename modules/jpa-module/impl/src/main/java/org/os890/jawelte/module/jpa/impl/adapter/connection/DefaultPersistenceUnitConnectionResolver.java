@@ -16,10 +16,12 @@
 package org.os890.jawelte.module.jpa.impl.adapter.connection;
 
 import java.sql.Connection;
+import java.util.Set;
 
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManager;
 
+import org.hibernate.Session;
 import org.os890.jawelte.module.jpa.api.port.PersistenceUnitConnectionResolver;
 import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 
@@ -55,6 +57,32 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
                             + "'. Was the call made outside a @Transactional or "
                             + "UserTransaction.begin() boundary?");
         }
-        return entityManager.unwrap(Connection.class);
+        // JPA's spec-portable em.unwrap(Connection.class) is not
+        // supported by Hibernate; route through Session.doReturningWork
+        // which surfaces the active JDBC connection without enrolling
+        // new work. The returned connection is the same one Hibernate
+        // already drives, so seed / cleanup code shares the active
+        // transaction.
+        Session session = entityManager.unwrap(Session.class);
+        return session.doReturningWork(connection -> connection);
+    }
+
+    @Override
+    public Connection connectionForActivePersistenceUnit() {
+        Set<String> activeUnits = TransactionScopedEmHolder.currentFramePersistenceUnits();
+        if (activeUnits.isEmpty()) {
+            throw new IllegalStateException(
+                    "No active persistence unit on the calling thread. "
+                            + "Was the call made outside a @Transactional or "
+                            + "UserTransaction.begin() boundary?");
+        }
+        if (activeUnits.size() > 1) {
+            throw new IllegalStateException(
+                    "Multiple active persistence units on the calling thread: "
+                            + activeUnits + ". Use connectionFor(String) with an "
+                            + "explicit persistence unit name.");
+        }
+        String onlyActiveUnit = activeUnits.iterator().next();
+        return connectionFor(onlyActiveUnit);
     }
 }

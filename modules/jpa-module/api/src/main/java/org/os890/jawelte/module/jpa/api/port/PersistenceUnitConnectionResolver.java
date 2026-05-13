@@ -42,4 +42,28 @@ public interface PersistenceUnitConnectionResolver {
      * @return the JDBC connection; never {@code null}
      */
     Connection connectionFor(String persistenceUnitName);
+
+    /**
+     * Resolve the JDBC {@link Connection} for the **only** persistence
+     * unit currently active on the calling thread. Intended for
+     * callers that did not pass an explicit persistence-unit name
+     * (e.g. {@code DbSeed.forPersistenceUnit()}) and where the
+     * scenario only ever uses one PU.
+     *
+     * <p>The resolver throws {@link IllegalStateException} when:
+     *
+     * <ul>
+     *   <li>no persistence unit is active on the calling thread —
+     *       typically because the call is outside an active
+     *       {@code @Transactional} or
+     *       {@code UserTransaction.begin()} boundary, or</li>
+     *   <li>more than one persistence unit is active and the caller
+     *       did not disambiguate; the caller must then use
+     *       {@link #connectionFor(String)} with an explicit name.</li>
+     * </ul>
+     *
+     * @return the JDBC connection for the single active PU; never
+     *         {@code null}
+     */
+    Connection connectionForActivePersistenceUnit();
 }

@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-db-testdata-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/db-testdata-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-db-testdata-module. The always-needed stack is core-api + core-impl (for the SPI bootstrap), db-testdata-module-api + db-testdata-module-impl, DbUnit, H2 (for the in-memory database), SmallRye Config, the Jakarta EL implementation (Tomcat embed-el), and the test-side JUnit / AssertJ jars. forPersistenceUnit(...) scenarios additionally pull jpa-module + Hibernate.</description>
+
+    <modules>
+        <module>scenario-01-clean-insert-seeds-data</module>
+        <module>scenario-02-clean-insert-fk-ordering</module>
+        <module>scenario-03-clean-insert-circular-fk</module>
+        <module>scenario-04-insert-mode</module>
+        <module>scenario-05-insert-duplicate-pk</module>
+        <module>scenario-06-update-mode</module>
+        <module>scenario-07-update-missing-row</module>
+        <module>scenario-08-refresh-mode</module>
+        <module>scenario-09-dbdiff-match</module>
+        <module>scenario-10-dbdiff-cell-mismatch</module>
+        <module>scenario-11-dbdiff-missing-row</module>
+        <module>scenario-12-dbdiff-extra-row</module>
+        <module>scenario-13-dbdiff-subset-only</module>
+        <module>scenario-14-null-marker-is-sql-null</module>
+        <module>scenario-15-null-lowercase-is-literal</module>
+        <module>scenario-16-null-titlecase-is-literal</module>
+        <module>scenario-17-regex-match</module>
+        <module>scenario-18-regex-mismatch</module>
+        <module>scenario-19-tilde-literal-via-regex</module>
+        <module>scenario-20-uuid-literal</module>
+        <module>scenario-21-boolean-normalisation-true</module>
+        <module>scenario-22-boolean-normalisation-false</module>
+        <module>scenario-23-boolean-mp-config-extras</module>
+        <module>scenario-24-boolean-non-recognised</module>
+        <module>scenario-25-numeric-precision</module>
+        <module>scenario-26-ignore-wildcard-column</module>
+        <module>scenario-27-ignore-specific-column</module>
+        <module>scenario-28-unordered-tables-multiset</module>
+        <module>scenario-29-unordered-tables-missing-row</module>
+        <module>scenario-30-el-with-values</module>
+        <module>scenario-31-el-with-bean</module>
+        <module>scenario-32-el-with-function</module>
+        <module>scenario-33-el-with-function-non-static</module>
+        <module>scenario-34-el-with-function-missing</module>
+        <module>scenario-35-el-bean-overrides-value</module>
+        <module>scenario-36-for-pu-default-single-active</module>
+        <module>scenario-36a-for-pu-ambiguous</module>
+        <module>scenario-36b-for-pu-outside-transaction</module>
+        <module>scenario-37-for-pu-named</module>
+        <module>scenario-38-for-connection-ownership</module>
+        <module>scenario-39-for-connection-auto-commit-on</module>
+        <module>scenario-40-for-connection-auto-commit-off</module>
+        <module>scenario-41-row-count-match</module>
+        <module>scenario-42-row-count-mismatch</module>
+        <module>scenario-43-row-count-empty-table</module>
+        <module>scenario-44-custom-seed-engine</module>
+        <module>scenario-45-custom-diff-engine</module>
+        <module>scenario-46-custom-pu-resolver</module>
+        <module>scenario-47-deferred-el-numeric-num</module>
+        <module>scenario-48-deferred-el-value-string</module>
+        <module>scenario-49-deferred-el-with-bean</module>
+        <module>scenario-50-deferred-el-with-function</module>
+        <module>scenario-51-deferred-el-with-values-visible</module>
+        <module>scenario-52-deferred-el-non-boolean-raises</module>
+        <module>scenario-53-deferred-el-mismatch-shows-expression</module>
+        <module>scenario-54-hash-marker-on-seed-immediate</module>
+        <module>scenario-55-vendor-data-type-factory-h2-binary-uuid</module>
+        <module>scenario-56-binary16-uuid-round-trip</module>
+        <module>scenario-57-hex-marker-binary-round-trip</module>
+        <module>scenario-58-empty-table-marker-matches-empty</module>
+        <module>scenario-59-empty-table-marker-reports-extras</module>
+        <module>scenario-60-boolean-defaults-postgres-tf</module>
+        <module>scenario-61-label-pk-fk-match</module>
+        <module>scenario-62-label-fk-mismatch</module>
+        <module>scenario-63-label-chain-three-tables</module>
+        <module>scenario-64-for-persistence-unit-annotation-resolves</module>
+    </modules>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            jpa-module-api on the test classpath: db-testdata-module-api
+            compile-depends on it for the
+            PersistenceUnitConnectionResolver port reference. Scenarios
+            that drive forPersistenceUnit(...) end-to-end additionally
+            pull jpa-module-impl in their own poms.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            DbUnit is a compile-scope dep of db-testdata-module-impl;
+            stated again here so test-only tooling that does not walk
+            transitive scopes still sees it on the classpath.
+        -->
+        <dependency>
+            <groupId>org.dbunit</groupId>
+            <artifactId>dbunit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- H2 in-memory database for every scenario. -->
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <!--
+            Jakarta EL: api on the test classpath plus Apache Tomcat's
+            tomcat-embed-el as the default provider for the
+            JakartaELInterpolator. Consumers can swap to GlassFish
+            Expressly in their own pom with no code change.
+        -->
+        <dependency>
+            <groupId>jakarta.el</groupId>
+            <artifactId>jakarta.el-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat.embed</groupId>
+            <artifactId>tomcat-embed-el</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.enterprise.cdi-api supplies the CDI surface
+            TestContext.loadService(...) probes via tryCdiFirst before
+            falling back to reflective instantiation. db-testdata
+            scenarios that do NOT bootstrap CDI still need the api on
+            the classpath so the bootstrap probe doesn't LinkageError.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+        <profile>
+            <id>weld</id>
+        </profile>
+    </profiles>
+</project>

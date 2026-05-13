@@ -68,6 +68,16 @@ import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
  * {@code limitToTestBeans=true} whitelist veto when in scope, and
  * synthesises Mockito mocks for unsatisfied injection points.
  *
+ * <p>The IP-collection step at {@code ProcessInjectionPoint} time
+ * delegates to {@link ExcludedPackageFilter#isOwningBeanExcluded(Class)}
+ * to drop IPs declared by framework-internal beans (Weld / OWB /
+ * DeltaSpike / SmallRye decorators, interceptors, producers) before
+ * they enter the auto-mock candidate set; the default
+ * {@code ExcludedPackageFilter} ships the prefix list via MP Config
+ * (see {@code META-INF/microprofile-config.properties}), so the
+ * filter is fully configurable through the standard MP Config
+ * machinery.
+ *
  * <p>The Extension obtains the active {@link TestContext} via
  * {@link TestContext#get()} during {@code BeforeBeanDiscovery};
  * outside of the {@code DelegatingJUnitExtension.beforeAll}
@@ -116,6 +126,18 @@ public class TestBeansCdiExtension implements Extension {
         this.excludedPackageFilter = TestContext.loadService(ExcludedPackageFilter.class);
         this.mockFactory = TestContext.loadService(MockFactory.class);
 
+        // Warm both filter caches on the bootstrap thread. Weld dispatches
+        // ProcessInjectionPoint events on ForkJoinPool worker threads whose
+        // context ClassLoader does not include this module's classpath, so a
+        // lazy MP Config read on first PIP would fail with ClassNotFoundException
+        // from TestContext.instantiateConfigured's Class.forName. Touching the
+        // filter here fills its cached prefix lists while we still hold the
+        // bootstrap thread's ClassLoader.
+        if (excludedPackageFilter != null) {
+            excludedPackageFilter.isOwningBeanExcluded(Object.class);
+            excludedPackageFilter.isExcluded(Object.class);
+        }
+
         // Force discovery of @TestBean target classes that lack a
         // bean-defining annotation (e.g. @Alternative without an explicit
         // scope). Augment the AnnotatedType with @Dependent so CDI accepts
@@ -145,6 +167,12 @@ public class TestBeansCdiExtension implements Extension {
         Type targetType = unwrapWrapper(ipType);
         if (targetType == null) {
             return;
+        }
+        if (excludedPackageFilter != null) {
+            Class<?> owningBeanClass = ip.getBean() == null ? null : ip.getBean().getBeanClass();
+            if (owningBeanClass != null && excludedPackageFilter.isOwningBeanExcluded(owningBeanClass)) {
+                return;
+            }
         }
         unsatisfiedCandidateIps.add(new IpKey(targetType, new LinkedHashSet<>(qualifiers)));
     }

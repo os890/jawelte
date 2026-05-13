@@ -47,3 +47,43 @@ Possible directions when the need arises:
 - Or: lazy-but-mutable cache keyed by configuration fingerprint so multiple consumers cohabit (probably overkill for a test framework).
 
 Defer until a consumer asks. Document the existing behaviour in the api-side docs once the design lands.
+
+## db-testdata-module — configurable marker keywords
+
+Make the marker keyword strings tunable so consumers can pick a
+different naming if our defaults clash with their domain vocabulary.
+The strings currently hard-coded in `impl/util` and `api/DbDiffBuilder`
+are:
+
+- `value` — the actual DB cell value bound inside `#{...}`
+  predicates (`JakartaELInterpolator.evaluatePredicate` /
+  `MarkerComparator` integration).
+- `num` — the `Double`-parsed form of the same cell, bound when the
+  string parses as a number.
+- `MATCH:` — the regex marker keyword inside the bracketed
+  `[MATCH:regex]` (once D6 ships).
+
+Possible shapes for the override:
+- MP Config keys (`org.os890.jawelte.module.dbtestdata.api.markers.value`
+  etc.); FQCN-style, consistent with the existing config keys.
+- A `MarkerKeywords` immutable record / config service the engines
+  consult once at JVM bootstrap (mirrors `ServicePriorityResolver`'s
+  shape).
+- Per-call override via the builder (probably overkill).
+
+Decide the override mechanism before adding any code; the goal is
+ergonomic naming the team can iterate without breaking existing
+fixtures.
+
+
+## Revisit later: Runnable / framework-internal IP filter follow-ups
+
+TICKET-009 surfaced and fixed a latent issue in `TestBeansCdiExtension`: the auto-mock loop had been silently mocking `java.lang.Runnable` in every Weld test for the entire history of the extension (Weld-SE's `RunnableDecorator` declares `@Inject Runnable` and the IP collector accepted it). Mockito hid the noise everywhere it was on classpath; db-testdata-module exposed the bug because its test parent doesn't pull Mockito.
+
+The fix is in place (commits `270f7f3` → `377e895` → `1861487`) and `verify-all.sh` is green. Revisit later to decide whether to:
+
+- Wire a dedicated cdi-module test scenario for `ExcludedPackageFilter.isOwningBeanExcluded(...)` — mirrors the existing `scenario-19-exclude-packages` / `scenario-36-custom-excluded-package-filter` style. Currently the new SPI method only has indirect coverage via the db-testdata-module Weld run + the silent-mocking that's now removed across jpa/scope/cdi/ejb Weld phases of `verify-all.sh`.
+- Add `tests/db-testdata-module` to the `for cdi in owb weld` loop in `verify-all.sh:115-120`. Pre-existing gap (db-testdata isn't in the full-matrix sweep) is what let this bug ship undetected; closing it would prevent recurrence.
+- Note for architecture.md / mission.md: the auto-mock framework-internal-bean filter follows the established `FrameworkAllowlist` pattern — `META-INF/microprofile-config.properties` defaults read through the active `ConfigResolver`, no Java constants on the consuming class. Worth a sentence under the cdi-module section if we want this documented for downstream readers.
+
+Decide later whether any/all of the three are worth doing.

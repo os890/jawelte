@@ -2572,3 +2572,528 @@ sees their `jacoco.exec`. Aggregate impl coverage moved from
 68% / 58% to **98% / 89%** (instructions / branches). Every
 package now sits at >= 81% branch coverage; the matchers in
 `impl.util` are at 100%.
+
+## 2026-05-12 — TICKET-009 kickoff
+
+- Reconciled `tickets/009-db-testdata-module.md` to match the existing `jpa-module` port shape: `Connection connectionFor(String)` (single active resolver via `TestContext.loadService(...)`, lowest `@Priority` wins, no Optional / no fall-through chain). Dropped chain-selection test scenario (#47); tightened scenario #46 wording.
+- Opened issue #18 "DB Test-Data Module (db-testdata-module)" with the reconciled ticket body, branch `18-db-test-data-module-db-testdata-module` checked out via `gh issue develop`.
+- Pinned `org.dbunit:dbunit:3.0.0` in root pom dependencyManagement; added `dbunit.version` property; added internal `db-testdata-module-api` / `-impl` cross-refs.
+- Scaffolded `modules/db-testdata-module/` aggregator + `api/` + `impl/` poms; wired into `modules/pom.xml`. api compile-deps `core-api` + `jpa-module/api` (for `PersistenceUnitConnectionResolver`). impl compile-deps `dbunit:3.0.0`, plus the api jar.
+- Extended `PersistenceUnitConnectionResolver` (jpa-module/api) with `connectionForActivePersistenceUnit()`: zero-active → exception, multi-active → exception, exactly-one → that PU's connection. `DefaultPersistenceUnitConnectionResolver` implements it via `TransactionScopedEmHolder.currentFramePersistenceUnits()`. Backs `DbSeed.forPersistenceUnit()` / `DbDiff.forPersistenceUnit()` no-arg semantics.
+- Wrote `db-testdata-module/api`: records (`SeedSpec`, `DiffSpec`, `DbDifference`, `ELFunctionDescriptor`, `InterpolationContext`), three SPI ports (`DbSeedEngine`, `DbDiffEngine`, `ELInterpolator`), builders (`DbSeedBuilder`, `DbDiffBuilder`), facades (`DbSeed`, `DbDiff`), and package-private `DatasetSupport` helper (resource loading + per-format engine caching + cached active interpolator). MP Config defaults (`ignore`, `unordered-tables`, `boolean-true`, `boolean-false`) read through `ConfigResolver` with the project's dot→underscore fallback.
+- Wrote `db-testdata-module/impl`: `JakartaELInterpolator` (full Jakarta EL with values + beans + lazy FunctionMapper for functions), `DbUnitXmlSeedEngine` (DbUnit `FlatXmlDataSetBuilder` + `ReplacementDataSet` mapping `[NULL]` to SQL NULL), `DbUnitXmlDiffEngine` (table-by-table SELECT * + row-as-multiset matching), and three utility classes (`ExpectedXmlLineLocator` for 1-based row line numbers via custom SAX, `MarkerComparator` for [NULL] / regex / uuid / boolean / BigDecimal / String, `IgnorePatternMatcher` for `*.COL` / `TABLE.COL`). ServiceLoader files for the three SPI ports + `beans.xml`.
+- Wired `tests/db-testdata-module` aggregator into `tests/pom.xml`; added `<id>wip</id>` profile mirroring the in-flight scenarios. Smoke scenario 01 (`clean-insert-seeds-data`) drives `DbSeed.forConnection(...).datasetContent(...).cleanInsert().execute()` against an H2 in-memory schema and verifies the seeded rows via plain JDBC — green on first run.
+- Scenarios 02-08 (seed modes): clean-insert FK ordering, clean-insert circular FK (cleanInsert fails, refresh succeeds), insert mode, insert duplicate PK throws, update mode, update of missing row is no-op (matches SQL UPDATE semantics — ticket scenario 7 updated to reflect this), refresh upserts. All green.
+- Scenarios 09-13 (DbDiff matching): full match returns silently; cell mismatch surfaces TABLE[row].COLUMN with expected file line; missing row reports MISSING_ROW; extra row reports unexpected row (subsetOnly=false default); subsetOnly() suppresses both extra rows and untracked tables. Green.
+- Scenarios 14-25 (special markers): [NULL] uppercase = SQL NULL; [null]/[Null] are literal strings; ~regex match and mismatch; ~\~literal matches a literal tilde-prefixed value; uuid'...' literal compares against VARCHAR-stored canonical form; boolean normalisation true (true=1) and false (false=0); MP Config extends the true list (ja=true); non-recognised "maybe" falls through to String.equals; BigDecimal numeric precision (9.99 = 9.990).
+- Scenarios 26-29 (ignore patterns + unordered tables): wildcard `*.ID` skips ID across tables; specific `CUSTOMER.CREATED_AT` skips only that pair; `unorderedTables(CUSTOMER)` matches rows as a multiset regardless of physical order; missing rows surface at their expected-side index.
+- Scenarios 30-35 (EL interpolation): withValues substitution; withBean method call on registered instance; withFunction static-method invocation; non-static method registered surfaces RuntimeException at evaluation (not registration); missing method same; bean wins on name collision with withValues.
+- Scenarios 38-43 (forConnection ownership + row count): forConnection() does not close/commit/rollback the caller's connection nor change auto-commit; with auto-commit on, a separate connection observes the seed; with auto-commit off, only the caller's transaction sees it (api never commits); assertRowCount match/mismatch/empty-table all surface their documented message.
+- Scenarios 44-46 (SPI): custom DbSeedEngine for `text/csv` registered via ServiceLoader routes DbSeed.format("text/csv") to it; same for DbDiffEngine; custom PersistenceUnitConnectionResolver at @Priority(0) wins over jpa-module-impl's default impl via TestContext.loadService(...).
+- Scenario 36b (forPersistenceUnit outside any @Transactional): with jpa-module-impl on the classpath but no active transaction, DefaultPersistenceUnitConnectionResolver.connectionForActivePersistenceUnit() returns the empty active-PU set and raises IllegalStateException("No active persistence unit..."), which DbSeed propagates unchanged.
+- Scenarios 36 and 37 (forPersistenceUnit with active CDI+JPA): single PU active in a @Transactional method, no-arg forPersistenceUnit() resolves to it and the seed shares the active transaction; the named variant forPersistenceUnit("testPU37") works the same way.
+- FIXED jpa-module/impl: DefaultPersistenceUnitConnectionResolver was calling em.unwrap(Connection.class) which Hibernate does not support; routed through Session.doReturningWork(c -> c) instead. The connection returned is the one Hibernate already drives, so seed code shares the active transaction.
+- Scenario 36a (forPersistenceUnit ambiguous — multiple PUs active): two PUs in persistence.xml, service touches both EMs via createNativeQuery (which goes through the EM proxy's peekOrAutoBegin and pushes both onto the @Transactional frame), then DbSeed.forPersistenceUnit() (no-arg) calls connectionForActivePersistenceUnit() which sees two PUs and raises IllegalStateException("Multiple active persistence units...").
+- Added all 48 db-testdata-module scenarios to coverage-report/pom.xml so JaCoCo report-aggregate picks up their exec data for the project-wide report. Also added jawelte-db-testdata-module-api / -impl as compile deps so the report knows about the production classes.
+- TICKET-009 shipping: full `bash verify-all.sh` matrix green in 20m37s across all 16 phases (every module on both OWB and Weld profiles). Removed the `<id>wip</id>` profile from `tests/db-testdata-module/pom.xml` and reordered the default `<modules>` list into strict numeric order (36, 36a, 36b, 37 in line with the other scenarios).
+
+## 2026-05-13 — TICKET-009 D1/D9: #{...} per-cell predicate, part 1
+
+Extended the `ELInterpolator` port with two new abstract methods:
+- `interpolateAll(template, context)` — pre-parse substitution recognising
+  both `${...}` and `#{...}` immediately (for the seed builder).
+- `evaluatePredicate(expression, context, actualValue)` — deferred boolean
+  predicate evaluation against the actual DB cell, with `value` (Object) and
+  `num` (Double when parseable) bound on top of the caller's
+  `InterpolationContext`. Strict: non-Boolean result raises.
+
+Implemented all three methods in `JakartaELInterpolator`, refactoring the
+existing `substituteAll` to accept an `includeHashSyntax` flag so the same
+walker handles both `${...}`-only and `${...}+#{...}` modes.
+
+
+## 2026-05-13 — TICKET-009 D1: thread InterpolationContext through DiffSpec
+
+`DiffSpec` gains an `interpolationContext` field so the diff engine
+can forward values/beans/functions to the active EL interpolator when
+it evaluates `#{...}` per-cell predicate markers. `DbDiffBuilder`
+constructs the context once and passes it to both `interpolator.interpolate(...)`
+and the new `buildSpec(context)` call.
+
+`DbSeedBuilder` switches its pre-parse step from `interpolator.interpolate(...)`
+to `interpolator.interpolateAll(...)` so `#{...}` on the seed side acts
+as a placeholder (immediate eval) — matches Jakarta EL semantics on the
+seed side where no actual DB value exists for deferred evaluation.
+
+
+## 2026-05-13 — TICKET-009 D1: wire #{...} per-cell branch into the diff path
+
+Added `CellPredicateEvaluator` (impl/util) — a one-method functional
+interface the diff engine fills in with a lambda capturing the active
+`ELInterpolator` plus the per-call `InterpolationContext`. Keeps the
+api-side EL surface out of `MarkerComparator`.
+
+`MarkerComparator` gains a third constructor parameter
+(`CellPredicateEvaluator`) and a new branch in `matches(...)` for
+expected cells starting with `#{` and ending with `}` — the marker is
+dispatched to the evaluator before the comparator's existing
+`uuid'…'` / boolean / numeric / fallback branches run.
+
+`DbUnitXmlDiffEngine` resolves the active `ELInterpolator` once via
+ServiceLoader + `ServicePriorityResolver` (cached in a static volatile
+field with double-checked locking, same shape as
+`DatasetSupport.resolveInterpolator()`), builds the per-call evaluator
+lambda from the resolved interpolator plus `spec.interpolationContext()`,
+and threads it into the new `MarkerComparator` constructor.
+
+Smoke-tested scenarios 17 / 30 / 31 / 32 (regex + `${...}` value /
+bean / function paths) — all four pass post-refactor.
+
+
+## 2026-05-13 — TICKET-009 D1: scenarios 47-54 plus pom registrations
+
+Eight new scenarios under `tests/db-testdata-module/`:
+
+- **47** `#{num gt 0 and num lt 100}` against an INT column / DECIMAL
+  column — confirms the `num` Double binding works for cell predicates.
+- **48** `#{value.startsWith('Wid')}` against a VARCHAR — confirms
+  String methods resolve through the dynamic `value` Object binding.
+- **49** `#{v.isPositive(value)}` with `withBean("v", ...)` — registered
+  bean methods visible inside per-cell predicates.
+- **50** `#{fn:isPositive(value)}` with
+  `withFunction("fn", "isPositive", Cls.class, "isPositive")` — static
+  function calls.
+- **51** `#{value eq expectedName}` with
+  `withValues(Map.of("expectedName", "Widget"))` — confirms
+  `withValues` bindings are visible inside `#{...}` (per the D1/Q1
+  decision: same bindings as `${...}`).
+- **52** `#{value.length()}` — Integer result raises `RuntimeException`
+  with "expected Boolean" in the message (strict-EL stance).
+- **53** `#{num gt 100}` against PRICE=9.99 — false-result mismatch
+  surfaces the raw expression in the `AssertionError` message.
+- **54** `#{today}` in a *seed* dataset — `interpolateAll` resolves it
+  as an immediate placeholder; the substituted value reaches the DB.
+
+Aggregator (`tests/db-testdata-module/pom.xml`) and coverage-report
+(`coverage-report/pom.xml`) both updated to register the eight new
+modules in numeric order.
+
+Smoke-tested all 8 on OWB and Weld profiles individually — green on
+both. Full `verify-all.sh` matrix to follow.
+
+
+## 2026-05-13 — TICKET-009 D2: vendor-aware DbUnit DataTypeFactory
+
+New `impl/util/DataTypeFactoryResolver` reflectively loads the
+matching `org.dbunit.ext.<vendor>.*DataTypeFactory` by JDBC product
+name (H2 / PostgreSQL / MySQL / MariaDB / Oracle). Reflection keeps
+the impl module free of a compile-time dependency on the optional
+`org.dbunit.ext.*` packages. Probing failures, unknown vendors, and
+missing extension classes all return `null` — caller falls back to
+DbUnit's default factory.
+
+`DbUnitXmlSeedEngine.seed(...)` invokes the resolver after wrapping
+the JDBC connection in `DatabaseConnection` and sets the resulting
+factory on `DatabaseConfig.PROPERTY_DATATYPE_FACTORY` when non-null.
+Lets the seed path accept e.g. `uuid'…'` against an H2 `BINARY(16)`
+column via H2DataTypeFactory's `UuidAwareBytesDataType`, where
+DbUnit's default factory rejects the marker.
+
+Scenario 55 covers the H2 `BINARY(16)` UUID seed path: it inserts a
+single row via the marker, then verifies via raw JDBC that the
+byte content matches the canonical big-endian byte layout of the
+expected `UUID`. Lives in the in-flight wip profile of
+`tests/db-testdata-module/pom.xml` until the topic ships; default
+`<modules>` and `coverage-report/pom.xml` are unchanged for now.
+
+`verify-all.sh wip` green: install reactor + run db-testdata-module
+aggregator under `-P wip` — 56 scenarios, 1m 2s end-to-end.
+
+
+## 2026-05-13 — TICKET-009 D3: BINARY(16) uuid'…' round-trip
+
+Confirmed via scenario 56 that the existing `uuid'…'` marker
+handles `BINARY(16)` columns symmetrically: H2DataTypeFactory's
+`UuidAwareBytesDataType.typeCast(...)` parses the marker on the
+seed side, and `MarkerComparator.uuidMatches(...)` parses the
+same marker on the diff side, comparing against the raw
+`byte[16]` returned by JDBC. Same syntax in both directions; no
+implicit byte[] -> string heuristics required.
+
+verify-all.sh wip green (2 phases, 1m 0s) — scenario 55 (seed
+only) + scenario 56 (round-trip) both pass under the wip profile.
+
+
+## 2026-05-13 — TICKET-009 D4: hex'…' marker for non-UUID binary
+
+Adds the `hex'…'` marker on both seed and diff sides, mirroring the
+shape of `uuid'…'` for non-UUID `byte[]` columns.
+
+- `MarkerComparator` gains `HEX_PREFIX` / `HEX_SUFFIX` constants and
+  a `hexMatches(...)` branch that parses the inner string with
+  `java.util.HexFormat`, then compares the resulting `byte[]`
+  bytewise against the actual cell when it is a `byte[]`.
+- `DbUnitXmlSeedEngine.rewriteHexMarkersAsBase64(...)` runs a
+  text-level pre-pass that converts every `hex'(hex)' ` occurrence
+  in the dataset to the Base64 of the parsed bytes — DbUnit's stock
+  `BytesDataType.typeCast(...)` decodes Base64 natively, so the
+  bytes reach the database as a typed `byte[]`. Malformed inner hex
+  (odd length / non-hex chars) raises `IllegalArgumentException`
+  citing the offending marker text — fail-fast, not silent
+  pass-through.
+
+Scenario 57 round-trips a 20-byte (SHA-1) hash through an H2
+`BINARY(20)` column: seed via `hex'da39a3ee…'`, verify the stored
+bytes via raw JDBC, then diff via the same `hex'…'` marker. Wired
+into the wip profile alongside scenarios 55 / 56.
+
+verify-all.sh wip green — 3 in-flight scenarios + the 54 default
+ones, 1m 0s end-to-end.
+
+
+## 2026-05-13 — TICKET-009 D5: empty-table assertion via <TABLE/>
+
+Authors can now assert "this database table is empty" in the
+expected dataset by writing the zero-attribute element
+`<CUSTOMER/>` &mdash; DbUnit's `FlatXmlDataSetBuilder` silently
+drops these tags, so the existing SAX line-locator pass is
+extended to capture them as a parallel set.
+
+- `ExpectedXmlLineLocator.emptyTableNames()` returns the upper-case
+  names of tables that appear *only* as zero-attribute elements in
+  the dataset (a table that also appears with an attributed row is
+  treated as a normal table). The SAX handler buckets every
+  depth-2 element into either the line map (when it has attributes)
+  or the empty-name set, and the public accessor returns the set
+  minus any names that ended up in the line map.
+- `DbUnitXmlDiffEngine.diff(...)` collects the names of tables it
+  saw via DbUnit's iterator, then walks
+  `lineLocator.emptyTableNames()` skipping those that DbUnit
+  already handled. For each remaining empty-table name, it queries
+  the table and emits one `EXTRA_ROW` per actual row (unless
+  `DiffSpec.subsetOnly()` suppresses extras, matching the rest of
+  the engine's subset-only contract).
+
+Scenarios 58 (`<CUSTOMER/>` against an empty table → no diff) and
+59 (`<CUSTOMER/>` against a populated table → 2 EXTRA_ROW diffs,
+DB diff message references the table + row indices).
+
+verify-all.sh wip green — 5 in-flight + 54 default scenarios,
+1m 4s.
+
+
+## 2026-05-13 — TICKET-009 D8: withFunction fail-fast validation
+
+`DbDiffBuilder.withFunction(prefix, name, declaringClass, methodName)`
+now verifies the method's existence and modifiers at registration
+time. An unknown method name or a non-`public static` method raises
+`IllegalArgumentException` from the `withFunction(...)` call itself,
+not from `assertEquals()` later. Validation iterates
+`declaringClass.getDeclaredMethods()` looking for a name match, then
+checks the modifiers. Error messages carry the
+`prefix:name` label plus the offending class + method names so the
+test author can correct the call site directly.
+
+`JakartaELInterpolator.LazyFunctionMapper.resolveFunction(...)` keeps
+its own resolution + cache path; the builder-time check is a strict
+fail-fast guard, the eval-time path is defensive in case a descriptor
+is constructed without going through the builder.
+
+Scenarios 33 (non-static method) and 34 (missing method) were
+updated to assert the failure surfaces from `withFunction(...)`
+rather than from `assertEquals()`; method names renamed accordingly.
+
+verify-all.sh wip green — 5 in-flight + 54 default scenarios, 1m 2s.
+
+
+## 2026-05-13 — TICKET-009 D6: regex marker is now [MATCH:regex]
+
+Replaced the `~regex` prefix with the bracketed `[MATCH:regex]`
+shape. MarkerComparator's `MATCH_PREFIX = "[MATCH:"` /
+`MATCH_SUFFIX = "]"` constants drive the new branch — the inner
+regex is `expected.substring(7, expected.length() - 1)`, so the
+final `]` is always the marker terminator and any `[`/`]`
+character classes inside the regex pass through unchanged. The
+old `REGEX_PREFIX = "~"` constant and its branch are gone.
+
+Scenarios 17 / 18 / 19 migrated to the new syntax. Scenario 19's
+focus shifts from "escaping a tilde in the marker" to "tilde has
+no special meaning inside the regex any more" — same fixture
+intent, different proof.
+
+verify-all.sh wip green — 5 in-flight + 54 default scenarios,
+1m 3s.
+
+
+## 2026-05-13 — TICKET-009 D7: t / f join the default boolean buckets
+
+`MarkerComparator.DEFAULT_TRUE_VALUES` gains `"t"`,
+`DEFAULT_FALSE_VALUES` gains `"f"`. Case-insensitive matching is
+already done via `toLowerCase(Locale.ROOT)`, so `"t"` / `"T"` /
+`"f"` / `"F"` all normalise to the boolean buckets out of the box.
+PostgreSQL's BOOLEAN export form (textual `'t'` / `'f'`) now
+compares as TRUE / FALSE against an expected `true` / `false`
+without the test author having to extend the MP Config
+`boolean-true` / `boolean-false` keys.
+
+Scenario 60 sits a VARCHAR column holding `'t'` and `'f'` and
+matches it against `true` / `false` in the expected dataset.
+
+verify-all.sh wip green — 6 in-flight + 54 default scenarios,
+1m 3s.
+
+
+## 2026-05-13 — TICKET-009 D12: @label back-reference markers
+
+Authors can now express "this cell holds whatever value the
+matched row's PK ends up with" via the `@label` marker on the
+diff side, then reference the same label from a FK cell in another
+table to assert referential integrity without knowing the dynamic
+PK upfront.
+
+Engine-level (`DbUnitXmlDiffEngine`); `MarkerComparator` is
+unchanged. `LABEL_PATTERN = "@[A-Za-z0-9_]+"` recognises pure
+identifier-style label tokens — arbitrary VARCHAR content like
+`@admin@example.com` does *not* match, so the marker doesn't
+silently capture e-mail strings as bindings.
+
+Algorithm:
+1. Per row, walk the cells. A cell whose entire expected value is
+   `@<id>` records `(label, table, row, col, line, actualValue)`
+   into a per-call `Map<String, List<RecordedBinding>>`; it never
+   produces a `VALUE_MISMATCH` during cell comparison and acts as
+   a wildcard during unordered row matching.
+2. After every table has been compared, walk the binding map. The
+   first recorded actual value per label is the canonical binding;
+   any later occurrence that disagrees emits a `VALUE_MISMATCH`
+   whose `expected=` field reads `@<label> bound to "<canonical>"`
+   so the test author sees both the label name and the value the
+   first occurrence pinned it to.
+
+`compareRow` records bindings inline (ordered path); `compareUnordered`
+calls a new `recordLabelBindingsForRow(...)` helper after a successful
+match so the same accumulator covers both modes.
+
+Scenarios 61 / 62 / 63 cover PK-FK happy path, mismatch with the
+bound value in the error message, and a three-table chain.
+
+verify-all.sh wip green — 9 in-flight + 54 default scenarios,
+1m 5s.
+
+
+## 2026-05-13 — TICKET-009 round wrap-up: graduate scenarios 55-63
+
+Scenarios 55 (vendor DataTypeFactory), 56 (`uuid'…'` round-trip),
+57 (`hex'…'` round-trip), 58 / 59 (empty-table assertions),
+60 (`t` / `f` boolean defaults), 61 / 62 / 63 (`@label`
+back-references) move from the `<id>wip</id>` profile in
+`tests/db-testdata-module/pom.xml` into the default
+`<modules>` list; the wip profile itself is removed. They are
+also registered in `coverage-report/pom.xml` so the aggregated
+JaCoCo report covers their classes.
+
+Full `verify-all.sh` matrix to follow.
+
+
+## 2026-05-13 — Annotation-driven default PU for DbSeed / DbDiff
+
+Renamed the existing `DbSeed.forPersistenceUnit()` /
+`DbDiff.forPersistenceUnit()` to `forCurrentPersistenceUnit()`
+(unchanged "single active PU on the calling thread, ambiguous
+raises" semantics) and added a new `forPersistenceUnit()` that
+consults `@PersistenceConfig.persistenceUnitName` on the active
+test class. A non-empty value routes to that named PU; empty
+(absent annotation, default attribute, or jpa-module not on the
+classpath) delegates to `forCurrentPersistenceUnit()` so the
+existing scenarios 36 / 36a / 36b keep their behaviour without
+changes.
+
+The annotation can't be read from `DbSeed`'s static factory at
+test-execution time (`TestContext.get()` is restricted to the
+bootstrap window), so a new public utility
+`JpaConfiguredPersistenceUnit` lives in `jpa-module/api`. Its
+`AtomicReference<String>` is populated by
+`JpaLifecycleAdapter.beforeAll` from the annotation value and
+cleared by `afterAll`. `DbSeed` / `DbDiff` read it as a JVM-wide
+accessor.
+
+Scenario 64 sits two PUs simultaneously active on the calling
+thread (the call path that would normally make
+`forCurrentPersistenceUnit()` raise) and verifies the annotation
+route picks `testPU64A` for both `DbSeed.forPersistenceUnit()` and
+`DbDiff.forPersistenceUnit()`. Wired through the
+`<id>wip</id>` profile on the test aggregator.
+
+verify-all.sh wip green — 1 in-flight scenario + 63 default
+scenarios, 1m 8s.
+
+
+## 2026-05-13 — Nest DbSeed.Builder / DbDiff.Builder / DbDiff.DiffSpec
+
+Moved the previously-standalone `DbSeedBuilder` and `DbDiffBuilder`
+into their entry-point classes as `DbSeed.Builder` and
+`DbDiff.Builder`. The fluent api now has a single import per side
+(`DbSeed` / `DbDiff`); the nested `Builder` types stay on the
+public api so callers can declare typed variables when they want
+to (the existing scenarios use `var` instead).
+
+`DiffSpec` moved into `DbDiff` the same way (now
+`DbDiff.DiffSpec`); the `DbDiffEngine` port signature and every
+import in the engine impl and consumers were updated.
+
+Verified by deleting all `target/` directories under
+`tests/db-testdata-module/` (Maven's incremental compilation
+missed the type-name changes in scenarios whose own source did
+not change) then running `verify-all.sh wip` — 1m 7s green for
+the in-flight scenario 64 plus the 63 default scenarios that all
+go through the new nested types.
+
+
+## 2026-05-13 — Nest ELFunctionDescriptor inside InterpolationContext
+
+Moved the `ELFunctionDescriptor` record from a top-level type to
+a nested record inside `InterpolationContext`
+(`InterpolationContext.ELFunctionDescriptor`). The descriptor is
+only meaningful in the context of an interpolation pass, so the
+nesting collapses the api surface onto a single import path.
+
+References in `DbDiff` and `JakartaELInterpolator` switched to
+the nested name via static-friendly `import
+org.os890.jawelte.module.dbtestdata.api.InterpolationContext.ELFunctionDescriptor;`,
+keeping every call site terse.
+
+verify-all.sh wip green — 1m 8s.
+
+
+## 2026-05-13 — Nest SeedSpec (with its SeedMode enum) inside DbSeed
+
+Moved `SeedSpec` from a top-level record to a nested record inside
+`DbSeed` (now `DbSeed.SeedSpec`); the `SeedMode` enum stays nested
+inside the record (`DbSeed.SeedSpec.SeedMode`). Standalone
+`SeedSpec.java` deleted. `DbSeedEngine` port signature, the bundled
+`DbUnitXmlSeedEngine` impl, the custom `TestScenarioCsvSeedEngine`
+in scenario 44, and `DbSeed.Builder`'s internal references all
+updated.
+
+verify-all.sh wip green — 1m 10s.
+
+
+## 2026-05-13 — Inline DatasetSupport into DbSeed / DbDiff
+
+Deleted the package-private `DatasetSupport` helper class; its
+plumbing (default format constant, classpath-resource loader,
+per-format engine cache, JVM-wide interpolator cache) is now
+duplicated as private static methods + fields on `DbSeed` and
+`DbDiff` themselves. The interpolator cache is per-class — same
+impl gets ServiceLoader-resolved twice over the JVM lifetime, no
+functional consequence.
+
+Net effect: one fewer source file under
+`modules/db-testdata-module/api/`, each entry-point class is
+self-contained, and the public api drops a name (`DatasetSupport`
+was package-private so never exposed anyway).
+
+verify-all.sh wip green — 1m 9s.
+
+
+## 2026-05-13 — Rename InterpolationContext to ELInterpolator.Context
+
+Moved `InterpolationContext` (with its nested `ELFunctionDescriptor`)
+from a top-level type in `db-testdata-module/api` into a nested
+record inside the `ELInterpolator` port at
+`db-testdata-module/api/port`, renaming to `ELInterpolator.Context`
+(and the inner descriptor to `Context.FunctionDescriptor`). The
+port is the consumer of the context, so the nesting is
+semantically clean; the renames shorten the leaf names so call
+sites stay tight.
+
+References in `DbSeed`, `DbDiff` (including its `DiffSpec` field),
+`JakartaELInterpolator`, `DbUnitXmlDiffEngine`, and the doc
+comments on `MarkerComparator` / `CellPredicateEvaluator` all
+switched to the new path. Standalone `InterpolationContext.java`
+deleted.
+
+verify-all.sh wip green — 1m 7s.
+
+
+## 2026-05-13 — Nest DbDifference inside DbDiff (with shortened names)
+
+Moved `DbDifference` from a top-level record to a nested record
+inside `DbDiff`, renamed: `DbDifference` -> `DbDiff.Difference`,
+its nested enum `DifferenceType` -> `DbDiff.Difference.Kind`. The
+short names work inside the nesting context (`Difference` /
+`Kind`); call sites import them as nested types so the bodies
+stay tight.
+
+References in the `DbDiffEngine` port, `DbUnitXmlDiffEngine`,
+`DbDiff.Builder`'s message formatter, scenario 45's
+`TestScenarioCsvDiffEngine`, and the line-locator's javadoc all
+switched. Standalone `DbDifference.java` deleted.
+
+verify-all.sh wip green — 1m 10s.
+
+
+## 2026-05-13 — Graduate scenario 64 + ship the refactor round
+
+Moved `scenario-64-for-persistence-unit-annotation-resolves` from
+the `<id>wip</id>` profile in `tests/db-testdata-module/pom.xml`
+into the default `<modules>` list and registered it in
+`coverage-report/pom.xml`; the wip profile is removed. Full
+`verify-all.sh` matrix to follow before pushing the seven queued
+commits.
+
+
+## 2026-05-13: PersistenceUnitNameSupplier port replaces JpaConfiguredPersistenceUnit
+
+Reworked the wiring for `DbSeed.forPersistenceUnit()` / `DbDiff.forPersistenceUnit()`. The old design used a JVM-wide static holder (`JpaConfiguredPersistenceUnit` in `jpa-module/api`) that the jpa-module lifecycle adapter set in `beforeAll` and cleared in `afterAll`. The new design is CDI-native and owns its state inside db-testdata-module:
+
+- New port `PersistenceUnitNameSupplier` in `db-testdata-module/api/port/` with a single `String get()` method. `DbSeed` / `DbDiff` look it up at `@Test`-method time via `CDI.current().select(PersistenceUnitNameSupplier.class).get().get()`.
+- CDI extension `AnnotationDrivenPersistenceUnitExtension` in `db-testdata-module/impl/adapter/extension/`. During `BeforeBeanDiscovery` it calls `TestContext.get()` (which still resolves in that bootstrap window) and stores `@PersistenceConfig.persistenceUnitName()` on itself. Exposed via `capturedName()`.
+- Default impl `DefaultPersistenceUnitNameSupplier` in `db-testdata-module/impl/adapter/persistence/`, `@ApplicationScoped`. Its `@Initialized(ApplicationScoped.class)` observer takes a `BeanManager` parameter, calls `bm.getExtension(AnnotationDrivenPersistenceUnitExtension.class).capturedName()`, and stores the value on itself. The bean serves as the per-CDI-container cache for the captured value (room for additional cached info later).
+- Removed `JpaConfiguredPersistenceUnit` entirely; trimmed the `set`/`reset` calls from `JpaLifecycleAdapter.beforeAll` / `afterAll`.
+
+Path of an in-flight lookup:
+1. `DelegatingJUnitExtension.beforeAll` sets the per-thread `TestContext`.
+2. CDI container starts. `AnnotationDrivenPersistenceUnitExtension.onBeforeBeanDiscovery` runs, calls `TestContext.get()`, reads the annotation, stores the captured name on the extension instance.
+3. Still inside the CDI bootstrap, `@Initialized(ApplicationScoped.class)` fires. The default `PersistenceUnitNameSupplier` bean's observer pulls the captured value from the extension via `bm.getExtension(...)` and sets it on itself.
+4. `DelegatingJUnitExtension.beforeAll` returns; `testContext.reset()` clears the per-thread accessor.
+5. The `@Test` method runs. `DbSeed.forPersistenceUnit()` calls `CDI.current().select(PersistenceUnitNameSupplier.class).get().get()`, gets the captured name, routes to the named PU.
+
+Tested under OWB: scenarios 01, 36, 36a, 37, 44, 46, 64 all green. Under Weld: scenario 01 green; scenarios 36 and 64 fail with a pre-existing `NoClassDefFoundError: org/mockito/Mockito` from `TestBeansCdiExtension`'s auto-mock loop — verified the same failure exists at HEAD baseline without my changes (`mockito-core` is `provided` in the parent depMgmt and `cdi-module/impl`'s auto-mock loop tries to instantiate Mockito for any unsatisfied `@Inject` IP found in the test class). Separate bug; out of scope for this rework.
+
+
+## 2026-05-13: cdi-module — filter framework-internal IPs out of auto-mocking
+
+`TestBeansCdiExtension.onProcessInjectionPoint` previously collected EVERY injection point — including IPs from CDI-runtime infrastructure beans (Weld-SE's `RunnableDecorator` injecting `Runnable`, SmallRye Config's `ConfigProducer` injecting `InjectionPoint`, etc.). The auto-mock loop then tried to synthesise Mockito mocks for those IPs. With Mockito on the test classpath (jpa-module, scope-module, cdi-module, ejb-module test parents declare `mockito-core` at `provided`), the mocking silently succeeded and produced dead-weight beans never injected anywhere. Without Mockito on the classpath (db-testdata-module's test parent doesn't declare it), the loop blew up with `NoClassDefFoundError: org/mockito/Mockito`.
+
+Fix in two parts:
+
+- Bake a built-in framework-internal owning-bean filter into the extension itself (consistent with the existing `hasSyntheticBeanBinding` DeltaSpike check that also lives there). The prefix list `org.jboss.weld.`, `org.apache.webbeans.`, `org.apache.deltaspike.`, `io.smallrye.` always applies — drops IPs declared by those framework-shipped beans at PIP time, before they enter the auto-mock candidate set. Compile-string-only so cdi-module incurs no compile-time dependency on the listed runtimes.
+- Extend `ExcludedPackageFilter` with a default-method `isOwningBeanExcluded(Class<?>)` so users (and the default impl on top of MP Config) can extend the owning-bean filter beyond the built-in prefixes. `DefaultExcludedPackageFilter` reuses the existing `org.os890.jawelte.module.cdi.auto-mock.exclude-packages` MP Config key for the user-extensible list. The framework-internal list stays in the extension (not in the filter) so it applies regardless of which `ExcludedPackageFilter` impl wins via `@Priority` — including jpa-module's `JpaTypesExcludedPackageFilter` (priority `Integer.MAX_VALUE - 1`), which now inherits the framework-internal filter for free without duplicating the prefix list.
+
+Latent bug introduced when `onProcessInjectionPoint` was added in commit `648d70e UNTESTED: TICKET-003 Phase 3 - cdi-module/impl`. Silent everywhere Mockito was on the test classpath; surfaced as `NoClassDefFoundError` only once db-testdata-module's Weld profile was exercised. Verified `mvn -P weld test` green for sampled scenarios across scope-module / jpa-module / db-testdata-module (scope scenario 14, jpa scenario 03, db-testdata scenarios 36 + 64); OWB green for the same set.
+
+
+## 2026-05-13: cdi-module — make the framework-internal IP filter MP Config-extensible
+
+Follow-up to the framework-internal IP filter commit. The previous commit hardcoded the framework-internal owning-bean prefix list (`org.jboss.weld.`, `org.apache.webbeans.`, `org.apache.deltaspike.`, `io.smallrye.`) inside `TestBeansCdiExtension`. Match the configurability of the other exclude filters: keep the built-in baseline (always applies, cannot be removed) but merge in any additional prefixes the user lists under the new MP Config key `org.os890.jawelte.module.cdi.auto-mock.framework-internal-bean-packages` (comma-separated; dot-then-underscore fallback via the active `ConfigResolver`). Same "defaults + user-extension" shape as `JpaTypesExcludedPackageFilter` uses for its target-type filter, so users who pull in a CDI extension shipping infrastructure beans in some other package (e.g. `org.acme.cdi.bridge.`) can add the prefix without forking the framework.
+
+
+## 2026-05-13: scenario-36 — add missing META-INF/beans.xml
+
+`tests/db-testdata-module/scenario-36-for-pu-default-single-active` shipped without a `META-INF/beans.xml` (its siblings 36a, 37, 64 all have one). Under Weld's bean-discovery rules a test resources root without `beans.xml` isn't an annotated bean archive, so `DefaultPuSeedingService` was never discovered as a managed bean and the test class's `@Inject DefaultPuSeedingService` IP was treated as unsatisfied. After the companion cdi-module filter (framework-internal IPs filtered out of the auto-mock loop), Weld surfaced this missing-beans.xml gap directly: the only remaining unsatisfied IP was the test bean itself, and the auto-mock loop tripped `NoClassDefFoundError: org/mockito/Mockito` because db-testdata-module's test parent pom doesn't declare Mockito. Adding a standard `bean-discovery-mode="annotated"` beans.xml matches the sibling scenarios and resolves the issue.
+
+
+## 2026-05-13: refactor framework-internal IP filter to match the FrameworkAllowlist pattern
+
+The framework-internal owning-bean filter was previously hardcoded in `TestBeansCdiExtension` with a separate MP Config key, which didn't match the established project pattern. Refactored to match `FrameworkAllowlist` (used by `DefaultWhitelistFilter`):
+
+- Defaults now ship in cdi-module/impl's `META-INF/microprofile-config.properties` under the new key `org.os890.jawelte.module.cdi.auto-mock.exclude-owning-bean-packages`. Same `META-INF/microprofile-config.properties` file already carries the `framework-allowlist.packages` defaults consumed by `FrameworkAllowlist`; consistent home.
+- `DefaultExcludedPackageFilter.isOwningBeanExcluded` reads the new key via `ConfigResolver` (with the standard dot-then-underscore fallback) and caches the parsed list in a `volatile` field, identical pattern to its existing target-type reader. Constant `OWNING_BEAN_DOT_KEY`.
+- `JpaTypesExcludedPackageFilter` overrides `isOwningBeanExcluded` reading the same key (constant `OWNING_BEAN_CONFIG_KEY`, same value) so the filter wins via `@Priority(MAX_VALUE - 1)` without losing the framework defaults shipped by cdi-module.
+- `TestBeansCdiExtension` strips the hardcoded `FRAMEWORK_INTERNAL_OWNING_BEAN_PREFIXES` list, the `FRAMEWORK_INTERNAL_BEAN_PACKAGES_CONFIG_KEY` constant, the `resolveFrameworkInternalBeanPrefixes` reader, and the `isFrameworkInternalBean` helper. `onProcessInjectionPoint` just calls `excludedPackageFilter.isOwningBeanExcluded(owningBeanClass)` — no more cdi-runtime knowledge inside the extension.
+
+The extension still owns one thing: it warms up both filter caches on the bootstrap thread inside `onBeforeBeanDiscovery`. Weld dispatches `ProcessInjectionPoint` events on `ForkJoinPool` worker threads whose context `ClassLoader` does not include test-module classpath roots; a lazy MP Config read from a worker thread fails with `ClassNotFoundException` out of `TestContext.instantiateConfigured`'s `Class.forName(..., contextClassLoader)`. Calling `isOwningBeanExcluded(Object.class)` and `isExcluded(Object.class)` once on the bootstrap thread fills the cached prefix lists while we still hold the right classloader; later PIP dispatches just read the cached list.
+
+Users override the framework defaults the same way they would override any other MP Config-backed list: set the same key in a higher-priority MP Config source (system property, environment variable, application properties file). Custom `ExcludedPackageFilter` impls remain free to replace the entire behaviour via the existing `@Priority`-based `ServicePriorityResolver` route.
+

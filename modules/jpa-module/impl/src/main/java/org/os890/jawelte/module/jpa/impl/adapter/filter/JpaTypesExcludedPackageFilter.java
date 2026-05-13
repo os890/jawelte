@@ -46,10 +46,15 @@ import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
  * keeps the default auto-mock-everything behaviour for JPA / JTA
  * types (the mocks may indeed be wanted there).
  *
- * <p>Configuration via the same MP Config key cdi-module's default
- * filter uses ({@code org.os890.jawelte.module.cdi.auto-mock.exclude-packages})
- * is honoured on top of the JPA-provided defaults so user-supplied
- * excludes still apply.
+ * <p>Configuration via the same MP Config keys cdi-module's default
+ * filter uses ({@code org.os890.jawelte.module.cdi.auto-mock.exclude-packages}
+ * for target-type excludes and
+ * {@code org.os890.jawelte.module.cdi.auto-mock.exclude-owning-bean-packages}
+ * for owning-bean excludes) is honoured on top of the JPA-provided
+ * defaults so user-supplied excludes still apply. The owning-bean
+ * defaults shipped in cdi-module/impl's
+ * {@code META-INF/microprofile-config.properties} cover the
+ * CDI-runtime infrastructure (Weld / OWB / DeltaSpike / SmallRye).
  *
  * <p>{@code @Priority(Integer.MAX_VALUE - 1)} — one rank ahead of
  * cdi-module's {@code DefaultExcludedPackageFilter}, so this
@@ -58,8 +63,12 @@ import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 @Priority(Integer.MAX_VALUE - 1)
 public class JpaTypesExcludedPackageFilter implements ExcludedPackageFilter {
 
-    /** MP Config key (same as cdi-module's default filter). */
+    /** MP Config key (same as cdi-module's default filter) for target-type excludes. */
     public static final String USER_CONFIG_KEY = "org.os890.jawelte.module.cdi.auto-mock.exclude-packages";
+
+    /** MP Config key (same as cdi-module's default filter) for owning-bean excludes. */
+    public static final String OWNING_BEAN_CONFIG_KEY =
+            "org.os890.jawelte.module.cdi.auto-mock.exclude-owning-bean-packages";
 
     /** Package prefixes for types jpa-module owns (no auto-mocking). */
     private static final Set<String> JPA_PROVIDED_PREFIXES = Set.of(
@@ -67,6 +76,7 @@ public class JpaTypesExcludedPackageFilter implements ExcludedPackageFilter {
             "jakarta.transaction.");
 
     private volatile List<String> cachedUserPrefixes;
+    private volatile List<String> cachedOwningBeanPrefixes;
 
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public JpaTypesExcludedPackageFilter() {
@@ -90,6 +100,24 @@ public class JpaTypesExcludedPackageFilter implements ExcludedPackageFilter {
         return false;
     }
 
+    @Override
+    public boolean isOwningBeanExcluded(Class<?> owningBeanClass) {
+        if (owningBeanClass == null) {
+            return false;
+        }
+        List<String> prefixes = owningBeanPrefixes();
+        if (prefixes.isEmpty()) {
+            return false;
+        }
+        String packageName = owningBeanClass.getPackageName() + ".";
+        for (String prefix : prefixes) {
+            if (packageName.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<String> userPrefixes() {
         List<String> local = cachedUserPrefixes;
         if (local != null) {
@@ -97,18 +125,31 @@ public class JpaTypesExcludedPackageFilter implements ExcludedPackageFilter {
         }
         synchronized (this) {
             if (cachedUserPrefixes == null) {
-                cachedUserPrefixes = readUserPrefixes();
+                cachedUserPrefixes = readPrefixes(USER_CONFIG_KEY);
             }
             return cachedUserPrefixes;
         }
     }
 
-    private static List<String> readUserPrefixes() {
+    private List<String> owningBeanPrefixes() {
+        List<String> local = cachedOwningBeanPrefixes;
+        if (local != null) {
+            return local;
+        }
+        synchronized (this) {
+            if (cachedOwningBeanPrefixes == null) {
+                cachedOwningBeanPrefixes = readPrefixes(OWNING_BEAN_CONFIG_KEY);
+            }
+            return cachedOwningBeanPrefixes;
+        }
+    }
+
+    private static List<String> readPrefixes(String key) {
         ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
         if (resolver == null) {
             return Collections.emptyList();
         }
-        return resolver.resolve(USER_CONFIG_KEY)
+        return resolver.resolve(key)
                 .map(value -> Arrays.stream(value.split(","))
                         .map(String::trim)
                         .filter(s -> !s.isEmpty())

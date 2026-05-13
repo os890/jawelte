@@ -26,29 +26,49 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 
 /**
- * Default {@link ExcludedPackageFilter}. Reads the comma-separated
- * package-prefix list from the MicroProfile Config key
- * {@code org.os890.jawelte.module.cdi.auto-mock.exclude-packages}
- * via the active {@link ConfigResolver} (resolved through
+ * Default {@link ExcludedPackageFilter}. Reads two comma-separated
+ * package-prefix lists from MicroProfile Config via the active
+ * {@link ConfigResolver} (resolved through
  * {@link TestContext#loadService(Class)}, so the dot-then-underscore
  * fallback and any user-supplied {@code @Alternative ConfigResolver}
- * apply uniformly). A type is excluded when any class in its
- * supertype hierarchy lives under one of the configured prefixes.
+ * apply uniformly):
+ *
+ * <ul>
+ *   <li>{@link #DOT_KEY} feeds {@link #isExcluded(Class)} — a target
+ *       type is excluded when any class in its supertype hierarchy
+ *       lives under one of the configured prefixes. Empty by default;
+ *       set the key in a higher-priority MP Config source to
+ *       exclude application types from auto-mocking.</li>
+ *   <li>{@link #OWNING_BEAN_DOT_KEY} feeds
+ *       {@link #isOwningBeanExcluded(Class)} — an IP is dropped
+ *       when its owning bean's package starts with one of the
+ *       configured prefixes. Defaults shipped in cdi-module/impl's
+ *       {@code META-INF/microprofile-config.properties} cover the
+ *       CDI-runtime infrastructure ({@code org.jboss.weld.},
+ *       {@code org.apache.webbeans.},
+ *       {@code org.apache.deltaspike.}, {@code io.smallrye.}) whose
+ *       IPs the runtime satisfies internally.</li>
+ * </ul>
  *
  * <p>Annotated {@code @Priority(Integer.MAX_VALUE)} so any user-supplied
  * implementation with a lower priority value automatically wins via
  * the project-wide {@code ServicePriorityResolver}.
  *
- * <p>The parsed list is cached in a {@code volatile} field for the
+ * <p>The parsed lists are cached in {@code volatile} fields for the
  * filter instance's lifetime; never re-read per injection point.
  */
 @Priority(Integer.MAX_VALUE)
 public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
 
-    /** MP Config key that lists the excluded package prefixes. */
+    /** MP Config key that lists target-type package prefixes excluded from auto-mocking. */
     public static final String DOT_KEY = "org.os890.jawelte.module.cdi.auto-mock.exclude-packages";
 
+    /** MP Config key that lists owning-bean package prefixes whose IPs are dropped before auto-mocking. */
+    public static final String OWNING_BEAN_DOT_KEY =
+            "org.os890.jawelte.module.cdi.auto-mock.exclude-owning-bean-packages";
+
     private volatile List<String> cachedPrefixes;
+    private volatile List<String> cachedOwningBeanPrefixes;
 
     /** No-arg constructor required by {@code ServiceLoader}. */
     public DefaultExcludedPackageFilter() {
@@ -66,6 +86,24 @@ public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
         return supertypeMatches(rawType, prefixes);
     }
 
+    @Override
+    public boolean isOwningBeanExcluded(Class<?> owningBeanClass) {
+        if (owningBeanClass == null) {
+            return false;
+        }
+        List<String> prefixes = owningBeanPrefixes();
+        if (prefixes.isEmpty()) {
+            return false;
+        }
+        String packageName = owningBeanClass.getPackageName() + ".";
+        for (String prefix : prefixes) {
+            if (packageName.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private List<String> prefixes() {
         List<String> local = cachedPrefixes;
         if (local != null) {
@@ -73,15 +111,28 @@ public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
         }
         synchronized (this) {
             if (cachedPrefixes == null) {
-                cachedPrefixes = readPrefixes();
+                cachedPrefixes = readPrefixes(DOT_KEY);
             }
             return cachedPrefixes;
         }
     }
 
-    private static List<String> readPrefixes() {
+    private List<String> owningBeanPrefixes() {
+        List<String> local = cachedOwningBeanPrefixes;
+        if (local != null) {
+            return local;
+        }
+        synchronized (this) {
+            if (cachedOwningBeanPrefixes == null) {
+                cachedOwningBeanPrefixes = readPrefixes(OWNING_BEAN_DOT_KEY);
+            }
+            return cachedOwningBeanPrefixes;
+        }
+    }
+
+    private static List<String> readPrefixes(String key) {
         ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
-        return resolver.resolve(DOT_KEY)
+        return resolver.resolve(key)
                 .map(value -> Arrays.stream(value.split(","))
                         .map(String::trim)
                         .filter(s -> !s.isEmpty())
