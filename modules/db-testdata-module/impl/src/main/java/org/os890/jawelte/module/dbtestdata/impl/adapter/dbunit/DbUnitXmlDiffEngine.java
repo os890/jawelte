@@ -116,11 +116,13 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                 options.subsetOnly());
 
         List<DbDifference> differences = new ArrayList<>();
+        Set<String> tablesHandledByDbunit = new HashSet<>();
         try {
             ITableIterator iterator = expectedDataset.iterator();
             while (iterator.next()) {
                 ITable expectedTable = iterator.getTable();
                 String tableName = expectedTable.getTableMetaData().getTableName();
+                tablesHandledByDbunit.add(tableName.toUpperCase(Locale.ROOT));
                 List<Map<String, Object>> actualRows = readTable(connection, tableName);
                 TableScope scope = new TableScope(tableName, expectedTable,
                         expectedTable.getTableMetaData().getColumns(), actualRows);
@@ -130,12 +132,39 @@ public class DbUnitXmlDiffEngine implements DbDiffEngine {
                     compareOrdered(differences, scope, context);
                 }
             }
+            for (String emptyTable : lineLocator.emptyTableNames()) {
+                if (tablesHandledByDbunit.contains(emptyTable)) {
+                    continue;
+                }
+                checkEmptyTableAssertion(differences, connection, emptyTable, context.subsetOnly());
+            }
         } catch (SQLException sqlFailure) {
             throw new RuntimeException(sqlFailure.getMessage(), sqlFailure);
         } catch (Exception dbunitFailure) {
             throw new RuntimeException(dbunitFailure.getMessage(), dbunitFailure);
         }
         return List.copyOf(differences);
+    }
+
+    private static void checkEmptyTableAssertion(
+            List<DbDifference> differences,
+            Connection connection,
+            String emptyTable,
+            boolean subsetOnly) throws SQLException {
+        if (subsetOnly) {
+            return;
+        }
+        List<Map<String, Object>> actualRows = readTable(connection, emptyTable);
+        for (int rowIndex = 0; rowIndex < actualRows.size(); rowIndex++) {
+            differences.add(new DbDifference(
+                    DifferenceType.EXTRA_ROW,
+                    emptyTable,
+                    rowIndex,
+                    null,
+                    null,
+                    actualRowSnapshot(actualRows.get(rowIndex)),
+                    0));
+        }
     }
 
     private static Set<String> upperCaseSet(List<String> source) {

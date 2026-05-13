@@ -17,10 +17,13 @@ package org.os890.jawelte.module.dbtestdata.impl.util;
 
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
@@ -52,21 +55,30 @@ public class ExpectedXmlLineLocator {
 
     private final Map<String, List<Integer>> linesPerTable;
 
-    private ExpectedXmlLineLocator(Map<String, List<Integer>> linesPerTable) {
+    private final Set<String> emptyTableNames;
+
+    private ExpectedXmlLineLocator(
+            Map<String, List<Integer>> linesPerTable, Set<String> emptyTableNames) {
         this.linesPerTable = linesPerTable;
+        this.emptyTableNames = emptyTableNames;
     }
 
     /**
-     * Parse {@code expectedContent} and capture the 1-based start
-     * line of every row element (a child of the dataset root).
+     * Parse {@code expectedContent} and capture both the 1-based
+     * start line of every row element (a child of the dataset root)
+     * and the set of table names that appear <em>only</em> as
+     * zero-attribute elements &mdash; the empty-table assertion shape
+     * {@code &lt;CUSTOMER/&gt;} that DbUnit's
+     * {@code FlatXmlDataSetBuilder} silently drops.
      *
      * @param expectedContent the expected XML dataset
-     * @return a locator backed by the captured line map
+     * @return a locator backed by the captured maps
      * @throws IllegalArgumentException when the SAX parse fails
      */
     public static ExpectedXmlLineLocator parse(String expectedContent) {
         Map<String, List<Integer>> linesPerTable = new HashMap<>();
-        RowLineHandler handler = new RowLineHandler(linesPerTable);
+        Set<String> emptyTableNamesRaw = new HashSet<>();
+        RowLineHandler handler = new RowLineHandler(linesPerTable, emptyTableNamesRaw);
         try {
             SAXParserFactory factory = SAXParserFactory.newInstance();
             factory.setNamespaceAware(false);
@@ -79,7 +91,28 @@ public class ExpectedXmlLineLocator {
             throw new IllegalArgumentException(
                     "Malformed dataset: " + parseFailure.getMessage(), parseFailure);
         }
-        return new ExpectedXmlLineLocator(linesPerTable);
+        Set<String> trulyEmpty = new HashSet<>(emptyTableNamesRaw);
+        trulyEmpty.removeAll(linesPerTable.keySet());
+        return new ExpectedXmlLineLocator(linesPerTable, Collections.unmodifiableSet(trulyEmpty));
+    }
+
+    /**
+     * Names of tables that appear <em>only</em> as zero-attribute
+     * elements in the expected dataset, e.g. {@code &lt;CUSTOMER/&gt;}.
+     * A table that also appears with an attributed row is treated as a
+     * normal table and is not in this set.
+     *
+     * <p>The diff engine reads this to assert "the database table is
+     * empty" &mdash; any actual row in such a table surfaces as an
+     * {@code EXTRA_ROW} difference (unless
+     * {@code DiffSpec.subsetOnly()} is on, in which case extras are
+     * silently accepted, matching the rest of the engine's
+     * subset-only contract).</p>
+     *
+     * @return the empty-table names (upper-case, unmodifiable)
+     */
+    public Set<String> emptyTableNames() {
+        return emptyTableNames;
     }
 
     /**
@@ -104,12 +137,16 @@ public class ExpectedXmlLineLocator {
 
         private final Map<String, List<Integer>> linesPerTable;
 
+        private final Set<String> emptyTableNamesRaw;
+
         private Locator locator;
 
         private int depth;
 
-        RowLineHandler(Map<String, List<Integer>> linesPerTable) {
+        RowLineHandler(
+                Map<String, List<Integer>> linesPerTable, Set<String> emptyTableNamesRaw) {
             this.linesPerTable = linesPerTable;
+            this.emptyTableNamesRaw = emptyTableNamesRaw;
         }
 
         @Override
@@ -124,9 +161,13 @@ public class ExpectedXmlLineLocator {
             // depth 1 = root dataset element; depth 2 = row elements.
             if (depth == 2) {
                 String upper = qName.toUpperCase(Locale.ROOT);
-                linesPerTable
-                        .computeIfAbsent(upper, key -> new ArrayList<>())
-                        .add(locator == null ? 0 : locator.getLineNumber());
+                if (attributes.getLength() == 0) {
+                    emptyTableNamesRaw.add(upper);
+                } else {
+                    linesPerTable
+                            .computeIfAbsent(upper, key -> new ArrayList<>())
+                            .add(locator == null ? 0 : locator.getLineNumber());
+                }
             }
         }
 

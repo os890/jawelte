@@ -2750,3 +2750,34 @@ into the wip profile alongside scenarios 55 / 56.
 verify-all.sh wip green — 3 in-flight scenarios + the 54 default
 ones, 1m 0s end-to-end.
 
+
+## 2026-05-13 — TICKET-009 D5: empty-table assertion via <TABLE/>
+
+Authors can now assert "this database table is empty" in the
+expected dataset by writing the zero-attribute element
+`<CUSTOMER/>` &mdash; DbUnit's `FlatXmlDataSetBuilder` silently
+drops these tags, so the existing SAX line-locator pass is
+extended to capture them as a parallel set.
+
+- `ExpectedXmlLineLocator.emptyTableNames()` returns the upper-case
+  names of tables that appear *only* as zero-attribute elements in
+  the dataset (a table that also appears with an attributed row is
+  treated as a normal table). The SAX handler buckets every
+  depth-2 element into either the line map (when it has attributes)
+  or the empty-name set, and the public accessor returns the set
+  minus any names that ended up in the line map.
+- `DbUnitXmlDiffEngine.diff(...)` collects the names of tables it
+  saw via DbUnit's iterator, then walks
+  `lineLocator.emptyTableNames()` skipping those that DbUnit
+  already handled. For each remaining empty-table name, it queries
+  the table and emits one `EXTRA_ROW` per actual row (unless
+  `DiffSpec.subsetOnly()` suppresses extras, matching the rest of
+  the engine's subset-only contract).
+
+Scenarios 58 (`<CUSTOMER/>` against an empty table → no diff) and
+59 (`<CUSTOMER/>` against a populated table → 2 EXTRA_ROW diffs,
+DB diff message references the table + row indices).
+
+verify-all.sh wip green — 5 in-flight + 54 default scenarios,
+1m 4s.
+

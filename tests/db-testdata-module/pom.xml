@@ -214,6 +214,8 @@
                 <module>scenario-55-vendor-data-type-factory-h2-binary-uuid</module>
                 <module>scenario-56-binary16-uuid-round-trip</module>
                 <module>scenario-57-hex-marker-binary-round-trip</module>
+                <module>scenario-58-empty-table-marker-matches-empty</module>
+                <module>scenario-59-empty-table-marker-reports-extras</module>
             </modules>
         </profile>
     </profiles>
