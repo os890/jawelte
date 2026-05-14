@@ -113,7 +113,7 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
         if (annotation.isPresent() && annotation.get().testData().length > 0) {
             TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
             if (handler != null) {
-                handler.seedAll(annotation.get(), testContext);
+                handler.seedAll(annotation.get());
             }
         }
     }

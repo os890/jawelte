@@ -79,7 +79,7 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * </ol>
  *
  * <p><b>Phases 1–3 entry points.</b> The lifecycle adapter calls
- * {@link #seedAll(TestControl, TestContext)} in {@code beforeEach}.
+ * {@link #seedAll(TestControl)} in {@code beforeEach}.
  *
  * <p><b>Phase 4 entry points.</b> Two:
  *
@@ -114,10 +114,13 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * to every entry's folder path (after the {@code puName:} prefix is
  * stripped).
  *
- * <p><b>State.</b> No instance fields. All per-method state lives on
- * {@link TestContext} via {@code bindMetadata} / {@code unbindMetadata}.
- * Thread-safe for the project's single-test-thread model; not safe
- * for parallel test methods.
+ * <p><b>State.</b> Per-method state lives in two {@code volatile}
+ * fields on this {@code @ApplicationScoped} bean
+ * ({@link #activeAnnotation}, {@link #verifiedThisMethod}); the
+ * lifecycle adapter calls {@link #clearActive()} at the end of
+ * {@code afterEach} so the next test method starts with a clean
+ * slate. Thread-safe for the project's single-test-thread model;
+ * not safe for parallel test methods.
  */
 @ApplicationScoped
 public class TestDataHandler {
@@ -154,11 +157,10 @@ public class TestDataHandler {
      *
      * @param annotation  the active {@code @TestControl} on the test
      *                    method
-     * @param testContext the active {@link TestContext}
      * @throws IllegalArgumentException when an entry's base folder is
      *                                  not on the classpath
      */
-    public void seedAll(TestControl annotation, TestContext testContext) {
+    public void seedAll(TestControl annotation) {
         this.activeAnnotation = annotation;
         this.verifiedThisMethod = false;
         if (annotation == null || annotation.testData().length == 0) {
@@ -208,7 +210,7 @@ public class TestDataHandler {
 
     /**
      * Drive the verify phase ({@code dbExpected/}) against the
-     * annotation cached in {@link #seedAll(TestControl, TestContext)}.
+     * annotation cached in {@link #seedAll(TestControl)}.
      * Both the transactional observer path and the non-transactional
      * fallback land here. Sets {@link #verifiedThisMethod} so the
      * lifecycle adapter's {@code afterEach} can decide whether the
