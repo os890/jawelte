@@ -58,9 +58,14 @@ import org.os890.jawelte.module.testcontrol.impl.adapter.observer.TestControlSco
  *       {@code false} (otherwise the transactional path already
  *       verified through
  *       {@link TestDataHandler#onAfterTestTransaction}). The
- *       adapter always calls {@link TestDataHandler#clearActive()}
- *       after the fallback decision so the next test method starts
- *       with a clean handler state.</li>
+ *       {@code afterEach} method always calls
+ *       {@link TestDataHandler#clearActive()} in a {@code finally}
+ *       block — independent of whether {@link TestControl} was
+ *       bound, whether the {@code testData} array was empty, and
+ *       whether the verify step threw — so the next test method
+ *       starts with a clean handler state. The handler is
+ *       {@code @ApplicationScoped}, so a missed reset would leak
+ *       state across every later method in the same container.</li>
  * </ol>
  *
  * <p><b>Priority.</b> {@code @Priority(50)} — lowest among jawelte's
@@ -120,19 +125,24 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void afterEach(TestContext testContext) {
+        // Handler is @ApplicationScoped: resolve once so clearActive runs in finally regardless of how verifyAll exits.
+        TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
         try {
             Optional<TestControl> annotation = testContext.getMetadata(TestControl.class);
-            if (annotation.isPresent() && annotation.get().testData().length > 0) {
-                TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
-                if (handler != null) {
-                    if (!handler.didAlreadyVerify()) {
-                        handler.verifyAll();
-                    }
-                    handler.clearActive();
-                }
+            if (handler != null
+                    && annotation.isPresent()
+                    && annotation.get().testData().length > 0
+                    && !handler.didAlreadyVerify()) {
+                handler.verifyAll();
             }
         } finally {
-            testContext.unbindMetadata(TestControl.class);
+            try {
+                if (handler != null) {
+                    handler.clearActive();
+                }
+            } finally {
+                testContext.unbindMetadata(TestControl.class);
+            }
         }
     }
 

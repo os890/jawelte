@@ -3334,3 +3334,33 @@ Renames (to free up the spec-aligned scenario-08 number for multi-PU):
 Phase 12 checkpoint: 12 scenarios × 2 CDI runtimes = 24 test runs all green under both `-Powb` and `-Pweld`.
 
 Multi-PU happy path is the most substantive functional verification of the testData pipeline to date — proves the per-PU grouping in `TestDataHandler.runPhase`, the `NamedLiteral` CDI lookup in the template, the active-PU stack maintenance through the seed transaction, and the interceptor's `enterTransactionalScope()` empty-frame + lazy-populate path all work end-to-end across two distinct H2 databases.
+
+## 2026-05-14 — TICKET-010 fix: failsafe clearActive() in afterEach
+
+**Issue.** `TestControlLifecycleAdapter.afterEach` only called
+`TestDataHandler.clearActive()` inside the `if (annotation.isPresent()
+&& testData.length > 0)` branch — and only after `verifyAll()`
+returned normally. `TestDataHandler` is `@ApplicationScoped`, so its
+`activeAnnotation` / `verifiedThisMethod` fields survive across every
+test method in the same CDI container. Skipping the reset leaked
+state into the next method.
+
+Three paths previously skipped the reset:
+1. `verifyAll()` throws (assertion failure) → fall-through to outer
+   `finally` only unbinds metadata.
+2. Next test method has no `@TestControl` or an empty `testData`
+   array → the `if` branch is taken zero times, so a prior method's
+   annotation remains pinned on the handler bean.
+3. CDI container was never booted (`handler == null`) → branch is
+   skipped silently.
+
+**Fix.** Resolve the handler once at the top, gate `verifyAll()` on
+all preconditions (handler non-null, annotation present, testData
+non-empty, not already verified), and call `clearActive()` in an
+outer `finally` regardless of how the verify path exited.
+`unbindMetadata` stays in the innermost `finally` so it runs even if
+`clearActive` were ever to throw.
+
+**Verification.** Targeted run of `tests/testcontrol-module/**` under
+both `-Powb` and `-Pweld` profiles — all 12 scenarios pass.
+
