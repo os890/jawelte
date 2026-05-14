@@ -42,5 +42,6 @@
         <module>ejb-module</module>
         <module>content-diff-module</module>
         <module>db-testdata-module</module>
+        <module>testcontrol-module</module>
     </modules>
 </project>

@@ -61,6 +61,10 @@
         <module>scenario-25-user-declared-scope-on-testbean-wins</module>
         <module>scenario-26-scope-aware-auto-mock-default</module>
         <module>scenario-27-no-scope-module-fallbacks-apply</module>
+        <module>scenario-28-configbean-remapped-to-testclass</module>
+        <module>scenario-29-configbean-remap-unconditional</module>
+        <module>scenario-30-configbean-with-explicit-scope-not-remapped</module>
+        <module>scenario-31-testclassscoped-observes-containerstarted-once</module>
     </modules>
 
     <dependencies>

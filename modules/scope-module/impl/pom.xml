@@ -31,7 +31,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (scope-module/impl)</name>
-    <description>Implementation of jawelte's test-lifecycle CDI scopes. Hosts the per-method / per-class CDI Context implementations, the bean stores bound on TestContext, the TestScopeCdiExtension that registers the contexts, and the ScopeLifecycleAdapter (TestModuleLifecyclePort impl) that drives activation / deactivation.</description>
+    <description>Implementation of jawelte's test-lifecycle CDI scopes. Hosts the per-method / per-class CDI Context implementations, the bean stores bound on TestContext, the TestScopeCdiExtension that registers the contexts, the ConfigBeanScopeRemapCdiExtension that unconditionally remaps @ConfigBean from @ApplicationScoped to @TestClassScoped at ProcessAnnotatedType time, and the ScopeLifecycleAdapter (TestModuleLifecyclePort impl) that drives activation / deactivation.</description>
 
     <dependencies>
         <!--

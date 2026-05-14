@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-testcontrol-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-testcontrol-module-impl</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (testcontrol-module/impl)</name>
+    <description>Implementation of testcontrol-module: TestControlLifecycleAdapter (the TestModuleLifecyclePort adapter at @Priority(50) that reads @TestControl off the active test method, drives the testData seed/verify pipeline, and feeds the scope-filter allow-list to TestControlScopeObserver), TestControlScopeObserver (BeforeScopeStarted observer that vetoes scopes outside the startScopes allow-list), TestDataHandler + TestDataSeedTransactionTemplate (the seed/commit/verify pipeline that drives DbSeed and DbDiff for the @TestControl(testData=…) entries). The companion @ConfigBean → @TestClassScoped scope remap lives in scope-module/impl. SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
+
+    <dependencies>
+        <!--
+            testcontrol-module/api supplies the @TestControl annotation
+            that downstream classes (TestControlLifecycleAdapter,
+            TestDataHandler, TestControlScopeObserver) read off the
+            active test method.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-testcontrol-module-api</artifactId>
+        </dependency>
+
+        <!--
+            core-api supplies the TestModuleLifecyclePort + TestContext
+            infrastructure that TestControlLifecycleAdapter implements
+            and the @TestContext per-thread accessor used by
+            TestDataHandler.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            db-testdata-module/api supplies DbSeed + DbDiff fluent
+            builders consumed by TestDataHandler.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.transaction-api supplies @Transactional, used on
+            the TestDataSeedTransactionTemplate proxy bean to drive
+            the seed phase inside a transactional context. The
+            interceptor implementation is provided at test runtime by
+            jta-module (whatever TransactionStrategy is active —
+            Geronimo, Narayana, Atomikos) when @TestControl(testData=…)
+            is in use.
+        -->
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.persistence-api supplies EntityManager, looked up
+            via CDI inside TestDataSeedTransactionTemplate to populate
+            jpa-module's active-PU stack before DbSeed.forPersistenceUnit()
+            resolves a connection.
+        -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+
+        <!--
+            junit-jupiter-api supplies ExtensionContext (read off
+            TestContext under the ExtensionContext.class key bound by
+            core/impl's DelegatingJUnitExtension) and the
+            AnnotationSupport.findAnnotation helper used to resolve
+            @TestControl on the active test method with JUnit Jupiter's
+            class-hierarchy walk semantics. provided scope (inherited
+            from the parent's dependencyManagement) — consumers bring
+            their own JUnit version.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

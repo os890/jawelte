@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-modules</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-testcontrol-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (testcontrol-module aggregator)</name>
+    <description>Convenience annotation @TestControl that binds per-method scope filtering (startScopes) and database-fixture handling (testData = dbIn/ + dbUpdate/ + dbExpected/) into a single annotation, plus an unconditional CDI-bootstrap remap of @ConfigBean from @ApplicationScoped to @TestClassScoped. testcontrol-module/api ships only the annotation; testcontrol-module/impl ships the TestModuleLifecyclePort adapter (@Priority(50)), the CDI Extension that performs the remap, the BeforeScopeStarted observer that applies the startScopes veto, and the TestDataHandler that drives the four-phase seed -&gt; commit -&gt; verify pipeline through TICKET-009's DbSeed / DbDiff and TICKET-005's PersistenceUnitConnectionResolver.</description>
+
+    <modules>
+        <module>api</module>
+        <module>impl</module>
+    </modules>
+</project>

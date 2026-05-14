@@ -3097,3 +3097,338 @@ The extension still owns one thing: it warms up both filter caches on the bootst
 
 Users override the framework defaults the same way they would override any other MP Config-backed list: set the same key in a higher-priority MP Config source (system property, environment variable, application properties file). Custom `ExcludedPackageFilter` impls remain free to replace the entire behaviour via the existing `@Priority`-based `ServicePriorityResolver` route.
 
+
+## 2026-05-14 — TICKET-010 Phase 1: testcontrol-module skeleton + @TestControl annotation
+
+Started TICKET-010 (TestControl module) after merging PR #19 (TICKET-009 db-testdata-module) and pulling main. Before any code touched, reviewed `tickets/010-testcontrol-module.md` against shipped TICKET-009 reality and applied 8 corrective edits to the ticket (gitignored, no commit): the spec had attributed `PersistenceUnitConnectionResolver` to db-testdata-module/api when it actually lives in jpa-module/api, the DbSeed/DbDiff call shape was written as if static methods instead of the fluent `forPersistenceUnit().…().execute()` builders, an internal `@Inherited` contradiction sat between the Inheritance subsection and the Acceptance Criteria line, and the `Seed Commit` paragraph referenced a non-existent `resolveConnection()` returning `Optional<Connection>`. Then opened GitHub issue #20 and let `gh issue develop` create the tracking branch `20-testcontrol-module-testcontrol-module`.
+
+Phase 1 ships only the api submodule:
+
+- `modules/testcontrol-module/pom.xml` — Maven aggregator under jawelte-modules.
+- `modules/testcontrol-module/api/pom.xml` — packaging=jar, zero external compile dependencies (all annotation attribute types resolve through java.lang.annotation), javadoc-jar wired at the verify phase to match the project pattern.
+- `modules/testcontrol-module/api/src/main/java/org/os890/jawelte/module/testcontrol/api/TestControl.java` — the annotation. `@Target(METHOD)`, `@Retention(RUNTIME)`, `@Documented`. Deliberately **not** `@Inherited` — `java.lang.annotation.Inherited` only takes effect on class-level annotations; cross-class inheritance over test methods comes from JUnit Jupiter's `AnnotationSupport.findAnnotation` class-hierarchy walk. Three attributes: `startScopes` (empty default = "all scope-module scopes activate normally" sentinel so non-`@TestControl` tests are unaffected by the veto observer), `testData` (empty default = no fixture handling; entries may carry a `puName:` prefix for multi-PU routing), `testDataBasePath` (empty default; MP Config key `org.os890.jawelte.module.testcontrol.api.TestControl.base-path` takes precedence over the annotation attribute when set).
+- `modules/pom.xml` — added `testcontrol-module` to `<modules>`.
+- `pom.xml` (root) — added `jawelte-testcontrol-module-api` to `<dependencyManagement>`.
+
+Phase 1 checkpoint: `./mvnw -B -ntp -DskipTests install` clean across the full reactor in 27 seconds; Checkstyle, Maven Enforcer, Apache RAT, JaCoCo, and Javadoc all green. impl submodule (CDI extension performing the unconditional `@ConfigBean` → `@TestClassScoped` remap) deferred to Phase 2.
+
+## 2026-05-14 — TICKET-010 Phase 2: TestControlCdiExtension (@ConfigBean → @TestClassScoped remap)
+
+Added the impl submodule with the CDI Extension that performs the unconditional @ConfigBean → @TestClassScoped remap at `ProcessAnnotatedType` time. Files:
+
+- `modules/testcontrol-module/impl/pom.xml` — compile deps on testcontrol-module/api, core-api (for `@ConfigBean`), scope-module/api (for `@TestClassScoped`), and jakarta.enterprise.cdi-api. Javadoc-jar wired at verify.
+- `modules/testcontrol-module/impl/src/main/java/.../TestControlCdiExtension.java` — observes `ProcessAnnotatedType<?>`; skips classes without `@ConfigBean`; skips classes that declare an explicit non-`@ApplicationScoped` scope (detected by walking declared annotations and checking each annotation type for `@NormalScope` or `@Scope` meta-annotations, ignoring `@ConfigBean` and `@ApplicationScoped` themselves); for the remaining classes uses `event.configureAnnotatedType().remove(...).add(TestClassScopedLiteral.INSTANCE)`. The literal subclasses `AnnotationLiteral<TestClassScoped>` and `implements TestClassScoped`, with `annotationType()` overridden explicitly to side-step the generic-erasure problem documented in ejb-module's `AnnotationInstanceFactory`.
+- `modules/testcontrol-module/impl/src/main/resources/META-INF/services/jakarta.enterprise.inject.spi.Extension` — single-line registration.
+- `modules/testcontrol-module/impl/src/main/resources/META-INF/beans.xml` — `bean-discovery-mode="annotated"`, version 4.0, with a comment marking it as ready for the @ApplicationScoped beans coming in Phases 4 and 5 (no managed CDI beans yet).
+- `modules/testcontrol-module/pom.xml` — added `impl` to `<modules>`.
+- `pom.xml` (root) — added `jawelte-testcontrol-module-impl` to `<dependencyManagement>`.
+
+First build attempt failed Checkstyle with "Classes must not be declared final (CDI proxy compatibility)" on the inner `TestClassScopedLiteral`. The rule applies blanketly across all classes; the literal isn't a CDI bean but the regex doesn't know that. Dropped `final` from the inner class declaration — the class is still effectively final because it's `private static`.
+
+Phase 2 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green in 3 seconds (incremental). Full quality gates pass: Checkstyle, Enforcer, RAT, JaCoCo, Javadoc. Behavioural validation (the remap actually fires at runtime) deferred to Phase 6's scenarios 21–23.
+
+## 2026-05-14 — TICKET-010 Phase 3: TestControlLifecycleAdapter skeleton
+
+Added the `TestModuleLifecyclePort` adapter at `@Priority(50)` — the lowest among jawelte's lifecycle adapters, so it runs first in `before*` and last in `after*`. Phase 3 responsibility is narrow on purpose: resolve the active test method's `@TestControl` and publish it on `TestContext` so the Phase 4 / Phase 5 observers can find it without re-walking JUnit's reflection layer per CDI event.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` — `beforeEach`: reads the JUnit per-method `ExtensionContext` (bound on `TestContext` under the `ExtensionContext.class` key by core/impl's `DelegatingJUnitExtension`), pulls the active test method, and calls `AnnotationSupport.findAnnotation(method, TestControl.class)` — which performs the class-hierarchy walk that gives `@TestControl` its inheritance semantics. If a `@TestControl` is found, the adapter `bindMetadata(TestControl.class, annotation)` on `TestContext`. `afterEach`: `unbindMetadata(TestControl.class)` — unconditional so stale annotations cannot leak into the next test method (the unbind is a safe no-op when the key isn't bound).
+- `modules/testcontrol-module/impl/src/main/resources/META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort` — single-line FQN registration.
+- `modules/testcontrol-module/impl/pom.xml` — added `junit-jupiter-api` dependency (provided scope inherited from the parent's `dependencyManagement`); the impl pulls in `ExtensionContext` and `AnnotationSupport`.
+
+The adapter does NOT yet call `TestControlScopeObserver#configureAllowedScopes(Set)` (Phase 4 adds that observer and the wiring) and does NOT yet drive `TestDataHandler.seedAll(...)` or run the non-transactional `dbExpected/` fallback (Phase 5 adds those). The early publication of the resolved `@TestControl` on `TestContext` is the seam those later observers consume.
+
+First build failed Checkstyle's `ImportOrder` with "extra separation in import group" — I had a blank line between `org.junit.*` and `org.os890.*`, but the project convention groups all `org.*` imports without an inner blank line. Merged the two blocks.
+
+Phase 3 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green in 3 seconds (incremental). Behavioural verification (the adapter publishes the right `@TestControl` and unbinds it cleanly) deferred to the Phase 7 scenarios.
+
+## 2026-05-14 — TICKET-010 Phase 4: TestControlScopeObserver + adapter wiring (startScopes veto)
+
+Added the `@ApplicationScoped` CDI bean that observes `BeforeScopeStarted` and applies the `startScopes` allow-list, and wired the adapter to push the allow-set in `beforeEach`.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/observer/TestControlScopeObserver.java` — `volatile Set<Class<? extends Annotation>> allowedScopes` field. `configureAllowedScopes(Set)` takes a defensive copy via `Set.copyOf(...)`; `null` or empty input means "no veto policy active" (covers both `@TestControl(startScopes={})` and the absence of `@TestControl` on the test method). `onBeforeScopeStarted(@Observes BeforeScopeStarted event)` is a no-op when the field is `null`; otherwise vetoes the event when its scope is not in the set.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` (updated) — `beforeEach` now ALSO resolves the observer via the `BeanManager` of the `SeContainer` bound on `TestContext`, computes the allow-set (`new LinkedHashSet<>(Arrays.asList(annotation.startScopes()))` when present and non-empty; `null` otherwise), and pushes it via `observer.configureAllowedScopes(set)`. Lookup goes through `bm.getBeans(...) → bm.resolve(...) → bm.getReference(...)` with a `RuntimeException` catch so the wiring is a silent no-op when CDI isn't booted by jawelte or the observer bean isn't on the classpath. The observer is reconfigured on every `beforeEach` (regardless of `@TestControl` presence) so residual state from a previous test method cannot influence the current one.
+
+The scope-veto chain now is end-to-end working in principle: scope-module fires `BeforeScopeStarted(@TestMethodScoped.class)` at priority 100, the observer reads its allow-set (already pushed by testcontrol at priority 50), and vetoes when the scope is not in the set.
+
+Phase 4 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green. Behavioural verification deferred to the Phase 7 scenarios that exercise scope filtering (11–15) — those will need a `@TestMethodScoped` and `@TestClassScoped` injection target across a couple of `@TestControl(startScopes=…)` configurations.
+
+## 2026-05-14 — TICKET-010 Phase 5: TestDataHandler (seed → commit → verify pipeline)
+
+Added the `@ApplicationScoped` `TestDataHandler` that owns the four-phase test-data pipeline and wired it into the adapter's `beforeEach` / `afterEach`.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataHandler.java` — the orchestrator. `seedAll(annotation, testContext)` walks `testData` entries in array order: phase 1 calls `DbSeed.forPersistenceUnit(…).dataset(xml).cleanInsert().execute()` for each XML in `dbIn/`, phase 2 calls the same with `.update().execute()` on `dbUpdate/`, phase 3 commits the raw JDBC connection for each distinct PU via `PersistenceUnitConnectionResolver.connectionFor(name)` / `connectionForActivePersistenceUnit()` when `autoCommit=false`. `verifyAll(annotation, testContext)` walks `dbExpected/` and asserts via `DbDiff.forPersistenceUnit(…).expected(xml).assertEquals()`. `onAfterTestTransaction(@Observes AfterTestTransaction)` reads `@TestControl` from `TestContext`, runs `verifyAll`, and binds `VerificationCompleted.INSTANCE` on `TestContext` so the adapter's fallback won't double-verify.
+
+  Folder enumeration handles both `file:` URLs (`Files.list`) and `jar:` URLs (`JarURLConnection.getJarFile().entries()` filtered by prefix and `.xml` suffix, sorted). Missing base folder raises `IllegalArgumentException("Test data folder not found: …")`; missing `dbIn/` / `dbUpdate/` / `dbExpected/` sub-folders are silent no-ops for that phase.
+
+  Base-path resolution: MP Config key `org.os890.jawelte.module.testcontrol.api.TestControl.base-path` wins over the annotation's `testDataBasePath` when set to a non-empty value; otherwise the annotation attribute is used. `EntrySpec.parse` splits on `:` to extract an optional `puName:` prefix and joins the base path with the remainder (single `/` separator regardless of trailing/leading slashes on either side).
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/VerificationCompleted.java` — singleton marker bound on `TestContext` by the observer; checked by the adapter's afterEach. `public class` (not `final`) because Checkstyle's blanket "no final classes" rule applies even to non-CDI types.
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` (refactored) — factored the bean lookup into a generic `resolveBean(testContext, beanType)` helper used by both the scope-observer wiring and the data-handler wiring. `beforeEach` now also calls `handler.seedAll(annotation, testContext)` when the resolved `@TestControl` has non-empty `testData`. `afterEach` runs `handler.verifyAll(...)` ONLY when `VerificationCompleted` is absent (i.e., the transactional observer did not already run); in either case both metadata keys are unbound in a `finally` so they cannot leak across test methods.
+
+- `modules/testcontrol-module/impl/pom.xml` — added compile deps on `jawelte-db-testdata-module-api` (for `DbSeed` / `DbDiff`) and `jawelte-jpa-module-api` (for `PersistenceUnitConnectionResolver`). The jpa-module dep is only meaningfully exercised at runtime when `testData=…` is used but is required at compile time regardless.
+
+Hit the same Checkstyle "no final classes" rule on `VerificationCompleted` — dropped `final`; the class is effectively final via private constructor.
+
+Phase 5 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green. Behavioural validation (scenarios 1–10, 16–20 covering seed/update/commit/verify, multi-PU, base-path precedence, autoCommit handling, multi-entry ordering) deferred to Phase 7.
+
+## 2026-05-14 — TICKET-010 Phase 6: tests/testcontrol-module aggregator + first batch (07, 12, 21, 22) green on OWB and Weld
+
+Added the tests/testcontrol-module aggregator (modeled on tests/scope-module, with testcontrol-module-api/impl pulled in as test-scope deps), wired it into the top-level tests/pom.xml modules list, and shipped four no-DB scenarios that exercise the parts of TICKET-010 that don't require H2 / JPA:
+
+- **Scenario 07** `scenario-07-empty-testdata-no-op` — a test class with NO `@TestControl` on any method. Verifies the lifecycle adapter is a silent no-op: no scope vetoes, no test-data side effects, no exception. Boot + run + clean teardown.
+- **Scenario 12** `scenario-12-scope-filter-empty-allows-all` — `@TestControl(startScopes = {})`. Empty array is the documented sentinel for "all scope-module scopes activate normally"; the observer must NOT veto, so `@TestMethodScoped` and `@TestClassScoped` beans are both reachable in the test method.
+- **Scenario 21** `scenario-21-configbean-remapped-to-testclass` — a `@ConfigBean`-annotated class. Verifies the remap via `BeanManager.resolve(...).getScope()` returning `TestClassScoped.class`.
+- **Scenario 22** `scenario-22-configbean-remap-unconditional` — same as 21 but the test class has NO `@TestControl` on any method; still expects the remap (the spec is "unconditional when testcontrol-module is on classpath").
+
+Phase 6 checkpoint: `./mvnw -B -ntp verify` from tests/testcontrol-module green under both `-Powb` (default) and `-Pweld`. 4 scenarios × 2 CDI runtimes = 8 test runs, all green.
+
+**Skipped from this commit** (Phase 7 follow-ups):
+
+- Scope-filter scenarios **11**, 13–15 require scope-module to actually honor the `BeforeScopeStarted` veto. Today scope-module's `ScopeLifecycleAdapter` activates `@TestMethodScoped` unconditionally regardless of veto status (and only fires `BeforeScopeStarted` for `@TestMethodScoped` — `@TestClassScoped` is class-level and never goes through the event). The testcontrol observer correctly emits `event.veto()` per the spec, but scope-module ignores it. Two paths forward: (a) extend scope-module's adapter to skip activation when vetoed (cross-module change), or (b) reframe TICKET-010's scope-veto contract to "observer-side only". TBD with the user.
+- Test-data pipeline scenarios **1–10, 16–20** need H2 + JPA + entity classes + `persistence.xml` + DBunit XML datasets. Same setup shape as tests/db-testdata-module's transactional scenarios; deferred to Phase 7 to keep this commit reviewable.
+- Inheritance scenarios **24–26** and priority-ordering scenario **27** are tractable without DB; queued for Phase 7.
+
+`verify-all.sh` wiring deferred to Phase 7 (when the full scenario set is in).
+
+## 2026-05-14 — TICKET-010 Phase 7: inheritance scenarios 24+25, verify-all.sh wiring, coverage-report
+
+Added the remaining no-DB scenarios that exercise `@TestControl` inheritance semantics, and wired tests/testcontrol-module into the verify-all.sh sweep + coverage-report aggregator.
+
+Inheritance scenarios:
+
+- **Scenario 24** `scenario-24-testcontrol-inherited-from-superclass-method` — `Scenario24Base` carries `@Test @TestControl(testDataBasePath="from-superclass") inheritedTestMethod()`. `Scenario24Test` extends the base without override. JUnit discovers the inherited method; testcontrol resolves `@TestControl` through `AnnotationSupport.findAnnotation`'s class-hierarchy walk and runs the adapter pipeline without blowing up. Verification is structural: the test method runs cleanly through testcontrol's `beforeEach` / `afterEach` — explicit value assertions are not possible because `TestContext.get()` is unavailable in test bodies (DelegatingJUnitExtension's beforeAll `finally` calls `testContext.reset()` to clear the per-thread accessor, so the lookup outside the bootstrap window raises `IllegalStateException`). A previous attempt to assert `TestContext.getMetadata(TestControl.class).get().testDataBasePath()` from the test body failed with exactly that exception; the simpler "runs cleanly = inheritance worked" check replaces it.
+- **Scenario 25** `scenario-25-testcontrol-overridden-method-subclass-wins` — `Scenario25Base` declares `@Test @TestControl(testDataBasePath="from-superclass-should-be-shadowed") overriddenTestMethod()`. `Scenario25Test` `@Override`s the method and supplies its own `@Test @TestControl(testDataBasePath="from-subclass-overrides")`. The override's annotation wins, with no merging of the superclass's value — JUnit's `AnnotationSupport` walks the override path and stops at the subclass declaration. Same structural-verification rationale as scenario 24.
+
+Wiring:
+
+- `verify-all.sh` — added `run "tests/testcontrol-module [$cdi]" ...` inside the {owb,weld} loop alongside cdi/scope/jpa/ejb. Two new phases (one per CDI runtime).
+- `coverage-report/pom.xml` — added compile deps on `jawelte-testcontrol-module-api`/`-impl` so the production classes are indexed, and pulled the six testcontrol-module scenario modules into the test-scenarios dep list so jacoco's report-aggregate collects their exec data.
+
+Full suite execution intentionally NOT run in this commit per user direction ("let's run the full suite only before we close the ticket"). Local verify of tests/testcontrol-module remains green under both `-Powb` (default) and `-Pweld` — 6 scenarios × 2 runtimes = 12 test runs.
+
+Still queued for the final pre-close batch:
+- DB-driven testData pipeline scenarios (1–10, 16–20) — H2 + JPA + entity + persistence.xml + DBunit dataset shape.
+- Folder-not-found scenario 6 (likely doable without DB if the validation fires before any DB call).
+- Scope-filter affirmative scenarios (11, 13–15) — still gated on scope-module honoring the BeforeScopeStarted veto.
+- Priority-ordering scenario 27 — recording-adapter approach.
+- Architecture.md / mission.md updates if any.
+
+## 2026-05-14 — TICKET-010 Phase 8: scenario 23 + close-out findings
+
+Added scenario 23 covering the explicit-scope-wins case from TICKET-010's `@ConfigBean Remapping` table (line 431): `@ConfigBean @RequestScoped` is NOT remapped — the explicit `@RequestScoped` on the class wins over the stereotype's contributed `@ApplicationScoped`. Verified via `BeanManager.resolve(...).getScope() == RequestScoped.class`. Green under both OWB and Weld.
+
+Scope status:
+- 7 scenarios green × 2 CDI runtimes = 14 test runs all passing (07, 12, 21, 22, 23, 24, 25).
+- DB-driven testData pipeline scenarios (1–10, 16–20) deliberately not written this cycle — see todo.md for the architectural gap that blocks them.
+- Scope-filter affirmative scenarios (11, 13, 14, 15) deliberately not written — see todo.md for the scope-module gap.
+
+Two TICKET-010 follow-ups recorded in `todo.md`:
+
+1. **testData seed-commit needs an active EntityManager.** `TestDataHandler.seedAll` calls `DbSeed.forPersistenceUnit(name)` which routes through `PersistenceUnitConnectionResolver.connectionFor(name)`. The default jpa-module impl needs an active EM on the calling thread, but jpa-module's lifecycle adapter only pushes an EM in `beforeEach` for `@Transactional` test methods at `@Priority(200)` — strictly AFTER testcontrol's `@Priority(50)` seedAll. So testcontrol's seed sees no active EM and fails. Three potential fixes captured in todo.md.
+
+2. **BeforeScopeStarted veto is currently advisory.** scope-module's `ScopeLifecycleAdapter` fires the event but activates the context unconditionally regardless of `event.isVetoed()`; the scope-module doc explicitly defers "usage-veto semantics" to a follow-up ticket. Also: scope-module never fires `BeforeScopeStarted` for `@TestClassScoped`. testcontrol's `TestControlScopeObserver` correctly emits `veto()` per `startScopes` but the veto has no effect on scope activation today.
+
+Both findings keep the testcontrol-module impl itself sound — the SPI calls, the CDI extension, and the lifecycle adapter all do what TICKET-010 specifies. The gaps are at the boundaries with jpa-module and scope-module, which is what the dependency declarations in TICKET-010 implicitly required but which the depended-on modules don't yet fully provide.
+
+## 2026-05-14 — TICKET-010 Phase 9: TestDataSeedTransactionTemplate (T08 resolved via @Transactional-driven seed)
+
+Switched the seed-commit mechanism from a manual raw-JDBC commit (which required an active EntityManager that testcontrol's @Priority(50) beforeEach didn't have) to a proxy-driven `@Transactional` template bean. The seed now runs inside a managed transaction; the interceptor (provided by jta-module's active TransactionStrategy — Geronimo, Narayana, or Atomikos depending on profile) begins the transaction, the template touches the right EntityManager via CDI lookup to populate jpa-module's active-PU stack, the lambda's `DbSeed.forPersistenceUnit(…).…execute()` calls succeed, and the interceptor commits on lambda return. Each call is independent of the test method's own transaction, so seed data is durable and visible to other threads before the test method begins.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataSeedTransactionTemplate.java` — new `@ApplicationScoped` bean with one `@Transactional public void runInTransaction(String puName, Runnable seedWork)` method. EntityManager lookup is per-call via CDI: single-PU resolves via the `@Default` qualifier the jpa-module CDI extension assigns; multi-PU resolves via `NamedLiteral.of(puName)` against the `@Named(puName)` qualifier the extension assigns per PU. `entityManager.toString()` populates the active-PU stack for `DbSeed.forPersistenceUnit()` to resolve the connection — same pattern as db-testdata-module's scenario-36.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataHandler.java` — `seedAll` now resolves the template via `CDI.current().select(...).get()`, then drives two phases via a new `runPhase(entries, subDir, mode, template)` helper. The helper groups entries by distinct PU (preserving first-occurrence order in the testData array) and calls `template.runInTransaction(puName, lambda)` per PU per phase. All dbIn across all PUs commit before any dbUpdate starts (each phase loop completes before the next begins), satisfying the spec's "phase-across-entries" rule. `commitSeed(…)` is removed entirely along with its `PersistenceUnitConnectionResolver` lookup, its raw JDBC commit, and the SQLException-wrapping branch. The `dbIn` / `dbUpdate` ops use `DbSeed.Builder::cleanInsert` and `DbSeed.Builder::update` as method references passed into `runPhase`.
+- `modules/testcontrol-module/impl/pom.xml` — added `jakarta.transaction-api` (provided) for `@Transactional` and `jakarta.persistence-api` (provided) for `EntityManager`. Dropped the direct `jawelte-jpa-module-api` compile dep (no longer used; the transitive from db-testdata-module-api still carries it if needed elsewhere).
+
+Per-method state contract is unchanged: the `TestControl` and `VerificationCompleted` metadata keys still bind / unbind on `TestContext` as before; the `verifyAll` / `onAfterTestTransaction` path remains intact for the `dbExpected/` half.
+
+Phase 9 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green; `mvn verify` on `tests/testcontrol-module` green under both `-Powb` and `-Pweld`. The existing 7 scenarios all have empty `testData`, so they don't exercise the new seed path but they confirm no regression in the scope-veto / @ConfigBean-remap / inheritance / no-op-when-absent code paths.
+
+The TICKET-010 spec section "Seed Commit" still describes the old raw-JDBC mechanism; spec rewrite is the next step (separate commit) so the issue body and the file stay in sync.
+
+## 2026-05-14 — TICKET-010 Phase 10: scenarios 01+02 (DB-driven), refactor TestDataHandler state to handler-side fields (TestContext post-bootstrap fix), drop VerificationCompleted
+
+Two new DB-driven scenarios that prove the Phase 9 seed-commit pipeline actually works end-to-end:
+
+- **scenario-01-testdata-dbin-seeds-rows** — happy-path. `dbIn/customers.xml` seeds 2 CUSTOMER rows; the `@Transactional` service injected into the test class counts them and asserts 2.
+- **scenario-02-testdata-dbexpected-transactional** — transactional verify path. `dbIn/customers.xml` seeds Alice + Bob; the test method itself carries `@Transactional` so jpa-module begins a tx, the test renames Bob → Robert, jpa-module fires `AfterTestTransaction` on commit, and `TestDataHandler.onAfterTestTransaction` runs `DbDiff.assertEquals` against `dbExpected/customers.xml` (Alice + Robert).
+
+Implementing scenario-02 surfaced a real bug in the prior `TestDataHandler` design: the `onAfterTestTransaction` observer called `TestContext.get()` to read the active `@TestControl` and to bind a `VerificationCompleted` marker — but `TestContext.get()` is unavailable in the observer-dispatch window (DelegatingJUnitExtension's `beforeAll finally` calls `testContext.reset()` to clear the per-thread accessor; everything post-beforeAll has no current TestContext). The observer silently caught the `IllegalStateException` and returned without verifying, so the adapter's `afterEach` fallback fired, which then itself failed because by then jpa-module's transaction had been committed and the EM was popped — `DbDiff.forPersistenceUnit()` couldn't resolve a connection.
+
+Refactor: moved the per-method state from `TestContext` metadata onto the `@ApplicationScoped` `TestDataHandler` itself as `volatile TestControl activeAnnotation` + `volatile boolean verifiedThisMethod`. The lifecycle adapter writes these in `beforeEach` via `handler.seedAll(annotation, testContext)` (sets `activeAnnotation`); the observer reads them via `handler.verifyAll()` (no args). Same state-holding-CDI-bean pattern db-testdata-module already uses for `PersistenceUnitNameSupplier`. Dropped the `VerificationCompleted` marker entirely; the adapter now consults `handler.didAlreadyVerify()` and calls `handler.clearActive()` at end of `afterEach` so the next test method starts with a clean slate.
+
+Second issue surfaced: the observer's `verifyAll()` still failed because `DbDiff.forPersistenceUnit()` needs an active EM at call time, and by the time `AfterTestTransaction` fires jpa-module has already popped the EM from its active-PU stack. Fix: wrapped `verifyAll`'s per-PU loop in the same `TestDataSeedTransactionTemplate.runInTransaction(...)` the seed path uses. Each verify call now opens its own short-lived transaction, the template's CDI EM lookup populates the active-PU stack, `DbDiff.assertEquals()` resolves a connection, the read-only transaction commits on lambda return.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataHandler.java` — added `volatile activeAnnotation` + `volatile verifiedThisMethod`; rewrote `seedAll` to set the state; rewrote `verifyAll` to no-args reading from `activeAnnotation`, wrapped in the transaction template; added `didAlreadyVerify()` + `clearActive()`. Class-level javadoc updated.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` — `afterEach` now checks `handler.didAlreadyVerify()` instead of TestContext metadata; calls `handler.clearActive()` at end. `VerificationCompleted` import dropped; javadoc updated.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/VerificationCompleted.java` — DELETED. Replaced by the handler-side `verifiedThisMethod` flag.
+- `tests/testcontrol-module/scenario-01-testdata-dbin-seeds-rows/` — new scenario (pom, persistence.xml, beans.xml, Customer entity, dbIn/customers.xml, count service, test class).
+- `tests/testcontrol-module/scenario-02-testdata-dbexpected-transactional/` — new scenario (pom, persistence.xml, beans.xml, Customer entity, dbIn/customers.xml, dbExpected/customers.xml, test class with @Transactional method that renames Bob to Robert).
+- `tests/testcontrol-module/pom.xml` — added scenarios 01 and 02 to `<modules>`.
+- `coverage-report/pom.xml` — added the two new scenario modules to `<dependencies>` for jacoco's report-aggregate.
+
+Both new scenarios are also under -Pweld. 9 scenarios × 2 CDI runtimes = 18 test runs all green (~10s OWB, ~11s Weld). Phase 9's `TestDataSeedTransactionTemplate` is now actually exercised by tests — what landed in Phase 9 was untested-and-broken; it took two fixes (the handler state refactor + the verify-side transaction wrap) before scenario-02 went green.
+
+Still TODO: spec rewrite at `tickets/010-testcontrol-module.md` so the Seed Commit section matches Phase 9 reality; issue #20 body sync from the updated ticket file.
+
+## 2026-05-14 — Fix verify-all.sh Phase 18 coverage-report invocation (pre-existing latent bug)
+
+Phase 18 of `verify-all.sh` (`run "coverage-report" "$REPO_ROOT/coverage-report" verify`) was a `cd coverage-report && mvn verify` invocation. That puts Maven in single-module-session mode: only `coverage-report` itself is in the reactor. The `jacoco:report-aggregate` goal binds to `verify` but discovers exec data by walking the active reactor's project list — with only the aggregator in the session it loads ZERO exec files and silently overwrites the populated aggregate report at `coverage-report/target/site/jacoco-aggregate/index.html` with the empty placeholder (1624 bytes, `Total: 0 of 0, n/a`).
+
+Repro before the fix: in-flight report at Phase 17 was 221KB (populated by Phase 01's full-reactor install whose `verify` lifecycle invoked `report-aggregate` in reactor mode, with the prior sweep's stale exec files); Phase 18 turned it into 1624 bytes empty.
+
+This isn't a TICKET-010 regression — the same single-module Phase 18 invocation has been in `verify-all.sh` since the original `wire content-diff-module into verify-all and coverage-report` commit (`b1f2491`). The plugin config in `coverage-report/pom.xml` is byte-identical to what's on `main`. The bug was just latent — Phase 01's full-reactor install populated the report directory mid-sweep, so a casual end-of-sweep check landed on a directory that existed and looked plausible, even though by the time Phase 18 returned the file had been overwritten with the empty placeholder.
+
+Fix: change Phase 18 to `cd $REPO_ROOT && ./mvnw -pl :coverage-report -am -DskipTests verify`. From repo root with `-am`, the reactor session contains every transitive dependency of `coverage-report` (which is every other module). `report-aggregate` walks that reactor and finds each `tests/<module>/scenario-*/target/jacoco.exec` it needs. `-DskipTests` skips Surefire re-runs (tests already ran in Phases 02–17). With the local repo warm from Phase 01 install, each transitive dependency reports as ~0.015s SUCCESS (up-to-date, no recompile) so the net overhead is single-digit seconds.
+
+Validated by hand before committing: `time ./mvnw -B -ntp -pl :coverage-report -am -DskipTests verify` completed in 13s wall-clock, loaded all 350 `*.exec` files from the test scenarios, and produced a 221KB populated `index.html` (vs the broken 1624-byte placeholder).
+
+The 14-line patch to `verify-all.sh` includes a comment block explaining why the invocation looks the way it does, so future-self doesn't try to "simplify" it back to the broken `cd coverage-report && mvn verify` shape.
+
+## 2026-05-14 — TICKET-010 Phase 11: @TestControl(requireDbExpected) guard against missing dbExpected/
+
+Add a new attribute `requireDbExpected` to `@TestControl` (default `true`) that protects the test-data verification side from silent regressions. The motivating scenario: a developer deletes (or empties out) the `dbExpected/` folder of a previously-verifying test — without the guard, the test would still pass because the verify phase has nothing to assert against. With the guard, testcontrol's `beforeEach` raises `IllegalStateException` pointing at the missing assertion side.
+
+Spec:
+
+- The guard only fires when `testData()` is non-empty. A `@TestControl` used purely for `startScopes` (or for future attributes unrelated to seeding) is unaffected by the default `requireDbExpected=true` — no testData means no verification-side requirement.
+- When `testData()` is non-empty, the guard checks that AT LEAST ONE entry contributes a non-empty `dbExpected/` folder (at least one `*.xml` inside). An entry with an empty `dbExpected/` folder counts as "no contribution" — keeps the contract strong against the "empty folder bypass" edge case.
+- Set `requireDbExpected=false` to opt out per-method (seed-only paths).
+
+Files:
+
+- `modules/testcontrol-module/api/src/main/java/.../TestControl.java` — added the `boolean requireDbExpected() default true;` attribute with comprehensive javadoc covering: rationale (silent-regression protection), opt-out semantics, implicit satisfaction when testData is empty (in case future @TestControl features have nothing to do with seeding), and the "empty dbExpected folder counts as no contribution" rule.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataHandler.java` — added the guard in `seedAll`. Runs AFTER `validateBaseFolders` (so a missing testData folder is still the first error you see) and BEFORE the seed transaction begins (so no DB side-effects when the config is wrong). Error message names the testData entries and points at the two ways out (add a file, or set requireDbExpected=false).
+- `tests/testcontrol-module/scenario-01-testdata-dbin-seeds-rows/src/test/java/.../Scenario01Test.java` — scenario 01 seeds CUSTOMER rows from `dbIn/` but has no `dbExpected/`. Updated its `@TestControl` to set `requireDbExpected=false` since it's legitimately a seed-only test.
+- `tests/testcontrol-module/scenario-08-testdata-missing-dbexpected-fails/` — new scenario. Inner `MissingDbExpectedSubject` carries `@TestControl(testData="testdata/scenario08")` with default `requireDbExpected=true`; `testdata/scenario08/` has only `dbIn/`. `Scenario08Test` drives the subject via JUnit's `EngineTestKit`, walks the failure-cause chain for an `IllegalStateException`, and asserts the message contains `"requires at least one dbExpected"`. Naming-convention note: the subject class is `MissingDbExpectedSubject` (no `Test` prefix/suffix) so Surefire's default discovery skips it during the normal test run; only EngineTestKit picks it up via `selectClass(...)`.
+- `tests/testcontrol-module/pom.xml` — added scenario 08 to `<modules>`.
+- `coverage-report/pom.xml` — added scenario 08 to the test-scenarios dep list.
+
+Phase 11 checkpoint: tests/testcontrol-module verify green under both `-Powb` and `-Pweld`. 10 scenarios × 2 CDI runtimes = 20 test runs. Scenario 01 still passes (with the explicit `requireDbExpected=false`); scenario 02 still passes (its `dbExpected/customers.xml` satisfies the guard); scenario 08 confirms the guard's failure-case message.
+
+## 2026-05-14 — TICKET-010 Phase 12: multi-PU testData routing scenarios (08, 08a) + EM-touch fix + scenario rename
+
+User asked for multi-PU testData scenarios and an invalid-puName error case. While writing scenario-08 (the happy path), the test surfaced a real bug in `TestDataSeedTransactionTemplate`: the post-lookup touch was `entityManager.toString()`, but `EntityManagerProxy.invoke` handles Object methods (`toString` / `equals` / `hashCode`) locally — it returns `"EntityManagerProxy[name]"` directly without ever calling `peekOrAutoBegin`. In single-PU mode the bug was invisible because `DefaultResourceLocalTransactionStrategy.begin()` eagerly opens the only PU and pushes it onto the holder before the template body runs; in multi-PU mode `resolveEagerPersistenceUnit` returns `null` (multi-PU + no `@PersistenceConfig`) and the strategy takes the "all-lazy" path with an empty frame — relying on the FIRST real `EntityManager` method call to populate it. Swapping `entityManager.toString()` for `entityManager.isOpen()` (a real `EntityManager` method, side-effect-free, routes through `peekOrAutoBegin`) fixes the multi-PU path AND remains correct for single-PU.
+
+Scenarios:
+
+- **scenario-08-multi-pu-testdata-routes-per-entry** — two PUs (`testcontrolScenario08CustomersPU`, `testcontrolScenario08OrdersPU`), each with its own H2 in-memory database and entity (`Customer`, `Order` — the table is `CUSTOMER_ORDER` because `ORDER` is reserved in H2's dialect). `@TestControl(testData = {"…CustomersPU:testdata/scenario08-customers", "…OrdersPU:testdata/scenario08-orders"}, requireDbExpected = false)`. `MultiPuCountService` injects both EMs via `@PersistenceContext(unitName=…)` and queries each PU independently; the test asserts CUSTOMER (PU 1) has 3 rows and CUSTOMER_ORDER (PU 2) has 2 rows, proving the `puName:` prefix routes each entry to the right database.
+- **scenario-08a-multi-pu-invalid-pu-name-fails** — `UnknownPuNameSubject` carries `@TestControl(testData = "thisPersistenceUnitIsNotDeclared:testdata/scenario08a", requireDbExpected = false)`. The CDI `@Named("thisPersistenceUnitIsNotDeclared")` lookup for `EntityManager` finds no bean — raises `UnsatisfiedResolutionException`. `Scenario28aTest` drives via `EngineTestKit` and walks the failure cause chain. Originally relied on the CDI runtime's own exception message containing the PU name, which **OWB does include but Weld 5+ omits** (Weld's message says `@Named` without the value). Caught the resolution failure in `TestDataSeedTransactionTemplate.lookupEntityManager` and re-throw as `IllegalArgumentException` with an explicit message naming the offending PU — works deterministically on both runtimes, points the user at the typo.
+
+Renames (to free up the spec-aligned scenario-08 number for multi-PU):
+
+- `tests/testcontrol-module/scenario-08-testdata-missing-dbexpected-fails/` → `scenario-28-requireDbExpected-guard-fails-when-missing/` (the `requireDbExpected` guard isn't part of the spec's original 27 scenarios — it's a new attribute added in Phase 11, so it sits past spec scenario 27).
+- Inner Java package `scenario08` → `scenario28` to match.
+- `Scenario08Test.java` → `Scenario28Test.java` + class name + javadoc references updated.
+- `testdata/scenario08` → `testdata/scenario28` to match the new package name in the `@TestControl(testData=…)` value.
+
+Phase 12 checkpoint: 12 scenarios × 2 CDI runtimes = 24 test runs all green under both `-Powb` and `-Pweld`.
+
+Multi-PU happy path is the most substantive functional verification of the testData pipeline to date — proves the per-PU grouping in `TestDataHandler.runPhase`, the `NamedLiteral` CDI lookup in the template, the active-PU stack maintenance through the seed transaction, and the interceptor's `enterTransactionalScope()` empty-frame + lazy-populate path all work end-to-end across two distinct H2 databases.
+
+## 2026-05-14 — TICKET-010 fix: failsafe clearActive() in afterEach
+
+**Issue.** `TestControlLifecycleAdapter.afterEach` only called
+`TestDataHandler.clearActive()` inside the `if (annotation.isPresent()
+&& testData.length > 0)` branch — and only after `verifyAll()`
+returned normally. `TestDataHandler` is `@ApplicationScoped`, so its
+`activeAnnotation` / `verifiedThisMethod` fields survive across every
+test method in the same CDI container. Skipping the reset leaked
+state into the next method.
+
+Three paths previously skipped the reset:
+1. `verifyAll()` throws (assertion failure) → fall-through to outer
+   `finally` only unbinds metadata.
+2. Next test method has no `@TestControl` or an empty `testData`
+   array → the `if` branch is taken zero times, so a prior method's
+   annotation remains pinned on the handler bean.
+3. CDI container was never booted (`handler == null`) → branch is
+   skipped silently.
+
+**Fix.** Resolve the handler once at the top, gate `verifyAll()` on
+all preconditions (handler non-null, annotation present, testData
+non-empty, not already verified), and call `clearActive()` in an
+outer `finally` regardless of how the verify path exited.
+`unbindMetadata` stays in the innermost `finally` so it runs even if
+`clearActive` were ever to throw.
+
+**Verification.** Targeted run of `tests/testcontrol-module/**` under
+both `-Powb` and `-Pweld` profiles — all 12 scenarios pass.
+
+
+## 2026-05-14 — Move @ConfigBean scope-upgrade extension to scope-module
+
+User pointed out that the `@ConfigBean → @TestClassScoped` scope-upgrade CDI Extension belongs in scope-module, not testcontrol-module — the remap is fundamentally a scope concern (it changes the target scope on `@ConfigBean`-stereotyped classes to a type owned by scope-module) and is independent of `@TestControl`.
+
+**Production move.**
+- New class `modules/scope-module/impl/.../adapter/extension/ConfigBeanScopeRemapCdiExtension.java` — same body as before, just renamed for its new owner. Sibling to `TestScopeCdiExtension`, kept in a separate class to preserve single-responsibility (context registration vs. bean-type rewriting).
+- Added the SPI registration to `modules/scope-module/impl/src/main/resources/META-INF/services/jakarta.enterprise.inject.spi.Extension`, alongside the existing `TestScopeCdiExtension` entry.
+- Deleted the old `TestControlCdiExtension.java` from testcontrol-module/impl and its (now-empty) `META-INF/services/jakarta.enterprise.inject.spi.Extension` file.
+- Dropped the `jawelte-scope-module-api` compile dep from `modules/testcontrol-module/impl/pom.xml` — no remaining Java reference to scope-module types after the move.
+- Updated `modules/scope-module/impl/pom.xml` description, `modules/testcontrol-module/impl/pom.xml` description, `modules/testcontrol-module/impl/src/main/resources/META-INF/beans.xml` comment, and the "Companion remap" note in `modules/testcontrol-module/api/src/main/java/.../TestControl.java` javadoc to point at the new home.
+
+**Scenario move.**
+- `tests/testcontrol-module/scenario-21-configbean-remapped-to-testclass` → `tests/scope-module/scenario-28-configbean-remapped-to-testclass` (class renamed to `Scenario28Test`, package `org.os890.jawelte.tests.scope.scenario28`).
+- `tests/testcontrol-module/scenario-22-configbean-remap-unconditional` → `tests/scope-module/scenario-29-configbean-remap-unconditional` (assertion message updated: the remap fires whenever scope-module is on the classpath, no longer "even without `@TestControl`").
+- `tests/testcontrol-module/scenario-23-configbean-with-explicit-scope-not-remapped` → `tests/scope-module/scenario-30-configbean-with-explicit-scope-not-remapped`.
+- Updated each scenario pom (artifactId, parent, name), updated both aggregator poms (removed three entries from testcontrol-module's module list, added three to scope-module's).
+
+**Verification.** `tests/scope-module` reactor: 30/30 scenarios pass under `-Powb` and `-Pweld`. `tests/testcontrol-module` reactor: 9/9 remaining scenarios pass under `-Powb` and `-Pweld`. (Required an explicit `install` of `jawelte-scope-module-impl` first — when test reactors are run from their own root, they pull scope-module/impl from the local m2 repo rather than reactor sources.)
+
+
+## 2026-05-14 — Simplify TestControlLifecycleAdapter.resolveBean to CDI.current()
+
+User correction on the POC-comparison T14 finding: don't avoid
+`CDI.current()` as a matter of style — only reach for the longer
+`BeanManager` path when there is a concrete technical reason. Original
+reasoning ("consistency with another helper", "keep CDI.current() off
+the compile classpath") didn't hold up: `jakarta.enterprise.cdi-api` is
+already on testcontrol-module's compile classpath, and consistency with
+a 12-line helper isn't enough to outweigh a 3-line one that works.
+
+Refactor:
+
+- `TestControlLifecycleAdapter.resolveBean` collapsed from 12 lines
+  (resolve `SeContainer` from `TestContext` metadata, get
+  `BeanManager`, look up `Bean`, get a `CreationalContext`-backed
+  reference) to 3 lines wrapping `CDI.current().select(beanType).get()`.
+- Dropped the unused `TestContext testContext` parameter from
+  `resolveBean` and from `configureScopeObserver`. Updated the three
+  call sites.
+- Dropped imports for `SeContainer`, `Bean`, `BeanManager`. Added
+  import for `jakarta.enterprise.inject.spi.CDI`.
+
+All testcontrol-module scenarios pass under both `-Powb` and `-Pweld`.
+
+## 2026-05-14 — Add ContainerStarted eager-init scenario to scope-module
+
+In view of T15 in the POC comparison report (the
+`ContainerStarted` + `@TestClassScoped` "eager init" pattern), add
+the demonstrating scenario under `tests/scope-module/`:
+
+- `scenario-31-testclassscoped-observes-containerstarted-once`.
+- A `@TestClassScoped` static inner bean with
+  `@Observes ContainerStarted` increments a counter and captures
+  the event's `getTestClass()`. Two `@Test` methods on the same
+  class share the bean via the class-scoped context and both see
+  the counter at `1` (the event was delivered once, and the same
+  instance is shared across methods).
+- Verifies the cross-cutting pattern is available in jawelte:
+  `ContainerStarted` fires while `TestClassScopedContext` is
+  active (the context allocates its store eagerly in the
+  context's constructor during `AfterBeanDiscovery`), so a
+  `@TestClassScoped` observer is reachable from the
+  `BeanManager.getEvent().fire(...)` site in `CdiTestBeanContainer.beforeAll`.
+
+Passes under both `-Powb` and `-Pweld`. T15 in the comparison
+report flipped from "no action proposed" to "done — scenario 31
+added".

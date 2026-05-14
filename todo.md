@@ -87,3 +87,53 @@ The fix is in place (commits `270f7f3` → `377e895` → `1861487`) and `verify-
 - Note for architecture.md / mission.md: the auto-mock framework-internal-bean filter follows the established `FrameworkAllowlist` pattern — `META-INF/microprofile-config.properties` defaults read through the active `ConfigResolver`, no Java constants on the consuming class. Worth a sentence under the cdi-module section if we want this documented for downstream readers.
 
 Decide later whether any/all of the three are worth doing.
+
+## TICKET-010 follow-ups (post-implementation findings)
+
+### `BeforeScopeStarted` veto is currently advisory
+
+scope-module's `ScopeLifecycleAdapter` fires `BeforeScopeStarted(TestMethodScoped.class)` and then activates the context unconditionally regardless of `event.isVetoed()` — the scope-module adapter docstring acknowledges: *"the 'usage-veto' semantics — telling consumers to skip use of @TestMethodScoped beans for a given method — are deferred to a follow-up ticket."*
+
+Also: scope-module never fires `BeforeScopeStarted` for `@TestClassScoped`; that scope is added at `AfterBeanDiscovery` and remains active for the whole test class. So vetoing `@TestClassScoped` per method is not currently expressible.
+
+Effect on TICKET-010: testcontrol's `TestControlScopeObserver` correctly emits `event.veto()` per the `@TestControl.startScopes` allow-list, but scope-module ignores the veto. The scope-filter affirmative scenarios (11, 13, 14, 15) cannot be expected to pass until scope-module is updated.
+
+Paths forward:
+- Update `ScopeLifecycleAdapter.beforeEach` to call `methodContext.activate()` only when `!event.isVetoed()`. Mirror change for any scope-module `BeforeScopeStarted` emission.
+- Fire `BeforeScopeStarted(TestClassScoped.class)` in `beforeAll` and gate `TestClassScopedContext` activation on its veto status.
+
+### Per-entry flush in TestDataHandler error-handling
+
+`TestDataHandler.seedAll(...)` walks `@TestControl(testData=…)` entries in array order and runs each entry's `dbIn/` files (then later each entry's `dbUpdate/` files) without flushing between entries or files. When one entry's `*.xml` dataset fails mid-pipeline (constraint violation, FK violation, DBunit parse error), the failure currently surfaces from `DbSeed…execute()` immediately — but with no breadcrumb beyond the dataset file path, and the prior entries' data sits in the open transaction without being either fully committed or fully rolled back. Error localization across multi-entry seeds is harder than it needs to be.
+
+Two shapes to consider (now tractable because `TestDataSeedTransactionTemplate` already runs each phase inside a managed transaction with the EM on the active stack — so a `flush` / `commit` between entries is a small addition to the existing loop):
+
+- `em.flush()` between entries: pushes the EntityManager's first-level cache to the JDBC layer; still inside the active transaction; cheap. Doesn't change the transactional contract, just makes failures surface at the entry boundary they originated from.
+- `connection.commit()` between entries: stronger isolation; each entry's data is durable as soon as it succeeds, so a later entry's failure does not roll back the earlier ones. Aligns naturally with the seed-commit semantics already documented for the post-seed commit phase, just earlier in the pipeline. Changes visibility: if a later `@Transactional` test method then opens its own transaction, seed data is already committed across all entries.
+
+Decide which model fits before adding the flush/commit calls; document in the spec table that the chosen model is the contract.
+
+## Starting-point smoke test: jawelte on classpath, plain JUnit, nothing breaks
+
+Add a JUnit test scenario whose pom pulls in every jawelte module (cdi, scope, jpa, jta, ejb, content-diff, db-testdata, testcontrol — as useful) at test scope, but whose test class uses NONE of jawelte's features:
+
+- No `@EnableTestBeans` on the test class.
+- No `@TestControl`, no `@PersistenceConfig`, no `@Transactional` on the test method.
+- No `@Inject` of jawelte-managed beans.
+- No `persistence.xml`, no DBunit datasets, no test-data folders.
+- A plain `@Test` method that asserts something trivial (e.g. `assertThat(1 + 1).isEqualTo(2);`).
+
+The point is to verify the **opt-in contract**: a user who simply adds the jawelte jars to their test classpath (e.g. while gradually adopting the framework) should NOT see their existing plain JUnit tests break. Specifically:
+
+- CDI extensions shipped by each module must not fail bootstrap when no `@EnableTestBeans` is present (and ideally must not bootstrap a CDI container at all).
+- MP Config defaults shipped in `META-INF/microprofile-config.properties` must not be picked up by unrelated MP Config consumers in a way that changes behaviour.
+- `META-INF/services` registrations (lifecycle ports, CDI extensions, transaction strategies, persistence-unit resolvers, DbSeed/DbDiff engines, …) must not run side-effects on classpath load.
+- Lifecycle adapters' `beforeAll` / `beforeEach` / `afterAll` / `afterEach` must not fire when the JUnit extension is not registered (i.e. when `@EnableTestBeans` is absent).
+- The H2 driver (and Hibernate, and the JTA transaction strategies) being on the classpath must not boot persistence units, register transaction managers, or open connections.
+
+Position the scenario as its own per-scenario sub-module under `tests/` — most likely `tests/core/scenario-NN-jawelte-on-classpath-plain-junit-no-regression/`, since the test does not exercise any module-specific behaviour and just pins the framework-wide opt-in contract. Run under both `-Powb` (default) and `-Pweld` profiles; both should pass without jawelte ever activating. The signal value is high: future refactors that introduce side-effects on classpath load (e.g. a global static initializer that opens a connection) would fail this scenario immediately.
+
+Two design choices to settle before writing the scenario:
+
+- Should the pom pull jpa-module-impl + Hibernate + H2 too? (Confirms that even with the JPA stack on classpath, no persistence unit boots automatically.) Probably yes — the contract is strongest when ALL modules are present.
+- Should we register a JUnit `ExtensionContext` listener / custom logger to assert NO jawelte lifecycle adapter ran? Or trust "the test method passes with the expected assertion" as evidence enough? Probably the latter for simplicity; the former is over-engineered.

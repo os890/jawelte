@@ -115,6 +115,16 @@
             <artifactId>jawelte-db-testdata-module-impl</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-testcontrol-module-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-testcontrol-module-impl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             Test scenario modules: their jacoco.exec files contain the
@@ -1837,6 +1847,66 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-db-testdata-module-scenario-64-for-persistence-unit-annotation-resolves</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-01-testdata-dbin-seeds-rows</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-02-testdata-dbexpected-transactional</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-07-empty-testdata-no-op</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-08-multi-pu-testdata-routes-per-entry</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-08a-multi-pu-invalid-pu-name-fails</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-28-requireDbExpected-guard-fails-when-missing</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-12-scope-filter-empty-allows-all</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-21-configbean-remapped-to-testclass</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-22-configbean-remap-unconditional</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-23-configbean-with-explicit-scope-not-remapped</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-24-testcontrol-inherited-from-superclass-method</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-25-testcontrol-overridden-method-subclass-wins</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>
