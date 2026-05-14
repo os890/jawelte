@@ -3219,3 +3219,20 @@ Still queued for the final pre-close batch:
 - Scope-filter affirmative scenarios (11, 13–15) — still gated on scope-module honoring the BeforeScopeStarted veto.
 - Priority-ordering scenario 27 — recording-adapter approach.
 - Architecture.md / mission.md updates if any.
+
+## 2026-05-14 — TICKET-010 Phase 8: scenario 23 + close-out findings
+
+Added scenario 23 covering the explicit-scope-wins case from TICKET-010's `@ConfigBean Remapping` table (line 431): `@ConfigBean @RequestScoped` is NOT remapped — the explicit `@RequestScoped` on the class wins over the stereotype's contributed `@ApplicationScoped`. Verified via `BeanManager.resolve(...).getScope() == RequestScoped.class`. Green under both OWB and Weld.
+
+Scope status:
+- 7 scenarios green × 2 CDI runtimes = 14 test runs all passing (07, 12, 21, 22, 23, 24, 25).
+- DB-driven testData pipeline scenarios (1–10, 16–20) deliberately not written this cycle — see todo.md for the architectural gap that blocks them.
+- Scope-filter affirmative scenarios (11, 13, 14, 15) deliberately not written — see todo.md for the scope-module gap.
+
+Two TICKET-010 follow-ups recorded in `todo.md`:
+
+1. **testData seed-commit needs an active EntityManager.** `TestDataHandler.seedAll` calls `DbSeed.forPersistenceUnit(name)` which routes through `PersistenceUnitConnectionResolver.connectionFor(name)`. The default jpa-module impl needs an active EM on the calling thread, but jpa-module's lifecycle adapter only pushes an EM in `beforeEach` for `@Transactional` test methods at `@Priority(200)` — strictly AFTER testcontrol's `@Priority(50)` seedAll. So testcontrol's seed sees no active EM and fails. Three potential fixes captured in todo.md.
+
+2. **BeforeScopeStarted veto is currently advisory.** scope-module's `ScopeLifecycleAdapter` fires the event but activates the context unconditionally regardless of `event.isVetoed()`; the scope-module doc explicitly defers "usage-veto semantics" to a follow-up ticket. Also: scope-module never fires `BeforeScopeStarted` for `@TestClassScoped`. testcontrol's `TestControlScopeObserver` correctly emits `veto()` per `startScopes` but the veto has no effect on scope activation today.
+
+Both findings keep the testcontrol-module impl itself sound — the SPI calls, the CDI extension, and the lifecycle adapter all do what TICKET-010 specifies. The gaps are at the boundaries with jpa-module and scope-module, which is what the dependency declarations in TICKET-010 implicitly required but which the depended-on modules don't yet fully provide.

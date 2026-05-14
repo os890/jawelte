@@ -1871,6 +1871,11 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-23-configbean-with-explicit-scope-not-remapped</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-testcontrol-module-scenario-24-testcontrol-inherited-from-superclass-method</artifactId>
             <version>${project.version}</version>
         </dependency>

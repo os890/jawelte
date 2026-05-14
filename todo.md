@@ -87,3 +87,38 @@ The fix is in place (commits `270f7f3` → `377e895` → `1861487`) and `verify-
 - Note for architecture.md / mission.md: the auto-mock framework-internal-bean filter follows the established `FrameworkAllowlist` pattern — `META-INF/microprofile-config.properties` defaults read through the active `ConfigResolver`, no Java constants on the consuming class. Worth a sentence under the cdi-module section if we want this documented for downstream readers.
 
 Decide later whether any/all of the three are worth doing.
+
+## TICKET-010 follow-ups (post-implementation findings)
+
+### Test-data pipeline seed-commit needs an active EntityManager
+
+`TestDataHandler.seedAll(...)` runs in testcontrol-module's `beforeEach` at `@Priority(50)`. It calls `DbSeed.forPersistenceUnit(name)…` which delegates to `PersistenceUnitConnectionResolver.connectionFor(name)`. The default jpa-module impl (`DefaultPersistenceUnitConnectionResolver`) requires an active `EntityManager` for the named PU on the calling thread:
+
+```java
+public Connection connectionFor(String persistenceUnitName) {
+    EntityManager entityManager = …pop from active stack…;
+    Session session = entityManager.unwrap(Session.class);
+    return session.doReturningWork(connection -> connection);
+}
+```
+
+jpa-module's lifecycle adapter pushes an EM onto the active stack only inside `beginTransactionForTransactionalTestMethod` — which runs at `@Priority(200)`, AFTER testcontrol's `@Priority(50)`. So when testcontrol's seedAll asks for a connection, no EM is active and the resolver fails.
+
+Paths forward:
+- (a) Extend jpa-module to push an EM in `beforeEach` regardless of `@Transactional` (broad change).
+- (b) Have testcontrol obtain a connection by another route (e.g. open one from the EMF directly, then commit/close itself).
+- (c) Delay testcontrol's seed phase to run inside the transactional method via an interceptor or wrapper.
+
+Until one of these is settled, the DB-driven scenarios (1–10, 16–20) cannot be expected to pass even after they are written.
+
+### `BeforeScopeStarted` veto is currently advisory
+
+scope-module's `ScopeLifecycleAdapter` fires `BeforeScopeStarted(TestMethodScoped.class)` and then activates the context unconditionally regardless of `event.isVetoed()` — the scope-module adapter docstring acknowledges: *"the 'usage-veto' semantics — telling consumers to skip use of @TestMethodScoped beans for a given method — are deferred to a follow-up ticket."*
+
+Also: scope-module never fires `BeforeScopeStarted` for `@TestClassScoped`; that scope is added at `AfterBeanDiscovery` and remains active for the whole test class. So vetoing `@TestClassScoped` per method is not currently expressible.
+
+Effect on TICKET-010: testcontrol's `TestControlScopeObserver` correctly emits `event.veto()` per the `@TestControl.startScopes` allow-list, but scope-module ignores the veto. The scope-filter affirmative scenarios (11, 13, 14, 15) cannot be expected to pass until scope-module is updated.
+
+Paths forward:
+- Update `ScopeLifecycleAdapter.beforeEach` to call `methodContext.activate()` only when `!event.isVetoed()`. Mirror change for any scope-module `BeforeScopeStarted` emission.
+- Fire `BeforeScopeStarted(TestClassScoped.class)` in `beforeAll` and gate `TestClassScopedContext` activation on its veto status.
