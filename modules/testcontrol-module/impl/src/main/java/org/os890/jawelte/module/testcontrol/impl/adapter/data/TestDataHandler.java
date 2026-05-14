@@ -87,14 +87,14 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  *   <li>{@link #onAfterTestTransaction(AfterTestTransaction)} —
  *       fired by jpa-module's adapter at {@code @Priority(200)}
  *       inside its {@code afterEach}, after the transaction has been
- *       committed or rolled back and before JPA table cleanup. When
- *       this observer runs it marks {@link VerificationCompleted}
- *       on the active {@link TestContext} so the adapter's own
- *       afterEach fallback does not double-verify.</li>
- *   <li>{@link #verifyAll(TestControl, TestContext)} — invoked from
- *       the lifecycle adapter's {@code afterEach} as the
- *       non-transactional fallback, but ONLY when the marker above
- *       is absent.</li>
+ *       committed or rolled back and before JPA table cleanup. The
+ *       observer dispatches to {@link #verifyAll()} and the handler
+ *       sets {@link #didAlreadyVerify()} so the lifecycle adapter's
+ *       {@code afterEach} fallback skips the second call.</li>
+ *   <li>{@link #verifyAll()} — invoked from the lifecycle adapter's
+ *       {@code afterEach} as the non-transactional fallback, but
+ *       only when {@link #didAlreadyVerify()} is still
+ *       {@code false}.</li>
  * </ul>
  *
  * <p><b>Folder enumeration.</b> Resolves each entry's classpath
@@ -134,13 +134,22 @@ public class TestDataHandler {
     private static final String DB_EXPECTED = "dbExpected";
     private static final String XML_SUFFIX = ".xml";
 
+    private volatile TestControl activeAnnotation;
+    private volatile boolean verifiedThisMethod;
+
     /** No-arg constructor required by the CDI runtime. */
     public TestDataHandler() {
     }
 
     /**
      * Drive the seed and update phases inside one transaction per
-     * distinct persistence unit, then return. No-op when
+     * distinct persistence unit. Stores {@code annotation} on the
+     * handler so the {@link AfterTestTransaction} observer can drive
+     * the verify phase without re-resolving the annotation through
+     * {@code TestContext} (which is not available in observer
+     * dispatch — {@code TestContext.get()} throws once
+     * {@code DelegatingJUnitExtension.beforeAll}'s {@code finally}
+     * has cleared the per-thread accessor). No-op when
      * {@code testData} is empty.
      *
      * @param annotation  the active {@code @TestControl} on the test
@@ -150,6 +159,8 @@ public class TestDataHandler {
      *                                  not on the classpath
      */
     public void seedAll(TestControl annotation, TestContext testContext) {
+        this.activeAnnotation = annotation;
+        this.verifiedThisMethod = false;
         if (annotation == null || annotation.testData().length == 0) {
             return;
         }
@@ -163,40 +174,71 @@ public class TestDataHandler {
     }
 
     /**
-     * Drive the verify phase ({@code dbExpected/}). Both the
-     * transactional observer path and the non-transactional fallback
-     * land here.
-     *
-     * @param annotation  the active {@code @TestControl} on the test
-     *                    method
-     * @param testContext the active {@link TestContext}
+     * Drive the verify phase ({@code dbExpected/}) against the
+     * annotation cached in {@link #seedAll(TestControl, TestContext)}.
+     * Both the transactional observer path and the non-transactional
+     * fallback land here. Sets {@link #verifiedThisMethod} so the
+     * lifecycle adapter's {@code afterEach} can decide whether the
+     * fallback is needed.
      */
-    public void verifyAll(TestControl annotation, TestContext testContext) {
+    public void verifyAll() {
+        TestControl annotation = activeAnnotation;
         if (annotation == null || annotation.testData().length == 0) {
             return;
         }
-        List<EntrySpec> entries = parseEntries(annotation);
-        validateBaseFolders(entries);
+        try {
+            List<EntrySpec> entries = parseEntries(annotation);
+            validateBaseFolders(entries);
+            TestDataSeedTransactionTemplate template =
+                    CDI.current().select(TestDataSeedTransactionTemplate.class).get();
+            Set<String> distinctPuKeys = new LinkedHashSet<>();
+            for (EntrySpec entry : entries) {
+                distinctPuKeys.add(puKey(entry));
+            }
+            for (String puKey : distinctPuKeys) {
+                String puName = puKey.isEmpty() ? null : puKey;
+                template.runInTransaction(puName, () -> verifyEntriesForPu(entries, puKey));
+            }
+        } finally {
+            this.verifiedThisMethod = true;
+        }
+    }
+
+    private void verifyEntriesForPu(List<EntrySpec> entries, String puKey) {
         for (EntrySpec entry : entries) {
+            if (!puKey(entry).equals(puKey)) {
+                continue;
+            }
             for (String xml : listXmlResources(entry.folderPath() + "/" + DB_EXPECTED)) {
                 diffBuilder(entry).expected(xml).assertEquals();
             }
         }
     }
 
+    /**
+     * Whether {@link #verifyAll()} has already run for the current
+     * test method.
+     *
+     * @return {@code true} if {@code verifyAll} already executed
+     *         (so the lifecycle adapter skips the {@code afterEach}
+     *         fallback); {@code false} otherwise
+     */
+    public boolean didAlreadyVerify() {
+        return verifiedThisMethod;
+    }
+
+    /**
+     * Reset per-method state. Called from the lifecycle adapter's
+     * {@code afterEach} so the next test method starts with a clean
+     * slate even though this handler is {@code @ApplicationScoped}.
+     */
+    public void clearActive() {
+        this.activeAnnotation = null;
+        this.verifiedThisMethod = false;
+    }
+
     void onAfterTestTransaction(@Observes AfterTestTransaction event) {
-        TestContext active;
-        try {
-            active = TestContext.get();
-        } catch (IllegalStateException noActiveContext) {
-            return;
-        }
-        Optional<TestControl> annotation = active.getMetadata(TestControl.class);
-        try {
-            annotation.ifPresent(value -> verifyAll(value, active));
-        } finally {
-            active.bindMetadata(VerificationCompleted.class, VerificationCompleted.INSTANCE);
-        }
+        verifyAll();
     }
 
     private void runPhase(List<EntrySpec> entries, String subDir,

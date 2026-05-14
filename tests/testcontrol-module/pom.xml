@@ -34,6 +34,8 @@
     <description>Aggregator AND parent for the per-scenario test modules covering jawelte-testcontrol-module. Each scenario boots a CDI container (via cdi-module + scope-module) so testcontrol's lifecycle adapter, CDI Extension, scope observer, and data handler run end-to-end. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld). DB-driven scenarios additionally pull jpa-module + db-testdata-module + H2 in their own poms.</description>
 
     <modules>
+        <module>scenario-01-testdata-dbin-seeds-rows</module>
+        <module>scenario-02-testdata-dbexpected-transactional</module>
         <module>scenario-07-empty-testdata-no-op</module>
         <module>scenario-12-scope-filter-empty-allows-all</module>
         <module>scenario-21-configbean-remapped-to-testclass</module>

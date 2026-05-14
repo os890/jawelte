@@ -3252,3 +3252,30 @@ Per-method state contract is unchanged: the `TestControl` and `VerificationCompl
 Phase 9 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green; `mvn verify` on `tests/testcontrol-module` green under both `-Powb` and `-Pweld`. The existing 7 scenarios all have empty `testData`, so they don't exercise the new seed path but they confirm no regression in the scope-veto / @ConfigBean-remap / inheritance / no-op-when-absent code paths.
 
 The TICKET-010 spec section "Seed Commit" still describes the old raw-JDBC mechanism; spec rewrite is the next step (separate commit) so the issue body and the file stay in sync.
+
+## 2026-05-14 — TICKET-010 Phase 10: scenarios 01+02 (DB-driven), refactor TestDataHandler state to handler-side fields (TestContext post-bootstrap fix), drop VerificationCompleted
+
+Two new DB-driven scenarios that prove the Phase 9 seed-commit pipeline actually works end-to-end:
+
+- **scenario-01-testdata-dbin-seeds-rows** — happy-path. `dbIn/customers.xml` seeds 2 CUSTOMER rows; the `@Transactional` service injected into the test class counts them and asserts 2.
+- **scenario-02-testdata-dbexpected-transactional** — transactional verify path. `dbIn/customers.xml` seeds Alice + Bob; the test method itself carries `@Transactional` so jpa-module begins a tx, the test renames Bob → Robert, jpa-module fires `AfterTestTransaction` on commit, and `TestDataHandler.onAfterTestTransaction` runs `DbDiff.assertEquals` against `dbExpected/customers.xml` (Alice + Robert).
+
+Implementing scenario-02 surfaced a real bug in the prior `TestDataHandler` design: the `onAfterTestTransaction` observer called `TestContext.get()` to read the active `@TestControl` and to bind a `VerificationCompleted` marker — but `TestContext.get()` is unavailable in the observer-dispatch window (DelegatingJUnitExtension's `beforeAll finally` calls `testContext.reset()` to clear the per-thread accessor; everything post-beforeAll has no current TestContext). The observer silently caught the `IllegalStateException` and returned without verifying, so the adapter's `afterEach` fallback fired, which then itself failed because by then jpa-module's transaction had been committed and the EM was popped — `DbDiff.forPersistenceUnit()` couldn't resolve a connection.
+
+Refactor: moved the per-method state from `TestContext` metadata onto the `@ApplicationScoped` `TestDataHandler` itself as `volatile TestControl activeAnnotation` + `volatile boolean verifiedThisMethod`. The lifecycle adapter writes these in `beforeEach` via `handler.seedAll(annotation, testContext)` (sets `activeAnnotation`); the observer reads them via `handler.verifyAll()` (no args). Same state-holding-CDI-bean pattern db-testdata-module already uses for `PersistenceUnitNameSupplier`. Dropped the `VerificationCompleted` marker entirely; the adapter now consults `handler.didAlreadyVerify()` and calls `handler.clearActive()` at end of `afterEach` so the next test method starts with a clean slate.
+
+Second issue surfaced: the observer's `verifyAll()` still failed because `DbDiff.forPersistenceUnit()` needs an active EM at call time, and by the time `AfterTestTransaction` fires jpa-module has already popped the EM from its active-PU stack. Fix: wrapped `verifyAll`'s per-PU loop in the same `TestDataSeedTransactionTemplate.runInTransaction(...)` the seed path uses. Each verify call now opens its own short-lived transaction, the template's CDI EM lookup populates the active-PU stack, `DbDiff.assertEquals()` resolves a connection, the read-only transaction commits on lambda return.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataHandler.java` — added `volatile activeAnnotation` + `volatile verifiedThisMethod`; rewrote `seedAll` to set the state; rewrote `verifyAll` to no-args reading from `activeAnnotation`, wrapped in the transaction template; added `didAlreadyVerify()` + `clearActive()`. Class-level javadoc updated.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` — `afterEach` now checks `handler.didAlreadyVerify()` instead of TestContext metadata; calls `handler.clearActive()` at end. `VerificationCompleted` import dropped; javadoc updated.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/VerificationCompleted.java` — DELETED. Replaced by the handler-side `verifiedThisMethod` flag.
+- `tests/testcontrol-module/scenario-01-testdata-dbin-seeds-rows/` — new scenario (pom, persistence.xml, beans.xml, Customer entity, dbIn/customers.xml, count service, test class).
+- `tests/testcontrol-module/scenario-02-testdata-dbexpected-transactional/` — new scenario (pom, persistence.xml, beans.xml, Customer entity, dbIn/customers.xml, dbExpected/customers.xml, test class with @Transactional method that renames Bob to Robert).
+- `tests/testcontrol-module/pom.xml` — added scenarios 01 and 02 to `<modules>`.
+- `coverage-report/pom.xml` — added the two new scenario modules to `<dependencies>` for jacoco's report-aggregate.
+
+Both new scenarios are also under -Pweld. 9 scenarios × 2 CDI runtimes = 18 test runs all green (~10s OWB, ~11s Weld). Phase 9's `TestDataSeedTransactionTemplate` is now actually exercised by tests — what landed in Phase 9 was untested-and-broken; it took two fixes (the handler state refactor + the verify-side transaction wrap) before scenario-02 went green.
+
+Still TODO: spec rewrite at `tickets/010-testcontrol-module.md` so the Seed Commit section matches Phase 9 reality; issue #20 body sync from the updated ticket file.

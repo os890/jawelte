@@ -33,7 +33,6 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 import org.os890.jawelte.module.testcontrol.impl.adapter.data.TestDataHandler;
-import org.os890.jawelte.module.testcontrol.impl.adapter.data.VerificationCompleted;
 import org.os890.jawelte.module.testcontrol.impl.adapter.observer.TestControlScopeObserver;
 
 /**
@@ -51,13 +50,17 @@ import org.os890.jawelte.module.testcontrol.impl.adapter.observer.TestControlSco
  *       scope-module's adapter fires its {@code BeforeScopeStarted}
  *       events.</li>
  *   <li>Drive the test-data pipeline through {@link TestDataHandler}:
- *       phases 1–3 ({@code dbIn/}, {@code dbUpdate/}, raw-JDBC seed
- *       commit) in {@code beforeEach}; the {@code dbExpected/}
- *       fallback in {@code afterEach} — only when the
- *       {@link VerificationCompleted} marker has not been bound on
- *       {@code TestContext} (which would mean the transactional path
- *       has already verified through
- *       {@link TestDataHandler#onAfterTestTransaction}).</li>
+ *       phases 1–3 ({@code dbIn/} + {@code dbUpdate/} inside a
+ *       {@code @Transactional} template, commit on lambda return)
+ *       in {@code beforeEach}; the {@code dbExpected/} fallback in
+ *       {@code afterEach} — only when
+ *       {@link TestDataHandler#didAlreadyVerify()} is still
+ *       {@code false} (otherwise the transactional path already
+ *       verified through
+ *       {@link TestDataHandler#onAfterTestTransaction}). The
+ *       adapter always calls {@link TestDataHandler#clearActive()}
+ *       after the fallback decision so the next test method starts
+ *       with a clean handler state.</li>
  * </ol>
  *
  * <p><b>Priority.</b> {@code @Priority(50)} — lowest among jawelte's
@@ -80,9 +83,11 @@ import org.os890.jawelte.module.testcontrol.impl.adapter.observer.TestControlSco
  * {@link TestControl}.
  *
  * <p><b>State.</b> Stateless — no instance fields. Per-method state
- * lives on {@link TestContext} ({@code TestControl} and
- * {@code VerificationCompleted} metadata keys) and on the observer /
- * handler beans' own state.
+ * lives on {@link TestContext} (the {@code TestControl} metadata
+ * key, unbound in {@code afterEach}) and on the observer / handler
+ * beans' own volatile state (the handler's {@code activeAnnotation}
+ * and {@code verifiedThisMethod} flags, cleared by
+ * {@link TestDataHandler#clearActive()}).
  */
 @Priority(50)
 public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
@@ -117,18 +122,16 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
     public void afterEach(TestContext testContext) {
         try {
             Optional<TestControl> annotation = testContext.getMetadata(TestControl.class);
-            boolean transactionalPathRan =
-                    testContext.getMetadata(VerificationCompleted.class).isPresent();
-            if (!transactionalPathRan
-                    && annotation.isPresent()
-                    && annotation.get().testData().length > 0) {
+            if (annotation.isPresent() && annotation.get().testData().length > 0) {
                 TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
                 if (handler != null) {
-                    handler.verifyAll(annotation.get(), testContext);
+                    if (!handler.didAlreadyVerify()) {
+                        handler.verifyAll();
+                    }
+                    handler.clearActive();
                 }
             }
         } finally {
-            testContext.unbindMetadata(VerificationCompleted.class);
             testContext.unbindMetadata(TestControl.class);
         }
     }

@@ -1851,6 +1851,16 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-01-testdata-dbin-seeds-rows</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-02-testdata-dbexpected-transactional</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-testcontrol-module-scenario-07-empty-testdata-no-op</artifactId>
             <version>${project.version}</version>
         </dependency>
