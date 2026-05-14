@@ -3618,3 +3618,48 @@ Enforcer all green, javadoc jars built.
 Commit: UNTESTED: TICKET-011 Phase 3 — impl types
 (JaxRsLifecycleAdapter, JaxRsCdiExtension, TestUrlHolder,
 CdiIntegrationFilter) + META-INF wiring.
+
+## 2026-05-14 — TICKET-011 Phase 4 (tests aggregator + provider deps)
+
+Scaffolded the tests aggregator and pinned the CXF / RESTEasy
+artifact GAVs so per-scenario poms can pull them via profile only
+(scope inherited from depMgmt).
+
+- **`pom.xml`** — added `<dependencyManagement>` entries for
+  the four JAX-RS provider artifacts. All `test`-scope, version
+  pinned via `${cxf.version}` and `${resteasy.version}`:
+  - `org.apache.cxf:cxf-rt-frontend-jaxrs` (CXF JAX-RS frontend
+    with `RuntimeDelegate` and `SeBootstrap.Instance`)
+  - `org.apache.cxf:cxf-rt-transports-http-jetty` (CXF embedded
+    HTTP transport — Jetty)
+  - `org.jboss.resteasy:resteasy-core` (RESTEasy
+    `RuntimeDelegate` + `SeBootstrap.Instance`)
+  - `org.jboss.resteasy:resteasy-undertow` (RESTEasy embedded
+    HTTP transport — Undertow)
+- **`tests/pom.xml`** — appended `<module>jaxrs-module</module>`
+  to the tests aggregator's `<modules>` list.
+- **`tests/jaxrs-module/pom.xml`** — new aggregator AND parent
+  pom for the per-scenario test modules. `<modules>` is empty
+  for now (scenarios land in subsequent phases). The shared
+  `<dependencies>` block carries the dep shape every scenario
+  needs: `core-api/impl`, `cdi-module-api/impl`,
+  `scope-module-api/impl`, `jaxrs-module-api/impl`,
+  `content-diff-module-api/impl`, the jakarta CDI / annotation /
+  inject / ws.rs APIs, MP Config + SmallRye Config, Mockito,
+  JUnit Jupiter + Platform TestKit, AssertJ. Four orthogonal
+  `<profiles>` — `owb` (default) + `weld` for the CDI runtime,
+  and `cxf` (default) + `resteasy` for the JAX-RS provider —
+  so any combination (`./mvnw test -pl tests/jaxrs-module
+  -Pweld,resteasy`) selects exactly the corresponding pair
+  on the test classpath.
+
+`./mvnw validate`: the new aggregator appears in the reactor
+between `tests/testcontrol-module` and `coverage-report`; all 13
+reactor modules still validate green.
+
+No scenarios yet; the next phase adds the first cluster of
+scenarios (server boot + GET/POST + CDI injection — scenarios
+1–4).
+
+Commit: UNTESTED: TICKET-011 Phase 4 — tests aggregator +
+CXF/RESTEasy provider artifacts in depMgmt.

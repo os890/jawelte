@@ -579,6 +579,41 @@
             </dependency>
 
             <!--
+                JAX-RS SeBootstrap implementations. test-scope by default:
+                jaxrs-module's two Maven profiles (-Pcxf default,
+                -Presteasy switch) add exactly one of these stacks to
+                the active test classpath so each provider's
+                RuntimeDelegate / SeBootstrap.Instance path can be
+                exercised in isolation, mirroring the -Powb / -Pweld
+                selection for the CDI SE runtime. Production consumers
+                ship their own JAX-RS provider.
+            -->
+            <dependency>
+                <groupId>org.apache.cxf</groupId>
+                <artifactId>cxf-rt-frontend-jaxrs</artifactId>
+                <version>${cxf.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.cxf</groupId>
+                <artifactId>cxf-rt-transports-http-jetty</artifactId>
+                <version>${cxf.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.resteasy</groupId>
+                <artifactId>resteasy-core</artifactId>
+                <version>${resteasy.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.resteasy</groupId>
+                <artifactId>resteasy-undertow</artifactId>
+                <version>${resteasy.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!--
                 opentest4j ships TestAbortedException — used by
                 jpa-module/impl to skip subsequent test methods in
                 @PersistenceConfig(fileMode=true). provided scope
