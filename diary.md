@@ -3126,3 +3126,19 @@ Added the impl submodule with the CDI Extension that performs the unconditional 
 First build attempt failed Checkstyle with "Classes must not be declared final (CDI proxy compatibility)" on the inner `TestClassScopedLiteral`. The rule applies blanketly across all classes; the literal isn't a CDI bean but the regex doesn't know that. Dropped `final` from the inner class declaration — the class is still effectively final because it's `private static`.
 
 Phase 2 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green in 3 seconds (incremental). Full quality gates pass: Checkstyle, Enforcer, RAT, JaCoCo, Javadoc. Behavioural validation (the remap actually fires at runtime) deferred to Phase 6's scenarios 21–23.
+
+## 2026-05-14 — TICKET-010 Phase 3: TestControlLifecycleAdapter skeleton
+
+Added the `TestModuleLifecyclePort` adapter at `@Priority(50)` — the lowest among jawelte's lifecycle adapters, so it runs first in `before*` and last in `after*`. Phase 3 responsibility is narrow on purpose: resolve the active test method's `@TestControl` and publish it on `TestContext` so the Phase 4 / Phase 5 observers can find it without re-walking JUnit's reflection layer per CDI event.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` — `beforeEach`: reads the JUnit per-method `ExtensionContext` (bound on `TestContext` under the `ExtensionContext.class` key by core/impl's `DelegatingJUnitExtension`), pulls the active test method, and calls `AnnotationSupport.findAnnotation(method, TestControl.class)` — which performs the class-hierarchy walk that gives `@TestControl` its inheritance semantics. If a `@TestControl` is found, the adapter `bindMetadata(TestControl.class, annotation)` on `TestContext`. `afterEach`: `unbindMetadata(TestControl.class)` — unconditional so stale annotations cannot leak into the next test method (the unbind is a safe no-op when the key isn't bound).
+- `modules/testcontrol-module/impl/src/main/resources/META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort` — single-line FQN registration.
+- `modules/testcontrol-module/impl/pom.xml` — added `junit-jupiter-api` dependency (provided scope inherited from the parent's `dependencyManagement`); the impl pulls in `ExtensionContext` and `AnnotationSupport`.
+
+The adapter does NOT yet call `TestControlScopeObserver#configureAllowedScopes(Set)` (Phase 4 adds that observer and the wiring) and does NOT yet drive `TestDataHandler.seedAll(...)` or run the non-transactional `dbExpected/` fallback (Phase 5 adds those). The early publication of the resolved `@TestControl` on `TestContext` is the seam those later observers consume.
+
+First build failed Checkstyle's `ImportOrder` with "extra separation in import group" — I had a blank line between `org.junit.*` and `org.os890.*`, but the project convention groups all `org.*` imports without an inner blank line. Merged the two blocks.
+
+Phase 3 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green in 3 seconds (incremental). Behavioural verification (the adapter publishes the right `@TestControl` and unbinds it cleanly) deferred to the Phase 7 scenarios.

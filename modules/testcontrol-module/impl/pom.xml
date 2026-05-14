@@ -69,6 +69,21 @@
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
         </dependency>
+
+        <!--
+            junit-jupiter-api supplies ExtensionContext (read off
+            TestContext under the ExtensionContext.class key bound by
+            core/impl's DelegatingJUnitExtension) and the
+            AnnotationSupport.findAnnotation helper used to resolve
+            @TestControl on the active test method with JUnit Jupiter's
+            class-hierarchy walk semantics. provided scope (inherited
+            from the parent's dependencyManagement) — consumers bring
+            their own JUnit version.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
