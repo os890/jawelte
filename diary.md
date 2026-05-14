@@ -3963,3 +3963,57 @@ Status: **14 of 17 scenarios passing.** Deferred:
 
 Commit: UNTESTED: TICKET-011 Phase 9 — scenarios 12, 15-17;
 EnableJaxRs.Validator + @Dependent class-registration routing.
+
+## 2026-05-14 — TICKET-011 Phase 10 (arch.md fix + coverage-report wiring + WORKING)
+
+Final wrap-up: doc-sanity fix that was deferred from Phase 3 to
+this branch (per user's choice), coverage-report wiring for the
+new module, and a full `./mvnw verify` to flip the tip-of-branch
+prefix from `UNTESTED:` to `WORKING:`.
+
+- **`architecture.md`** — two edits:
+  1. Integrations table row renamed from `jawelte-jaxrs` to
+     `jawelte-jaxrs-module` and the Technology column from
+     `JAX-RS` to `Jakarta REST` (matches the established
+     `-module` suffix on the other landed rows + the actual
+     module name).
+  2. "Planned (forward-looking, not yet shipped)" line drops
+     `JaxRsContainerPort` — TICKET-011 contributes no new SPI
+     port; jaxrs-module hooks the existing
+     `TestModuleLifecyclePort` like every other module.
+- **`coverage-report/pom.xml`** — adds
+  `jawelte-jaxrs-module-api`, `jawelte-jaxrs-module-impl`, and
+  all 14 scenario sub-modules as dependencies so their
+  `jacoco.exec` data feeds `report-aggregate`.
+
+`./mvnw verify` end-to-end: BUILD SUCCESS in ~8:31 min. All 14
+jaxrs scenarios + every existing scenario from prior tickets
+pass; Checkstyle / Javadoc-strict / RAT / Enforcer / JaCoCo
+gates all green.
+
+Coverage snapshot (jacoco-aggregate/jacoco.csv, jaxrs rows):
+
+| Class                                 | Lines covered / total |
+|---------------------------------------|-----------------------|
+| EnableJaxRs.Validator                 | 8/9   (89%)           |
+| ResponseDiff                          | 5/6   (83%)           |
+| TestUrlHolder                         | 10/10 (100%)          |
+| JaxRsLifecycleAdapter                 | 54/75  (72%)          |
+| JaxRsLifecycleAdapter.TestApplication | 6/6   (100%)          |
+| CdiIntegrationFilter                  | 13/13 (100%)          |
+| JaxRsCdiExtension                     | 15/20 (75%)           |
+| TestMethodScopedLiteral               | 2/2   (100%)          |
+| TestClassScopedLiteral                | 0/2   (0%) — only fires when testcontrol-module is on the classpath; not exercised in jaxrs's own scenarios |
+
+The uncovered branches in `JaxRsLifecycleAdapter` are the error
+paths around server start/stop failure (timeouts, interruptions,
+the `IllegalStateException` mapping for the missing-impl probe).
+Those are reachable only by scenarios 10/13/14, all of which are
+deferred.
+
+Status: **14 of 17 scenarios green; full reactor verifies green
+end-to-end; 3 scenarios deferred with clear rationale**. Ready
+for review.
+
+Commit: WORKING: TICKET-011 Phase 10 — architecture.md fix +
+coverage-report wiring (full ./mvnw verify green).
