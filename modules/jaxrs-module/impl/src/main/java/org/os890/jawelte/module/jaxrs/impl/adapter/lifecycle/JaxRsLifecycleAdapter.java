@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import jakarta.annotation.Priority;
+import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.ws.rs.SeBootstrap;
 import jakarta.ws.rs.core.Application;
@@ -143,17 +144,32 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
 
         Set<Object> singletons = new LinkedHashSet<>();
         for (Class<?> resourceClass : annotation.restResources()) {
-            if (resourceClass.isAnnotationPresent(Provider.class)) {
-                // @Provider — register as a class so JAX-RS sees @Provider
-                // on the registered Class<?> directly (CDI normal-scope
-                // client-proxy classes don't carry their bean class's
-                // annotations on the proxy type itself, which makes
-                // JAX-RS skip the provider detection on a CDI-resolved
-                // singleton). The trade-off: a provider registered this
-                // way is instantiated by the JAX-RS runtime, not CDI,
-                // so @Inject inside the provider is not satisfied.
-                // Typical stateless providers (ExceptionMappers,
-                // message body readers/writers) work fine.
+            if (resourceClass.isAnnotationPresent(Provider.class)
+                    || resourceClass.isAnnotationPresent(Dependent.class)) {
+                // Two cases register as Class<?> instead of via
+                // CDI-resolved singleton:
+                //
+                // - @Provider: CDI normal-scope client-proxy classes
+                //   don't carry the bean class's annotations on the
+                //   proxy type itself, so a CDI-resolved singleton
+                //   is invisible as a JAX-RS provider. Registering
+                //   the class directly lets JAX-RS see @Provider
+                //   and integrate the type as ExceptionMapper /
+                //   MessageBodyReader / filter / etc.
+                //
+                // - @Dependent: CDI.current().select(class).get()
+                //   returns one fresh instance per call. Registering
+                //   a singleton would fix that instance for the whole
+                //   server lifetime, breaking the "new instance per
+                //   request" expectation of JAX-RS's default
+                //   resource-instance lifecycle (which is what users
+                //   reach for when they write @Dependent on a resource).
+                //
+                // Trade-off in both cases: the resource/provider is
+                // instantiated by the JAX-RS runtime, not by CDI, so
+                // @Inject inside it is NOT satisfied. Typical
+                // stateless ExceptionMappers and per-request
+                // @Dependent resources don't need that.
                 classes.add(resourceClass);
             } else {
                 singletons.add(CDI.current().select(resourceClass).get());

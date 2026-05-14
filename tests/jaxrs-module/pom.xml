@@ -53,6 +53,10 @@
             observer) before re-enabling.
         -->
         <module>scenario-11-exception-mapper</module>
+        <module>scenario-12-enable-jaxrs-without-enable-test-beans-fails</module>
+        <module>scenario-15-test-url-called-before-server-start</module>
+        <module>scenario-16-session-scoped-remap-is-global</module>
+        <module>scenario-17-dependent-resource-per-request</module>
     </modules>
 
     <dependencies>

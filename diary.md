@@ -3873,3 +3873,93 @@ all 10 scenarios green (regression-free under
 Commit: UNTESTED: TICKET-011 Phase 8 — scenarios 9 & 11; route
 @Provider classes by-class to fix ExceptionMapper detection;
 scenario 10 deferred to a follow-up.
+
+## 2026-05-14 — TICKET-011 Phase 9 (scenarios 12, 15-17 + EnableJaxRs.Validator + @Dependent routing)
+
+Four new green scenarios plus two impl additions to support them.
+
+**Impl additions:**
+
+- `EnableJaxRs.Validator` — new inner class of
+  `@EnableJaxRs` that implements `BeforeAllCallback`. Wired via
+  `@ExtendWith(EnableJaxRs.Validator.class)` on the annotation
+  itself. Fires in `beforeAll` independently of jawelte's
+  lifecycle-adapter chain — even if the test class doesn't
+  carry `@EnableTestBeans`. Detects "`@EnableJaxRs` without
+  `@EnableTestBeans`" and raises the documented
+  `IllegalStateException("@EnableJaxRs requires
+  @EnableTestBeans on the test class: {className}")`.
+  Adds `junit-jupiter-api` as a provided dep on
+  `jaxrs-module/api` (mirroring `core/api`'s pattern for the
+  `EnableTestBeans.Proxy`).
+- `JaxRsLifecycleAdapter` — `@Dependent`-annotated
+  `restResources` now route through the same
+  register-as-class path as `@Provider` classes. Reason:
+  `CDI.current().select(class).get()` for `@Dependent` returns
+  a single fresh instance — registering it as a singleton
+  would freeze that instance for the server lifetime, breaking
+  the "per HTTP request" semantics users expect from
+  `@Dependent` on a resource. Trade-off: register-as-class
+  resources don't get CDI injection on the resource itself.
+  Two scopes route differently:
+  - `@ApplicationScoped`, `@RequestScoped`,
+    `@TestMethodScoped`, `@TestClassScoped` → CDI-resolved
+    singleton (existing path; CDI proxies handle per-context
+    delegation).
+  - `@Dependent`, `@Provider` → registered as Class<?>;
+    JAX-RS instantiates per dispatch.
+
+**Scenarios:**
+
+- **12** (`scenario-12-enable-jaxrs-without-enable-test-beans-fails`)
+  — `Scenario12Subject` carries `@EnableJaxRs` but no
+  `@EnableTestBeans`. `Scenario12Test` runs the subject through
+  `EngineTestKit` and asserts the container-level FAILED event
+  surfaces `IllegalStateException` whose message contains
+  `"@EnableJaxRs requires @EnableTestBeans"`. The failure is a
+  CONTAINER event (not TEST) because it originates in
+  `beforeAll` — the test method never runs.
+- **15** (`scenario-15-test-url-called-before-server-start`) —
+  test class has `@EnableTestBeans` but NOT `@EnableJaxRs`. The
+  CDI container is up so `TestUrl` is injectable, but the
+  lifecycle adapter never boots the server →
+  `TestUrlHolder.baseUrl` stays `null`. Calling
+  `testUrl.get()` raises
+  `IllegalStateException("JAX-RS server not started yet")` —
+  the documented "called too early" contract.
+- **16** (`scenario-16-session-scoped-remap-is-global`) —
+  test class has `@EnableTestBeans`, no `@EnableJaxRs`. A
+  `@SessionScoped` counter bean is rewritten to
+  `@TestMethodScoped` by `JaxRsCdiExtension` (registered via
+  `META-INF/services`, fires on every CDI bootstrap regardless
+  of resource registration). Method 1 increments 1→2 (same
+  instance); method 2 resets to 1 — proves the remap is
+  global, not gated on a running server.
+- **17** (`scenario-17-dependent-resource-per-request`) —
+  `@Dependent`-scoped resource registered via
+  `restResources`. Two HTTP GETs report distinct
+  `System.identityHashCode` values, confirming the
+  register-as-class routing yields JAX-RS's default per-request
+  resource lifecycle.
+
+Initial Checkstyle run flagged `public` on the
+`EnableJaxRs.Validator` constructor as redundant (members of a
+class nested in an annotation type are implicitly public,
+matching the `EnableTestBeans.Proxy` pattern). Fixed by
+dropping the modifier.
+
+`./mvnw -pl tests/jaxrs-module/scenario-1{2,5,6,7}-* test -am`:
+all four green; re-running scenarios 1-9 + 11 after the impl
+changes — no regressions.
+
+Status: **14 of 17 scenarios passing.** Deferred:
+- Scenario 10 (`server-stops-after-test-class`) — timing-sensitive
+  against Jetty stop, needs a deterministic mechanism.
+- Scenario 13 (`missing-SeBootstrap-impl`) — requires
+  per-scenario classpath manipulation to exclude both providers.
+- Scenario 14 (`RESTEasy-provider-selection`) — requires
+  `-Presteasy` build to exercise the alternative provider; the
+  scenario module would need profile-conditional activation.
+
+Commit: UNTESTED: TICKET-011 Phase 9 — scenarios 12, 15-17;
+EnableJaxRs.Validator + @Dependent class-registration routing.

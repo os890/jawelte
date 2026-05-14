@@ -20,6 +20,11 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.junit.jupiter.api.extension.BeforeAllCallback;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.os890.jawelte.core.api.EnableTestBeans;
+
 /**
  * Activates jawelte's embedded Jakarta REST 4.0 server support for a
  * test class. Must be combined with
@@ -47,6 +52,7 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
+@ExtendWith(EnableJaxRs.Validator.class)
 public @interface EnableJaxRs {
 
     /**
@@ -80,4 +86,44 @@ public @interface EnableJaxRs {
      *         (the compiler enforces the absence of a default)
      */
     Class<?>[] restResources();
+
+    /**
+     * JUnit Jupiter extension wired via {@code @ExtendWith} on
+     * {@link EnableJaxRs}. Fires in {@code beforeAll} on every test
+     * class that carries {@link EnableJaxRs} and raises
+     * {@link IllegalStateException} when {@link EnableTestBeans} is
+     * <em>not</em> on the same class.
+     *
+     * <p>The check has to live on this annotation's extension chain
+     * rather than inside {@code JaxRsLifecycleAdapter} because the
+     * lifecycle-adapter chain is driven by the
+     * {@code @EnableTestBeans} extension proxy — without
+     * {@code @EnableTestBeans} on the class, the proxy never fires
+     * and the lifecycle adapter never gets a chance to validate.
+     */
+    class Validator implements BeforeAllCallback {
+
+        /**
+         * No-arg constructor used by JUnit to instantiate the
+         * extension via {@code @ExtendWith(EnableJaxRs.Validator.class)}.
+         * Members of a class nested inside an annotation type are
+         * implicitly {@code public}; the {@code public} modifier
+         * here would trip Checkstyle's RedundantModifier rule.
+         */
+        Validator() {
+        }
+
+        @Override
+        public void beforeAll(ExtensionContext context) {
+            Class<?> testClass = context.getRequiredTestClass();
+            if (testClass.getAnnotation(EnableJaxRs.class) == null) {
+                return;
+            }
+            if (testClass.getAnnotation(EnableTestBeans.class) == null) {
+                throw new IllegalStateException(
+                        "@EnableJaxRs requires @EnableTestBeans on the test class: "
+                                + testClass.getName());
+            }
+        }
+    }
 }
