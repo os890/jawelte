@@ -37,6 +37,9 @@
         <module>scenario-01-server-starts-on-random-port</module>
         <module>scenario-02-get-request-returns-body</module>
         <module>scenario-03-post-request-creates-resource</module>
+        <module>scenario-04-cdi-injection-in-resource</module>
+        <module>scenario-05-request-scoped-bean-per-request</module>
+        <module>scenario-06-session-scoped-remapped-to-test-method-scoped</module>
     </modules>
 
     <dependencies>

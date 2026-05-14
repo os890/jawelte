@@ -3748,3 +3748,53 @@ Provider-deps additions (depMgmt + cxf profile):
 Commit: UNTESTED: TICKET-011 Phase 5 — scenarios 1-3 + impl
 fixes (rootPath, pre-allocated port, singleton-via-CDI
 resource registration).
+
+## 2026-05-14 — TICKET-011 Phase 6 (scenarios 4-6 — CDI injection patterns)
+
+Three more scenarios exercising the CDI surfaces the lifecycle
+adapter and the CDI extension are responsible for. All three
+green on the first run — the singleton-via-CDI registration from
+Phase 5 carries through to every CDI-related case.
+
+- **Scenario 04** (`scenario-04-cdi-injection-in-resource`) —
+  `@ApplicationScoped` service `@Inject`-ed into the resource;
+  `GET /greet/{name}` delegates to the service and returns
+  `"Hello, " + name`. Proves the resource's `@Inject` field is
+  satisfied on the server worker thread (i.e. CDI proxying
+  works for resources resolved through
+  `CDI.current().select(class).get()`).
+- **Scenario 05**
+  (`scenario-05-request-scoped-bean-per-request`) — resource
+  injects a `@RequestScoped` bean exposing its
+  `System.identityHashCode`; two sequential HTTP requests from
+  one test method observe distinct identity values. Proves the
+  `CdiIntegrationFilter`'s activate→deactivate cycle runs per
+  HTTP request, not just once for the lifetime of the server.
+- **Scenario 06**
+  (`scenario-06-session-scoped-remapped-to-test-method-scoped`)
+  — `@SessionScoped`-declared counter bean is automatically
+  rewritten by `JaxRsCdiExtension` to `@TestMethodScoped`.
+  Method 1 increments twice (sees 1 then 2 — same instance);
+  method 2 (run after via `@TestMethodOrder` +
+  `@Order`) increments once (sees 1 — fresh
+  `@TestMethodScoped` allocation by scope-module's
+  `ScopeLifecycleAdapter.beforeEach`). The counter class
+  intentionally does NOT implement `Serializable` — the
+  rewrite happens at `ProcessAnnotatedType` time before CDI's
+  passivation-scope validation runs, so the
+  `Serializable`-or-die check never fires.
+
+Cross-thread state propagation note: confirmed
+`scope-module/impl`'s `ScopeStore` uses a `volatile Map` (not a
+`ThreadLocal`), so the `@TestMethodScoped` bean map allocated by
+scope-module's adapter on the JUnit thread is visible to the
+JAX-RS worker thread that dispatches the HTTP request. Same
+applies to `@TestClassScoped`. No bridging code needed in
+jaxrs-module.
+
+`./mvnw -pl tests/jaxrs-module/scenario-0{4,5,6}-* test -am`:
+all three green under default `-Powb -Pcxf`.
+
+Commit: UNTESTED: TICKET-011 Phase 6 — scenarios 4-6 (CDI
+injection in resource, @RequestScoped per HTTP request,
+@SessionScoped → @TestMethodScoped remap).
