@@ -3535,3 +3535,86 @@ compile, 0 Checkstyle violations.
 
 Commit: UNTESTED: TICKET-011 Phase 2 — api types
 (@EnableJaxRs, TestUrl, ResponseDiff).
+
+## 2026-05-14 — TICKET-011 Phase 3 (impl types)
+
+Added the four impl-side Java types and the META-INF wiring.
+
+- **`TestUrlHolder`** (`…impl`) — `@ApplicationScoped`,
+  `volatile String baseUrl`. `setBaseUrl(...)` published by the
+  lifecycle adapter after `SeBootstrap.start` returns; `clear()`
+  called by `afterAll`. `get()` returns the snapshot or throws
+  `IllegalStateException("JAX-RS server not started yet")` when
+  the baseUrl is null.
+- **`CdiIntegrationFilter`** (`…impl.adapter.filter`) — JAX-RS
+  `@Provider` implementing both `ContainerRequestFilter` and
+  `ContainerResponseFilter`. Acquires a `RequestContextController`
+  from `CDI.current()` on every incoming HTTP request and calls
+  `activate()`; stores the controller on the
+  `ContainerRequestContext` property
+  `…CdiIntegrationFilter.controller` so the matching response
+  filter can `deactivate()` it. Skips activation if the context
+  was already active on the thread (returns `false` from
+  `activate()`), and the response filter is a no-op in that case.
+- **`JaxRsCdiExtension`** (`…impl.adapter.extension`) — single
+  CDI Extension carrying both `ProcessAnnotatedType` remap
+  responsibilities. (1) Unconditional global remap: any class
+  annotated `@SessionScoped` has its scope replaced with
+  `@TestMethodScoped`. (2) Conditional `TestUrlHolder` upgrade:
+  if testcontrol-module is on the classpath (probed via
+  `Class.forName("org.os890.jawelte.module.testcontrol.api.TestControl")`
+  at extension load time), `TestUrlHolder`'s `@ApplicationScoped`
+  is replaced with `@TestClassScoped`. Two singleton
+  `AnnotationLiteral` inner classes hold the target scope
+  literals; each overrides `annotationType()` explicitly per the
+  project's literal pattern.
+- **`JaxRsLifecycleAdapter`** (`…impl.adapter.lifecycle`) —
+  `TestModuleLifecyclePort` at `@Priority(75)`. `beforeAll`:
+  reads `@EnableJaxRs` off the test class (no-op if absent),
+  enforces the `@EnableTestBeans` companion requirement with
+  `IllegalStateException("@EnableJaxRs requires @EnableTestBeans
+  on the test class: {className}")`, probes `RuntimeDelegate
+  .getInstance()` (translates any `RuntimeException`/
+  `LinkageError` to `IllegalStateException("No JAX-RS
+  SeBootstrap implementation found")`), then calls
+  `SeBootstrap.start(...)` on `port=0` with the user's
+  `restResources` plus `CdiIntegrationFilter` registered as
+  classes. The returned `SeBootstrap.Instance` is awaited up to
+  30s, the resolved port read off
+  `instance.configuration().baseUri().getPort()`, the
+  `"http://localhost:{port}"` URL published on `TestUrlHolder`,
+  and the `Instance` bound on `TestContext` for the test class.
+  `afterAll`: reads the `Instance` back off `TestContext`, calls
+  `stop()` waiting up to 10s, then clears `TestUrlHolder` and
+  unbinds the metadata. Stop failures logged at WARNING and
+  swallowed per the cleanup contract; start failures after a
+  successful `start()` trigger a `stopServerQuietly()` to avoid
+  leaking the OS port. Stateless — no instance fields. Inner
+  `TestApplication` (named class, not anonymous) holds the
+  union of user resources + filter as an immutable
+  `Set.copyOf(...)`.
+- **`META-INF/beans.xml`** — `bean-discovery-mode="annotated"`
+  with a comment listing the impl-side CDI bean surface
+  (just `TestUrlHolder`; the lifecycle adapter is
+  ServiceLoader-loaded, the filter is JAX-RS-instantiated,
+  the extension is registered through
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`).
+- **`META-INF/services/jakarta.enterprise.inject.spi.Extension`** —
+  registers `JaxRsCdiExtension`. Apache header as `#` comments
+  per the project's services-file convention.
+- **`META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort`** —
+  registers `JaxRsLifecycleAdapter`. Same header convention.
+
+Initial javadoc-strict run flagged one bad `{@link TestUrl#get()}`
+in `JaxRsLifecycleAdapter`'s class-level docstring (TestUrl wasn't
+imported in the impl class). Fixed by fully-qualifying as
+`{@link org.os890.jawelte.module.jaxrs.api.TestUrl#get()}`.
+
+`./mvnw -pl modules/jaxrs-module/api,modules/jaxrs-module/impl
+verify -am`: 4 impl sources + 3 api sources compile, 0
+Checkstyle violations across both, javadoc-strict / RAT /
+Enforcer all green, javadoc jars built.
+
+Commit: UNTESTED: TICKET-011 Phase 3 — impl types
+(JaxRsLifecycleAdapter, JaxRsCdiExtension, TestUrlHolder,
+CdiIntegrationFilter) + META-INF wiring.
