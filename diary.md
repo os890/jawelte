@@ -3142,3 +3142,16 @@ The adapter does NOT yet call `TestControlScopeObserver#configureAllowedScopes(S
 First build failed Checkstyle's `ImportOrder` with "extra separation in import group" — I had a blank line between `org.junit.*` and `org.os890.*`, but the project convention groups all `org.*` imports without an inner blank line. Merged the two blocks.
 
 Phase 3 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green in 3 seconds (incremental). Behavioural verification (the adapter publishes the right `@TestControl` and unbinds it cleanly) deferred to the Phase 7 scenarios.
+
+## 2026-05-14 — TICKET-010 Phase 4: TestControlScopeObserver + adapter wiring (startScopes veto)
+
+Added the `@ApplicationScoped` CDI bean that observes `BeforeScopeStarted` and applies the `startScopes` allow-list, and wired the adapter to push the allow-set in `beforeEach`.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/observer/TestControlScopeObserver.java` — `volatile Set<Class<? extends Annotation>> allowedScopes` field. `configureAllowedScopes(Set)` takes a defensive copy via `Set.copyOf(...)`; `null` or empty input means "no veto policy active" (covers both `@TestControl(startScopes={})` and the absence of `@TestControl` on the test method). `onBeforeScopeStarted(@Observes BeforeScopeStarted event)` is a no-op when the field is `null`; otherwise vetoes the event when its scope is not in the set.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` (updated) — `beforeEach` now ALSO resolves the observer via the `BeanManager` of the `SeContainer` bound on `TestContext`, computes the allow-set (`new LinkedHashSet<>(Arrays.asList(annotation.startScopes()))` when present and non-empty; `null` otherwise), and pushes it via `observer.configureAllowedScopes(set)`. Lookup goes through `bm.getBeans(...) → bm.resolve(...) → bm.getReference(...)` with a `RuntimeException` catch so the wiring is a silent no-op when CDI isn't booted by jawelte or the observer bean isn't on the classpath. The observer is reconfigured on every `beforeEach` (regardless of `@TestControl` presence) so residual state from a previous test method cannot influence the current one.
+
+The scope-veto chain now is end-to-end working in principle: scope-module fires `BeforeScopeStarted(@TestMethodScoped.class)` at priority 100, the observer reads its allow-set (already pushed by testcontrol at priority 50), and vetoes when the scope is not in the set.
+
+Phase 4 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green. Behavioural verification deferred to the Phase 7 scenarios that exercise scope filtering (11–15) — those will need a `@TestMethodScoped` and `@TestClassScoped` injection target across a couple of `@TestControl(startScopes=…)` configurations.
