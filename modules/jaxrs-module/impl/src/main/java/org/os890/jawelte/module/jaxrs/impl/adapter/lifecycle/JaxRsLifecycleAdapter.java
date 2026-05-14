@@ -15,9 +15,9 @@
  */
 package org.os890.jawelte.module.jaxrs.impl.adapter.lifecycle;
 
+import java.io.IOException;
 import java.lang.System.Logger;
-import java.net.URI;
-import java.util.Collections;
+import java.net.ServerSocket;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -138,22 +138,28 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
         probeJaxRsRuntime();
 
         Set<Class<?>> classes = new LinkedHashSet<>();
-        Collections.addAll(classes, annotation.restResources());
         classes.add(CdiIntegrationFilter.class);
 
-        Application application = new TestApplication(classes);
+        Set<Object> singletons = new LinkedHashSet<>();
+        for (Class<?> resourceClass : annotation.restResources()) {
+            singletons.add(CDI.current().select(resourceClass).get());
+        }
+
+        Application application = new TestApplication(classes, singletons);
+
+        int port = allocateFreePort();
 
         SeBootstrap.Configuration configuration = SeBootstrap.Configuration.builder()
                 .protocol("HTTP")
                 .host("localhost")
-                .port(0)
+                .port(port)
+                .rootPath("/")
                 .build();
 
         SeBootstrap.Instance instance = startServer(application, configuration);
 
         try {
-            URI baseUri = instance.configuration().baseUri();
-            String baseUrl = "http://localhost:" + baseUri.getPort();
+            String baseUrl = "http://localhost:" + port;
             CDI.current().select(TestUrlHolder.class).get().setBaseUrl(baseUrl);
             testContext.bindMetadata(SeBootstrap.Instance.class, instance);
         } catch (RuntimeException e) {
@@ -187,6 +193,29 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
         if (testClass.getAnnotation(EnableTestBeans.class) == null) {
             throw new IllegalStateException(
                     "@EnableJaxRs requires @EnableTestBeans on the test class: " + testClass.getName());
+        }
+    }
+
+    /**
+     * Pre-allocate a free local TCP port via a transient
+     * {@link ServerSocket} on port 0, then close it so the JAX-RS
+     * runtime can bind. Used in place of {@code SeBootstrap}'s own
+     * port-0 contract because the spec's
+     * {@code Instance.configuration().port()} post-start contract
+     * is not honoured uniformly across providers (Apache CXF 4.1
+     * still returns the configured value, not the bound one). A
+     * tiny TOCTOU window exists between the socket close here and
+     * the server bind in {@code SeBootstrap.start} — the standard
+     * test-framework trade-off; we accept it for portability and
+     * defer a retry loop until a real CI flake surfaces.
+     */
+    private static int allocateFreePort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            socket.setReuseAddress(true);
+            return socket.getLocalPort();
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "Failed to allocate a free TCP port for the JAX-RS server", e);
         }
     }
 
@@ -224,23 +253,36 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
     }
 
     /**
-     * Internal {@link Application} subclass that exposes the union
-     * of user-supplied resource classes and
-     * {@link CdiIntegrationFilter}. A named class (rather than an
-     * anonymous one) so the JAX-RS runtime's debug logging surfaces
-     * a stable diagnostic name.
+     * Internal {@link Application} subclass that exposes the
+     * jaxrs-module-managed {@code @Provider} classes (currently
+     * just {@link CdiIntegrationFilter}, instantiated by the
+     * JAX-RS runtime itself) and the user's resource singletons
+     * (pre-resolved through CDI so {@code @Inject} dependencies
+     * are satisfied on every dispatch). Splitting on
+     * classes-vs-singletons sidesteps each provider's
+     * vendor-specific CDI integration: jaxrs-module owns the CDI
+     * lookup, the provider just sees instances. A named class
+     * (rather than an anonymous one) so the JAX-RS runtime's
+     * debug logging surfaces a stable diagnostic name.
      */
     static class TestApplication extends Application {
 
         private final Set<Class<?>> classes;
+        private final Set<Object> singletons;
 
-        TestApplication(Set<Class<?>> classes) {
+        TestApplication(Set<Class<?>> classes, Set<Object> singletons) {
             this.classes = Set.copyOf(classes);
+            this.singletons = Set.copyOf(singletons);
         }
 
         @Override
         public Set<Class<?>> getClasses() {
             return classes;
+        }
+
+        @Override
+        public Set<Object> getSingletons() {
+            return singletons;
         }
     }
 }

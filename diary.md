@@ -3663,3 +3663,88 @@ scenarios (server boot + GET/POST + CDI injection — scenarios
 
 Commit: UNTESTED: TICKET-011 Phase 4 — tests aggregator +
 CXF/RESTEasy provider artifacts in depMgmt.
+
+## 2026-05-14 — TICKET-011 Phase 5 (scenarios 1-3 + impl fixes)
+
+First batch of working test scenarios. Three impl issues
+surfaced during scenario 01–03 dev, all fixed before
+committing:
+
+1. **`SeBootstrap.Configuration` required `rootPath`.** CXF's
+   `RuntimeDelegateImpl.bootstrap` calls
+   `Configuration.baseUriBuilder` which NPEs on a null `path`
+   (the configured `rootPath`). Added `.rootPath("/")` to the
+   `SeBootstrap.Configuration.builder()` chain in
+   `JaxRsLifecycleAdapter`.
+2. **`Configuration.port()` does not reflect the bound port
+   after start in CXF.** The Jakarta REST 4.0 spec says
+   `Instance.configuration().port()` should return the
+   OS-assigned port after a `port(0)` start, but CXF 4.1.0
+   still returns the configured value (0). Replaced
+   `port(0)` with pre-allocated local port via
+   `try (ServerSocket socket = new ServerSocket(0)) {
+       socket.getLocalPort();
+   }` — the standard cross-provider workaround used by Spring
+   Boot's test web server and similar frameworks. Tiny TOCTOU
+   window between the socket close and `SeBootstrap.start`,
+   accepted as the portability trade-off; a retry loop is
+   trivial to add if CI flakes surface.
+3. **CDI-managed JAX-RS resources need provider-side
+   integration that varies wildly.** Adding
+   `cxf-integration-cdi` pulled in `CXFCdiServlet` which
+   tried to integrate with the CDI container in
+   servlet-container mode, conflicting with OWB
+   (`AmbiguousResolutionException: org.apache.cxf.Bus`).
+   Provider-specific integration also wouldn't carry over to
+   RESTEasy without separate wiring. Fixed cross-provider by
+   resolving each `restResources` class through
+   `CDI.current().select(class).get()` in
+   `JaxRsLifecycleAdapter.beforeAll` and registering the
+   resulting (proxied) CDI bean as a JAX-RS singleton via
+   `Application.getSingletons()`. CDI normal-scope client
+   proxies are subclasses of the bean class, so JAX-RS's
+   standard annotation-lookup walk surfaces `@Path` correctly.
+   `CdiIntegrationFilter` is still registered as a class
+   (JAX-RS instantiates it directly — no CDI lookup needed).
+   `cxf-integration-cdi` and `resteasy-cdi` removed from
+   depMgmt and from the profiles.
+
+Scenarios:
+
+- **Scenario 01** (`scenario-01-server-starts-on-random-port`)
+  — smoke test. `@EnableJaxRs(restResources = {HelloResource.class})`,
+  assert `TestUrl.get()` starts with `"http://localhost:"` and
+  port > 0. Verifies the lifecycle adapter boots
+  `SeBootstrap`, resolves the port, publishes the URL on
+  `TestUrlHolder`.
+- **Scenario 02** (`scenario-02-get-request-returns-body`) —
+  HTTP GET. A `@GET /hello` resource returns plain text
+  `"hello"`; a JAX-RS client built via
+  `ClientBuilder.newClient()` calls the endpoint and asserts
+  status 200 + body equality. Verifies end-to-end HTTP
+  dispatch via the embedded server +
+  `CdiIntegrationFilter` request scope activation.
+- **Scenario 03** (`scenario-03-post-request-creates-resource`)
+  — HTTP POST + CDI injection in the resource. The
+  `@POST /orders @Consumes(JSON)` resource injects a shared
+  `@ApplicationScoped ReceivedOrderHolder`, stores the
+  request body on it, returns 201; the test thread reads the
+  holder back through its own `@Inject`. Verifies POST
+  handling AND the singleton-via-CDI resource resolution path
+  end-to-end.
+
+Provider-deps additions (depMgmt + cxf profile):
+
+- `org.apache.cxf:cxf-rt-rs-client` (test scope) — CXF client
+  side for `ClientBuilder.newClient()` from scenario 02
+  onward.
+- `org.jboss.resteasy:resteasy-client` (test scope) —
+  matching client artifact for the resteasy profile.
+
+`./mvnw -pl tests/jaxrs-module/scenario-01-…,…02-…,…03-… test
+-am` — all three scenarios green under the default
+`-Powb -Pcxf` profiles.
+
+Commit: UNTESTED: TICKET-011 Phase 5 — scenarios 1-3 + impl
+fixes (rootPath, pre-allocated port, singleton-via-CDI
+resource registration).

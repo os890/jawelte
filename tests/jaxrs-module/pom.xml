@@ -34,6 +34,9 @@
     <description>Aggregator AND parent for the per-scenario test modules covering jawelte-jaxrs-module. Each scenario boots a CDI container (via cdi-module + scope-module) so jaxrs-module's lifecycle adapter, CDI extension (@SessionScoped→@TestMethodScoped remap plus the TestUrlHolder upgrade gate), TestUrlHolder bean, and CdiIntegrationFilter run end-to-end against a live embedded JAX-RS server. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld) for the CDI runtime, crossed with Apache CXF (-Pcxf, default) or RESTEasy (-Presteasy) for the JAX-RS provider — the two axes are orthogonal Maven profiles.</description>
 
     <modules>
+        <module>scenario-01-server-starts-on-random-port</module>
+        <module>scenario-02-get-request-returns-body</module>
+        <module>scenario-03-post-request-creates-resource</module>
     </modules>
 
     <dependencies>
@@ -204,6 +207,10 @@
                     <groupId>org.apache.cxf</groupId>
                     <artifactId>cxf-rt-transports-http-jetty</artifactId>
                 </dependency>
+                <dependency>
+                    <groupId>org.apache.cxf</groupId>
+                    <artifactId>cxf-rt-rs-client</artifactId>
+                </dependency>
             </dependencies>
         </profile>
         <profile>
@@ -216,6 +223,10 @@
                 <dependency>
                     <groupId>org.jboss.resteasy</groupId>
                     <artifactId>resteasy-undertow</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>org.jboss.resteasy</groupId>
+                    <artifactId>resteasy-client</artifactId>
                 </dependency>
             </dependencies>
         </profile>
