@@ -122,3 +122,14 @@ Effect on TICKET-010: testcontrol's `TestControlScopeObserver` correctly emits `
 Paths forward:
 - Update `ScopeLifecycleAdapter.beforeEach` to call `methodContext.activate()` only when `!event.isVetoed()`. Mirror change for any scope-module `BeforeScopeStarted` emission.
 - Fire `BeforeScopeStarted(TestClassScoped.class)` in `beforeAll` and gate `TestClassScopedContext` activation on its veto status.
+
+### Per-entry flush in TestDataHandler error-handling
+
+`TestDataHandler.seedAll(...)` walks `@TestControl(testData=…)` entries in array order and runs each entry's `dbIn/` files (then later each entry's `dbUpdate/` files) without flushing between entries or files. When one entry's `*.xml` dataset fails mid-pipeline (constraint violation, FK violation, DBunit parse error), the failure currently surfaces from `DbSeed…execute()` immediately — but with no breadcrumb beyond the dataset file path, and the prior entries' data sits in the open transaction without being either fully committed or fully rolled back. Error localization across multi-entry seeds is harder than it needs to be.
+
+Two shapes to consider (after the seed-commit-needs-EM follow-up above is settled, since that's what gives us an active EntityManager to flush in the first place):
+
+- `em.flush()` between entries: pushes the EntityManager's first-level cache to the JDBC layer; still inside the active transaction; cheap. Doesn't change the transactional contract, just makes failures surface at the entry boundary they originated from.
+- `connection.commit()` between entries: stronger isolation; each entry's data is durable as soon as it succeeds, so a later entry's failure does not roll back the earlier ones. Aligns naturally with the seed-commit semantics already documented for the post-seed commit phase, just earlier in the pipeline. Changes visibility: if a later `@Transactional` test method then opens its own transaction, seed data is already committed across all entries.
+
+Decide which model fits before adding the flush/commit calls; document in the spec table that the chosen model is the contract.
