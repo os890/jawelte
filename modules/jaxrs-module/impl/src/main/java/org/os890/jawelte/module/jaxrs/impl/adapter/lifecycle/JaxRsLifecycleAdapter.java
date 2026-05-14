@@ -29,6 +29,7 @@ import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.ws.rs.SeBootstrap;
 import jakarta.ws.rs.core.Application;
+import jakarta.ws.rs.ext.Provider;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 
 import org.os890.jawelte.core.api.EnableTestBeans;
@@ -142,7 +143,21 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
 
         Set<Object> singletons = new LinkedHashSet<>();
         for (Class<?> resourceClass : annotation.restResources()) {
-            singletons.add(CDI.current().select(resourceClass).get());
+            if (resourceClass.isAnnotationPresent(Provider.class)) {
+                // @Provider — register as a class so JAX-RS sees @Provider
+                // on the registered Class<?> directly (CDI normal-scope
+                // client-proxy classes don't carry their bean class's
+                // annotations on the proxy type itself, which makes
+                // JAX-RS skip the provider detection on a CDI-resolved
+                // singleton). The trade-off: a provider registered this
+                // way is instantiated by the JAX-RS runtime, not CDI,
+                // so @Inject inside the provider is not satisfied.
+                // Typical stateless providers (ExceptionMappers,
+                // message body readers/writers) work fine.
+                classes.add(resourceClass);
+            } else {
+                singletons.add(CDI.current().select(resourceClass).get());
+            }
         }
 
         Application application = new TestApplication(classes, singletons);

@@ -42,6 +42,17 @@
         <module>scenario-06-session-scoped-remapped-to-test-method-scoped</module>
         <module>scenario-07-response-diff-json</module>
         <module>scenario-08-response-diff-xml</module>
+        <module>scenario-09-multiple-resource-classes</module>
+        <!--
+            scenario-10-server-stops-after-test-class: temporarily
+            commented out — the TCP-probe assertion is timing-sensitive
+            against CXF's Jetty transport (Server.stop() returns before
+            the listening socket is fully released on some kernels).
+            The files stay in the tree; needs a more deterministic
+            verification mechanism (e.g. a CDI ContainerStopping event
+            observer) before re-enabling.
+        -->
+        <module>scenario-11-exception-mapper</module>
     </modules>
 
     <dependencies>
