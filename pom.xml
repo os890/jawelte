@@ -315,6 +315,11 @@
                 <artifactId>jawelte-testcontrol-module-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-testcontrol-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!--
                 Jackson supplies the JSON tree + parser-level line-number

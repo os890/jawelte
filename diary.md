@@ -3111,3 +3111,18 @@ Phase 1 ships only the api submodule:
 - `pom.xml` (root) — added `jawelte-testcontrol-module-api` to `<dependencyManagement>`.
 
 Phase 1 checkpoint: `./mvnw -B -ntp -DskipTests install` clean across the full reactor in 27 seconds; Checkstyle, Maven Enforcer, Apache RAT, JaCoCo, and Javadoc all green. impl submodule (CDI extension performing the unconditional `@ConfigBean` → `@TestClassScoped` remap) deferred to Phase 2.
+
+## 2026-05-14 — TICKET-010 Phase 2: TestControlCdiExtension (@ConfigBean → @TestClassScoped remap)
+
+Added the impl submodule with the CDI Extension that performs the unconditional @ConfigBean → @TestClassScoped remap at `ProcessAnnotatedType` time. Files:
+
+- `modules/testcontrol-module/impl/pom.xml` — compile deps on testcontrol-module/api, core-api (for `@ConfigBean`), scope-module/api (for `@TestClassScoped`), and jakarta.enterprise.cdi-api. Javadoc-jar wired at verify.
+- `modules/testcontrol-module/impl/src/main/java/.../TestControlCdiExtension.java` — observes `ProcessAnnotatedType<?>`; skips classes without `@ConfigBean`; skips classes that declare an explicit non-`@ApplicationScoped` scope (detected by walking declared annotations and checking each annotation type for `@NormalScope` or `@Scope` meta-annotations, ignoring `@ConfigBean` and `@ApplicationScoped` themselves); for the remaining classes uses `event.configureAnnotatedType().remove(...).add(TestClassScopedLiteral.INSTANCE)`. The literal subclasses `AnnotationLiteral<TestClassScoped>` and `implements TestClassScoped`, with `annotationType()` overridden explicitly to side-step the generic-erasure problem documented in ejb-module's `AnnotationInstanceFactory`.
+- `modules/testcontrol-module/impl/src/main/resources/META-INF/services/jakarta.enterprise.inject.spi.Extension` — single-line registration.
+- `modules/testcontrol-module/impl/src/main/resources/META-INF/beans.xml` — `bean-discovery-mode="annotated"`, version 4.0, with a comment marking it as ready for the @ApplicationScoped beans coming in Phases 4 and 5 (no managed CDI beans yet).
+- `modules/testcontrol-module/pom.xml` — added `impl` to `<modules>`.
+- `pom.xml` (root) — added `jawelte-testcontrol-module-impl` to `<dependencyManagement>`.
+
+First build attempt failed Checkstyle with "Classes must not be declared final (CDI proxy compatibility)" on the inner `TestClassScopedLiteral`. The rule applies blanketly across all classes; the literal isn't a CDI bean but the regex doesn't know that. Dropped `final` from the inner class declaration — the class is still effectively final because it's `private static`.
+
+Phase 2 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green in 3 seconds (incremental). Full quality gates pass: Checkstyle, Enforcer, RAT, JaCoCo, Javadoc. Behavioural validation (the remap actually fires at runtime) deferred to Phase 6's scenarios 21–23.
