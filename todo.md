@@ -133,3 +133,28 @@ Two shapes to consider (after the seed-commit-needs-EM follow-up above is settle
 - `connection.commit()` between entries: stronger isolation; each entry's data is durable as soon as it succeeds, so a later entry's failure does not roll back the earlier ones. Aligns naturally with the seed-commit semantics already documented for the post-seed commit phase, just earlier in the pipeline. Changes visibility: if a later `@Transactional` test method then opens its own transaction, seed data is already committed across all entries.
 
 Decide which model fits before adding the flush/commit calls; document in the spec table that the chosen model is the contract.
+
+## Starting-point smoke test: jawelte on classpath, plain JUnit, nothing breaks
+
+Add a JUnit test scenario whose pom pulls in every jawelte module (cdi, scope, jpa, jta, ejb, content-diff, db-testdata, testcontrol — as useful) at test scope, but whose test class uses NONE of jawelte's features:
+
+- No `@EnableTestBeans` on the test class.
+- No `@TestControl`, no `@PersistenceConfig`, no `@Transactional` on the test method.
+- No `@Inject` of jawelte-managed beans.
+- No `persistence.xml`, no DBunit datasets, no test-data folders.
+- A plain `@Test` method that asserts something trivial (e.g. `assertThat(1 + 1).isEqualTo(2);`).
+
+The point is to verify the **opt-in contract**: a user who simply adds the jawelte jars to their test classpath (e.g. while gradually adopting the framework) should NOT see their existing plain JUnit tests break. Specifically:
+
+- CDI extensions shipped by each module must not fail bootstrap when no `@EnableTestBeans` is present (and ideally must not bootstrap a CDI container at all).
+- MP Config defaults shipped in `META-INF/microprofile-config.properties` must not be picked up by unrelated MP Config consumers in a way that changes behaviour.
+- `META-INF/services` registrations (lifecycle ports, CDI extensions, transaction strategies, persistence-unit resolvers, DbSeed/DbDiff engines, …) must not run side-effects on classpath load.
+- Lifecycle adapters' `beforeAll` / `beforeEach` / `afterAll` / `afterEach` must not fire when the JUnit extension is not registered (i.e. when `@EnableTestBeans` is absent).
+- The H2 driver (and Hibernate, and the JTA transaction strategies) being on the classpath must not boot persistence units, register transaction managers, or open connections.
+
+Position the scenario as its own per-scenario sub-module under `tests/` — most likely `tests/core/scenario-NN-jawelte-on-classpath-plain-junit-no-regression/`, since the test does not exercise any module-specific behaviour and just pins the framework-wide opt-in contract. Run under both `-Powb` (default) and `-Pweld` profiles; both should pass without jawelte ever activating. The signal value is high: future refactors that introduce side-effects on classpath load (e.g. a global static initializer that opens a connection) would fail this scenario immediately.
+
+Two design choices to settle before writing the scenario:
+
+- Should the pom pull jpa-module-impl + Hibernate + H2 too? (Confirms that even with the JPA stack on classpath, no persistence unit boots automatically.) Probably yes — the contract is strongest when ALL modules are present.
+- Should we register a JUnit `ExtensionContext` listener / custom logger to assert NO jawelte lifecycle adapter ran? Or trust "the test method passes with the expected assertion" as evidence enough? Probably the latter for simplicity; the former is over-engineered.
