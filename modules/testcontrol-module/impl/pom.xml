@@ -74,22 +74,34 @@
             <artifactId>jawelte-db-testdata-module-api</artifactId>
         </dependency>
 
-        <!--
-            jpa-module/api supplies PersistenceUnitConnectionResolver,
-            consumed by TestDataHandler for the raw-JDBC seed commit
-            after phases 1 + 2. Only consulted at runtime when
-            @TestControl(testData=…) is used; without testData this
-            dep is dead weight at runtime but still required at
-            compile time.
-        -->
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-jpa-module-api</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.transaction-api supplies @Transactional, used on
+            the TestDataSeedTransactionTemplate proxy bean to drive
+            the seed phase inside a transactional context. The
+            interceptor implementation is provided at test runtime by
+            jta-module (whatever TransactionStrategy is active —
+            Geronimo, Narayana, Atomikos) when @TestControl(testData=…)
+            is in use.
+        -->
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.persistence-api supplies EntityManager, looked up
+            via CDI inside TestDataSeedTransactionTemplate to populate
+            jpa-module's active-PU stack before DbSeed.forPersistenceUnit()
+            resolves a connection.
+        -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
         </dependency>
 
         <!--
