@@ -1971,7 +1971,7 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-jaxrs-module-scenario-12-enable-jaxrs-without-enable-test-beans-fails</artifactId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-12-enable-jaxrs-alone-boots-the-lifecycle</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

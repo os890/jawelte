@@ -33,7 +33,6 @@ import jakarta.ws.rs.core.Application;
 import jakarta.ws.rs.ext.Provider;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 
-import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.jaxrs.api.EnableJaxRs;
@@ -56,10 +55,11 @@ import org.os890.jawelte.module.jaxrs.impl.adapter.filter.CdiIntegrationFilter;
  *
  * <p><b>Trigger.</b> The adapter is a no-op for test classes that
  * are not annotated {@link EnableJaxRs}. When present, the adapter
- * validates {@link EnableTestBeans} is also on the class —
- * {@link EnableJaxRs} cannot be used standalone because the
- * resource classes are CDI beans and the CDI container has to be
- * up.
+ * boots {@code SeBootstrap}. The companion {@code @EnableTestBeans}
+ * is brought in transparently because {@code @EnableJaxRs} is
+ * meta-annotated with it — the adapter doesn't need to validate
+ * its presence (by the time {@code beforeAll} reaches this
+ * adapter, jawelte's machinery is by definition active).
  *
  * <p><b>Provider probe.</b> Before calling {@code SeBootstrap.start},
  * {@link RuntimeDelegate#getInstance()} is invoked as a probe. If
@@ -136,7 +136,6 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
         if (annotation == null) {
             return;
         }
-        requireEnableTestBeans(testClass);
         probeJaxRsRuntime();
 
         Set<Class<?>> classes = new LinkedHashSet<>();
@@ -217,13 +216,6 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
                         cdiAlreadyClosing);
             }
             testContext.unbindMetadata(SeBootstrap.Instance.class);
-        }
-    }
-
-    private static void requireEnableTestBeans(Class<?> testClass) {
-        if (testClass.getAnnotation(EnableTestBeans.class) == null) {
-            throw new IllegalStateException(
-                    "@EnableJaxRs requires @EnableTestBeans on the test class: " + testClass.getName());
         }
     }
 

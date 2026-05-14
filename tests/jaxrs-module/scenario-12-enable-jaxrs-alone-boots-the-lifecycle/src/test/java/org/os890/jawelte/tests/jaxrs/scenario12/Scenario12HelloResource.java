@@ -18,21 +18,27 @@ package org.os890.jawelte.tests.jaxrs.scenario12;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.MediaType;
 
-/** Placeholder resource so the {@code restResources} attribute on
- *  the broken subject is non-empty. The lifecycle never reaches
- *  the point of registering it — the validator fires first. */
+/**
+ * Trivial resource backing {@code GET /hello}. Used by scenario
+ * 12 to verify the embedded server actually serves traffic when
+ * the test class carries only {@code @EnableJaxRs} (no separate
+ * {@code @EnableTestBeans}).
+ */
 @ApplicationScoped
-@Path("/never-reached")
+@Path("/hello")
 public class Scenario12HelloResource {
 
     /** Default no-arg constructor (CDI-discoverable). */
     public Scenario12HelloResource() {
     }
 
-    /** @return the literal {@code "unreached"} */
+    /** @return the literal {@code "hello"} */
     @GET
-    public String body() {
-        return "unreached";
+    @Produces(MediaType.TEXT_PLAIN)
+    public String hello() {
+        return "hello";
     }
 }

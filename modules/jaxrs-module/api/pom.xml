@@ -81,20 +81,6 @@
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
         </dependency>
-
-        <!--
-            junit-jupiter-api supplies @ExtendWith, BeforeAllCallback
-            and ExtensionContext — used by EnableJaxRs.Validator
-            (the @ExtendWith hook that fires the
-            "@EnableJaxRs requires @EnableTestBeans" guard even when
-            the test class doesn't carry @EnableTestBeans, since
-            without it jawelte's lifecycle adapter chain never runs).
-            provided scope (inherited).
-        -->
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-        </dependency>
     </dependencies>
 
     <build>

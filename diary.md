@@ -4017,3 +4017,62 @@ for review.
 
 Commit: WORKING: TICKET-011 Phase 10 — architecture.md fix +
 coverage-report wiring (full ./mvnw verify green).
+
+## 2026-05-14 — TICKET-011 hex-arch fix (drop junit-jupiter-api dep from jaxrs-module/api)
+
+`jaxrs-module/api` had picked up a direct compile dep on
+`junit-jupiter-api` via the `EnableJaxRs.Validator` inner class I
+introduced in Phase 9 — that violated the hex-arch convention that
+keeps every module API JUnit-agnostic and concentrates the
+JUnit bridge in `core/api` (via `EnableTestBeans.Proxy`).
+
+Fix:
+
+- **`@EnableJaxRs`** is now meta-annotated with
+  `@EnableTestBeans`. JUnit Jupiter walks the annotation's
+  meta-annotation chain to discover the
+  `@ExtendWith(EnableTestBeans.Proxy.class)` that
+  `@EnableTestBeans` carries, so jawelte's proxy extension
+  registers automatically — applying `@EnableJaxRs` to a test
+  class is sufficient on its own. No JUnit reference appears
+  on the jaxrs-module/api surface; the meta-annotation is a
+  plain Java reference to `EnableTestBeans`.
+- **`EnableJaxRs.Validator`** inner class **removed** along
+  with its `@ExtendWith` registration. The companion-check it
+  performed is now structurally impossible to trip — having
+  `@EnableJaxRs` on the class brings `@EnableTestBeans`'s
+  machinery in transparently.
+- **`jaxrs-module/api/pom.xml`** drops the `junit-jupiter-api`
+  dependency.
+- **`JaxRsLifecycleAdapter`** drops the now-pointless
+  `requireEnableTestBeans` check. By the time the adapter's
+  `beforeAll` runs, jawelte's proxy chain is by definition
+  active — no need to re-verify.
+- **Scenario 12 repurposed + directory renamed**
+  (`scenario-12-enable-jaxrs-without-enable-test-beans-fails`
+  → `scenario-12-enable-jaxrs-alone-boots-the-lifecycle`).
+  Now asserts: a test class with ONLY `@EnableJaxRs` (no
+  separate `@EnableTestBeans`) successfully boots CDI + the
+  embedded server, an HTTP GET to a registered resource
+  returns 200. Demonstrates the meta-annotation contract
+  end-to-end. The `Scenario12Subject` class is deleted
+  (EngineTestKit no longer needed); the rest collapses to a
+  plain `Scenario12Test` direct test class.
+- **`tests/jaxrs-module/pom.xml`** and
+  **`coverage-report/pom.xml`** updated for the rename.
+
+JUnit-Jupiter de-duplicates `EnableTestBeans.Proxy` registrations
+across direct + meta-annotation discoveries (verified by running
+the existing scenarios with both `@EnableTestBeans` and
+`@EnableJaxRs` after the change — no double-firing observed), so
+the redundant `@EnableTestBeans` on scenarios 01-11 + 17 is
+harmless and left in place. Only scenario 12 demonstrates the
+standalone usage; the others continue to show the
+both-annotations form for explicitness.
+
+`./mvnw verify` (full reactor): BUILD SUCCESS, 8:55 min. All 14
+scenarios still green; new scenario 12 passes; no regressions.
+
+Commit: FIXED: TICKET-011 hex-arch — drop junit-jupiter-api dep
+from jaxrs-module/api by meta-annotating @EnableJaxRs with
+@EnableTestBeans.

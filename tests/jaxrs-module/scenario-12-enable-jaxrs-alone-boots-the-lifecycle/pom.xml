@@ -24,7 +24,7 @@
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <artifactId>jawelte-tests-jaxrs-module-scenario-12-enable-jaxrs-without-enable-test-beans-fails</artifactId>
+    <artifactId>jawelte-tests-jaxrs-module-scenario-12-enable-jaxrs-alone-boots-the-lifecycle</artifactId>
     <packaging>jar</packaging>
-    <name>jawelte tests/jaxrs-module scenario 12: @EnableJaxRs without @EnableTestBeans fails the test class in beforeAll with a guard error</name>
+    <name>jawelte tests/jaxrs-module scenario 12: @EnableJaxRs alone (no separate @EnableTestBeans) boots the full lifecycle — the meta-annotation chain activates the CDI proxy automatically</name>
 </project>

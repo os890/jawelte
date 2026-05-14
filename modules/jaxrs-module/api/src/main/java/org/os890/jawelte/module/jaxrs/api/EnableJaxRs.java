@@ -20,39 +20,44 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.junit.jupiter.api.extension.BeforeAllCallback;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.extension.ExtensionContext;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 /**
  * Activates jawelte's embedded Jakarta REST 4.0 server support for a
- * test class. Must be combined with
- * {@code @EnableTestBeans} on the same class — the JAX-RS module
- * looks up resource beans from the CDI container that
- * {@code @EnableTestBeans} brings up, so the CDI container has to be
- * active by the time the JAX-RS lifecycle adapter runs.
+ * test class. The annotation is meta-annotated with
+ * {@link EnableTestBeans} so applying {@code @EnableJaxRs} to a
+ * test class is enough to activate jawelte's CDI machinery as well —
+ * users don't need to write both annotations side-by-side. JUnit
+ * Jupiter walks the annotation's meta-annotations to discover the
+ * {@code @ExtendWith(EnableTestBeans.Proxy.class)} that
+ * {@code @EnableTestBeans} carries, registering jawelte's proxy
+ * extension automatically. The lifecycle adapter chain (driven by
+ * that proxy) then runs as usual; {@code JaxRsLifecycleAdapter}
+ * boots {@code SeBootstrap} once it sees {@code @EnableJaxRs} on
+ * the test class.
  *
  * <p>jaxrs-module's {@code JaxRsLifecycleAdapter}
  * ({@code @Priority(75)}, between testcontrol at 50 and scope at 100)
  * reads this annotation off the test class in {@code beforeAll},
- * boots {@code SeBootstrap.start} on port {@code 0} (the OS-assigned
- * free port), and registers the {@link #restResources()} classes as
- * the active REST resources. The {@code TestUrl} bean (also from
- * this api package) is populated with the resolved base URL so test
- * methods can issue HTTP calls against the running server.
+ * boots {@code SeBootstrap.start} on an OS-assigned local port,
+ * and registers the {@link #restResources()} classes as the active
+ * REST resources. The {@code TestUrl} bean (also from this api
+ * package) is populated with the resolved base URL so test methods
+ * can issue HTTP calls against the running server.
  *
- * <p>Validation: {@code @EnableJaxRs} without
- * {@code @EnableTestBeans} on the test class fails the lifecycle
- * with
- * {@code IllegalStateException("@EnableJaxRs requires @EnableTestBeans on the test class: {className}")}.
+ * <p><b>Hex-arch note.</b> No JUnit Jupiter type appears on this
+ * api's surface — the JUnit bridge lives entirely in {@code core/api}
+ * via {@link EnableTestBeans} (which jaxrs-module/api references
+ * only as a Java meta-annotation reference, not by depending on
+ * JUnit). All other JUnit interaction happens in {@code core/impl}
+ * and in module impl classes that route through {@code TestContext}.
  *
  * <p>{@code @EnableJaxRs} is {@code TYPE}-only. Placing it on a
  * method or any other element is rejected by the compiler.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-@ExtendWith(EnableJaxRs.Validator.class)
+@EnableTestBeans
 public @interface EnableJaxRs {
 
     /**
@@ -86,44 +91,4 @@ public @interface EnableJaxRs {
      *         (the compiler enforces the absence of a default)
      */
     Class<?>[] restResources();
-
-    /**
-     * JUnit Jupiter extension wired via {@code @ExtendWith} on
-     * {@link EnableJaxRs}. Fires in {@code beforeAll} on every test
-     * class that carries {@link EnableJaxRs} and raises
-     * {@link IllegalStateException} when {@link EnableTestBeans} is
-     * <em>not</em> on the same class.
-     *
-     * <p>The check has to live on this annotation's extension chain
-     * rather than inside {@code JaxRsLifecycleAdapter} because the
-     * lifecycle-adapter chain is driven by the
-     * {@code @EnableTestBeans} extension proxy — without
-     * {@code @EnableTestBeans} on the class, the proxy never fires
-     * and the lifecycle adapter never gets a chance to validate.
-     */
-    class Validator implements BeforeAllCallback {
-
-        /**
-         * No-arg constructor used by JUnit to instantiate the
-         * extension via {@code @ExtendWith(EnableJaxRs.Validator.class)}.
-         * Members of a class nested inside an annotation type are
-         * implicitly {@code public}; the {@code public} modifier
-         * here would trip Checkstyle's RedundantModifier rule.
-         */
-        Validator() {
-        }
-
-        @Override
-        public void beforeAll(ExtensionContext context) {
-            Class<?> testClass = context.getRequiredTestClass();
-            if (testClass.getAnnotation(EnableJaxRs.class) == null) {
-                return;
-            }
-            if (testClass.getAnnotation(EnableTestBeans.class) == null) {
-                throw new IllegalStateException(
-                        "@EnableJaxRs requires @EnableTestBeans on the test class: "
-                                + testClass.getName());
-            }
-        }
-    }
 }
