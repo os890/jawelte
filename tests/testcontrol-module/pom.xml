@@ -38,6 +38,8 @@
         <module>scenario-12-scope-filter-empty-allows-all</module>
         <module>scenario-21-configbean-remapped-to-testclass</module>
         <module>scenario-22-configbean-remap-unconditional</module>
+        <module>scenario-24-testcontrol-inherited-from-superclass-method</module>
+        <module>scenario-25-testcontrol-overridden-method-subclass-wins</module>
     </modules>
 
     <dependencies>

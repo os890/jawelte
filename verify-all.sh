@@ -111,12 +111,14 @@ else
     run "tests/core" "$REPO_ROOT/tests/core" verify
 
     # tests/cdi-module, tests/scope-module, tests/jpa-module,
-    # tests/ejb-module: CDI-runtime sweep only (owb default + weld).
+    # tests/ejb-module, tests/testcontrol-module: CDI-runtime sweep
+    # only (owb default + weld).
     for cdi in owb weld; do
-        run "tests/cdi-module [$cdi]"   "$REPO_ROOT/tests/cdi-module"   -P "$cdi" verify
-        run "tests/scope-module [$cdi]" "$REPO_ROOT/tests/scope-module" -P "$cdi" verify
-        run "tests/jpa-module [$cdi]"   "$REPO_ROOT/tests/jpa-module"   -P "$cdi" verify
-        run "tests/ejb-module [$cdi]"   "$REPO_ROOT/tests/ejb-module"   -P "$cdi" verify
+        run "tests/cdi-module [$cdi]"         "$REPO_ROOT/tests/cdi-module"         -P "$cdi" verify
+        run "tests/scope-module [$cdi]"       "$REPO_ROOT/tests/scope-module"       -P "$cdi" verify
+        run "tests/jpa-module [$cdi]"         "$REPO_ROOT/tests/jpa-module"         -P "$cdi" verify
+        run "tests/ejb-module [$cdi]"         "$REPO_ROOT/tests/ejb-module"         -P "$cdi" verify
+        run "tests/testcontrol-module [$cdi]" "$REPO_ROOT/tests/testcontrol-module" -P "$cdi" verify
     done
 
     # tests/content-diff-module: utility library — does not bootstrap a
