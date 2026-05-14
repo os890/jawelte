@@ -4,8 +4,10 @@ team.md
 # Build output
 target
 
-# Runtime data (H2 database)
-data
+# Runtime data (H2 database) — root-only so it does not match `data`
+# package directories inside the source tree (e.g.
+# modules/testcontrol-module/impl/.../adapter/data/).
+/data
 
 # Coverage artifacts
 coverage
