@@ -1866,6 +1866,11 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-08-testdata-missing-dbexpected-fails</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-testcontrol-module-scenario-12-scope-filter-empty-allows-all</artifactId>
             <version>${project.version}</version>
         </dependency>

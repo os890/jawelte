@@ -43,7 +43,7 @@ class Scenario01Test {
     private Scenario01CustomerCountService customerCountService;
 
     @Test
-    @TestControl(testData = "testdata/scenario01")
+    @TestControl(testData = "testdata/scenario01", requireDbExpected = false)
     void dbInSeedsCustomerRowsBeforeTestMethod() {
         assertThat(customerCountService.countCustomers())
                 .as("dbIn/customers.xml seeded 2 CUSTOMER rows by testcontrol's beforeEach")

@@ -166,11 +166,44 @@ public class TestDataHandler {
         }
         List<EntrySpec> entries = parseEntries(annotation);
         validateBaseFolders(entries);
+        if (annotation.requireDbExpected() && !anyEntryContributesDbExpected(entries)) {
+            throw new IllegalStateException(
+                    "@TestControl(testData=" + describeTestData(annotation)
+                            + ") requires at least one dbExpected/*.xml across the listed "
+                            + "entries — none was found. Either add a dbExpected/<file>.xml "
+                            + "next to the dbIn/ / dbUpdate/ folders, or set "
+                            + "requireDbExpected=false on the @TestControl annotation if this "
+                            + "is intentionally a seed-only test method.");
+        }
 
         TestDataSeedTransactionTemplate template =
                 CDI.current().select(TestDataSeedTransactionTemplate.class).get();
         runPhase(entries, DB_IN, DbSeed.Builder::cleanInsert, template);
         runPhase(entries, DB_UPDATE, DbSeed.Builder::update, template);
+    }
+
+    private static boolean anyEntryContributesDbExpected(List<EntrySpec> entries) {
+        for (EntrySpec entry : entries) {
+            if (!listXmlResources(entry.folderPath() + "/" + DB_EXPECTED).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String describeTestData(TestControl annotation) {
+        String[] testData = annotation.testData();
+        if (testData.length == 1) {
+            return "\"" + testData[0] + "\"";
+        }
+        StringBuilder buffer = new StringBuilder("{");
+        for (int index = 0; index < testData.length; index++) {
+            if (index > 0) {
+                buffer.append(", ");
+            }
+            buffer.append('"').append(testData[index]).append('"');
+        }
+        return buffer.append('}').toString();
     }
 
     /**

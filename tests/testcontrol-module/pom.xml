@@ -37,6 +37,7 @@
         <module>scenario-01-testdata-dbin-seeds-rows</module>
         <module>scenario-02-testdata-dbexpected-transactional</module>
         <module>scenario-07-empty-testdata-no-op</module>
+        <module>scenario-08-testdata-missing-dbexpected-fails</module>
         <module>scenario-12-scope-filter-empty-allows-all</module>
         <module>scenario-21-configbean-remapped-to-testclass</module>
         <module>scenario-22-configbean-remap-unconditional</module>

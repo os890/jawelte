@@ -3293,3 +3293,24 @@ Fix: change Phase 18 to `cd $REPO_ROOT && ./mvnw -pl :coverage-report -am -Dskip
 Validated by hand before committing: `time ./mvnw -B -ntp -pl :coverage-report -am -DskipTests verify` completed in 13s wall-clock, loaded all 350 `*.exec` files from the test scenarios, and produced a 221KB populated `index.html` (vs the broken 1624-byte placeholder).
 
 The 14-line patch to `verify-all.sh` includes a comment block explaining why the invocation looks the way it does, so future-self doesn't try to "simplify" it back to the broken `cd coverage-report && mvn verify` shape.
+
+## 2026-05-14 — TICKET-010 Phase 11: @TestControl(requireDbExpected) guard against missing dbExpected/
+
+Add a new attribute `requireDbExpected` to `@TestControl` (default `true`) that protects the test-data verification side from silent regressions. The motivating scenario: a developer deletes (or empties out) the `dbExpected/` folder of a previously-verifying test — without the guard, the test would still pass because the verify phase has nothing to assert against. With the guard, testcontrol's `beforeEach` raises `IllegalStateException` pointing at the missing assertion side.
+
+Spec:
+
+- The guard only fires when `testData()` is non-empty. A `@TestControl` used purely for `startScopes` (or for future attributes unrelated to seeding) is unaffected by the default `requireDbExpected=true` — no testData means no verification-side requirement.
+- When `testData()` is non-empty, the guard checks that AT LEAST ONE entry contributes a non-empty `dbExpected/` folder (at least one `*.xml` inside). An entry with an empty `dbExpected/` folder counts as "no contribution" — keeps the contract strong against the "empty folder bypass" edge case.
+- Set `requireDbExpected=false` to opt out per-method (seed-only paths).
+
+Files:
+
+- `modules/testcontrol-module/api/src/main/java/.../TestControl.java` — added the `boolean requireDbExpected() default true;` attribute with comprehensive javadoc covering: rationale (silent-regression protection), opt-out semantics, implicit satisfaction when testData is empty (in case future @TestControl features have nothing to do with seeding), and the "empty dbExpected folder counts as no contribution" rule.
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataHandler.java` — added the guard in `seedAll`. Runs AFTER `validateBaseFolders` (so a missing testData folder is still the first error you see) and BEFORE the seed transaction begins (so no DB side-effects when the config is wrong). Error message names the testData entries and points at the two ways out (add a file, or set requireDbExpected=false).
+- `tests/testcontrol-module/scenario-01-testdata-dbin-seeds-rows/src/test/java/.../Scenario01Test.java` — scenario 01 seeds CUSTOMER rows from `dbIn/` but has no `dbExpected/`. Updated its `@TestControl` to set `requireDbExpected=false` since it's legitimately a seed-only test.
+- `tests/testcontrol-module/scenario-08-testdata-missing-dbexpected-fails/` — new scenario. Inner `MissingDbExpectedSubject` carries `@TestControl(testData="testdata/scenario08")` with default `requireDbExpected=true`; `testdata/scenario08/` has only `dbIn/`. `Scenario08Test` drives the subject via JUnit's `EngineTestKit`, walks the failure-cause chain for an `IllegalStateException`, and asserts the message contains `"requires at least one dbExpected"`. Naming-convention note: the subject class is `MissingDbExpectedSubject` (no `Test` prefix/suffix) so Surefire's default discovery skips it during the normal test run; only EngineTestKit picks it up via `selectClass(...)`.
+- `tests/testcontrol-module/pom.xml` — added scenario 08 to `<modules>`.
+- `coverage-report/pom.xml` — added scenario 08 to the test-scenarios dep list.
+
+Phase 11 checkpoint: tests/testcontrol-module verify green under both `-Powb` and `-Pweld`. 10 scenarios × 2 CDI runtimes = 20 test runs. Scenario 01 still passes (with the explicit `requireDbExpected=false`); scenario 02 still passes (its `dbExpected/customers.xml` satisfies the guard); scenario 08 confirms the guard's failure-case message.

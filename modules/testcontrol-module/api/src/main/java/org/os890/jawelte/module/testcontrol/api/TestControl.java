@@ -165,4 +165,44 @@ public @interface TestControl {
      *         means no prefix
      */
     String testDataBasePath() default "";
+
+    /**
+     * Whether at least one {@link #testData()} entry must supply at
+     * least one {@code dbExpected/*.xml} dataset for the test method
+     * to be considered correctly configured.
+     *
+     * <p>The default value {@code true} guards against a silent
+     * regression where someone deletes (or empties out) the
+     * {@code dbExpected/} folder of a verifying test — without the
+     * guard, the test would still pass because the verify phase has
+     * nothing to assert against. With the guard, the test fails fast
+     * during {@code beforeEach} with a clear error pointing at the
+     * missing assertion side.
+     *
+     * <p>Set to {@code false} on a per-method basis when the test
+     * legitimately only seeds (e.g. a fixture-setup test that another
+     * test consumes, or a smoke test that verifies via other means
+     * than {@code DbDiff}).
+     *
+     * <p><b>Implicitly satisfied when {@code testData} is empty.</b>
+     * If a test method uses {@code @TestControl} purely for other
+     * features (e.g. {@code startScopes} only, or a future attribute
+     * unrelated to seeding) and supplies no {@code testData} entries,
+     * this attribute has no effect — the guard only runs when
+     * {@code testData} is non-empty. The default {@code true} value
+     * is therefore safe to leave in place on tests that never seed.
+     *
+     * <p>The guard fires when {@link #testData()} is non-empty and
+     * NO entry contributes a {@code dbExpected/} sub-folder
+     * containing at least one {@code *.xml} file. An entry with a
+     * {@code dbExpected/} folder that has no XML files counts as
+     * "no contribution" to keep the contract strong against the
+     * "empty folder bypass" case.
+     *
+     * @return {@code true} (default) to require a non-empty
+     *         {@code dbExpected/} contribution across the entries
+     *         when {@code testData} is non-empty; {@code false} to
+     *         opt out (seed-only path)
+     */
+    boolean requireDbExpected() default true;
 }
