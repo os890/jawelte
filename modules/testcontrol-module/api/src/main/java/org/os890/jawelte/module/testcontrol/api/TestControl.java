@@ -73,9 +73,9 @@ import java.lang.annotation.Target;
  * <i>testDataBasePath Precedence</i> table in TICKET-010 for the
  * full matrix.
  *
- * <p><b>Companion remap.</b> When the testcontrol module is on the
- * classpath, the {@code TestControlCdiExtension} unconditionally
- * remaps every {@code @ConfigBean}-stereotyped class from
+ * <p><b>Companion remap.</b> When scope-module is on the classpath,
+ * its {@code ConfigBeanScopeRemapCdiExtension} unconditionally remaps
+ * every {@code @ConfigBean}-stereotyped class from
  * {@code @ApplicationScoped} to {@code @TestClassScoped} during CDI
  * bootstrap. This remap is independent of {@code @TestControl} —
  * having any test method use {@code @TestControl} is <em>not</em>

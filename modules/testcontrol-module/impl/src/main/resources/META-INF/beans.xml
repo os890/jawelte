@@ -21,18 +21,17 @@
        version="4.0"
        bean-discovery-mode="annotated">
     <!--
-        testcontrol-module/impl's CDI bean surface is added
-        incrementally across the ticket's phases:
+        testcontrol-module/impl's CDI bean surface:
 
-          - Phase 2 (this commit): no managed beans yet — only the
-            TestControlCdiExtension, loaded via the
-            META-INF/services/jakarta.enterprise.inject.spi.Extension
-            registration. The beans.xml is included up front so
-            ahead-of-time CDI implementations index the module's
-            classes without scanning the bare jar.
-          - Phase 4: TestControlScopeObserver (@ApplicationScoped
-            CDI bean that observes BeforeScopeStarted).
-          - Phase 5: TestDataHandler (@ApplicationScoped CDI bean
-            that observes AfterTestTransaction).
+          - TestControlScopeObserver (@ApplicationScoped CDI bean
+            that observes BeforeScopeStarted).
+          - TestDataHandler (@ApplicationScoped CDI bean that
+            observes AfterTestTransaction).
+          - TestDataSeedTransactionTemplate (@ApplicationScoped CDI
+            bean with a @Transactional method used to seed/commit
+            test data per persistence unit).
+
+        The @ConfigBean → @TestClassScoped scope remap CDI Extension
+        lives in scope-module/impl.
     -->
 </beans>

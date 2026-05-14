@@ -31,7 +31,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (testcontrol-module/impl)</name>
-    <description>Implementation of testcontrol-module: TestControlCdiExtension (the CDI Extension that unconditionally remaps every @ConfigBean class from @ApplicationScoped to @TestClassScoped during ProcessAnnotatedType), and — added in later phases — TestControlLifecycleAdapter, TestControlScopeObserver, and TestDataHandler. SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
+    <description>Implementation of testcontrol-module: TestControlLifecycleAdapter (the TestModuleLifecyclePort adapter at @Priority(50) that reads @TestControl off the active test method, drives the testData seed/verify pipeline, and feeds the scope-filter allow-list to TestControlScopeObserver), TestControlScopeObserver (BeforeScopeStarted observer that vetoes scopes outside the startScopes allow-list), TestDataHandler + TestDataSeedTransactionTemplate (the seed/commit/verify pipeline that drives DbSeed and DbDiff for the @TestControl(testData=…) entries). The companion @ConfigBean → @TestClassScoped scope remap lives in scope-module/impl. SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
 
     <dependencies>
         <!--
@@ -46,23 +46,14 @@
         </dependency>
 
         <!--
-            core-api supplies @ConfigBean (the stereotype this module's
-            CDI Extension scans for) and — for later phases — the
-            TestModuleLifecyclePort + TestContext infrastructure.
+            core-api supplies the TestModuleLifecyclePort + TestContext
+            infrastructure that TestControlLifecycleAdapter implements
+            and the @TestContext per-thread accessor used by
+            TestDataHandler.
         -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
-        </dependency>
-
-        <!--
-            scope-module/api supplies @TestClassScoped (the target
-            scope of the @ConfigBean remap) and @TestMethodScoped for
-            the startScopes filter.
-        -->
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-scope-module-api</artifactId>
         </dependency>
 
         <!--

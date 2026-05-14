@@ -3364,3 +3364,23 @@ outer `finally` regardless of how the verify path exited.
 **Verification.** Targeted run of `tests/testcontrol-module/**` under
 both `-Powb` and `-Pweld` profiles — all 12 scenarios pass.
 
+
+## 2026-05-14 — Move @ConfigBean scope-upgrade extension to scope-module
+
+User pointed out that the `@ConfigBean → @TestClassScoped` scope-upgrade CDI Extension belongs in scope-module, not testcontrol-module — the remap is fundamentally a scope concern (it changes the target scope on `@ConfigBean`-stereotyped classes to a type owned by scope-module) and is independent of `@TestControl`.
+
+**Production move.**
+- New class `modules/scope-module/impl/.../adapter/extension/ConfigBeanScopeRemapCdiExtension.java` — same body as before, just renamed for its new owner. Sibling to `TestScopeCdiExtension`, kept in a separate class to preserve single-responsibility (context registration vs. bean-type rewriting).
+- Added the SPI registration to `modules/scope-module/impl/src/main/resources/META-INF/services/jakarta.enterprise.inject.spi.Extension`, alongside the existing `TestScopeCdiExtension` entry.
+- Deleted the old `TestControlCdiExtension.java` from testcontrol-module/impl and its (now-empty) `META-INF/services/jakarta.enterprise.inject.spi.Extension` file.
+- Dropped the `jawelte-scope-module-api` compile dep from `modules/testcontrol-module/impl/pom.xml` — no remaining Java reference to scope-module types after the move.
+- Updated `modules/scope-module/impl/pom.xml` description, `modules/testcontrol-module/impl/pom.xml` description, `modules/testcontrol-module/impl/src/main/resources/META-INF/beans.xml` comment, and the "Companion remap" note in `modules/testcontrol-module/api/src/main/java/.../TestControl.java` javadoc to point at the new home.
+
+**Scenario move.**
+- `tests/testcontrol-module/scenario-21-configbean-remapped-to-testclass` → `tests/scope-module/scenario-28-configbean-remapped-to-testclass` (class renamed to `Scenario28Test`, package `org.os890.jawelte.tests.scope.scenario28`).
+- `tests/testcontrol-module/scenario-22-configbean-remap-unconditional` → `tests/scope-module/scenario-29-configbean-remap-unconditional` (assertion message updated: the remap fires whenever scope-module is on the classpath, no longer "even without `@TestControl`").
+- `tests/testcontrol-module/scenario-23-configbean-with-explicit-scope-not-remapped` → `tests/scope-module/scenario-30-configbean-with-explicit-scope-not-remapped`.
+- Updated each scenario pom (artifactId, parent, name), updated both aggregator poms (removed three entries from testcontrol-module's module list, added three to scope-module's).
+
+**Verification.** `tests/scope-module` reactor: 30/30 scenarios pass under `-Powb` and `-Pweld`. `tests/testcontrol-module` reactor: 9/9 remaining scenarios pass under `-Powb` and `-Pweld`. (Required an explicit `install` of `jawelte-scope-module-impl` first — when test reactors are run from their own root, they pull scope-module/impl from the local m2 repo rather than reactor sources.)
+
