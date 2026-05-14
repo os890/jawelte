@@ -3798,3 +3798,27 @@ all three green under default `-Powb -Pcxf`.
 Commit: UNTESTED: TICKET-011 Phase 6 — scenarios 4-6 (CDI
 injection in resource, @RequestScoped per HTTP request,
 @SessionScoped → @TestMethodScoped remap).
+
+## 2026-05-14 — TICKET-011 Phase 7 (scenarios 7-8 — ResponseDiff)
+
+Two thin bridge tests for the ResponseDiff adapter — proves
+ResponseDiff reads the JAX-RS `Response` entity as `String`,
+forwards to `ContentDiff.forJson(...)` / `forXml(...)`, and the
+content-diff-module engines accept the bridged payload.
+
+- **Scenario 07** (`scenario-07-response-diff-json`) — resource
+  produces a literal JSON body; test calls
+  `ResponseDiff.forJson(response).expectedContent("…").assertEquals()`.
+- **Scenario 08** (`scenario-08-response-diff-xml`) — same shape
+  for XML payloads via `ResponseDiff.forXml(...)`.
+
+Mismatch behaviour, ignore patterns, and the two MP Config
+default-ignore keys are content-diff-module's responsibility —
+TICKET-008 already covers them. These two scenarios assert only
+the bridge contract (response → builder → assertion).
+
+`./mvnw -pl tests/jaxrs-module/scenario-0{7,8}-* test -am`: both
+green under default `-Powb -Pcxf`.
+
+Commit: UNTESTED: TICKET-011 Phase 7 — scenarios 7-8 (ResponseDiff
+JSON + XML bridge tests).
