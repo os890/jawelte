@@ -3097,3 +3097,17 @@ The extension still owns one thing: it warms up both filter caches on the bootst
 
 Users override the framework defaults the same way they would override any other MP Config-backed list: set the same key in a higher-priority MP Config source (system property, environment variable, application properties file). Custom `ExcludedPackageFilter` impls remain free to replace the entire behaviour via the existing `@Priority`-based `ServicePriorityResolver` route.
 
+
+## 2026-05-14 — TICKET-010 Phase 1: testcontrol-module skeleton + @TestControl annotation
+
+Started TICKET-010 (TestControl module) after merging PR #19 (TICKET-009 db-testdata-module) and pulling main. Before any code touched, reviewed `tickets/010-testcontrol-module.md` against shipped TICKET-009 reality and applied 8 corrective edits to the ticket (gitignored, no commit): the spec had attributed `PersistenceUnitConnectionResolver` to db-testdata-module/api when it actually lives in jpa-module/api, the DbSeed/DbDiff call shape was written as if static methods instead of the fluent `forPersistenceUnit().…().execute()` builders, an internal `@Inherited` contradiction sat between the Inheritance subsection and the Acceptance Criteria line, and the `Seed Commit` paragraph referenced a non-existent `resolveConnection()` returning `Optional<Connection>`. Then opened GitHub issue #20 and let `gh issue develop` create the tracking branch `20-testcontrol-module-testcontrol-module`.
+
+Phase 1 ships only the api submodule:
+
+- `modules/testcontrol-module/pom.xml` — Maven aggregator under jawelte-modules.
+- `modules/testcontrol-module/api/pom.xml` — packaging=jar, zero external compile dependencies (all annotation attribute types resolve through java.lang.annotation), javadoc-jar wired at the verify phase to match the project pattern.
+- `modules/testcontrol-module/api/src/main/java/org/os890/jawelte/module/testcontrol/api/TestControl.java` — the annotation. `@Target(METHOD)`, `@Retention(RUNTIME)`, `@Documented`. Deliberately **not** `@Inherited` — `java.lang.annotation.Inherited` only takes effect on class-level annotations; cross-class inheritance over test methods comes from JUnit Jupiter's `AnnotationSupport.findAnnotation` class-hierarchy walk. Three attributes: `startScopes` (empty default = "all scope-module scopes activate normally" sentinel so non-`@TestControl` tests are unaffected by the veto observer), `testData` (empty default = no fixture handling; entries may carry a `puName:` prefix for multi-PU routing), `testDataBasePath` (empty default; MP Config key `org.os890.jawelte.module.testcontrol.api.TestControl.base-path` takes precedence over the annotation attribute when set).
+- `modules/pom.xml` — added `testcontrol-module` to `<modules>`.
+- `pom.xml` (root) — added `jawelte-testcontrol-module-api` to `<dependencyManagement>`.
+
+Phase 1 checkpoint: `./mvnw -B -ntp -DskipTests install` clean across the full reactor in 27 seconds; Checkstyle, Maven Enforcer, Apache RAT, JaCoCo, and Javadoc all green. impl submodule (CDI extension performing the unconditional `@ConfigBean` → `@TestClassScoped` remap) deferred to Phase 2.

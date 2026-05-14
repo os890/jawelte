@@ -309,6 +309,13 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal testcontrol-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-testcontrol-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!--
                 Jackson supplies the JSON tree + parser-level line-number
                 tracking that content-diff-module/impl's JsonDiffEngine
