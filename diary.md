@@ -3177,3 +3177,22 @@ Files:
 Hit the same Checkstyle "no final classes" rule on `VerificationCompleted` — dropped `final`; the class is effectively final via private constructor.
 
 Phase 5 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green. Behavioural validation (scenarios 1–10, 16–20 covering seed/update/commit/verify, multi-PU, base-path precedence, autoCommit handling, multi-entry ordering) deferred to Phase 7.
+
+## 2026-05-14 — TICKET-010 Phase 6: tests/testcontrol-module aggregator + first batch (07, 12, 21, 22) green on OWB and Weld
+
+Added the tests/testcontrol-module aggregator (modeled on tests/scope-module, with testcontrol-module-api/impl pulled in as test-scope deps), wired it into the top-level tests/pom.xml modules list, and shipped four no-DB scenarios that exercise the parts of TICKET-010 that don't require H2 / JPA:
+
+- **Scenario 07** `scenario-07-empty-testdata-no-op` — a test class with NO `@TestControl` on any method. Verifies the lifecycle adapter is a silent no-op: no scope vetoes, no test-data side effects, no exception. Boot + run + clean teardown.
+- **Scenario 12** `scenario-12-scope-filter-empty-allows-all` — `@TestControl(startScopes = {})`. Empty array is the documented sentinel for "all scope-module scopes activate normally"; the observer must NOT veto, so `@TestMethodScoped` and `@TestClassScoped` beans are both reachable in the test method.
+- **Scenario 21** `scenario-21-configbean-remapped-to-testclass` — a `@ConfigBean`-annotated class. Verifies the remap via `BeanManager.resolve(...).getScope()` returning `TestClassScoped.class`.
+- **Scenario 22** `scenario-22-configbean-remap-unconditional` — same as 21 but the test class has NO `@TestControl` on any method; still expects the remap (the spec is "unconditional when testcontrol-module is on classpath").
+
+Phase 6 checkpoint: `./mvnw -B -ntp verify` from tests/testcontrol-module green under both `-Powb` (default) and `-Pweld`. 4 scenarios × 2 CDI runtimes = 8 test runs, all green.
+
+**Skipped from this commit** (Phase 7 follow-ups):
+
+- Scope-filter scenarios **11**, 13–15 require scope-module to actually honor the `BeforeScopeStarted` veto. Today scope-module's `ScopeLifecycleAdapter` activates `@TestMethodScoped` unconditionally regardless of veto status (and only fires `BeforeScopeStarted` for `@TestMethodScoped` — `@TestClassScoped` is class-level and never goes through the event). The testcontrol observer correctly emits `event.veto()` per the spec, but scope-module ignores it. Two paths forward: (a) extend scope-module's adapter to skip activation when vetoed (cross-module change), or (b) reframe TICKET-010's scope-veto contract to "observer-side only". TBD with the user.
+- Test-data pipeline scenarios **1–10, 16–20** need H2 + JPA + entity classes + `persistence.xml` + DBunit XML datasets. Same setup shape as tests/db-testdata-module's transactional scenarios; deferred to Phase 7 to keep this commit reviewable.
+- Inheritance scenarios **24–26** and priority-ordering scenario **27** are tractable without DB; queued for Phase 7.
+
+`verify-all.sh` wiring deferred to Phase 7 (when the full scenario set is in).
