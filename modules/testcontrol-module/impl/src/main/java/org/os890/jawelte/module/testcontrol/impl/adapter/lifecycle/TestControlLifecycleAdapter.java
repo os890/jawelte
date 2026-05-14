@@ -23,9 +23,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import jakarta.annotation.Priority;
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.spi.Bean;
-import jakarta.enterprise.inject.spi.BeanManager;
+import jakarta.enterprise.inject.spi.CDI;
 
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.platform.commons.support.AnnotationSupport;
@@ -114,9 +112,9 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
         Optional<TestControl> annotation =
                 AnnotationSupport.findAnnotation(testMethod.get(), TestControl.class);
         annotation.ifPresent(value -> testContext.bindMetadata(TestControl.class, value));
-        configureScopeObserver(testContext, annotation.orElse(null));
+        configureScopeObserver(annotation.orElse(null));
         if (annotation.isPresent() && annotation.get().testData().length > 0) {
-            TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
+            TestDataHandler handler = resolveBean(TestDataHandler.class);
             if (handler != null) {
                 handler.seedAll(annotation.get());
             }
@@ -126,7 +124,7 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
     @Override
     public void afterEach(TestContext testContext) {
         // Handler is @ApplicationScoped: resolve once so clearActive runs in finally regardless of how verifyAll exits.
-        TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
+        TestDataHandler handler = resolveBean(TestDataHandler.class);
         try {
             Optional<TestControl> annotation = testContext.getMetadata(TestControl.class);
             if (handler != null
@@ -146,8 +144,8 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
         }
     }
 
-    private static void configureScopeObserver(TestContext testContext, TestControl annotation) {
-        TestControlScopeObserver observer = resolveBean(testContext, TestControlScopeObserver.class);
+    private static void configureScopeObserver(TestControl annotation) {
+        TestControlScopeObserver observer = resolveBean(TestControlScopeObserver.class);
         if (observer == null) {
             return;
         }
@@ -161,20 +159,10 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
         return new LinkedHashSet<>(Arrays.asList(annotation.startScopes()));
     }
 
-    private static <T> T resolveBean(TestContext testContext, Class<T> beanType) {
-        Optional<BeanManager> beanManager =
-                testContext.getMetadata(SeContainer.class).map(SeContainer::getBeanManager);
-        if (beanManager.isEmpty()) {
-            return null;
-        }
-        BeanManager bm = beanManager.get();
+    private static <T> T resolveBean(Class<T> beanType) {
         try {
-            Bean<?> bean = bm.resolve(bm.getBeans(beanType));
-            if (bean == null) {
-                return null;
-            }
-            return beanType.cast(bm.getReference(bean, beanType, bm.createCreationalContext(bean)));
-        } catch (RuntimeException missingBean) {
+            return CDI.current().select(beanType).get();
+        } catch (RuntimeException noContainerOrNoBean) {
             return null;
         }
     }

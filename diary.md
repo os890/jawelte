@@ -3384,3 +3384,27 @@ User pointed out that the `@ConfigBean → @TestClassScoped` scope-upgrade CDI E
 
 **Verification.** `tests/scope-module` reactor: 30/30 scenarios pass under `-Powb` and `-Pweld`. `tests/testcontrol-module` reactor: 9/9 remaining scenarios pass under `-Powb` and `-Pweld`. (Required an explicit `install` of `jawelte-scope-module-impl` first — when test reactors are run from their own root, they pull scope-module/impl from the local m2 repo rather than reactor sources.)
 
+
+## 2026-05-14 — Simplify TestControlLifecycleAdapter.resolveBean to CDI.current()
+
+User correction on the POC-comparison T14 finding: don't avoid
+`CDI.current()` as a matter of style — only reach for the longer
+`BeanManager` path when there is a concrete technical reason. Original
+reasoning ("consistency with another helper", "keep CDI.current() off
+the compile classpath") didn't hold up: `jakarta.enterprise.cdi-api` is
+already on testcontrol-module's compile classpath, and consistency with
+a 12-line helper isn't enough to outweigh a 3-line one that works.
+
+Refactor:
+
+- `TestControlLifecycleAdapter.resolveBean` collapsed from 12 lines
+  (resolve `SeContainer` from `TestContext` metadata, get
+  `BeanManager`, look up `Bean`, get a `CreationalContext`-backed
+  reference) to 3 lines wrapping `CDI.current().select(beanType).get()`.
+- Dropped the unused `TestContext testContext` parameter from
+  `resolveBean` and from `configureScopeObserver`. Updated the three
+  call sites.
+- Dropped imports for `SeContainer`, `Bean`, `BeanManager`. Added
+  import for `jakarta.enterprise.inject.spi.CDI`.
+
+All testcontrol-module scenarios pass under both `-Powb` and `-Pweld`.
