@@ -90,27 +90,6 @@ Decide later whether any/all of the three are worth doing.
 
 ## TICKET-010 follow-ups (post-implementation findings)
 
-### Test-data pipeline seed-commit needs an active EntityManager
-
-`TestDataHandler.seedAll(...)` runs in testcontrol-module's `beforeEach` at `@Priority(50)`. It calls `DbSeed.forPersistenceUnit(name)…` which delegates to `PersistenceUnitConnectionResolver.connectionFor(name)`. The default jpa-module impl (`DefaultPersistenceUnitConnectionResolver`) requires an active `EntityManager` for the named PU on the calling thread:
-
-```java
-public Connection connectionFor(String persistenceUnitName) {
-    EntityManager entityManager = …pop from active stack…;
-    Session session = entityManager.unwrap(Session.class);
-    return session.doReturningWork(connection -> connection);
-}
-```
-
-jpa-module's lifecycle adapter pushes an EM onto the active stack only inside `beginTransactionForTransactionalTestMethod` — which runs at `@Priority(200)`, AFTER testcontrol's `@Priority(50)`. So when testcontrol's seedAll asks for a connection, no EM is active and the resolver fails.
-
-Paths forward:
-- (a) Extend jpa-module to push an EM in `beforeEach` regardless of `@Transactional` (broad change).
-- (b) Have testcontrol obtain a connection by another route (e.g. open one from the EMF directly, then commit/close itself).
-- (c) Delay testcontrol's seed phase to run inside the transactional method via an interceptor or wrapper.
-
-Until one of these is settled, the DB-driven scenarios (1–10, 16–20) cannot be expected to pass even after they are written.
-
 ### `BeforeScopeStarted` veto is currently advisory
 
 scope-module's `ScopeLifecycleAdapter` fires `BeforeScopeStarted(TestMethodScoped.class)` and then activates the context unconditionally regardless of `event.isVetoed()` — the scope-module adapter docstring acknowledges: *"the 'usage-veto' semantics — telling consumers to skip use of @TestMethodScoped beans for a given method — are deferred to a follow-up ticket."*
@@ -127,7 +106,7 @@ Paths forward:
 
 `TestDataHandler.seedAll(...)` walks `@TestControl(testData=…)` entries in array order and runs each entry's `dbIn/` files (then later each entry's `dbUpdate/` files) without flushing between entries or files. When one entry's `*.xml` dataset fails mid-pipeline (constraint violation, FK violation, DBunit parse error), the failure currently surfaces from `DbSeed…execute()` immediately — but with no breadcrumb beyond the dataset file path, and the prior entries' data sits in the open transaction without being either fully committed or fully rolled back. Error localization across multi-entry seeds is harder than it needs to be.
 
-Two shapes to consider (after the seed-commit-needs-EM follow-up above is settled, since that's what gives us an active EntityManager to flush in the first place):
+Two shapes to consider (now tractable because `TestDataSeedTransactionTemplate` already runs each phase inside a managed transaction with the EM on the active stack — so a `flush` / `commit` between entries is a small addition to the existing loop):
 
 - `em.flush()` between entries: pushes the EntityManager's first-level cache to the JDBC layer; still inside the active transaction; cheap. Doesn't change the transactional contract, just makes failures surface at the entry boundary they originated from.
 - `connection.commit()` between entries: stronger isolation; each entry's data is durable as soon as it succeeds, so a later entry's failure does not roll back the earlier ones. Aligns naturally with the seed-commit semantics already documented for the post-seed commit phase, just earlier in the pipeline. Changes visibility: if a later `@Transactional` test method then opens its own transaction, seed data is already committed across all entries.
