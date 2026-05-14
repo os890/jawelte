@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-jaxrs-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-jaxrs-module-api</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (jaxrs-module/api)</name>
+    <description>Ships the @EnableJaxRs test-class annotation (Class&lt;?&gt;[] restResources), the TestUrl injection point (Supplier&lt;String&gt; returning the live SeBootstrap base URL with the OS-resolved port), and the ResponseDiff utility that bridges jakarta.ws.rs.core.Response to TICKET-008's ContentDiff.JsonBuilder / ContentDiff.XmlBuilder. Compile-depends on jawelte-core-api (for the SPI baseline) and on jawelte-content-diff-module-api (the ContentDiff return types of ResponseDiff.forJson / forXml). jakarta.ws.rs-api is provided — consumer test runs bring CXF or RESTEasy via the corresponding Maven profile.</description>
+
+    <dependencies>
+        <!--
+            core-api supplies the SPI surface shared with the impl
+            side and the cross-cutting types (TestContext keys, etc.)
+            consumers occasionally reach for from inside @EnableJaxRs
+            test classes.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            content-diff-module/api supplies ContentDiff.JsonBuilder
+            and ContentDiff.XmlBuilder — the typed return types on
+            ResponseDiff.forJson(Response) and ResponseDiff.forXml(Response).
+            Hard compile dep on the api jar (not just impl) because the
+            return type is part of the api signature.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-content-diff-module-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.ws.rs-api supplies jakarta.ws.rs.core.Response,
+            used as the input type of ResponseDiff.forJson /
+            ResponseDiff.forXml. provided scope (inherited from the
+            parent's dependencyManagement) — the active test classpath
+            ships CXF or RESTEasy which transitively brings a
+            jakarta.ws.rs-api jar.
+        -->
+        <dependency>
+            <groupId>jakarta.ws.rs</groupId>
+            <artifactId>jakarta.ws.rs-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.annotation-api supplies the meta-annotations
+            (@Documented, @Target etc. come from java.lang.annotation,
+            but @PostConstruct / @PreDestroy / @Priority etc. may be
+            referenced by future api additions). provided scope
+            (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

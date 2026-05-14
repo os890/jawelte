@@ -3432,3 +3432,66 @@ the demonstrating scenario under `tests/scope-module/`:
 Passes under both `-Powb` and `-Pweld`. T15 in the comparison
 report flipped from "no action proposed" to "done — scenario 31
 added".
+
+## 2026-05-14 — TICKET-011 Phase 1 (scaffolding)
+
+Branched `22-jax-rs-module-jaxrs-module` off main via
+`gh issue develop 22`. Scaffolded the empty Maven structure for
+jaxrs-module — the embedded Jakarta REST 4.0 container module that
+runs alongside the per-test-class CDI SE container.
+
+Files added / edited:
+
+- **`pom.xml`** — pinned three new version properties
+  (`jakarta.ws.rs.version=4.0.0`, `cxf.version=4.1.0`,
+  `resteasy.version=6.2.11.Final`). Added `jakarta.ws.rs-api`
+  (provided) to `<dependencyManagement>`. Added internal
+  cross-references for `jawelte-jaxrs-module-api` and
+  `jawelte-jaxrs-module-impl`.
+- **`modules/pom.xml`** — appended `<module>jaxrs-module</module>`
+  to the modules aggregator.
+- **`modules/jaxrs-module/pom.xml`** — new aggregator pom
+  (packaging=pom; api + impl submodules).
+- **`modules/jaxrs-module/api/pom.xml`** — packaging=jar; empty
+  `src/`. Compile deps on `jawelte-core-api` and
+  `jawelte-content-diff-module-api`. Provided deps on
+  `jakarta.ws.rs-api` and `jakarta.annotation-api`. javadoc-jar
+  plugin bound at verify.
+- **`modules/jaxrs-module/impl/pom.xml`** — packaging=jar; empty
+  `src/`. Compile deps on `jawelte-jaxrs-module-api`,
+  `jawelte-core-api`, `jawelte-scope-module-api`. Provided deps on
+  `jakarta.enterprise.cdi-api`, `jakarta.ws.rs-api`,
+  `microprofile-config-api`. javadoc-jar plugin bound at verify.
+
+`./mvnw validate` is green end-to-end; the three new rows
+(`jaxrs-module aggregator`, `jaxrs-module/api`, `jaxrs-module/impl`)
+appear in the reactor build order between `testcontrol-module
+aggregator` and the `tests` aggregator. No Java source yet — that
+comes next.
+
+Pre-scaffold design decisions (surfaced via AskUserQuestion):
+
+- **Provider selection model**: Maven-profile-only (`-Pcxf` default,
+  `-Presteasy` switch), mirroring the existing `-Powb` / `-Pweld`
+  pattern for the CDI SE runtime. The system-property mechanism
+  described in earlier drafts of the local ticket was removed from
+  the §"JAX-RS Provider Profiles" subsection, from test scenario 14,
+  from the acceptance criteria, and from the Maven Dependencies
+  table. The CXF artifact reference was corrected from
+  `cxf-rt-rs-sse` (SSE-only) to `cxf-rt-frontend-jaxrs` (+ HTTP
+  transport); the RESTEasy artifact reference was generalised from
+  `resteasy-undertow` to `resteasy-core` (+ HTTP transport).
+- **CXF / RESTEasy specific artifacts**: deferred to the
+  test-scenario wiring step (they only need to land in
+  `<dependencyManagement>` when the per-scenario poms activate
+  their profiles).
+- **`architecture.md` fixes** (`JaxRsContainerPort` removal from
+  the "Planned" line; `jawelte-jaxrs` → `jawelte-jaxrs-module`
+  table-row rename): deferred to a later commit on this feature
+  branch (the usual main-first doc protocol was waived for
+  TICKET-011).
+- **Test portability matrix**: OWB+CXF is the default; `-Pweld`
+  and `-Presteasy` are opt-in. No mandatory 2x2 verify-all.sh
+  enforcement for this ticket.
+
+GitHub: issue #22, PR will be opened once implementation lands.

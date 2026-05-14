@@ -42,5 +42,6 @@
         <module>content-diff-module</module>
         <module>db-testdata-module</module>
         <module>testcontrol-module</module>
+        <module>jaxrs-module</module>
     </modules>
 </project>
