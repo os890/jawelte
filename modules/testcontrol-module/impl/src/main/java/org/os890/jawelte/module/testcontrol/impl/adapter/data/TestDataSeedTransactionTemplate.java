@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.testcontrol.impl.adapter.data;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.UnsatisfiedResolutionException;
 import jakarta.enterprise.inject.literal.NamedLiteral;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.EntityManager;
@@ -82,10 +83,20 @@ public class TestDataSeedTransactionTemplate {
     @Transactional
     public void runInTransaction(String puName, Runnable seedWork) {
         EntityManager entityManager = lookupEntityManager(puName);
-        // Touch the EM so jpa-module's active-PU stack is populated
+        // Force jpa-module's active-PU stack to populate for this PU
         // before DbSeed.forPersistenceUnit() resolves the connection.
-        // Same pattern db-testdata-module's scenario-36 uses.
-        entityManager.toString();
+        // Object methods (toString / equals / hashCode) are handled
+        // locally by EntityManagerProxy and do NOT trigger
+        // peekOrAutoBegin — so an Object-method call would not push
+        // the EM, and the seed's connectionFor(puName) would then peek
+        // an empty stack and throw. isOpen() is a real EntityManager
+        // method, side-effect-free, and routes through the proxy's
+        // peekOrAutoBegin path — which lazy-creates the EM for the
+        // named PU, begins its EntityTransaction, and pushes onto the
+        // per-thread stack. Matters most in multi-PU mode where the
+        // strategy's "all-lazy" begin() leaves the frame empty until
+        // a real EM method call lazy-joins each requested PU.
+        entityManager.isOpen();
         seedWork.run();
     }
 
@@ -93,6 +104,20 @@ public class TestDataSeedTransactionTemplate {
         if (puName == null || puName.isEmpty()) {
             return CDI.current().select(EntityManager.class).get();
         }
-        return CDI.current().select(EntityManager.class, NamedLiteral.of(puName)).get();
+        try {
+            return CDI.current().select(EntityManager.class, NamedLiteral.of(puName)).get();
+        } catch (UnsatisfiedResolutionException unsatisfied) {
+            // CDI runtimes differ in whether they put the @Named value
+            // in the exception message (Weld 5+ omits it, OWB includes
+            // it). Re-throw with an explicit message that names the
+            // offending PU so the user can grep their test output and
+            // find the typo in @TestControl(testData="<puName>:…").
+            throw new IllegalArgumentException(
+                    "@TestControl(testData=\"" + puName + ":…\") references persistence unit '"
+                            + puName + "' but no EntityManager CDI bean is registered with "
+                            + "@Named(\"" + puName + "\"). Declare the persistence unit in "
+                            + "META-INF/persistence.xml, or fix the typo in the puName: prefix.",
+                    unsatisfied);
+        }
     }
 }

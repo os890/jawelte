@@ -1866,7 +1866,17 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-testcontrol-module-scenario-08-testdata-missing-dbexpected-fails</artifactId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-08-multi-pu-testdata-routes-per-entry</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-08a-multi-pu-invalid-pu-name-fails</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-28-requireDbExpected-guard-fails-when-missing</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

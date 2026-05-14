@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.tests.testcontrol.scenario08;
+package org.os890.jawelte.tests.testcontrol.scenario28;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClass;
@@ -29,8 +29,8 @@ import org.junit.platform.testkit.engine.EventType;
 /**
  * Scenario 08 — guards the {@code requireDbExpected} default
  * behaviour. {@link MissingDbExpectedSubject} carries
- * {@code @TestControl(testData="testdata/scenario08")} where
- * {@code testdata/scenario08/} contains only a {@code dbIn/}
+ * {@code @TestControl(testData="testdata/scenario28")} where
+ * {@code testdata/scenario28/} contains only a {@code dbIn/}
  * sub-folder. The default {@code requireDbExpected=true} therefore
  * detects "no {@code dbExpected/*.xml} contribution across the
  * entries" and raises {@link IllegalStateException} from
@@ -43,7 +43,7 @@ import org.junit.platform.testkit.engine.EventType;
  * {@code "requires at least one dbExpected"} so the user gets a
  * pointer to the configuration error.
  */
-class Scenario08Test {
+class Scenario28Test {
 
     @Test
     void requireDbExpectedGuardFailsWhenNoDbExpectedXmlAcrossEntries() {

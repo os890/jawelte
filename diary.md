@@ -3314,3 +3314,23 @@ Files:
 - `coverage-report/pom.xml` — added scenario 08 to the test-scenarios dep list.
 
 Phase 11 checkpoint: tests/testcontrol-module verify green under both `-Powb` and `-Pweld`. 10 scenarios × 2 CDI runtimes = 20 test runs. Scenario 01 still passes (with the explicit `requireDbExpected=false`); scenario 02 still passes (its `dbExpected/customers.xml` satisfies the guard); scenario 08 confirms the guard's failure-case message.
+
+## 2026-05-14 — TICKET-010 Phase 12: multi-PU testData routing scenarios (08, 08a) + EM-touch fix + scenario rename
+
+User asked for multi-PU testData scenarios and an invalid-puName error case. While writing scenario-08 (the happy path), the test surfaced a real bug in `TestDataSeedTransactionTemplate`: the post-lookup touch was `entityManager.toString()`, but `EntityManagerProxy.invoke` handles Object methods (`toString` / `equals` / `hashCode`) locally — it returns `"EntityManagerProxy[name]"` directly without ever calling `peekOrAutoBegin`. In single-PU mode the bug was invisible because `DefaultResourceLocalTransactionStrategy.begin()` eagerly opens the only PU and pushes it onto the holder before the template body runs; in multi-PU mode `resolveEagerPersistenceUnit` returns `null` (multi-PU + no `@PersistenceConfig`) and the strategy takes the "all-lazy" path with an empty frame — relying on the FIRST real `EntityManager` method call to populate it. Swapping `entityManager.toString()` for `entityManager.isOpen()` (a real `EntityManager` method, side-effect-free, routes through `peekOrAutoBegin`) fixes the multi-PU path AND remains correct for single-PU.
+
+Scenarios:
+
+- **scenario-08-multi-pu-testdata-routes-per-entry** — two PUs (`testcontrolScenario08CustomersPU`, `testcontrolScenario08OrdersPU`), each with its own H2 in-memory database and entity (`Customer`, `Order` — the table is `CUSTOMER_ORDER` because `ORDER` is reserved in H2's dialect). `@TestControl(testData = {"…CustomersPU:testdata/scenario08-customers", "…OrdersPU:testdata/scenario08-orders"}, requireDbExpected = false)`. `MultiPuCountService` injects both EMs via `@PersistenceContext(unitName=…)` and queries each PU independently; the test asserts CUSTOMER (PU 1) has 3 rows and CUSTOMER_ORDER (PU 2) has 2 rows, proving the `puName:` prefix routes each entry to the right database.
+- **scenario-08a-multi-pu-invalid-pu-name-fails** — `UnknownPuNameSubject` carries `@TestControl(testData = "thisPersistenceUnitIsNotDeclared:testdata/scenario08a", requireDbExpected = false)`. The CDI `@Named("thisPersistenceUnitIsNotDeclared")` lookup for `EntityManager` finds no bean — raises `UnsatisfiedResolutionException`. `Scenario28aTest` drives via `EngineTestKit` and walks the failure cause chain. Originally relied on the CDI runtime's own exception message containing the PU name, which **OWB does include but Weld 5+ omits** (Weld's message says `@Named` without the value). Caught the resolution failure in `TestDataSeedTransactionTemplate.lookupEntityManager` and re-throw as `IllegalArgumentException` with an explicit message naming the offending PU — works deterministically on both runtimes, points the user at the typo.
+
+Renames (to free up the spec-aligned scenario-08 number for multi-PU):
+
+- `tests/testcontrol-module/scenario-08-testdata-missing-dbexpected-fails/` → `scenario-28-requireDbExpected-guard-fails-when-missing/` (the `requireDbExpected` guard isn't part of the spec's original 27 scenarios — it's a new attribute added in Phase 11, so it sits past spec scenario 27).
+- Inner Java package `scenario08` → `scenario28` to match.
+- `Scenario08Test.java` → `Scenario28Test.java` + class name + javadoc references updated.
+- `testdata/scenario08` → `testdata/scenario28` to match the new package name in the `@TestControl(testData=…)` value.
+
+Phase 12 checkpoint: 12 scenarios × 2 CDI runtimes = 24 test runs all green under both `-Powb` and `-Pweld`.
+
+Multi-PU happy path is the most substantive functional verification of the testData pipeline to date — proves the per-PU grouping in `TestDataHandler.runPhase`, the `NamedLiteral` CDI lookup in the template, the active-PU stack maintenance through the seed transaction, and the interceptor's `enterTransactionalScope()` empty-frame + lazy-populate path all work end-to-end across two distinct H2 databases.

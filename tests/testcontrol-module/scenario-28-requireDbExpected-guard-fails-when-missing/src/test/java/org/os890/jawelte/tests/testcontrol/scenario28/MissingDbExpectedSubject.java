@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.tests.testcontrol.scenario08;
+package org.os890.jawelte.tests.testcontrol.scenario28;
 
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
@@ -39,7 +39,7 @@ public class MissingDbExpectedSubject {
     }
 
     @Test
-    @TestControl(testData = "testdata/scenario08")
+    @TestControl(testData = "testdata/scenario28")
     void shouldFailBecauseDbExpectedIsAbsent() {
         // Never reached — testcontrol's beforeEach raises
         // IllegalStateException before this method body runs.
