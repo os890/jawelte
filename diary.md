@@ -3495,3 +3495,43 @@ Pre-scaffold design decisions (surfaced via AskUserQuestion):
   enforcement for this ticket.
 
 GitHub: issue #22, PR will be opened once implementation lands.
+
+## 2026-05-14 — TICKET-011 Phase 2 (api types)
+
+Added the three public types of jaxrs-module/api:
+
+- **`EnableJaxRs`** — `@Target(TYPE)`, `@Retention(RUNTIME)`,
+  single required attribute `Class<?>[] restResources()`. Spec
+  notes inline: must be combined with `@EnableTestBeans` (the
+  lifecycle adapter raises `IllegalStateException("@EnableJaxRs
+  requires @EnableTestBeans on the test class: {className}")`
+  when missing); resource classes are not auto-allowlisted (the
+  user is responsible for `@TestBean(...)` discovery under
+  whitelist mode); the CDI scope of each resource is whatever
+  CDI assigns — the module does not override it.
+- **`TestUrl`** — interface extending `Supplier<String>`. Single
+  method `String get()` returning the live
+  `"http://localhost:{port}"` base URL. Spec notes: throws
+  `IllegalStateException("JAX-RS server not started yet")` when
+  called before `JaxRsLifecycleAdapter.beforeAll` completes;
+  the implementing bean (`TestUrlHolder`) is
+  `@ApplicationScoped` by default and auto-upgraded to
+  `@TestClassScoped` when testcontrol-module is on the classpath.
+- **`ResponseDiff`** — abstract + private constructor utility
+  class. Two static factories: `forJson(Response)` and
+  `forXml(Response)` returning content-diff-module's
+  `JsonBuilder` / `XmlBuilder` respectively. Reads the entity
+  as `String` via `Response.readEntity(String.class)` and
+  forwards to `ContentDiff.forJson(...)` / `ContentDiff.forXml(...)`.
+  `NullPointerException` on `null` response (via
+  `Objects.requireNonNull`); `IllegalStateException("Response
+  has no entity")` when `!response.hasEntity()`. The two
+  `ContentDiff.{json|xml}.ignore` MP Config keys inherited
+  transparently from content-diff-module — no jaxrs-side
+  wiring needed.
+
+`./mvnw -pl modules/jaxrs-module/api compile`: 3 sources
+compile, 0 Checkstyle violations.
+
+Commit: UNTESTED: TICKET-011 Phase 2 — api types
+(@EnableJaxRs, TestUrl, ResponseDiff).
