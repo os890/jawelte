@@ -3279,3 +3279,17 @@ Files:
 Both new scenarios are also under -Pweld. 9 scenarios × 2 CDI runtimes = 18 test runs all green (~10s OWB, ~11s Weld). Phase 9's `TestDataSeedTransactionTemplate` is now actually exercised by tests — what landed in Phase 9 was untested-and-broken; it took two fixes (the handler state refactor + the verify-side transaction wrap) before scenario-02 went green.
 
 Still TODO: spec rewrite at `tickets/010-testcontrol-module.md` so the Seed Commit section matches Phase 9 reality; issue #20 body sync from the updated ticket file.
+
+## 2026-05-14 — Fix verify-all.sh Phase 18 coverage-report invocation (pre-existing latent bug)
+
+Phase 18 of `verify-all.sh` (`run "coverage-report" "$REPO_ROOT/coverage-report" verify`) was a `cd coverage-report && mvn verify` invocation. That puts Maven in single-module-session mode: only `coverage-report` itself is in the reactor. The `jacoco:report-aggregate` goal binds to `verify` but discovers exec data by walking the active reactor's project list — with only the aggregator in the session it loads ZERO exec files and silently overwrites the populated aggregate report at `coverage-report/target/site/jacoco-aggregate/index.html` with the empty placeholder (1624 bytes, `Total: 0 of 0, n/a`).
+
+Repro before the fix: in-flight report at Phase 17 was 221KB (populated by Phase 01's full-reactor install whose `verify` lifecycle invoked `report-aggregate` in reactor mode, with the prior sweep's stale exec files); Phase 18 turned it into 1624 bytes empty.
+
+This isn't a TICKET-010 regression — the same single-module Phase 18 invocation has been in `verify-all.sh` since the original `wire content-diff-module into verify-all and coverage-report` commit (`b1f2491`). The plugin config in `coverage-report/pom.xml` is byte-identical to what's on `main`. The bug was just latent — Phase 01's full-reactor install populated the report directory mid-sweep, so a casual end-of-sweep check landed on a directory that existed and looked plausible, even though by the time Phase 18 returned the file had been overwritten with the empty placeholder.
+
+Fix: change Phase 18 to `cd $REPO_ROOT && ./mvnw -pl :coverage-report -am -DskipTests verify`. From repo root with `-am`, the reactor session contains every transitive dependency of `coverage-report` (which is every other module). `report-aggregate` walks that reactor and finds each `tests/<module>/scenario-*/target/jacoco.exec` it needs. `-DskipTests` skips Surefire re-runs (tests already ran in Phases 02–17). With the local repo warm from Phase 01 install, each transitive dependency reports as ~0.015s SUCCESS (up-to-date, no recompile) so the net overhead is single-digit seconds.
+
+Validated by hand before committing: `time ./mvnw -B -ntp -pl :coverage-report -am -DskipTests verify` completed in 13s wall-clock, loaded all 350 `*.exec` files from the test scenarios, and produced a 221KB populated `index.html` (vs the broken 1624-byte placeholder).
+
+The 14-line patch to `verify-all.sh` includes a comment block explaining why the invocation looks the way it does, so future-self doesn't try to "simplify" it back to the broken `cd coverage-report && mvn verify` shape.
