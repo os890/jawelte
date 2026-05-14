@@ -3408,3 +3408,27 @@ Refactor:
   import for `jakarta.enterprise.inject.spi.CDI`.
 
 All testcontrol-module scenarios pass under both `-Powb` and `-Pweld`.
+
+## 2026-05-14 — Add ContainerStarted eager-init scenario to scope-module
+
+In view of T15 in the POC comparison report (the
+`ContainerStarted` + `@TestClassScoped` "eager init" pattern), add
+the demonstrating scenario under `tests/scope-module/`:
+
+- `scenario-31-testclassscoped-observes-containerstarted-once`.
+- A `@TestClassScoped` static inner bean with
+  `@Observes ContainerStarted` increments a counter and captures
+  the event's `getTestClass()`. Two `@Test` methods on the same
+  class share the bean via the class-scoped context and both see
+  the counter at `1` (the event was delivered once, and the same
+  instance is shared across methods).
+- Verifies the cross-cutting pattern is available in jawelte:
+  `ContainerStarted` fires while `TestClassScopedContext` is
+  active (the context allocates its store eagerly in the
+  context's constructor during `AfterBeanDiscovery`), so a
+  `@TestClassScoped` observer is reachable from the
+  `BeanManager.getEvent().fire(...)` site in `CdiTestBeanContainer.beforeAll`.
+
+Passes under both `-Powb` and `-Pweld`. T15 in the comparison
+report flipped from "no action proposed" to "done — scenario 31
+added".

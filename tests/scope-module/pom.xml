@@ -64,6 +64,7 @@
         <module>scenario-28-configbean-remapped-to-testclass</module>
         <module>scenario-29-configbean-remap-unconditional</module>
         <module>scenario-30-configbean-with-explicit-scope-not-remapped</module>
+        <module>scenario-31-testclassscoped-observes-containerstarted-once</module>
     </modules>
 
     <dependencies>
