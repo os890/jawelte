@@ -23,16 +23,18 @@
     <!--
         jaxrs-module/impl's CDI bean surface:
 
-          - TestUrlHolder (@ApplicationScoped, auto-upgraded to
-            @TestClassScoped by JaxRsCdiExtension when
-            testcontrol-module is on the classpath).
+          - TestUrlHolder (@ApplicationScoped).
 
         The JaxRsLifecycleAdapter is NOT a CDI bean — it is
         ServiceLoader-loaded via TestModuleLifecyclePort. The
         CdiIntegrationFilter is also not a CDI bean — JAX-RS
         instantiates it via its own provider scanning when
         SeBootstrap.start sees it in Application.getClasses().
-        The JaxRsCdiExtension is the CDI Extension itself,
-        registered through META-INF/services/jakarta.enterprise.inject.spi.Extension.
+
+        The @SessionScoped → @TestMethodScoped scope remap that
+        scenario 6 / 16 rely on lives in scope-module/impl
+        (SessionScopeRemapCdiExtension) — scope-module owns
+        every scope-rewriting concern in the project, so
+        jaxrs-module ships NO CDI Extension of its own.
     -->
 </beans>

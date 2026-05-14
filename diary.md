@@ -4076,3 +4076,72 @@ scenarios still green; new scenario 12 passes; no regressions.
 Commit: FIXED: TICKET-011 hex-arch — drop junit-jupiter-api dep
 from jaxrs-module/api by meta-annotating @EnableJaxRs with
 @EnableTestBeans.
+
+## 2026-05-14 — TICKET-011 scope-mapping refactor (move @SessionScoped remap into scope-module; drop TestUrlHolder upgrade)
+
+Reworked the scope-rewriting so it follows the project's existing
+"scope-module owns scope remaps" convention.
+
+**The problem with the previous shape**
+
+The `JaxRsCdiExtension` I introduced bundled two distinct
+responsibilities — the global `@SessionScoped → @TestMethodScoped`
+remap (a standard CDI-scope remap, structurally identical to the
+existing `@ConfigBean → @TestClassScoped` remap that lives in
+`scope-module/impl`) AND a class-specific `TestUrlHolder` scope
+override gated on testcontrol-module being on the classpath. Two
+concerns, one extension, in the wrong module. An earlier attempt
+to express the override as a `ScopeBinding.TestUrlHolderScope`
+record collapsed under its own weight — per-feature ScopeBinding
+records don't scale (each new bean that wants a scope override
+would need its own type). The user flagged both: "we don't need
+something extra like TestUrlHolderScope otherwise we collect types
+for every feature".
+
+**The fix**
+
+- **`@SessionScoped → @TestMethodScoped` remap moved to
+  scope-module/impl** as a new
+  `SessionScopeRemapCdiExtension` class, sibling to
+  `ConfigBeanScopeRemapCdiExtension`. Same shape: observes
+  `ProcessAnnotatedType`, filters by the source annotation,
+  rewrites the scope via
+  `AnnotatedTypeConfigurator.remove(...).add(literal)`. Carries
+  its own `TestMethodScopedLiteral` singleton inner class (the
+  pattern this project uses for stable annotation literals).
+  Registered through scope-module's
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  alongside the existing two extensions.
+- **`TestUrlHolder` upgrade dropped entirely.** Ticket-011 itself
+  flagged that "under cdi-module's per-test-class container the
+  two scopes are observably equivalent (one URL per test class
+  either way)" — the upgrade was a cosmetic guarantee. Removing
+  it eliminates the per-feature `ScopeBinding` record AND the
+  testcontrol-classpath probe; `TestUrlHolder` stays plain
+  `@ApplicationScoped`.
+- **`JaxRsCdiExtension` deleted from jaxrs-module/impl**. With
+  the @SessionScoped remap moved out and the TestUrlHolder
+  upgrade dropped, jaxrs-module no longer has any CDI-scope
+  rewriting concern of its own — and ships no CDI Extension at
+  all. The `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  registration file is removed; the now-empty
+  `…impl.adapter.extension` package is removed.
+- **`core/api/port/ScopeBinding.java`** restored to its previous
+  two-record state (`TestBeanDefaultScope`,
+  `AutoMockDefaultScope`); my speculative additions
+  (`SessionScopeRemapTarget`, `TestUrlHolderScope`) are gone.
+- **`scope-module/impl/TestScopeCdiExtension`** restored to its
+  previous bindings (the same two records); the four bindMetadata
+  calls I had added are reverted.
+- **`jaxrs-module/impl/beans.xml`** comment updated — points
+  readers at scope-module/impl for the @SessionScoped remap.
+
+`./mvnw verify` (full reactor): BUILD SUCCESS, 9:34 min. All 14
+jaxrs scenarios still green (6 and 16 prove the remap now fires
+from scope-module's new extension); the existing scope-module
+scenarios for @ConfigBean / @TestMethodScoped / @TestClassScoped
+all still green.
+
+Commit: FIXED: TICKET-011 scope-mapping — move @SessionScoped
+remap to scope-module/impl; drop per-feature ScopeBinding records
+and TestUrlHolder upgrade.
