@@ -57,12 +57,34 @@
 
         <!--
             scope-module/api supplies @TestClassScoped (the target
-            scope of the @ConfigBean remap) and — for later phases —
-            @TestMethodScoped for the startScopes filter.
+            scope of the @ConfigBean remap) and @TestMethodScoped for
+            the startScopes filter.
         -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-scope-module-api</artifactId>
+        </dependency>
+
+        <!--
+            db-testdata-module/api supplies DbSeed + DbDiff fluent
+            builders consumed by TestDataHandler.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-api</artifactId>
+        </dependency>
+
+        <!--
+            jpa-module/api supplies PersistenceUnitConnectionResolver,
+            consumed by TestDataHandler for the raw-JDBC seed commit
+            after phases 1 + 2. Only consulted at runtime when
+            @TestControl(testData=…) is used; without testData this
+            dep is dead weight at runtime but still required at
+            compile time.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
         </dependency>
 
         <dependency>

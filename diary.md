@@ -3155,3 +3155,25 @@ Files:
 The scope-veto chain now is end-to-end working in principle: scope-module fires `BeforeScopeStarted(@TestMethodScoped.class)` at priority 100, the observer reads its allow-set (already pushed by testcontrol at priority 50), and vetoes when the scope is not in the set.
 
 Phase 4 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green. Behavioural verification deferred to the Phase 7 scenarios that exercise scope filtering (11–15) — those will need a `@TestMethodScoped` and `@TestClassScoped` injection target across a couple of `@TestControl(startScopes=…)` configurations.
+
+## 2026-05-14 — TICKET-010 Phase 5: TestDataHandler (seed → commit → verify pipeline)
+
+Added the `@ApplicationScoped` `TestDataHandler` that owns the four-phase test-data pipeline and wired it into the adapter's `beforeEach` / `afterEach`.
+
+Files:
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/TestDataHandler.java` — the orchestrator. `seedAll(annotation, testContext)` walks `testData` entries in array order: phase 1 calls `DbSeed.forPersistenceUnit(…).dataset(xml).cleanInsert().execute()` for each XML in `dbIn/`, phase 2 calls the same with `.update().execute()` on `dbUpdate/`, phase 3 commits the raw JDBC connection for each distinct PU via `PersistenceUnitConnectionResolver.connectionFor(name)` / `connectionForActivePersistenceUnit()` when `autoCommit=false`. `verifyAll(annotation, testContext)` walks `dbExpected/` and asserts via `DbDiff.forPersistenceUnit(…).expected(xml).assertEquals()`. `onAfterTestTransaction(@Observes AfterTestTransaction)` reads `@TestControl` from `TestContext`, runs `verifyAll`, and binds `VerificationCompleted.INSTANCE` on `TestContext` so the adapter's fallback won't double-verify.
+
+  Folder enumeration handles both `file:` URLs (`Files.list`) and `jar:` URLs (`JarURLConnection.getJarFile().entries()` filtered by prefix and `.xml` suffix, sorted). Missing base folder raises `IllegalArgumentException("Test data folder not found: …")`; missing `dbIn/` / `dbUpdate/` / `dbExpected/` sub-folders are silent no-ops for that phase.
+
+  Base-path resolution: MP Config key `org.os890.jawelte.module.testcontrol.api.TestControl.base-path` wins over the annotation's `testDataBasePath` when set to a non-empty value; otherwise the annotation attribute is used. `EntrySpec.parse` splits on `:` to extract an optional `puName:` prefix and joins the base path with the remainder (single `/` separator regardless of trailing/leading slashes on either side).
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/data/VerificationCompleted.java` — singleton marker bound on `TestContext` by the observer; checked by the adapter's afterEach. `public class` (not `final`) because Checkstyle's blanket "no final classes" rule applies even to non-CDI types.
+
+- `modules/testcontrol-module/impl/src/main/java/.../adapter/lifecycle/TestControlLifecycleAdapter.java` (refactored) — factored the bean lookup into a generic `resolveBean(testContext, beanType)` helper used by both the scope-observer wiring and the data-handler wiring. `beforeEach` now also calls `handler.seedAll(annotation, testContext)` when the resolved `@TestControl` has non-empty `testData`. `afterEach` runs `handler.verifyAll(...)` ONLY when `VerificationCompleted` is absent (i.e., the transactional observer did not already run); in either case both metadata keys are unbound in a `finally` so they cannot leak across test methods.
+
+- `modules/testcontrol-module/impl/pom.xml` — added compile deps on `jawelte-db-testdata-module-api` (for `DbSeed` / `DbDiff`) and `jawelte-jpa-module-api` (for `PersistenceUnitConnectionResolver`). The jpa-module dep is only meaningfully exercised at runtime when `testData=…` is used but is required at compile time regardless.
+
+Hit the same Checkstyle "no final classes" rule on `VerificationCompleted` — dropped `final`; the class is effectively final via private constructor.
+
+Phase 5 checkpoint: `./mvnw -B -ntp -DskipTests -pl :jawelte-testcontrol-module-impl -am install` green. Behavioural validation (scenarios 1–10, 16–20 covering seed/update/commit/verify, multi-PU, base-path precedence, autoCommit handling, multi-entry ordering) deferred to Phase 7.

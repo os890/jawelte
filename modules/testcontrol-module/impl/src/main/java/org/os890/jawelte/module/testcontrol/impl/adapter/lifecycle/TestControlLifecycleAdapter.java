@@ -32,69 +32,57 @@ import org.junit.platform.commons.support.AnnotationSupport;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
+import org.os890.jawelte.module.testcontrol.impl.adapter.data.TestDataHandler;
+import org.os890.jawelte.module.testcontrol.impl.adapter.data.VerificationCompleted;
 import org.os890.jawelte.module.testcontrol.impl.adapter.observer.TestControlScopeObserver;
 
 /**
  * {@link TestModuleLifecyclePort} adapter shipped by
- * testcontrol-module/impl. Resolves the active test method's
- * {@link TestControl} annotation in {@code beforeEach}, publishes it
- * on {@link TestContext} (so the Phase&nbsp;5 {@code AfterTestTransaction}
- * observer can read it through {@link TestContext#getMetadata(Class)}
- * with the key {@code TestControl.class}), and pushes the
- * {@code startScopes} allow-list to the {@link TestControlScopeObserver}
- * CDI bean before scope-module's adapter fires its
- * {@code BeforeScopeStarted} events.
+ * testcontrol-module/impl. Orchestrates three things per test method:
  *
- * <p><b>Priority.</b> {@code @Priority(50)} — the lowest among the
- * jawelte modules' lifecycle adapters, so {@code beforeAll} /
- * {@code beforeEach} run <em>first</em> in the chain (before
- * scope-module at 100 fires {@code BeforeScopeStarted}, and before
- * jpa-module at 200 opens a transaction). {@code afterAll} /
- * {@code afterEach} run <em>last</em> (LIFO) so this adapter sees the
- * post-test state — used by the non-transactional {@code dbExpected/}
- * fallback path added in Phase&nbsp;5.
+ * <ol>
+ *   <li>Resolve the active test method's {@link TestControl} and
+ *       publish it on {@link TestContext} under the
+ *       {@code TestControl.class} key so the
+ *       {@link TestDataHandler}'s {@code AfterTestTransaction}
+ *       observer can read it.</li>
+ *   <li>Push the {@code startScopes} allow-list to the
+ *       {@link TestControlScopeObserver} CDI bean before
+ *       scope-module's adapter fires its {@code BeforeScopeStarted}
+ *       events.</li>
+ *   <li>Drive the test-data pipeline through {@link TestDataHandler}:
+ *       phases 1–3 ({@code dbIn/}, {@code dbUpdate/}, raw-JDBC seed
+ *       commit) in {@code beforeEach}; the {@code dbExpected/}
+ *       fallback in {@code afterEach} — only when the
+ *       {@link VerificationCompleted} marker has not been bound on
+ *       {@code TestContext} (which would mean the transactional path
+ *       has already verified through
+ *       {@link TestDataHandler#onAfterTestTransaction}).</li>
+ * </ol>
+ *
+ * <p><b>Priority.</b> {@code @Priority(50)} — lowest among jawelte's
+ * lifecycle adapters, so {@code beforeAll} / {@code beforeEach} run
+ * <em>first</em> in the chain (before scope-module at 100 fires
+ * {@code BeforeScopeStarted}, and before jpa-module at 200 opens a
+ * transaction). {@code afterAll} / {@code afterEach} run
+ * <em>last</em> (LIFO) so the non-transactional {@code dbExpected/}
+ * fallback sees the post-test database state — for non-transactional
+ * tests the JPA module skips its table cleanup, so the data is still
+ * present when the assertion runs.
  *
  * <p><b>Annotation lookup.</b> Uses JUnit Jupiter's
  * {@link AnnotationSupport#findAnnotation(java.lang.reflect.AnnotatedElement,
  * Class) AnnotationSupport.findAnnotation} on the active test method
- * (read off the per-method {@link ExtensionContext} that
- * {@code core/impl}'s {@code DelegatingJUnitExtension} bound on
- * {@code TestContext} in {@code beforeEach}). The Jupiter platform
- * walks the test class hierarchy when the method is not overridden,
- * which is the inheritance contract documented on
+ * (read off the per-method {@link ExtensionContext} bound on
+ * {@link TestContext} by core/impl's {@code DelegatingJUnitExtension}).
+ * The Jupiter platform walks the test class hierarchy when the
+ * method is not overridden — the inheritance contract documented on
  * {@link TestControl}.
  *
- * <p><b>Scope-observer wiring.</b> The adapter looks the
- * {@link TestControlScopeObserver} bean up through the
- * {@link BeanManager} of the {@link SeContainer} bound on
- * {@link TestContext}. The observer is reconfigured on every
- * {@code beforeEach} call so residual state from a previous test
- * method cannot influence the current one:
- *
- * <ul>
- *   <li>{@code @TestControl} present with non-empty
- *       {@code startScopes}: push the set of scope classes.</li>
- *   <li>{@code @TestControl} absent, or present with empty
- *       {@code startScopes}: push {@code null} — the observer's
- *       sentinel for "no veto policy active".</li>
- * </ul>
- *
- * <p>If the CDI container was not booted by jawelte (no
- * {@code SeContainer} on {@code TestContext}) or the observer bean is
- * not on the classpath, the wiring is a silent no-op; the observer
- * itself is also a no-op without a configured allow-list.
- *
- * <p><b>State.</b> Stateless — no instance fields. All per-method
- * state lives on {@link TestContext} via {@code bindMetadata} /
- * {@code unbindMetadata(TestControl.class)} and on the observer's own
- * {@code volatile} allow-list field.
- *
- * <p><b>Phase&nbsp;3–4 (this commit) responsibility.</b>
- * {@code @TestControl} resolution + publication and
- * {@code startScopes} push to the scope observer. The test-data
- * orchestration ({@code TestDataHandler.seedAll} / the
- * {@code AfterTestTransaction} observer / the non-transactional
- * {@code dbExpected/} fallback) is added in subsequent phases.
+ * <p><b>State.</b> Stateless — no instance fields. Per-method state
+ * lives on {@link TestContext} ({@code TestControl} and
+ * {@code VerificationCompleted} metadata keys) and on the observer /
+ * handler beans' own state.
  */
 @Priority(50)
 public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
@@ -117,15 +105,36 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
                 AnnotationSupport.findAnnotation(testMethod.get(), TestControl.class);
         annotation.ifPresent(value -> testContext.bindMetadata(TestControl.class, value));
         configureScopeObserver(testContext, annotation.orElse(null));
+        if (annotation.isPresent() && annotation.get().testData().length > 0) {
+            TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
+            if (handler != null) {
+                handler.seedAll(annotation.get(), testContext);
+            }
+        }
     }
 
     @Override
     public void afterEach(TestContext testContext) {
-        testContext.unbindMetadata(TestControl.class);
+        try {
+            Optional<TestControl> annotation = testContext.getMetadata(TestControl.class);
+            boolean transactionalPathRan =
+                    testContext.getMetadata(VerificationCompleted.class).isPresent();
+            if (!transactionalPathRan
+                    && annotation.isPresent()
+                    && annotation.get().testData().length > 0) {
+                TestDataHandler handler = resolveBean(testContext, TestDataHandler.class);
+                if (handler != null) {
+                    handler.verifyAll(annotation.get(), testContext);
+                }
+            }
+        } finally {
+            testContext.unbindMetadata(VerificationCompleted.class);
+            testContext.unbindMetadata(TestControl.class);
+        }
     }
 
     private static void configureScopeObserver(TestContext testContext, TestControl annotation) {
-        TestControlScopeObserver observer = resolveScopeObserver(testContext);
+        TestControlScopeObserver observer = resolveBean(testContext, TestControlScopeObserver.class);
         if (observer == null) {
             return;
         }
@@ -139,7 +148,7 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
         return new LinkedHashSet<>(Arrays.asList(annotation.startScopes()));
     }
 
-    private static TestControlScopeObserver resolveScopeObserver(TestContext testContext) {
+    private static <T> T resolveBean(TestContext testContext, Class<T> beanType) {
         Optional<BeanManager> beanManager =
                 testContext.getMetadata(SeContainer.class).map(SeContainer::getBeanManager);
         if (beanManager.isEmpty()) {
@@ -147,14 +156,11 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
         }
         BeanManager bm = beanManager.get();
         try {
-            Bean<?> bean = bm.resolve(bm.getBeans(TestControlScopeObserver.class));
+            Bean<?> bean = bm.resolve(bm.getBeans(beanType));
             if (bean == null) {
                 return null;
             }
-            return (TestControlScopeObserver) bm.getReference(
-                    bean,
-                    TestControlScopeObserver.class,
-                    bm.createCreationalContext(bean));
+            return beanType.cast(bm.getReference(bean, beanType, bm.createCreationalContext(bean)));
         } catch (RuntimeException missingBean) {
             return null;
         }
