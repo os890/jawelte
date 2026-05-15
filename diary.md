@@ -4175,3 +4175,38 @@ standard `port(0)` path.
 Commit: FIXED: TICKET-011 — bump CXF 4.1.0 → 4.1.2; replace
 ServerSocket pre-allocation with the standard SeBootstrap
 port(0) + Instance.configuration().port() flow.
+
+## 2026-05-14 — TICKET-011 reflective fallback for non-CDI resource classes
+
+Extended the lifecycle adapter's resource-resolution path to
+accept plain Java classes (no bean-defining annotation): when
+`CDI.current().select(class).get()` raises
+`UnsatisfiedResolutionException`, the adapter falls back to the
+class's public no-arg constructor and registers the resulting
+instance with the JAX-RS application as a singleton. Failing
+reflection (no accessible no-arg constructor) still raises
+`IllegalStateException` with both causes attached.
+
+- **`JaxRsLifecycleAdapter`** — new private static
+  `resolveResource(Class<?>)` helper. Tries CDI first; on
+  `UnsatisfiedResolutionException` (the "not a bean" signal),
+  falls through to `getDeclaredConstructor().newInstance()`.
+  The loop that builds the singleton set delegates to the new
+  helper instead of calling CDI inline. Adds the
+  `jakarta.enterprise.inject.UnsatisfiedResolutionException`
+  import.
+- **New `tests/jaxrs-module/scenario-18-plain-resource-via-reflective-fallback`**
+  — `Scenario18PlainResource` is a `@Path("/plain")` class with
+  NO CDI bean-defining annotation; under
+  `bean-discovery-mode="annotated"` it isn't a CDI bean. The
+  test asserts an HTTP `GET /plain` returns 200 with the
+  literal body, proving the fallback wired the class as a
+  JAX-RS resource. Added to `tests/jaxrs-module/pom.xml` and
+  to `coverage-report/pom.xml`.
+
+`./mvnw -pl tests/jaxrs-module/scenario-18-* test -am`:
+SUCCESS in 1.8 s. The other 14 scenarios are unaffected
+(the fallback fires only on `UnsatisfiedResolutionException`).
+
+Commit: FIXED: TICKET-011 — reflective no-arg fallback for
+non-CDI restResources classes; new scenario 18.

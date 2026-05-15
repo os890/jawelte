@@ -1989,6 +1989,11 @@
             <artifactId>jawelte-tests-jaxrs-module-scenario-17-dependent-resource-per-request</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-18-plain-resource-via-reflective-fallback</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

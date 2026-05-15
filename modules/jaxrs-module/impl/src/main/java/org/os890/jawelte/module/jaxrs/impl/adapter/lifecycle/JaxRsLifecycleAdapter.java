@@ -25,6 +25,7 @@ import java.util.concurrent.TimeoutException;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.inject.UnsatisfiedResolutionException;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.ws.rs.SeBootstrap;
 import jakarta.ws.rs.core.Application;
@@ -169,7 +170,7 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
                 // @Dependent resources don't need that.
                 classes.add(resourceClass);
             } else {
-                singletons.add(CDI.current().select(resourceClass).get());
+                singletons.add(resolveResource(resourceClass));
             }
         }
 
@@ -213,6 +214,41 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
                         cdiAlreadyClosing);
             }
             testContext.unbindMetadata(SeBootstrap.Instance.class);
+        }
+    }
+
+    /**
+     * Look up {@code resourceClass} as a CDI bean; if no bean
+     * is registered for the class (typical for plain Java
+     * resources without a bean-defining annotation), fall back
+     * to reflective no-arg instantiation. The reflectively
+     * created instance carries no CDI injection points, so any
+     * {@code @Inject} field on the class will be {@code null} —
+     * the typical use case is a stateless resource that doesn't
+     * need CDI integration.
+     *
+     * @param resourceClass the resource class to resolve
+     * @return a CDI-managed contextual reference, or a plain
+     *         reflectively-instantiated object when no bean
+     *         exists
+     * @throws IllegalStateException when the class is neither a
+     *         CDI bean nor instantiable via a public no-arg
+     *         constructor
+     */
+    private static Object resolveResource(Class<?> resourceClass) {
+        try {
+            return CDI.current().select(resourceClass).get();
+        } catch (UnsatisfiedResolutionException notACdiBean) {
+            try {
+                return resourceClass.getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException noNoArgCtor) {
+                IllegalStateException failure = new IllegalStateException(
+                        "Cannot instantiate JAX-RS resource " + resourceClass.getName()
+                                + ": not a CDI bean and no accessible no-arg constructor");
+                failure.addSuppressed(notACdiBean);
+                failure.addSuppressed(noNoArgCtor);
+                throw failure;
+            }
         }
     }
 

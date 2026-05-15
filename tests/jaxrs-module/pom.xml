@@ -57,6 +57,7 @@
         <module>scenario-15-test-url-called-before-server-start</module>
         <module>scenario-16-session-scoped-remap-is-global</module>
         <module>scenario-17-dependent-resource-per-request</module>
+        <module>scenario-18-plain-resource-via-reflective-fallback</module>
     </modules>
 
     <dependencies>
