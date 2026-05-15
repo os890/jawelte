@@ -4324,3 +4324,15 @@ or both) with the recommendation to take the auto-detect route.
 
 Commit: docs(todo): TICKET-011 follow-up — honour @ApplicationPath
 in jaxrs-module.
+
+## 2026-05-15 — TICKET-012 scaffold (wiremock-module)
+
+Phase 6 scaffold for wiremock-module landed on branch `24-wiremock-module-wiremock-module`:
+
+- Parent pom: `wiremock.version=3.13.2` property and depMgmt entry for `org.wiremock:wiremock`; internal cross-references for `jawelte-wiremock-module-{api,impl}`. Jackson version bumped from 2.18.2 to 2.20.1 (transitively required by WireMock 3.13.2; jackson-bom imported for converging jackson-core / jackson-annotations / jackson-datatype-jsr310 / jackson-dataformat-yaml). slf4j-api pinned at 2.0.17 in depMgmt to converge wiremock's 2.x against dbunit's 1.7.x; provided scope so consumers bring their own binding.
+- `modules/pom.xml` and `tests/pom.xml`: `wiremock-module` added to `<modules>`.
+- `modules/wiremock-module/{pom.xml, api/pom.xml, impl/pom.xml}`: aggregator + leaf poms following the jaxrs-module shape. Compile deps on the api side: core-api, jakarta.enterprise.cdi-api (provided), jakarta.annotation-api (provided). Compile deps on the impl side: wiremock-module-api, core-api, scope-module-api, org.wiremock:wiremock, jakarta.enterprise.cdi-api (provided), jakarta.annotation-api (provided), microprofile-config-api (provided).
+- `tests/wiremock-module/pom.xml`: aggregator + parent for per-scenario test sub-modules; empty `<modules>` for now (scenarios land in subsequent commits). Same dep shape as `tests/jaxrs-module/pom.xml` minus the JAX-RS provider profiles — there's no WireMock provider profile (only one WireMock implementation exists).
+- `./mvnw validate` passes across the full reactor; `tests/content-diff-module/scenario-01-json-match` re-run against Jackson 2.20.1 stays green (existing Jackson consumer un-impacted).
+
+No production source yet — annotation types, lifecycle adapter, producer, CDI extension, registry bean, and the `AnnotationScopeRemap` provider land in subsequent commits.

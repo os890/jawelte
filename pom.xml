@@ -78,7 +78,8 @@
         <narayana.jta.version>7.0.0.Final</narayana.jta.version>
         <jboss.transaction.spi.version>8.0.0.Final</jboss.transaction.spi.version>
         <atomikos.version>6.0.1</atomikos.version>
-        <jackson.version>2.18.2</jackson.version>
+        <jackson.version>2.20.1</jackson.version>
+        <slf4j.version>2.0.17</slf4j.version>
         <dbunit.version>3.0.0</dbunit.version>
         <jakarta.el.version>6.0.1</jakarta.el.version>
         <expressly.version>6.0.0</expressly.version>
@@ -86,6 +87,7 @@
         <jakarta.ws.rs.version>4.0.0</jakarta.ws.rs.version>
         <cxf.version>4.1.2</cxf.version>
         <resteasy.version>7.0.0.Final</resteasy.version>
+        <wiremock.version>3.13.2</wiremock.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -336,18 +338,60 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal wiremock-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-wiremock-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-wiremock-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!--
                 Jackson supplies the JSON tree + parser-level line-number
                 tracking that content-diff-module/impl's JsonDiffEngine
-                consumes. compile scope — content-diff-module/impl ships
-                Jackson transitively to its consumers, matching the
-                project pattern that "compile-scope deps in
-                modules/.../impl are part of the public surface".
+                consumes; wiremock-module/impl also pulls Jackson
+                transitively (json-schema-validator, request-matching
+                tree, response templating). The Jackson BOM converges
+                jackson-core / jackson-annotations / jackson-databind /
+                jackson-datatype-jsr310 / jackson-dataformat-yaml at a
+                single project-wide version. compile scope on the
+                explicit jackson-databind entry below —
+                content-diff-module/impl ships Jackson transitively to
+                its consumers, matching the project pattern that
+                "compile-scope deps in modules/.../impl are part of
+                the public surface".
             -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
+            </dependency>
+
+            <!--
+                SLF4J: WireMock 3.13.2 transitively pulls slf4j-api
+                2.x; DbUnit pulls 1.7.x. Pinning the api jar in
+                depMgmt at 2.0.x converges both sides on the
+                forward-compatible major version (DbUnit's logging
+                still works against slf4j-api 2.x — only the binding
+                contract changed between 1.x and 2.x). provided
+                scope so consumers bring their own slf4j binding.
+            -->
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!--
@@ -623,6 +667,22 @@
                 <artifactId>resteasy-client</artifactId>
                 <version>${resteasy.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!--
+                WireMock: compile-scope dep of wiremock-module/impl
+                (the api↔library bridge), so the upstream
+                org.wiremock.WireMockServer and
+                com.github.tomakehurst.wiremock.client.WireMock types
+                are visible inside the impl module. Consumers that
+                add jawelte-wiremock-module-impl to their test
+                classpath transitively pull WireMock in at the same
+                scope they declared the impl jar at (typically test).
+            -->
+            <dependency>
+                <groupId>org.wiremock</groupId>
+                <artifactId>wiremock</artifactId>
+                <version>${wiremock.version}</version>
             </dependency>
 
             <!--
