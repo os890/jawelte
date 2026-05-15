@@ -84,7 +84,7 @@
         <expressly.version>6.0.0</expressly.version>
         <tomcat.el.version>11.0.7</tomcat.el.version>
         <jakarta.ws.rs.version>4.0.0</jakarta.ws.rs.version>
-        <cxf.version>4.1.0</cxf.version>
+        <cxf.version>4.1.2</cxf.version>
         <resteasy.version>6.2.11.Final</resteasy.version>
 
         <!-- Plugin versions -->

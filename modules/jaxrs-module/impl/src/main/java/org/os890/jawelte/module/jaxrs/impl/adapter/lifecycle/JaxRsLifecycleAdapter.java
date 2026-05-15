@@ -15,9 +15,7 @@
  */
 package org.os890.jawelte.module.jaxrs.impl.adapter.lifecycle;
 
-import java.io.IOException;
 import java.lang.System.Logger;
-import java.net.ServerSocket;
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -177,19 +175,18 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
 
         Application application = new TestApplication(classes, singletons);
 
-        int port = allocateFreePort();
-
         SeBootstrap.Configuration configuration = SeBootstrap.Configuration.builder()
                 .protocol("HTTP")
                 .host("localhost")
-                .port(port)
+                .port(0)
                 .rootPath("/")
                 .build();
 
         SeBootstrap.Instance instance = startServer(application, configuration);
 
         try {
-            String baseUrl = "http://localhost:" + port;
+            int resolvedPort = instance.configuration().port();
+            String baseUrl = "http://localhost:" + resolvedPort;
             CDI.current().select(TestUrlHolder.class).get().setBaseUrl(baseUrl);
             testContext.bindMetadata(SeBootstrap.Instance.class, instance);
         } catch (RuntimeException e) {
@@ -216,29 +213,6 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
                         cdiAlreadyClosing);
             }
             testContext.unbindMetadata(SeBootstrap.Instance.class);
-        }
-    }
-
-    /**
-     * Pre-allocate a free local TCP port via a transient
-     * {@link ServerSocket} on port 0, then close it so the JAX-RS
-     * runtime can bind. Used in place of {@code SeBootstrap}'s own
-     * port-0 contract because the spec's
-     * {@code Instance.configuration().port()} post-start contract
-     * is not honoured uniformly across providers (Apache CXF 4.1
-     * still returns the configured value, not the bound one). A
-     * tiny TOCTOU window exists between the socket close here and
-     * the server bind in {@code SeBootstrap.start} — the standard
-     * test-framework trade-off; we accept it for portability and
-     * defer a retry loop until a real CI flake surfaces.
-     */
-    private static int allocateFreePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            socket.setReuseAddress(true);
-            return socket.getLocalPort();
-        } catch (IOException e) {
-            throw new IllegalStateException(
-                    "Failed to allocate a free TCP port for the JAX-RS server", e);
         }
     }
 

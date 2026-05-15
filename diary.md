@@ -4145,3 +4145,33 @@ all still green.
 Commit: FIXED: TICKET-011 scope-mapping — move @SessionScoped
 remap to scope-module/impl; drop per-feature ScopeBinding records
 and TestUrlHolder upgrade.
+
+## 2026-05-14 — TICKET-011 simplify port handling (bump CXF 4.1.0 → 4.1.2; drop ServerSocket pre-allocation)
+
+Re-verified CXF's `SeBootstrap.Instance.configuration().port()`
+behaviour after bumping `${cxf.version}` 4.1.0 → 4.1.2 — the
+post-start port resolution now correctly returns the bound
+port (the 4.1.0 release returned the configured value, i.e.
+`0`, which is why Phase 5 introduced the `ServerSocket(0)`
+pre-allocation workaround). Dropped the workaround in favour
+of the simpler Jakarta REST 4.0 contract.
+
+Changes:
+
+- **`pom.xml`** — `${cxf.version}` 4.1.0 → 4.1.2.
+- **`JaxRsLifecycleAdapter`** — `port(0)` instead of
+  pre-allocated port. After `SeBootstrap.start(...)` returns,
+  the bound port is read off
+  `instance.configuration().port()` directly. No more
+  TOCTOU window between socket close and server bind.
+- **`allocateFreePort()` helper deleted**, along with the
+  `java.io.IOException` and `java.net.ServerSocket` imports
+  (no longer referenced).
+
+`./mvnw verify` (full reactor): BUILD SUCCESS in 8:19 min. All
+14 jaxrs scenarios still green; scenario 01 now exercises the
+standard `port(0)` path.
+
+Commit: FIXED: TICKET-011 — bump CXF 4.1.0 → 4.1.2; replace
+ServerSocket pre-allocation with the standard SeBootstrap
+port(0) + Instance.configuration().port() flow.
