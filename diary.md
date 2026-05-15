@@ -4310,3 +4310,17 @@ all still green; no regressions anywhere.
 
 Commit: FIXED: TICKET-011 — generic AnnotationScopeRemap SPI
 replacing the two single-purpose remap CDI extensions.
+
+## 2026-05-14 — TICKET-011 follow-up logged to todo.md
+
+Logged the `@ApplicationPath` honouring gap surfaced after
+TICKET-011 was wrapped up: `JaxRsLifecycleAdapter` hardcodes
+`SeBootstrap.Configuration.rootPath("/")` and wraps the user's
+resources in its own `TestApplication`, so a production
+`Application` subclass carrying `@ApplicationPath("demoRest")`
+is ignored. The follow-up entry lists three options (`applicationPath`
+attribute on `@EnableJaxRs`, auto-detect `Application` subclasses,
+or both) with the recommendation to take the auto-detect route.
+
+Commit: docs(todo): TICKET-011 follow-up — honour @ApplicationPath
+in jaxrs-module.
