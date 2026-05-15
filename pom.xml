@@ -80,6 +80,7 @@
         <atomikos.version>6.0.1</atomikos.version>
         <jackson.version>2.20.1</jackson.version>
         <slf4j.version>2.0.17</slf4j.version>
+        <snakeyaml.version>2.4</snakeyaml.version>
         <dbunit.version>3.0.0</dbunit.version>
         <jakarta.el.version>6.0.1</jakarta.el.version>
         <expressly.version>6.0.0</expressly.version>
@@ -376,6 +377,18 @@
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
+            </dependency>
+
+            <!--
+                SnakeYAML: WireMock 3.13.2 transitively pulls 2.4
+                (via jackson-dataformat-yaml); DbUnit pulls 2.2.
+                Converge on the higher version — backward-compatible
+                bump within the YAML 1.1 line.
+            -->
+            <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>${snakeyaml.version}</version>
             </dependency>
 
             <!--

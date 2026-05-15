@@ -4397,3 +4397,16 @@ Deferred to follow-up tickets (logged separately):
 - Scenario 20 (independence from jaxrs-module) — needs jaxrs-module + wiremock-module on the same test classpath.
 
 `./mvnw test -f tests/wiremock-module/pom.xml` green across all 16 in-scope scenarios.
+
+## 2026-05-15 — TICKET-012 verify-green + arch.md update
+
+- `pom.xml`: pinned `snakeyaml.version=2.4` in `<dependencyManagement>` (DbUnit pulls 2.2 transitively; WireMock 3.13.2 pulls 2.4 via jackson-dataformat-yaml — converge on the higher version).
+- `coverage-report/pom.xml`: added `jawelte-wiremock-module-api`, `jawelte-wiremock-module-impl`, and all 16 in-scope `tests-wiremock-module-scenario-*` modules so JaCoCo's `report-aggregate` picks up wiremock-module's production classes and exec data.
+- `architecture.md`: integrations-table row renamed `jawelte-wiremock` → `jawelte-wiremock-module` (consistent with every other module's coordinate); adapters table gained a row for `WireMockLifecycleAdapter` (`@Priority(75)`) + `WireMockCdiExtension` + `WireMockRegistryScopeRemap`; the "Planned (forward-looking)" line dropped `HttpStubContainerPort` since wiremock-module ships no new SPI port.
+
+`./mvnw verify` from clean: green end-to-end (12:48 min). Line coverage (from `coverage-report/target/site/jacoco-aggregate/jacoco.csv`):
+- `WireMockProducer` — 100%
+- `WireMockRegistryScopeRemap` — 100%
+- `WireMockCdiExtension` — 88%
+- `WireMockServerRegistry` — 87%
+- `WireMockLifecycleAdapter` — 69% (the uncovered lines are the partial-start-failure recovery and the afterAll suppressed-exception aggregation, both reachable only via the deferred scenarios 10 + 13)

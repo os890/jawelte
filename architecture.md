@@ -46,7 +46,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 | `jawelte-dbunit` | DB-Unit | Dataset-based database state management |
 | `jawelte-h2` | H2 | In-memory database for fast persistence tests |
 | `jawelte-mockito` | Mockito | CDI-aware mock injection |
-| `jawelte-wiremock` | WireMock | HTTP stub server lifecycle management |
+| `jawelte-wiremock-module` | WireMock | HTTP stub server lifecycle management |
 
 New integrations follow the same pattern and require no changes to the core.
 
@@ -110,6 +110,7 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `EntityResolver` | `JpaMetamodelEntityResolver` (`@Priority(Integer.MAX_VALUE)`) | JPA metamodel | `jpa-module/impl` |
 | `PersistenceUnitConnectionResolver` | `DefaultPersistenceUnitConnectionResolver` (`@Priority(Integer.MAX_VALUE)`) | JDBC | `jpa-module/impl` |
 | `EjbAnnotationMapper` | `DefaultEjbAnnotationMapper` (`@Priority(Integer.MAX_VALUE)`) + `EjbAnnotationExtension` | CDI runtime + xbean-finder classpath scan | `ejb-module/impl` |
+| `TestModuleLifecyclePort` | `WireMockLifecycleAdapter` (`@Priority(75)`) + `WireMockCdiExtension` + `WireMockRegistryScopeRemap` (`AnnotationScopeRemap` SPI provider) | CDI runtime + WireMock library (`WireMockServer`) | `wiremock-module/impl` |
 
 **ejb-module additions (in `ejb-module/api`):**
 
@@ -117,7 +118,7 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 
 `ejb-module/impl` scans the classpath for `@Singleton` / `@Stateless` types during `BeforeBeanDiscovery` and feeds them to `addAnnotatedType` — neither OpenWebBeans nor Weld treats `BeforeBeanDiscovery.addStereotype(...)`-registered annotations as bean-defining for type discovery (the CDI 4.0 spec only encourages this), so the scan is required to keep `bean-discovery-mode="annotated"` working for plain EJB-annotated classes.
 
-**Planned (forward-looking, not yet shipped):** `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
+**Planned (forward-looking, not yet shipped):** `DatasetContainerPort` (e.g. DB-Unit). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 
 New integrations are simply new adapters — the core remains untouched.
 
