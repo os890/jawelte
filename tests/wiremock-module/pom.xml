@@ -42,6 +42,14 @@
         <module>scenario-06-meta-annotation-discovery</module>
         <module>scenario-07-wiremock-and-wiremockserver-share-endpoint</module>
         <module>scenario-08-unqualified-with-one-endpoint</module>
+        <module>scenario-09-unqualified-with-multiple-endpoints</module>
+        <module>scenario-11-no-endpoint-qualifiers</module>
+        <module>scenario-12-multiple-test-classes</module>
+        <module>scenario-14-https-state-not-configured</module>
+        <module>scenario-15-enable-wiremock-alone-boots-the-lifecycle</module>
+        <module>scenario-16-producer-satisfies-default-injection</module>
+        <module>scenario-18-registry-remapped-to-testclassscoped</module>
+        <module>scenario-19-annotationscoperemap-sl-wired</module>
     </modules>
 
     <dependencies>

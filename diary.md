@@ -4377,3 +4377,23 @@ Six more scenarios now in tree and green:
 - **scenario-08-unqualified-with-one-endpoint** — single `@PaymentApi` qualifier discovered; unqualified `@Inject WireMockServer` resolves to the synthetic bean (which carries `@Default + @PaymentApi`); same instance as the qualified injection.
 
 `tests/wiremock-module/pom.xml` also gained the `mockito-core` test dep — cdi-module's auto-mock loop is invoked at `AfterBeanDiscovery` for any unsatisfied injection point and crashes with `NoClassDefFoundError` if Mockito isn't on the test classpath, even when no `@TestBean(mock=true)` is declared.
+
+## 2026-05-15 — TICKET-012 scenarios 09 + 11–19
+
+Eight more scenarios in tree and green — full in-scope set for TICKET-012 now stands at 16 of 20:
+- **scenario-09-unqualified-with-multiple-endpoints** — EngineTestKit launches a Subject with two qualifiers + an unqualified `@Inject WireMockServer`; asserts deployment failure surfaces as a JUnit failure event and the `@Test` method never completes.
+- **scenario-11-no-endpoint-qualifiers** — direct probe of the `WireMockServerRegistry` confirming exactly one entry, keyed by `Default.class`, in default-only mode.
+- **scenario-12-multiple-test-classes** — EngineTestKit runs two `@EnableWireMock` subjects sequentially; each records its OS-assigned port into a shared `AtomicInteger` holder; asserts the two ports differ.
+- **scenario-14-https-state-not-configured** — `httpsSettings().enabled() == false`; `httpsPort()` throws (WireMock 3.x changed the contract from "returns -1" to "raises `IllegalStateException`", scenario asserts the new shape).
+- **scenario-15-enable-wiremock-alone-boots-the-lifecycle** — repurposed from the original "@EnableWireMock without @EnableTestBeans throws" (unreachable by design once @EnableWireMock is `@EnableTestBeans`-meta-annotated); now verifies the meta-annotation chain activates jawelte's machinery.
+- **scenario-16-producer-satisfies-default-injection** — `BeanManager.getBeans(WireMockServer.class).getBeanClass() == WireMockProducer.class` in default-only mode; the CDI extension didn't veto the producer and didn't register a synthetic bean.
+- **scenario-18-registry-remapped-to-testclassscoped** — `Bean.getScope() == TestClassScoped.class`; testcontrol-module deliberately not on the classpath.
+- **scenario-19-annotationscoperemap-sl-wired** — `ServiceLoader.load(AnnotationScopeRemap.class)` includes a provider with `trigger() == WireMockManagedScope.class` and `targetScope() == TestClassScoped.class`.
+
+Deferred to follow-up tickets (logged separately):
+- Scenario 10 (server stopped after class) — TCP-probe timing same as 011 scenario 10.
+- Scenario 13 (fixed-port conflict) — needs pre-bound socket + verification mechanism.
+- Scenario 17 (@Priority(75) ordering) — needs test-scope `TestModuleLifecyclePort` recorder adapter.
+- Scenario 20 (independence from jaxrs-module) — needs jaxrs-module + wiremock-module on the same test classpath.
+
+`./mvnw test -f tests/wiremock-module/pom.xml` green across all 16 in-scope scenarios.
