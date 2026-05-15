@@ -4365,3 +4365,15 @@ No production source yet — annotation types, lifecycle adapter, producer, CDI 
 - **scenario-02-stub-registration** — registers a stub via the injected `WireMock` client, issues an HTTP GET against the live server via `java.net.http.HttpClient`, verifies the response status + body. First end-to-end HTTP scenario proving the producer-supplied `WireMock` and `WireMockServer` point at the same running server.
 
 The previously-coded `WireMockLifecycleAdapter` validation that required an explicit `@EnableTestBeans` was removed — `@EnableWireMock` is meta-annotated with `@EnableTestBeans`, so by the time `beforeAll` runs jawelte's machinery is by definition active. Same call as 011 made for `@EnableJaxRs`.
+
+## 2026-05-15 — TICKET-012 scenarios 03–08
+
+Six more scenarios now in tree and green:
+- **scenario-03-stubs-reset-between-methods** — two ordered test methods; method 1 registers a stub + verifies it serves; method 2 hits the same path and expects 404 (lifecycle adapter called `resetAll()` in `beforeEach`).
+- **scenario-04-multi-endpoint-fixed-ports** — `@PaymentApi(port=18081)` and `@InventoryApi(port=18082)` discovered; two distinct `WireMockServer` instances bound to their declared ports.
+- **scenario-05-random-port** — `@WireMockEndpoint` (default `port=0`); server bound to a strictly-positive OS-assigned port.
+- **scenario-06-meta-annotation-discovery** — qualifier `@PaymentService` meta-annotated by `@PaymentApi` (which carries `@WireMockEndpoint(port=18091)`); recursive scan resolves the field-level `@PaymentService` qualifier to the right endpoint.
+- **scenario-07-wiremock-and-wiremockserver-share-endpoint** — qualified `WireMock` client stubs are served by the same-qualified `WireMockServer` (verified end-to-end via HTTP, not via reflective port-read since `WireMock.port()` isn't a public method in 3.13.2).
+- **scenario-08-unqualified-with-one-endpoint** — single `@PaymentApi` qualifier discovered; unqualified `@Inject WireMockServer` resolves to the synthetic bean (which carries `@Default + @PaymentApi`); same instance as the qualified injection.
+
+`tests/wiremock-module/pom.xml` also gained the `mockito-core` test dep — cdi-module's auto-mock loop is invoked at `AfterBeanDiscovery` for any unsatisfied injection point and crashes with `NoClassDefFoundError` if Mockito isn't on the test classpath, even when no `@TestBean(mock=true)` is declared.

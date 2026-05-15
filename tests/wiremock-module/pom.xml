@@ -36,6 +36,12 @@
     <modules>
         <module>scenario-01-single-endpoint-default-mode</module>
         <module>scenario-02-stub-registration</module>
+        <module>scenario-03-stubs-reset-between-methods</module>
+        <module>scenario-04-multi-endpoint-fixed-ports</module>
+        <module>scenario-05-random-port</module>
+        <module>scenario-06-meta-annotation-discovery</module>
+        <module>scenario-07-wiremock-and-wiremockserver-share-endpoint</module>
+        <module>scenario-08-unqualified-with-one-endpoint</module>
     </modules>
 
     <dependencies>
@@ -111,6 +117,11 @@
         <dependency>
             <groupId>io.smallrye.config</groupId>
             <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
         </dependency>
 
         <dependency>
