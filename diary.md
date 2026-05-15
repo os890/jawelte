@@ -4210,3 +4210,21 @@ SUCCESS in 1.8 s. The other 14 scenarios are unaffected
 
 Commit: FIXED: TICKET-011 — reflective no-arg fallback for
 non-CDI restResources classes; new scenario 18.
+
+## 2026-05-14 — TICKET-011 bump RESTEasy 6.2.11.Final → 7.0.0.Final
+
+Bumped `${resteasy.version}` to the current major. The
+`-Presteasy` test classpath had to be probed manually with
+`./mvnw -P-cxf,owb,resteasy ...` (so the default-active
+`owb` CDI runtime stays active when overriding the JAX-RS
+profile); scenario 01 boots and serves traffic successfully
+under RESTEasy 7.0.0.Final's `SeBootstrap` impl.
+
+`./mvnw verify` (default `-Powb -Pcxf` path): BUILD SUCCESS
+in 8:35 min — no regressions on the cxf path. RESTEasy 7 is
+not used by any currently-active scenario (scenario 14 is
+deferred), but the dependencyManagement pin is now consistent
+with the rest of the project's "latest stable Jakarta EE 11"
+versioning.
+
+Commit: TICKET-011 — bump RESTEasy 6.2.11.Final → 7.0.0.Final.
