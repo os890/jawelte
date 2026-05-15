@@ -2057,12 +2057,22 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-10-server-stopped-after-class</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-wiremock-module-scenario-11-no-endpoint-qualifiers</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-wiremock-module-scenario-12-multiple-test-classes</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-13-fixed-port-conflict</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -2082,12 +2092,22 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-17-scope-sandwich</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-wiremock-module-scenario-18-registry-remapped-to-testclassscoped</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-wiremock-module-scenario-19-annotationscoperemap-sl-wired</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-20-independence-from-jaxrs-module</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

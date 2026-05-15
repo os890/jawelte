@@ -29,7 +29,7 @@ import jakarta.inject.Qualifier;
 import org.os890.jawelte.module.wiremock.api.WireMockEndpoint;
 
 /** Endpoint qualifier for scenario 07 (port=0 → OS-assigned). */
-@WireMockEndpoint
+@WireMockEndpoint(port = 0)
 @Qualifier
 @Retention(RUNTIME)
 @Target({FIELD, METHOD, PARAMETER, TYPE})

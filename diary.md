@@ -4410,3 +4410,21 @@ Deferred to follow-up tickets (logged separately):
 - `WireMockCdiExtension` — 88%
 - `WireMockServerRegistry` — 87%
 - `WireMockLifecycleAdapter` — 69% (the uncovered lines are the partial-start-failure recovery and the afterAll suppressed-exception aggregation, both reachable only via the deferred scenarios 10 + 13)
+
+## 2026-05-15 — TICKET-012 all 20 scenarios in scope
+
+`@WireMockEndpoint.port` lost its `default 0` (user must always declare the port; `port=0` is still the OS-assigned mode but the user has to ask for it explicitly). Existing scenarios 05/07/08/09 that previously relied on the default now write `(port = 0)`.
+
+Four new scenarios — formerly deferred — landed green:
+- **scenario-10-server-stopped-after-class.** Lifecycle adapter now fires a new `WireMockServersStopped` CDI event from its `afterAll` (api/event package, ApplicationScoped observers can listen). Scenario subject runs via `EngineTestKit`; `@ApplicationScoped` observer increments an `AtomicInteger`; test asserts it became `1`. Replaces the TCP-probe approach.
+- **scenario-13-fixed-port-conflict.** Pre-binds a `ServerSocket(51777)` inside a `try-with-resources`; `EngineTestKit` runs a subject whose `@SquattedApi` qualifier pins `@WireMockEndpoint(port=51777)`. Test asserts the engine reported a failure whose throwable chain contains `java.net.BindException`.
+- **scenario-17-scope-sandwich.** Reframed from the original "verify @Priority numbers". A `@TestClassScoped` observer captures the injected `WireMockServer`; its `@PreDestroy` (driven by scope-module's `afterAll` at `@Priority(100)`) probes `server.isRunning()` and records the result. Test asserts the probe saw `true` — wiremock's `afterAll` at `@Priority(75)` runs AFTER scope-module's in LIFO, so the server is still up when scope contexts deactivate.
+- **scenario-20-independence-from-jaxrs-module.** Scenario subject carries both `@EnableJaxRs(restResources={Scenario20JaxRsResource.class})` and `@EnableWireMock`; test fires HTTP at both servers and asserts both respond on distinct ports. Uses RESTEasy + Undertow (not CXF) because CXF 4.1.2 transitively pulls Jetty 12 which collides with WireMock 3.13.2's Jetty 11 expectation.
+
+`./mvnw verify` from clean green end-to-end (8:59 min). Coverage from `coverage-report/target/site/jacoco-aggregate/jacoco.csv`:
+- `WireMockServersStopped` — 100%
+- `WireMockProducer` — 100%
+- `WireMockRegistryScopeRemap` — 100%
+- `WireMockCdiExtension` — 88%
+- `WireMockServerRegistry` — 87%
+- `WireMockLifecycleAdapter` — 77% (up from 69% — the partial-start-failure cleanup and multi-server suppressed-exception path remain uncovered; reachable only by intentionally throwing from `server.start()` / `server.stop()` which requires bytecode-level fault injection).

@@ -71,9 +71,10 @@ public @interface WireMockEndpoint {
 
     /**
      * The TCP port the embedded {@code WireMockServer} for this
-     * endpoint binds to.
+     * endpoint binds to. <b>Required</b> — there is no default;
+     * the user always declares the port explicitly.
      *
-     * <p>The default {@code 0} requests an OS-assigned ephemeral
+     * <p>The value {@code 0} requests an OS-assigned ephemeral
      * port — the resolved port is then readable via
      * {@code server.port()} on the injected
      * {@code WireMockServer}. This is the recommended setting
@@ -90,5 +91,5 @@ public @interface WireMockEndpoint {
      * @return the configured port, or {@code 0} for an
      *         OS-assigned ephemeral port
      */
-    int port() default 0;
+    int port();
 }

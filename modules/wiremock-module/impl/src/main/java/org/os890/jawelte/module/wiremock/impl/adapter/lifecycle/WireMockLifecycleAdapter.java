@@ -31,6 +31,7 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.wiremock.api.EnableWireMock;
 import org.os890.jawelte.module.wiremock.api.WireMockEndpoint;
+import org.os890.jawelte.module.wiremock.api.event.WireMockServersStopped;
 import org.os890.jawelte.module.wiremock.impl.WireMockServerRegistry;
 import org.os890.jawelte.module.wiremock.impl.adapter.extension.WireMockCdiExtension;
 
@@ -150,6 +151,10 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
                     }
                 }
             }
+            CDI.current().getBeanManager()
+                    .getEvent()
+                    .select(WireMockServersStopped.class)
+                    .fire(new WireMockServersStopped());
         } finally {
             registry.clear();
         }

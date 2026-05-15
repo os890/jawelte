@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.tests.wiremock.scenario08;
+package org.os890.jawelte.tests.wiremock.scenario13;
 
 import static java.lang.annotation.ElementType.FIELD;
 import static java.lang.annotation.ElementType.METHOD;
@@ -28,10 +28,15 @@ import jakarta.inject.Qualifier;
 
 import org.os890.jawelte.module.wiremock.api.WireMockEndpoint;
 
-/** Endpoint qualifier for scenario 08. */
-@WireMockEndpoint(port = 0)
+/**
+ * Endpoint qualifier pinned to {@link Scenario13Constants#SQUATTED_PORT}.
+ * The test pre-binds a {@code ServerSocket} on this port before
+ * running the subject, forcing WireMock's start to fail with
+ * {@code BindException}.
+ */
+@WireMockEndpoint(port = Scenario13Constants.SQUATTED_PORT)
 @Qualifier
 @Retention(RUNTIME)
 @Target({FIELD, METHOD, PARAMETER, TYPE})
-public @interface PaymentApi {
+public @interface SquattedApi {
 }
