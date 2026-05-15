@@ -12,5 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.module.scope.impl.adapter.extension.TestScopeCdiExtension
-org.os890.jawelte.module.scope.impl.adapter.extension.ScopeRemapCdiExtension
+org.os890.jawelte.module.scope.impl.adapter.extension.remap.SessionScopedToTestMethodScoped
+org.os890.jawelte.module.scope.impl.adapter.extension.remap.ConfigBeanToTestClassScoped

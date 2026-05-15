@@ -4246,3 +4246,67 @@ SUCCESS in 2 s.
 
 Commit: WORKING: TICKET-011 — scenario 19 (404 for an unmapped
 path).
+
+## 2026-05-14 — TICKET-011 generalise scope-mapping into AnnotationScopeRemap SPI
+
+Consolidated scope-module's two single-purpose remap CDI
+extensions into one SPI-driven extension. Adding a future scope
+remap is now "ship one provider + one META-INF/services line"
+rather than "write a new CDI Extension class + register it".
+
+**New surface:**
+
+- `scope-module/api/AnnotationScopeRemap.java` — three-coordinate
+  SPI: `trigger()` (marker annotation that fires the remap),
+  `targetScope()` (replacement CDI scope), and
+  `preserveExplicitDirectScopes()` (default `false`; set to
+  `true` for stereotype-style triggers where the user might
+  declare an explicit non-default scope to opt out).
+- `META-INF/services/org.os890.jawelte.module.scope.api.AnnotationScopeRemap`
+  — provider registration file.
+
+**New impl:**
+
+- `scope-module/impl/.../ScopeRemapCdiExtension.java` — the one
+  CDI Extension that loads all `AnnotationScopeRemap` providers
+  via `ServiceLoader` and applies them in a single
+  `ProcessAnnotatedType` observer. The remap flow:
+  1. If the type carries the provider's `trigger()` annotation
+     directly,
+  2. and `preserveExplicitDirectScopes()` is `true` AND the
+     type carries an explicit non-default direct CDI scope
+     (anything that's `@NormalScope` or `@Scope`-meta-annotated,
+     excluding the trigger and the trigger's
+     stereotype-contributed scope), skip the remap,
+  3. otherwise remove every direct CDI scope annotation from
+     the type and add the target scope as a direct annotation.
+     Stereotype-contributed scopes need no removal — the
+     directly-added target wins per CDI's
+     class-level-scope-wins rule.
+  Annotation literals are built lazily via
+  `java.lang.reflect.Proxy` and cached per scope class — no
+  per-remap singleton literal class is needed.
+- `scope-module/impl/.../remap/SessionScopedToTestMethodScoped.java`
+  — provider: `@SessionScoped → @TestMethodScoped`,
+  `preserveExplicitDirectScopes=false`.
+- `scope-module/impl/.../remap/ConfigBeanToTestClassScoped.java`
+  — provider: `@ConfigBean → @TestClassScoped`,
+  `preserveExplicitDirectScopes=true` (preserves
+  `@ConfigBean @SomethingElseScoped` user overrides exactly
+  like the old `ConfigBeanScopeRemapCdiExtension` did).
+
+**Removed:**
+
+- `scope-module/impl/.../SessionScopeRemapCdiExtension.java`
+- `scope-module/impl/.../ConfigBeanScopeRemapCdiExtension.java`
+- Their two entries in
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  (replaced by the single `ScopeRemapCdiExtension` entry).
+
+`./mvnw verify` (full reactor): BUILD SUCCESS in 8:45 min. All
+16 jaxrs scenarios green; scope-module's @ConfigBean scenarios
+28/29/30 (which cover the preserve-explicit-override semantics)
+all still green; no regressions anywhere.
+
+Commit: FIXED: TICKET-011 — generic AnnotationScopeRemap SPI
+replacing the two single-purpose remap CDI extensions.
