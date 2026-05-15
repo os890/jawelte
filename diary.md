@@ -4336,3 +4336,11 @@ Phase 6 scaffold for wiremock-module landed on branch `24-wiremock-module-wiremo
 - `./mvnw validate` passes across the full reactor; `tests/content-diff-module/scenario-01-json-match` re-run against Jackson 2.20.1 stays green (existing Jackson consumer un-impacted).
 
 No production source yet — annotation types, lifecycle adapter, producer, CDI extension, registry bean, and the `AnnotationScopeRemap` provider land in subsequent commits.
+
+## 2026-05-15 — TICKET-012 api types
+
+`wiremock-module/api` now ships its two public annotation types:
+- `@EnableWireMock` — `@Target(TYPE)`, meta-annotated with `@EnableTestBeans`, no attributes.
+- `@WireMockEndpoint` — `@Target(ANNOTATION_TYPE)`, meta-annotation for `@Qualifier`-marked endpoint annotations; carries an `int port() default 0` for OS-assigned-vs-fixed-port configuration.
+
+`./mvnw verify -pl modules/wiremock-module/api -am` green; javadoc-strict passes; api jar contains exactly the two annotation types and nothing else (no interfaces, no upstream WireMock library imports).
