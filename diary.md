@@ -4228,3 +4228,21 @@ with the rest of the project's "latest stable Jakarta EE 11"
 versioning.
 
 Commit: TICKET-011 — bump RESTEasy 6.2.11.Final → 7.0.0.Final.
+
+## 2026-05-14 — TICKET-011 scenario 19 (404 not found)
+
+New scenario covering JAX-RS's default routing fall-through:
+when no registered resource matches the requested path, the
+embedded server returns HTTP 404. The trivial
+`Scenario19HelloResource` (mapped at `/hello`) is registered
+so the server boots normally; the test fires GET against
+`/nonexistent` and asserts status 404.
+
+Added the module to `tests/jaxrs-module/pom.xml` and to
+`coverage-report/pom.xml`.
+
+`./mvnw -pl tests/jaxrs-module/scenario-19-... test -am`:
+SUCCESS in 2 s.
+
+Commit: WORKING: TICKET-011 — scenario 19 (404 for an unmapped
+path).

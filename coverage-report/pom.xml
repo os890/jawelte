@@ -1994,6 +1994,11 @@
             <artifactId>jawelte-tests-jaxrs-module-scenario-18-plain-resource-via-reflective-fallback</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-19-unknown-path-returns-404</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

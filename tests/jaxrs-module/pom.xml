@@ -58,6 +58,7 @@
         <module>scenario-16-session-scoped-remap-is-global</module>
         <module>scenario-17-dependent-resource-per-request</module>
         <module>scenario-18-plain-resource-via-reflective-fallback</module>
+        <module>scenario-19-unknown-path-returns-404</module>
     </modules>
 
     <dependencies>
