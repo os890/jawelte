@@ -34,6 +34,8 @@
     <description>Aggregator AND parent for the per-scenario test modules covering jawelte-wiremock-module. Each scenario boots a CDI container (via cdi-module + scope-module) so wiremock-module's lifecycle adapter, CDI producer (the api↔library bridge), CDI extension (@WireMockEndpoint discovery + synthetic-bean registration), and AnnotationScopeRemap SPI provider (registry-marker → @TestClassScoped) run end-to-end against real WireMockServer instances. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld) for the CDI runtime — there is no WireMock provider profile (only one WireMock implementation exists).</description>
 
     <modules>
+        <module>scenario-01-single-endpoint-default-mode</module>
+        <module>scenario-02-stub-registration</module>
     </modules>
 
     <dependencies>

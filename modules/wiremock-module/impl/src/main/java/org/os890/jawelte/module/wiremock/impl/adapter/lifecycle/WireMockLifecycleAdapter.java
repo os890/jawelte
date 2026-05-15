@@ -27,7 +27,6 @@ import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 
-import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.wiremock.api.EnableWireMock;
@@ -91,11 +90,6 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
         Class<?> testClass = testContext.getTestClass();
         if (testClass.getAnnotation(EnableWireMock.class) == null) {
             return;
-        }
-        if (testClass.getAnnotation(EnableTestBeans.class) == null) {
-            throw new IllegalStateException(
-                    "@EnableWireMock requires @EnableTestBeans on the test class: "
-                            + testClass.getName());
         }
         BeanManager beanManager = CDI.current().getBeanManager();
         WireMockServerRegistry registry = CDI.current().select(WireMockServerRegistry.class).get();

@@ -4357,3 +4357,11 @@ No production source yet — annotation types, lifecycle adapter, producer, CDI 
 - META-INF/beans.xml: `bean-discovery-mode="annotated"`, documenting the registry + producer + the synthetic-bean machinery the extension contributes.
 
 `./mvnw verify -pl modules/wiremock-module/impl -am` green; checkstyle, javadoc-strict, RAT, dependency-convergence all pass. No test scenarios yet — that's the next commit.
+
+## 2026-05-15 — TICKET-012 first test scenarios
+
+`tests/wiremock-module` aggregator + the first two scenarios are now in tree and green:
+- **scenario-01-single-endpoint-default-mode** — `@EnableWireMock` with no qualifier; `WireMockProducer`'s `@Default @Produces WireMockServer` resolves and the server reports an OS-assigned port + a `http://localhost:{port}` base URL.
+- **scenario-02-stub-registration** — registers a stub via the injected `WireMock` client, issues an HTTP GET against the live server via `java.net.http.HttpClient`, verifies the response status + body. First end-to-end HTTP scenario proving the producer-supplied `WireMock` and `WireMockServer` point at the same running server.
+
+The previously-coded `WireMockLifecycleAdapter` validation that required an explicit `@EnableTestBeans` was removed — `@EnableWireMock` is meta-annotated with `@EnableTestBeans`, so by the time `beforeAll` runs jawelte's machinery is by definition active. Same call as 011 made for `@EnableJaxRs`.
