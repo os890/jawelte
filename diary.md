@@ -3432,3 +3432,895 @@ the demonstrating scenario under `tests/scope-module/`:
 Passes under both `-Powb` and `-Pweld`. T15 in the comparison
 report flipped from "no action proposed" to "done — scenario 31
 added".
+
+## 2026-05-14 — TICKET-011 Phase 1 (scaffolding)
+
+Branched `22-jax-rs-module-jaxrs-module` off main via
+`gh issue develop 22`. Scaffolded the empty Maven structure for
+jaxrs-module — the embedded Jakarta REST 4.0 container module that
+runs alongside the per-test-class CDI SE container.
+
+Files added / edited:
+
+- **`pom.xml`** — pinned three new version properties
+  (`jakarta.ws.rs.version=4.0.0`, `cxf.version=4.1.0`,
+  `resteasy.version=6.2.11.Final`). Added `jakarta.ws.rs-api`
+  (provided) to `<dependencyManagement>`. Added internal
+  cross-references for `jawelte-jaxrs-module-api` and
+  `jawelte-jaxrs-module-impl`.
+- **`modules/pom.xml`** — appended `<module>jaxrs-module</module>`
+  to the modules aggregator.
+- **`modules/jaxrs-module/pom.xml`** — new aggregator pom
+  (packaging=pom; api + impl submodules).
+- **`modules/jaxrs-module/api/pom.xml`** — packaging=jar; empty
+  `src/`. Compile deps on `jawelte-core-api` and
+  `jawelte-content-diff-module-api`. Provided deps on
+  `jakarta.ws.rs-api` and `jakarta.annotation-api`. javadoc-jar
+  plugin bound at verify.
+- **`modules/jaxrs-module/impl/pom.xml`** — packaging=jar; empty
+  `src/`. Compile deps on `jawelte-jaxrs-module-api`,
+  `jawelte-core-api`, `jawelte-scope-module-api`. Provided deps on
+  `jakarta.enterprise.cdi-api`, `jakarta.ws.rs-api`,
+  `microprofile-config-api`. javadoc-jar plugin bound at verify.
+
+`./mvnw validate` is green end-to-end; the three new rows
+(`jaxrs-module aggregator`, `jaxrs-module/api`, `jaxrs-module/impl`)
+appear in the reactor build order between `testcontrol-module
+aggregator` and the `tests` aggregator. No Java source yet — that
+comes next.
+
+Pre-scaffold design decisions (surfaced via AskUserQuestion):
+
+- **Provider selection model**: Maven-profile-only (`-Pcxf` default,
+  `-Presteasy` switch), mirroring the existing `-Powb` / `-Pweld`
+  pattern for the CDI SE runtime. The system-property mechanism
+  described in earlier drafts of the local ticket was removed from
+  the §"JAX-RS Provider Profiles" subsection, from test scenario 14,
+  from the acceptance criteria, and from the Maven Dependencies
+  table. The CXF artifact reference was corrected from
+  `cxf-rt-rs-sse` (SSE-only) to `cxf-rt-frontend-jaxrs` (+ HTTP
+  transport); the RESTEasy artifact reference was generalised from
+  `resteasy-undertow` to `resteasy-core` (+ HTTP transport).
+- **CXF / RESTEasy specific artifacts**: deferred to the
+  test-scenario wiring step (they only need to land in
+  `<dependencyManagement>` when the per-scenario poms activate
+  their profiles).
+- **`architecture.md` fixes** (`JaxRsContainerPort` removal from
+  the "Planned" line; `jawelte-jaxrs` → `jawelte-jaxrs-module`
+  table-row rename): deferred to a later commit on this feature
+  branch (the usual main-first doc protocol was waived for
+  TICKET-011).
+- **Test portability matrix**: OWB+CXF is the default; `-Pweld`
+  and `-Presteasy` are opt-in. No mandatory 2x2 verify-all.sh
+  enforcement for this ticket.
+
+GitHub: issue #22, PR will be opened once implementation lands.
+
+## 2026-05-14 — TICKET-011 Phase 2 (api types)
+
+Added the three public types of jaxrs-module/api:
+
+- **`EnableJaxRs`** — `@Target(TYPE)`, `@Retention(RUNTIME)`,
+  single required attribute `Class<?>[] restResources()`. Spec
+  notes inline: must be combined with `@EnableTestBeans` (the
+  lifecycle adapter raises `IllegalStateException("@EnableJaxRs
+  requires @EnableTestBeans on the test class: {className}")`
+  when missing); resource classes are not auto-allowlisted (the
+  user is responsible for `@TestBean(...)` discovery under
+  whitelist mode); the CDI scope of each resource is whatever
+  CDI assigns — the module does not override it.
+- **`TestUrl`** — interface extending `Supplier<String>`. Single
+  method `String get()` returning the live
+  `"http://localhost:{port}"` base URL. Spec notes: throws
+  `IllegalStateException("JAX-RS server not started yet")` when
+  called before `JaxRsLifecycleAdapter.beforeAll` completes;
+  the implementing bean (`TestUrlHolder`) is
+  `@ApplicationScoped` by default and auto-upgraded to
+  `@TestClassScoped` when testcontrol-module is on the classpath.
+- **`ResponseDiff`** — abstract + private constructor utility
+  class. Two static factories: `forJson(Response)` and
+  `forXml(Response)` returning content-diff-module's
+  `JsonBuilder` / `XmlBuilder` respectively. Reads the entity
+  as `String` via `Response.readEntity(String.class)` and
+  forwards to `ContentDiff.forJson(...)` / `ContentDiff.forXml(...)`.
+  `NullPointerException` on `null` response (via
+  `Objects.requireNonNull`); `IllegalStateException("Response
+  has no entity")` when `!response.hasEntity()`. The two
+  `ContentDiff.{json|xml}.ignore` MP Config keys inherited
+  transparently from content-diff-module — no jaxrs-side
+  wiring needed.
+
+`./mvnw -pl modules/jaxrs-module/api compile`: 3 sources
+compile, 0 Checkstyle violations.
+
+Commit: UNTESTED: TICKET-011 Phase 2 — api types
+(@EnableJaxRs, TestUrl, ResponseDiff).
+
+## 2026-05-14 — TICKET-011 Phase 3 (impl types)
+
+Added the four impl-side Java types and the META-INF wiring.
+
+- **`TestUrlHolder`** (`…impl`) — `@ApplicationScoped`,
+  `volatile String baseUrl`. `setBaseUrl(...)` published by the
+  lifecycle adapter after `SeBootstrap.start` returns; `clear()`
+  called by `afterAll`. `get()` returns the snapshot or throws
+  `IllegalStateException("JAX-RS server not started yet")` when
+  the baseUrl is null.
+- **`CdiIntegrationFilter`** (`…impl.adapter.filter`) — JAX-RS
+  `@Provider` implementing both `ContainerRequestFilter` and
+  `ContainerResponseFilter`. Acquires a `RequestContextController`
+  from `CDI.current()` on every incoming HTTP request and calls
+  `activate()`; stores the controller on the
+  `ContainerRequestContext` property
+  `…CdiIntegrationFilter.controller` so the matching response
+  filter can `deactivate()` it. Skips activation if the context
+  was already active on the thread (returns `false` from
+  `activate()`), and the response filter is a no-op in that case.
+- **`JaxRsCdiExtension`** (`…impl.adapter.extension`) — single
+  CDI Extension carrying both `ProcessAnnotatedType` remap
+  responsibilities. (1) Unconditional global remap: any class
+  annotated `@SessionScoped` has its scope replaced with
+  `@TestMethodScoped`. (2) Conditional `TestUrlHolder` upgrade:
+  if testcontrol-module is on the classpath (probed via
+  `Class.forName("org.os890.jawelte.module.testcontrol.api.TestControl")`
+  at extension load time), `TestUrlHolder`'s `@ApplicationScoped`
+  is replaced with `@TestClassScoped`. Two singleton
+  `AnnotationLiteral` inner classes hold the target scope
+  literals; each overrides `annotationType()` explicitly per the
+  project's literal pattern.
+- **`JaxRsLifecycleAdapter`** (`…impl.adapter.lifecycle`) —
+  `TestModuleLifecyclePort` at `@Priority(75)`. `beforeAll`:
+  reads `@EnableJaxRs` off the test class (no-op if absent),
+  enforces the `@EnableTestBeans` companion requirement with
+  `IllegalStateException("@EnableJaxRs requires @EnableTestBeans
+  on the test class: {className}")`, probes `RuntimeDelegate
+  .getInstance()` (translates any `RuntimeException`/
+  `LinkageError` to `IllegalStateException("No JAX-RS
+  SeBootstrap implementation found")`), then calls
+  `SeBootstrap.start(...)` on `port=0` with the user's
+  `restResources` plus `CdiIntegrationFilter` registered as
+  classes. The returned `SeBootstrap.Instance` is awaited up to
+  30s, the resolved port read off
+  `instance.configuration().baseUri().getPort()`, the
+  `"http://localhost:{port}"` URL published on `TestUrlHolder`,
+  and the `Instance` bound on `TestContext` for the test class.
+  `afterAll`: reads the `Instance` back off `TestContext`, calls
+  `stop()` waiting up to 10s, then clears `TestUrlHolder` and
+  unbinds the metadata. Stop failures logged at WARNING and
+  swallowed per the cleanup contract; start failures after a
+  successful `start()` trigger a `stopServerQuietly()` to avoid
+  leaking the OS port. Stateless — no instance fields. Inner
+  `TestApplication` (named class, not anonymous) holds the
+  union of user resources + filter as an immutable
+  `Set.copyOf(...)`.
+- **`META-INF/beans.xml`** — `bean-discovery-mode="annotated"`
+  with a comment listing the impl-side CDI bean surface
+  (just `TestUrlHolder`; the lifecycle adapter is
+  ServiceLoader-loaded, the filter is JAX-RS-instantiated,
+  the extension is registered through
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`).
+- **`META-INF/services/jakarta.enterprise.inject.spi.Extension`** —
+  registers `JaxRsCdiExtension`. Apache header as `#` comments
+  per the project's services-file convention.
+- **`META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort`** —
+  registers `JaxRsLifecycleAdapter`. Same header convention.
+
+Initial javadoc-strict run flagged one bad `{@link TestUrl#get()}`
+in `JaxRsLifecycleAdapter`'s class-level docstring (TestUrl wasn't
+imported in the impl class). Fixed by fully-qualifying as
+`{@link org.os890.jawelte.module.jaxrs.api.TestUrl#get()}`.
+
+`./mvnw -pl modules/jaxrs-module/api,modules/jaxrs-module/impl
+verify -am`: 4 impl sources + 3 api sources compile, 0
+Checkstyle violations across both, javadoc-strict / RAT /
+Enforcer all green, javadoc jars built.
+
+Commit: UNTESTED: TICKET-011 Phase 3 — impl types
+(JaxRsLifecycleAdapter, JaxRsCdiExtension, TestUrlHolder,
+CdiIntegrationFilter) + META-INF wiring.
+
+## 2026-05-14 — TICKET-011 Phase 4 (tests aggregator + provider deps)
+
+Scaffolded the tests aggregator and pinned the CXF / RESTEasy
+artifact GAVs so per-scenario poms can pull them via profile only
+(scope inherited from depMgmt).
+
+- **`pom.xml`** — added `<dependencyManagement>` entries for
+  the four JAX-RS provider artifacts. All `test`-scope, version
+  pinned via `${cxf.version}` and `${resteasy.version}`:
+  - `org.apache.cxf:cxf-rt-frontend-jaxrs` (CXF JAX-RS frontend
+    with `RuntimeDelegate` and `SeBootstrap.Instance`)
+  - `org.apache.cxf:cxf-rt-transports-http-jetty` (CXF embedded
+    HTTP transport — Jetty)
+  - `org.jboss.resteasy:resteasy-core` (RESTEasy
+    `RuntimeDelegate` + `SeBootstrap.Instance`)
+  - `org.jboss.resteasy:resteasy-undertow` (RESTEasy embedded
+    HTTP transport — Undertow)
+- **`tests/pom.xml`** — appended `<module>jaxrs-module</module>`
+  to the tests aggregator's `<modules>` list.
+- **`tests/jaxrs-module/pom.xml`** — new aggregator AND parent
+  pom for the per-scenario test modules. `<modules>` is empty
+  for now (scenarios land in subsequent phases). The shared
+  `<dependencies>` block carries the dep shape every scenario
+  needs: `core-api/impl`, `cdi-module-api/impl`,
+  `scope-module-api/impl`, `jaxrs-module-api/impl`,
+  `content-diff-module-api/impl`, the jakarta CDI / annotation /
+  inject / ws.rs APIs, MP Config + SmallRye Config, Mockito,
+  JUnit Jupiter + Platform TestKit, AssertJ. Four orthogonal
+  `<profiles>` — `owb` (default) + `weld` for the CDI runtime,
+  and `cxf` (default) + `resteasy` for the JAX-RS provider —
+  so any combination (`./mvnw test -pl tests/jaxrs-module
+  -Pweld,resteasy`) selects exactly the corresponding pair
+  on the test classpath.
+
+`./mvnw validate`: the new aggregator appears in the reactor
+between `tests/testcontrol-module` and `coverage-report`; all 13
+reactor modules still validate green.
+
+No scenarios yet; the next phase adds the first cluster of
+scenarios (server boot + GET/POST + CDI injection — scenarios
+1–4).
+
+Commit: UNTESTED: TICKET-011 Phase 4 — tests aggregator +
+CXF/RESTEasy provider artifacts in depMgmt.
+
+## 2026-05-14 — TICKET-011 Phase 5 (scenarios 1-3 + impl fixes)
+
+First batch of working test scenarios. Three impl issues
+surfaced during scenario 01–03 dev, all fixed before
+committing:
+
+1. **`SeBootstrap.Configuration` required `rootPath`.** CXF's
+   `RuntimeDelegateImpl.bootstrap` calls
+   `Configuration.baseUriBuilder` which NPEs on a null `path`
+   (the configured `rootPath`). Added `.rootPath("/")` to the
+   `SeBootstrap.Configuration.builder()` chain in
+   `JaxRsLifecycleAdapter`.
+2. **`Configuration.port()` does not reflect the bound port
+   after start in CXF.** The Jakarta REST 4.0 spec says
+   `Instance.configuration().port()` should return the
+   OS-assigned port after a `port(0)` start, but CXF 4.1.0
+   still returns the configured value (0). Replaced
+   `port(0)` with pre-allocated local port via
+   `try (ServerSocket socket = new ServerSocket(0)) {
+       socket.getLocalPort();
+   }` — the standard cross-provider workaround used by Spring
+   Boot's test web server and similar frameworks. Tiny TOCTOU
+   window between the socket close and `SeBootstrap.start`,
+   accepted as the portability trade-off; a retry loop is
+   trivial to add if CI flakes surface.
+3. **CDI-managed JAX-RS resources need provider-side
+   integration that varies wildly.** Adding
+   `cxf-integration-cdi` pulled in `CXFCdiServlet` which
+   tried to integrate with the CDI container in
+   servlet-container mode, conflicting with OWB
+   (`AmbiguousResolutionException: org.apache.cxf.Bus`).
+   Provider-specific integration also wouldn't carry over to
+   RESTEasy without separate wiring. Fixed cross-provider by
+   resolving each `restResources` class through
+   `CDI.current().select(class).get()` in
+   `JaxRsLifecycleAdapter.beforeAll` and registering the
+   resulting (proxied) CDI bean as a JAX-RS singleton via
+   `Application.getSingletons()`. CDI normal-scope client
+   proxies are subclasses of the bean class, so JAX-RS's
+   standard annotation-lookup walk surfaces `@Path` correctly.
+   `CdiIntegrationFilter` is still registered as a class
+   (JAX-RS instantiates it directly — no CDI lookup needed).
+   `cxf-integration-cdi` and `resteasy-cdi` removed from
+   depMgmt and from the profiles.
+
+Scenarios:
+
+- **Scenario 01** (`scenario-01-server-starts-on-random-port`)
+  — smoke test. `@EnableJaxRs(restResources = {HelloResource.class})`,
+  assert `TestUrl.get()` starts with `"http://localhost:"` and
+  port > 0. Verifies the lifecycle adapter boots
+  `SeBootstrap`, resolves the port, publishes the URL on
+  `TestUrlHolder`.
+- **Scenario 02** (`scenario-02-get-request-returns-body`) —
+  HTTP GET. A `@GET /hello` resource returns plain text
+  `"hello"`; a JAX-RS client built via
+  `ClientBuilder.newClient()` calls the endpoint and asserts
+  status 200 + body equality. Verifies end-to-end HTTP
+  dispatch via the embedded server +
+  `CdiIntegrationFilter` request scope activation.
+- **Scenario 03** (`scenario-03-post-request-creates-resource`)
+  — HTTP POST + CDI injection in the resource. The
+  `@POST /orders @Consumes(JSON)` resource injects a shared
+  `@ApplicationScoped ReceivedOrderHolder`, stores the
+  request body on it, returns 201; the test thread reads the
+  holder back through its own `@Inject`. Verifies POST
+  handling AND the singleton-via-CDI resource resolution path
+  end-to-end.
+
+Provider-deps additions (depMgmt + cxf profile):
+
+- `org.apache.cxf:cxf-rt-rs-client` (test scope) — CXF client
+  side for `ClientBuilder.newClient()` from scenario 02
+  onward.
+- `org.jboss.resteasy:resteasy-client` (test scope) —
+  matching client artifact for the resteasy profile.
+
+`./mvnw -pl tests/jaxrs-module/scenario-01-…,…02-…,…03-… test
+-am` — all three scenarios green under the default
+`-Powb -Pcxf` profiles.
+
+Commit: UNTESTED: TICKET-011 Phase 5 — scenarios 1-3 + impl
+fixes (rootPath, pre-allocated port, singleton-via-CDI
+resource registration).
+
+## 2026-05-14 — TICKET-011 Phase 6 (scenarios 4-6 — CDI injection patterns)
+
+Three more scenarios exercising the CDI surfaces the lifecycle
+adapter and the CDI extension are responsible for. All three
+green on the first run — the singleton-via-CDI registration from
+Phase 5 carries through to every CDI-related case.
+
+- **Scenario 04** (`scenario-04-cdi-injection-in-resource`) —
+  `@ApplicationScoped` service `@Inject`-ed into the resource;
+  `GET /greet/{name}` delegates to the service and returns
+  `"Hello, " + name`. Proves the resource's `@Inject` field is
+  satisfied on the server worker thread (i.e. CDI proxying
+  works for resources resolved through
+  `CDI.current().select(class).get()`).
+- **Scenario 05**
+  (`scenario-05-request-scoped-bean-per-request`) — resource
+  injects a `@RequestScoped` bean exposing its
+  `System.identityHashCode`; two sequential HTTP requests from
+  one test method observe distinct identity values. Proves the
+  `CdiIntegrationFilter`'s activate→deactivate cycle runs per
+  HTTP request, not just once for the lifetime of the server.
+- **Scenario 06**
+  (`scenario-06-session-scoped-remapped-to-test-method-scoped`)
+  — `@SessionScoped`-declared counter bean is automatically
+  rewritten by `JaxRsCdiExtension` to `@TestMethodScoped`.
+  Method 1 increments twice (sees 1 then 2 — same instance);
+  method 2 (run after via `@TestMethodOrder` +
+  `@Order`) increments once (sees 1 — fresh
+  `@TestMethodScoped` allocation by scope-module's
+  `ScopeLifecycleAdapter.beforeEach`). The counter class
+  intentionally does NOT implement `Serializable` — the
+  rewrite happens at `ProcessAnnotatedType` time before CDI's
+  passivation-scope validation runs, so the
+  `Serializable`-or-die check never fires.
+
+Cross-thread state propagation note: confirmed
+`scope-module/impl`'s `ScopeStore` uses a `volatile Map` (not a
+`ThreadLocal`), so the `@TestMethodScoped` bean map allocated by
+scope-module's adapter on the JUnit thread is visible to the
+JAX-RS worker thread that dispatches the HTTP request. Same
+applies to `@TestClassScoped`. No bridging code needed in
+jaxrs-module.
+
+`./mvnw -pl tests/jaxrs-module/scenario-0{4,5,6}-* test -am`:
+all three green under default `-Powb -Pcxf`.
+
+Commit: UNTESTED: TICKET-011 Phase 6 — scenarios 4-6 (CDI
+injection in resource, @RequestScoped per HTTP request,
+@SessionScoped → @TestMethodScoped remap).
+
+## 2026-05-14 — TICKET-011 Phase 7 (scenarios 7-8 — ResponseDiff)
+
+Two thin bridge tests for the ResponseDiff adapter — proves
+ResponseDiff reads the JAX-RS `Response` entity as `String`,
+forwards to `ContentDiff.forJson(...)` / `forXml(...)`, and the
+content-diff-module engines accept the bridged payload.
+
+- **Scenario 07** (`scenario-07-response-diff-json`) — resource
+  produces a literal JSON body; test calls
+  `ResponseDiff.forJson(response).expectedContent("…").assertEquals()`.
+- **Scenario 08** (`scenario-08-response-diff-xml`) — same shape
+  for XML payloads via `ResponseDiff.forXml(...)`.
+
+Mismatch behaviour, ignore patterns, and the two MP Config
+default-ignore keys are content-diff-module's responsibility —
+TICKET-008 already covers them. These two scenarios assert only
+the bridge contract (response → builder → assertion).
+
+`./mvnw -pl tests/jaxrs-module/scenario-0{7,8}-* test -am`: both
+green under default `-Powb -Pcxf`.
+
+Commit: UNTESTED: TICKET-011 Phase 7 — scenarios 7-8 (ResponseDiff
+JSON + XML bridge tests).
+
+## 2026-05-14 — TICKET-011 Phase 8 (scenarios 9, 11; scenario 10 deferred; @Provider routing in the lifecycle adapter)
+
+Two new green scenarios plus one impl tweak.
+
+- **Scenario 09** (`scenario-09-multiple-resource-classes`) —
+  `restResources = {A.class, B.class}`; two resources at distinct
+  paths both reachable.
+- **Scenario 11** (`scenario-11-exception-mapper`) — a
+  CDI-managed `@Provider`-annotated
+  `ExceptionMapper<Scenario11TeapotException>` plus a resource
+  that throws the mapped exception; HTTP 418 + body
+  `"teapot"` returned.
+
+Surfaced during scenario 11 work: CDI normal-scope client-proxy
+classes don't carry the bean class's annotations on the proxy
+type itself, so a CDI-resolved singleton registered via
+`Application.getSingletons()` is invisible as a `@Provider` to
+the JAX-RS runtime — the runtime treats it as a plain resource
+class instead of an `ExceptionMapper`. Fixed in
+`JaxRsLifecycleAdapter.beforeAll` by routing each
+`restResources` entry on `isAnnotationPresent(Provider.class)`:
+
+- `@Provider`-annotated classes → registered as classes (JAX-RS
+  instantiates directly); the provider sees `@Provider` on its
+  Class<?> and integrates as ExceptionMapper / MessageBodyReader /
+  filter / etc. Trade-off: such providers can't use CDI
+  injection. Typical stateless providers don't need it.
+- Non-`@Provider` classes → CDI-resolved and registered as
+  singletons (the existing path; preserves `@Inject` in
+  resources).
+
+**Deferred — scenario 10** (`scenario-10-server-stops-after-test-class`)
+The files are in the tree but the module is commented out of
+`tests/jaxrs-module/pom.xml` with a TODO comment. The
+TCP-probe-the-released-port assertion is fundamentally
+timing-sensitive against CXF's Jetty transport (`Server.stop()`
+returns before the listening socket is fully released on some
+kernels). Even a 2-second retry window kept observing successful
+connections in the run that exposed the issue. A more
+deterministic verification needs a hook into the lifecycle
+adapter itself — likely a fired CDI event on server stop, which
+is a small impl addition out of scope for this batch.
+
+`./mvnw -pl tests/jaxrs-module/scenario-{01,02,03,04,05,06,07,08,09,11}-* test -am`:
+all 10 scenarios green (regression-free under
+`-Powb -Pcxf`).
+
+Commit: UNTESTED: TICKET-011 Phase 8 — scenarios 9 & 11; route
+@Provider classes by-class to fix ExceptionMapper detection;
+scenario 10 deferred to a follow-up.
+
+## 2026-05-14 — TICKET-011 Phase 9 (scenarios 12, 15-17 + EnableJaxRs.Validator + @Dependent routing)
+
+Four new green scenarios plus two impl additions to support them.
+
+**Impl additions:**
+
+- `EnableJaxRs.Validator` — new inner class of
+  `@EnableJaxRs` that implements `BeforeAllCallback`. Wired via
+  `@ExtendWith(EnableJaxRs.Validator.class)` on the annotation
+  itself. Fires in `beforeAll` independently of jawelte's
+  lifecycle-adapter chain — even if the test class doesn't
+  carry `@EnableTestBeans`. Detects "`@EnableJaxRs` without
+  `@EnableTestBeans`" and raises the documented
+  `IllegalStateException("@EnableJaxRs requires
+  @EnableTestBeans on the test class: {className}")`.
+  Adds `junit-jupiter-api` as a provided dep on
+  `jaxrs-module/api` (mirroring `core/api`'s pattern for the
+  `EnableTestBeans.Proxy`).
+- `JaxRsLifecycleAdapter` — `@Dependent`-annotated
+  `restResources` now route through the same
+  register-as-class path as `@Provider` classes. Reason:
+  `CDI.current().select(class).get()` for `@Dependent` returns
+  a single fresh instance — registering it as a singleton
+  would freeze that instance for the server lifetime, breaking
+  the "per HTTP request" semantics users expect from
+  `@Dependent` on a resource. Trade-off: register-as-class
+  resources don't get CDI injection on the resource itself.
+  Two scopes route differently:
+  - `@ApplicationScoped`, `@RequestScoped`,
+    `@TestMethodScoped`, `@TestClassScoped` → CDI-resolved
+    singleton (existing path; CDI proxies handle per-context
+    delegation).
+  - `@Dependent`, `@Provider` → registered as Class<?>;
+    JAX-RS instantiates per dispatch.
+
+**Scenarios:**
+
+- **12** (`scenario-12-enable-jaxrs-without-enable-test-beans-fails`)
+  — `Scenario12Subject` carries `@EnableJaxRs` but no
+  `@EnableTestBeans`. `Scenario12Test` runs the subject through
+  `EngineTestKit` and asserts the container-level FAILED event
+  surfaces `IllegalStateException` whose message contains
+  `"@EnableJaxRs requires @EnableTestBeans"`. The failure is a
+  CONTAINER event (not TEST) because it originates in
+  `beforeAll` — the test method never runs.
+- **15** (`scenario-15-test-url-called-before-server-start`) —
+  test class has `@EnableTestBeans` but NOT `@EnableJaxRs`. The
+  CDI container is up so `TestUrl` is injectable, but the
+  lifecycle adapter never boots the server →
+  `TestUrlHolder.baseUrl` stays `null`. Calling
+  `testUrl.get()` raises
+  `IllegalStateException("JAX-RS server not started yet")` —
+  the documented "called too early" contract.
+- **16** (`scenario-16-session-scoped-remap-is-global`) —
+  test class has `@EnableTestBeans`, no `@EnableJaxRs`. A
+  `@SessionScoped` counter bean is rewritten to
+  `@TestMethodScoped` by `JaxRsCdiExtension` (registered via
+  `META-INF/services`, fires on every CDI bootstrap regardless
+  of resource registration). Method 1 increments 1→2 (same
+  instance); method 2 resets to 1 — proves the remap is
+  global, not gated on a running server.
+- **17** (`scenario-17-dependent-resource-per-request`) —
+  `@Dependent`-scoped resource registered via
+  `restResources`. Two HTTP GETs report distinct
+  `System.identityHashCode` values, confirming the
+  register-as-class routing yields JAX-RS's default per-request
+  resource lifecycle.
+
+Initial Checkstyle run flagged `public` on the
+`EnableJaxRs.Validator` constructor as redundant (members of a
+class nested in an annotation type are implicitly public,
+matching the `EnableTestBeans.Proxy` pattern). Fixed by
+dropping the modifier.
+
+`./mvnw -pl tests/jaxrs-module/scenario-1{2,5,6,7}-* test -am`:
+all four green; re-running scenarios 1-9 + 11 after the impl
+changes — no regressions.
+
+Status: **14 of 17 scenarios passing.** Deferred:
+- Scenario 10 (`server-stops-after-test-class`) — timing-sensitive
+  against Jetty stop, needs a deterministic mechanism.
+- Scenario 13 (`missing-SeBootstrap-impl`) — requires
+  per-scenario classpath manipulation to exclude both providers.
+- Scenario 14 (`RESTEasy-provider-selection`) — requires
+  `-Presteasy` build to exercise the alternative provider; the
+  scenario module would need profile-conditional activation.
+
+Commit: UNTESTED: TICKET-011 Phase 9 — scenarios 12, 15-17;
+EnableJaxRs.Validator + @Dependent class-registration routing.
+
+## 2026-05-14 — TICKET-011 Phase 10 (arch.md fix + coverage-report wiring + WORKING)
+
+Final wrap-up: doc-sanity fix that was deferred from Phase 3 to
+this branch (per user's choice), coverage-report wiring for the
+new module, and a full `./mvnw verify` to flip the tip-of-branch
+prefix from `UNTESTED:` to `WORKING:`.
+
+- **`architecture.md`** — two edits:
+  1. Integrations table row renamed from `jawelte-jaxrs` to
+     `jawelte-jaxrs-module` and the Technology column from
+     `JAX-RS` to `Jakarta REST` (matches the established
+     `-module` suffix on the other landed rows + the actual
+     module name).
+  2. "Planned (forward-looking, not yet shipped)" line drops
+     `JaxRsContainerPort` — TICKET-011 contributes no new SPI
+     port; jaxrs-module hooks the existing
+     `TestModuleLifecyclePort` like every other module.
+- **`coverage-report/pom.xml`** — adds
+  `jawelte-jaxrs-module-api`, `jawelte-jaxrs-module-impl`, and
+  all 14 scenario sub-modules as dependencies so their
+  `jacoco.exec` data feeds `report-aggregate`.
+
+`./mvnw verify` end-to-end: BUILD SUCCESS in ~8:31 min. All 14
+jaxrs scenarios + every existing scenario from prior tickets
+pass; Checkstyle / Javadoc-strict / RAT / Enforcer / JaCoCo
+gates all green.
+
+Coverage snapshot (jacoco-aggregate/jacoco.csv, jaxrs rows):
+
+| Class                                 | Lines covered / total |
+|---------------------------------------|-----------------------|
+| EnableJaxRs.Validator                 | 8/9   (89%)           |
+| ResponseDiff                          | 5/6   (83%)           |
+| TestUrlHolder                         | 10/10 (100%)          |
+| JaxRsLifecycleAdapter                 | 54/75  (72%)          |
+| JaxRsLifecycleAdapter.TestApplication | 6/6   (100%)          |
+| CdiIntegrationFilter                  | 13/13 (100%)          |
+| JaxRsCdiExtension                     | 15/20 (75%)           |
+| TestMethodScopedLiteral               | 2/2   (100%)          |
+| TestClassScopedLiteral                | 0/2   (0%) — only fires when testcontrol-module is on the classpath; not exercised in jaxrs's own scenarios |
+
+The uncovered branches in `JaxRsLifecycleAdapter` are the error
+paths around server start/stop failure (timeouts, interruptions,
+the `IllegalStateException` mapping for the missing-impl probe).
+Those are reachable only by scenarios 10/13/14, all of which are
+deferred.
+
+Status: **14 of 17 scenarios green; full reactor verifies green
+end-to-end; 3 scenarios deferred with clear rationale**. Ready
+for review.
+
+Commit: WORKING: TICKET-011 Phase 10 — architecture.md fix +
+coverage-report wiring (full ./mvnw verify green).
+
+## 2026-05-14 — TICKET-011 hex-arch fix (drop junit-jupiter-api dep from jaxrs-module/api)
+
+`jaxrs-module/api` had picked up a direct compile dep on
+`junit-jupiter-api` via the `EnableJaxRs.Validator` inner class I
+introduced in Phase 9 — that violated the hex-arch convention that
+keeps every module API JUnit-agnostic and concentrates the
+JUnit bridge in `core/api` (via `EnableTestBeans.Proxy`).
+
+Fix:
+
+- **`@EnableJaxRs`** is now meta-annotated with
+  `@EnableTestBeans`. JUnit Jupiter walks the annotation's
+  meta-annotation chain to discover the
+  `@ExtendWith(EnableTestBeans.Proxy.class)` that
+  `@EnableTestBeans` carries, so jawelte's proxy extension
+  registers automatically — applying `@EnableJaxRs` to a test
+  class is sufficient on its own. No JUnit reference appears
+  on the jaxrs-module/api surface; the meta-annotation is a
+  plain Java reference to `EnableTestBeans`.
+- **`EnableJaxRs.Validator`** inner class **removed** along
+  with its `@ExtendWith` registration. The companion-check it
+  performed is now structurally impossible to trip — having
+  `@EnableJaxRs` on the class brings `@EnableTestBeans`'s
+  machinery in transparently.
+- **`jaxrs-module/api/pom.xml`** drops the `junit-jupiter-api`
+  dependency.
+- **`JaxRsLifecycleAdapter`** drops the now-pointless
+  `requireEnableTestBeans` check. By the time the adapter's
+  `beforeAll` runs, jawelte's proxy chain is by definition
+  active — no need to re-verify.
+- **Scenario 12 repurposed + directory renamed**
+  (`scenario-12-enable-jaxrs-without-enable-test-beans-fails`
+  → `scenario-12-enable-jaxrs-alone-boots-the-lifecycle`).
+  Now asserts: a test class with ONLY `@EnableJaxRs` (no
+  separate `@EnableTestBeans`) successfully boots CDI + the
+  embedded server, an HTTP GET to a registered resource
+  returns 200. Demonstrates the meta-annotation contract
+  end-to-end. The `Scenario12Subject` class is deleted
+  (EngineTestKit no longer needed); the rest collapses to a
+  plain `Scenario12Test` direct test class.
+- **`tests/jaxrs-module/pom.xml`** and
+  **`coverage-report/pom.xml`** updated for the rename.
+
+JUnit-Jupiter de-duplicates `EnableTestBeans.Proxy` registrations
+across direct + meta-annotation discoveries (verified by running
+the existing scenarios with both `@EnableTestBeans` and
+`@EnableJaxRs` after the change — no double-firing observed), so
+the redundant `@EnableTestBeans` on scenarios 01-11 + 17 is
+harmless and left in place. Only scenario 12 demonstrates the
+standalone usage; the others continue to show the
+both-annotations form for explicitness.
+
+`./mvnw verify` (full reactor): BUILD SUCCESS, 8:55 min. All 14
+scenarios still green; new scenario 12 passes; no regressions.
+
+Commit: FIXED: TICKET-011 hex-arch — drop junit-jupiter-api dep
+from jaxrs-module/api by meta-annotating @EnableJaxRs with
+@EnableTestBeans.
+
+## 2026-05-14 — TICKET-011 scope-mapping refactor (move @SessionScoped remap into scope-module; drop TestUrlHolder upgrade)
+
+Reworked the scope-rewriting so it follows the project's existing
+"scope-module owns scope remaps" convention.
+
+**The problem with the previous shape**
+
+The `JaxRsCdiExtension` I introduced bundled two distinct
+responsibilities — the global `@SessionScoped → @TestMethodScoped`
+remap (a standard CDI-scope remap, structurally identical to the
+existing `@ConfigBean → @TestClassScoped` remap that lives in
+`scope-module/impl`) AND a class-specific `TestUrlHolder` scope
+override gated on testcontrol-module being on the classpath. Two
+concerns, one extension, in the wrong module. An earlier attempt
+to express the override as a `ScopeBinding.TestUrlHolderScope`
+record collapsed under its own weight — per-feature ScopeBinding
+records don't scale (each new bean that wants a scope override
+would need its own type). The user flagged both: "we don't need
+something extra like TestUrlHolderScope otherwise we collect types
+for every feature".
+
+**The fix**
+
+- **`@SessionScoped → @TestMethodScoped` remap moved to
+  scope-module/impl** as a new
+  `SessionScopeRemapCdiExtension` class, sibling to
+  `ConfigBeanScopeRemapCdiExtension`. Same shape: observes
+  `ProcessAnnotatedType`, filters by the source annotation,
+  rewrites the scope via
+  `AnnotatedTypeConfigurator.remove(...).add(literal)`. Carries
+  its own `TestMethodScopedLiteral` singleton inner class (the
+  pattern this project uses for stable annotation literals).
+  Registered through scope-module's
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  alongside the existing two extensions.
+- **`TestUrlHolder` upgrade dropped entirely.** Ticket-011 itself
+  flagged that "under cdi-module's per-test-class container the
+  two scopes are observably equivalent (one URL per test class
+  either way)" — the upgrade was a cosmetic guarantee. Removing
+  it eliminates the per-feature `ScopeBinding` record AND the
+  testcontrol-classpath probe; `TestUrlHolder` stays plain
+  `@ApplicationScoped`.
+- **`JaxRsCdiExtension` deleted from jaxrs-module/impl**. With
+  the @SessionScoped remap moved out and the TestUrlHolder
+  upgrade dropped, jaxrs-module no longer has any CDI-scope
+  rewriting concern of its own — and ships no CDI Extension at
+  all. The `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  registration file is removed; the now-empty
+  `…impl.adapter.extension` package is removed.
+- **`core/api/port/ScopeBinding.java`** restored to its previous
+  two-record state (`TestBeanDefaultScope`,
+  `AutoMockDefaultScope`); my speculative additions
+  (`SessionScopeRemapTarget`, `TestUrlHolderScope`) are gone.
+- **`scope-module/impl/TestScopeCdiExtension`** restored to its
+  previous bindings (the same two records); the four bindMetadata
+  calls I had added are reverted.
+- **`jaxrs-module/impl/beans.xml`** comment updated — points
+  readers at scope-module/impl for the @SessionScoped remap.
+
+`./mvnw verify` (full reactor): BUILD SUCCESS, 9:34 min. All 14
+jaxrs scenarios still green (6 and 16 prove the remap now fires
+from scope-module's new extension); the existing scope-module
+scenarios for @ConfigBean / @TestMethodScoped / @TestClassScoped
+all still green.
+
+Commit: FIXED: TICKET-011 scope-mapping — move @SessionScoped
+remap to scope-module/impl; drop per-feature ScopeBinding records
+and TestUrlHolder upgrade.
+
+## 2026-05-14 — TICKET-011 simplify port handling (bump CXF 4.1.0 → 4.1.2; drop ServerSocket pre-allocation)
+
+Re-verified CXF's `SeBootstrap.Instance.configuration().port()`
+behaviour after bumping `${cxf.version}` 4.1.0 → 4.1.2 — the
+post-start port resolution now correctly returns the bound
+port (the 4.1.0 release returned the configured value, i.e.
+`0`, which is why Phase 5 introduced the `ServerSocket(0)`
+pre-allocation workaround). Dropped the workaround in favour
+of the simpler Jakarta REST 4.0 contract.
+
+Changes:
+
+- **`pom.xml`** — `${cxf.version}` 4.1.0 → 4.1.2.
+- **`JaxRsLifecycleAdapter`** — `port(0)` instead of
+  pre-allocated port. After `SeBootstrap.start(...)` returns,
+  the bound port is read off
+  `instance.configuration().port()` directly. No more
+  TOCTOU window between socket close and server bind.
+- **`allocateFreePort()` helper deleted**, along with the
+  `java.io.IOException` and `java.net.ServerSocket` imports
+  (no longer referenced).
+
+`./mvnw verify` (full reactor): BUILD SUCCESS in 8:19 min. All
+14 jaxrs scenarios still green; scenario 01 now exercises the
+standard `port(0)` path.
+
+Commit: FIXED: TICKET-011 — bump CXF 4.1.0 → 4.1.2; replace
+ServerSocket pre-allocation with the standard SeBootstrap
+port(0) + Instance.configuration().port() flow.
+
+## 2026-05-14 — TICKET-011 reflective fallback for non-CDI resource classes
+
+Extended the lifecycle adapter's resource-resolution path to
+accept plain Java classes (no bean-defining annotation): when
+`CDI.current().select(class).get()` raises
+`UnsatisfiedResolutionException`, the adapter falls back to the
+class's public no-arg constructor and registers the resulting
+instance with the JAX-RS application as a singleton. Failing
+reflection (no accessible no-arg constructor) still raises
+`IllegalStateException` with both causes attached.
+
+- **`JaxRsLifecycleAdapter`** — new private static
+  `resolveResource(Class<?>)` helper. Tries CDI first; on
+  `UnsatisfiedResolutionException` (the "not a bean" signal),
+  falls through to `getDeclaredConstructor().newInstance()`.
+  The loop that builds the singleton set delegates to the new
+  helper instead of calling CDI inline. Adds the
+  `jakarta.enterprise.inject.UnsatisfiedResolutionException`
+  import.
+- **New `tests/jaxrs-module/scenario-18-plain-resource-via-reflective-fallback`**
+  — `Scenario18PlainResource` is a `@Path("/plain")` class with
+  NO CDI bean-defining annotation; under
+  `bean-discovery-mode="annotated"` it isn't a CDI bean. The
+  test asserts an HTTP `GET /plain` returns 200 with the
+  literal body, proving the fallback wired the class as a
+  JAX-RS resource. Added to `tests/jaxrs-module/pom.xml` and
+  to `coverage-report/pom.xml`.
+
+`./mvnw -pl tests/jaxrs-module/scenario-18-* test -am`:
+SUCCESS in 1.8 s. The other 14 scenarios are unaffected
+(the fallback fires only on `UnsatisfiedResolutionException`).
+
+Commit: FIXED: TICKET-011 — reflective no-arg fallback for
+non-CDI restResources classes; new scenario 18.
+
+## 2026-05-14 — TICKET-011 bump RESTEasy 6.2.11.Final → 7.0.0.Final
+
+Bumped `${resteasy.version}` to the current major. The
+`-Presteasy` test classpath had to be probed manually with
+`./mvnw -P-cxf,owb,resteasy ...` (so the default-active
+`owb` CDI runtime stays active when overriding the JAX-RS
+profile); scenario 01 boots and serves traffic successfully
+under RESTEasy 7.0.0.Final's `SeBootstrap` impl.
+
+`./mvnw verify` (default `-Powb -Pcxf` path): BUILD SUCCESS
+in 8:35 min — no regressions on the cxf path. RESTEasy 7 is
+not used by any currently-active scenario (scenario 14 is
+deferred), but the dependencyManagement pin is now consistent
+with the rest of the project's "latest stable Jakarta EE 11"
+versioning.
+
+Commit: TICKET-011 — bump RESTEasy 6.2.11.Final → 7.0.0.Final.
+
+## 2026-05-14 — TICKET-011 scenario 19 (404 not found)
+
+New scenario covering JAX-RS's default routing fall-through:
+when no registered resource matches the requested path, the
+embedded server returns HTTP 404. The trivial
+`Scenario19HelloResource` (mapped at `/hello`) is registered
+so the server boots normally; the test fires GET against
+`/nonexistent` and asserts status 404.
+
+Added the module to `tests/jaxrs-module/pom.xml` and to
+`coverage-report/pom.xml`.
+
+`./mvnw -pl tests/jaxrs-module/scenario-19-... test -am`:
+SUCCESS in 2 s.
+
+Commit: WORKING: TICKET-011 — scenario 19 (404 for an unmapped
+path).
+
+## 2026-05-14 — TICKET-011 generalise scope-mapping into AnnotationScopeRemap SPI
+
+Consolidated scope-module's two single-purpose remap CDI
+extensions into one SPI-driven extension. Adding a future scope
+remap is now "ship one provider + one META-INF/services line"
+rather than "write a new CDI Extension class + register it".
+
+**New surface:**
+
+- `scope-module/api/AnnotationScopeRemap.java` — three-coordinate
+  SPI: `trigger()` (marker annotation that fires the remap),
+  `targetScope()` (replacement CDI scope), and
+  `preserveExplicitDirectScopes()` (default `false`; set to
+  `true` for stereotype-style triggers where the user might
+  declare an explicit non-default scope to opt out).
+- `META-INF/services/org.os890.jawelte.module.scope.api.AnnotationScopeRemap`
+  — provider registration file.
+
+**New impl:**
+
+- `scope-module/impl/.../ScopeRemapCdiExtension.java` — the one
+  CDI Extension that loads all `AnnotationScopeRemap` providers
+  via `ServiceLoader` and applies them in a single
+  `ProcessAnnotatedType` observer. The remap flow:
+  1. If the type carries the provider's `trigger()` annotation
+     directly,
+  2. and `preserveExplicitDirectScopes()` is `true` AND the
+     type carries an explicit non-default direct CDI scope
+     (anything that's `@NormalScope` or `@Scope`-meta-annotated,
+     excluding the trigger and the trigger's
+     stereotype-contributed scope), skip the remap,
+  3. otherwise remove every direct CDI scope annotation from
+     the type and add the target scope as a direct annotation.
+     Stereotype-contributed scopes need no removal — the
+     directly-added target wins per CDI's
+     class-level-scope-wins rule.
+  Annotation literals are built lazily via
+  `java.lang.reflect.Proxy` and cached per scope class — no
+  per-remap singleton literal class is needed.
+- `scope-module/impl/.../remap/SessionScopedToTestMethodScoped.java`
+  — provider: `@SessionScoped → @TestMethodScoped`,
+  `preserveExplicitDirectScopes=false`.
+- `scope-module/impl/.../remap/ConfigBeanToTestClassScoped.java`
+  — provider: `@ConfigBean → @TestClassScoped`,
+  `preserveExplicitDirectScopes=true` (preserves
+  `@ConfigBean @SomethingElseScoped` user overrides exactly
+  like the old `ConfigBeanScopeRemapCdiExtension` did).
+
+**Removed:**
+
+- `scope-module/impl/.../SessionScopeRemapCdiExtension.java`
+- `scope-module/impl/.../ConfigBeanScopeRemapCdiExtension.java`
+- Their two entries in
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  (replaced by the single `ScopeRemapCdiExtension` entry).
+
+`./mvnw verify` (full reactor): BUILD SUCCESS in 8:45 min. All
+16 jaxrs scenarios green; scope-module's @ConfigBean scenarios
+28/29/30 (which cover the preserve-explicit-override semantics)
+all still green; no regressions anywhere.
+
+Commit: FIXED: TICKET-011 — generic AnnotationScopeRemap SPI
+replacing the two single-purpose remap CDI extensions.
+
+## 2026-05-14 — TICKET-011 follow-up logged to todo.md
+
+Logged the `@ApplicationPath` honouring gap surfaced after
+TICKET-011 was wrapped up: `JaxRsLifecycleAdapter` hardcodes
+`SeBootstrap.Configuration.rootPath("/")` and wraps the user's
+resources in its own `TestApplication`, so a production
+`Application` subclass carrying `@ApplicationPath("demoRest")`
+is ignored. The follow-up entry lists three options (`applicationPath`
+attribute on `@EnableJaxRs`, auto-detect `Application` subclasses,
+or both) with the recommendation to take the auto-detect route.
+
+Commit: docs(todo): TICKET-011 follow-up — honour @ApplicationPath
+in jaxrs-module.

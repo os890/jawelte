@@ -13,4 +13,4 @@
 # limitations under the License.
 
 org.os890.jawelte.module.scope.impl.adapter.extension.TestScopeCdiExtension
-org.os890.jawelte.module.scope.impl.adapter.extension.ConfigBeanScopeRemapCdiExtension
+org.os890.jawelte.module.scope.impl.adapter.extension.ScopeRemapCdiExtension

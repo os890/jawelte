@@ -83,6 +83,9 @@
         <jakarta.el.version>6.0.1</jakarta.el.version>
         <expressly.version>6.0.0</expressly.version>
         <tomcat.el.version>11.0.7</tomcat.el.version>
+        <jakarta.ws.rs.version>4.0.0</jakarta.ws.rs.version>
+        <cxf.version>4.1.2</cxf.version>
+        <resteasy.version>7.0.0.Final</resteasy.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -321,6 +324,18 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal jaxrs-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jaxrs-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jaxrs-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!--
                 Jackson supplies the JSON tree + parser-level line-number
                 tracking that content-diff-module/impl's JsonDiffEngine
@@ -486,6 +501,20 @@
                 <version>${jakarta.ejb.version}</version>
                 <scope>provided</scope>
             </dependency>
+            <!--
+                jakarta.ws.rs-api defaults to provided for the same
+                reason: a JAX-RS provider (CXF / RESTEasy, selected
+                via Maven profile in tests/jaxrs-module/*) brings its
+                own copy of the API at test time. jaxrs-module/api
+                references jakarta.ws.rs.core.Response for the
+                ResponseDiff adapter signature.
+            -->
+            <dependency>
+                <groupId>jakarta.ws.rs</groupId>
+                <artifactId>jakarta.ws.rs-api</artifactId>
+                <version>${jakarta.ws.rs.version}</version>
+                <scope>provided</scope>
+            </dependency>
 
             <!--
                 ASM is provided so consumers can bring their own version
@@ -546,6 +575,53 @@
                 <groupId>com.h2database</groupId>
                 <artifactId>h2</artifactId>
                 <version>${h2.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!--
+                JAX-RS SeBootstrap implementations. test-scope by default:
+                jaxrs-module's two Maven profiles (-Pcxf default,
+                -Presteasy switch) add exactly one of these stacks to
+                the active test classpath so each provider's
+                RuntimeDelegate / SeBootstrap.Instance path can be
+                exercised in isolation, mirroring the -Powb / -Pweld
+                selection for the CDI SE runtime. Production consumers
+                ship their own JAX-RS provider.
+            -->
+            <dependency>
+                <groupId>org.apache.cxf</groupId>
+                <artifactId>cxf-rt-frontend-jaxrs</artifactId>
+                <version>${cxf.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.cxf</groupId>
+                <artifactId>cxf-rt-transports-http-jetty</artifactId>
+                <version>${cxf.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.cxf</groupId>
+                <artifactId>cxf-rt-rs-client</artifactId>
+                <version>${cxf.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.resteasy</groupId>
+                <artifactId>resteasy-core</artifactId>
+                <version>${resteasy.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.resteasy</groupId>
+                <artifactId>resteasy-undertow</artifactId>
+                <version>${resteasy.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jboss.resteasy</groupId>
+                <artifactId>resteasy-client</artifactId>
+                <version>${resteasy.version}</version>
                 <scope>test</scope>
             </dependency>
 

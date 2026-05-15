@@ -125,6 +125,16 @@
             <artifactId>jawelte-testcontrol-module-impl</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-impl</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             Test scenario modules: their jacoco.exec files contain the
@@ -1907,6 +1917,86 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-testcontrol-module-scenario-25-testcontrol-overridden-method-subclass-wins</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-01-server-starts-on-random-port</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-02-get-request-returns-body</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-03-post-request-creates-resource</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-04-cdi-injection-in-resource</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-05-request-scoped-bean-per-request</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-06-session-scoped-remapped-to-test-method-scoped</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-07-response-diff-json</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-08-response-diff-xml</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-09-multiple-resource-classes</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-11-exception-mapper</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-12-enable-jaxrs-alone-boots-the-lifecycle</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-15-test-url-called-before-server-start</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-16-session-scoped-remap-is-global</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-17-dependent-resource-per-request</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-18-plain-resource-via-reflective-fallback</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jaxrs-module-scenario-19-unknown-path-returns-404</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

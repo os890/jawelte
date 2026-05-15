@@ -137,3 +137,39 @@ Two design choices to settle before writing the scenario:
 
 - Should the pom pull jpa-module-impl + Hibernate + H2 too? (Confirms that even with the JPA stack on classpath, no persistence unit boots automatically.) Probably yes — the contract is strongest when ALL modules are present.
 - Should we register a JUnit `ExtensionContext` listener / custom logger to assert NO jawelte lifecycle adapter ran? Or trust "the test method passes with the expected assertion" as evidence enough? Probably the latter for simplicity; the former is over-engineered.
+
+## TICKET-011 follow-up — honour `@ApplicationPath` in `jaxrs-module`
+
+`JaxRsLifecycleAdapter` currently wraps the user's `restResources`
+in its own `TestApplication` (no `@ApplicationPath`) and pins
+`SeBootstrap.Configuration.rootPath("/")`. A production application
+class like
+
+```java
+@ApplicationPath("demoRest")
+public class DemoRestApp extends Application { ... }
+```
+
+is therefore invisible to the test setup: tests hit
+`<base>/<resource>` rather than `<base>/demoRest/<resource>`, so
+test URLs cannot match the deployed shape.
+
+**Options** (pick when picking up the follow-up):
+
+- **A.** Add `applicationPath` attribute to `@EnableJaxRs`:
+  `@EnableJaxRs(applicationPath = "demoRest", restResources = {...})`
+  — the value flows to `SeBootstrap.Configuration.rootPath(...)`.
+  Simple; user has to keep it in sync with the production
+  `@ApplicationPath`.
+- **B.** Detect `Application` subclasses passed in
+  `restResources` (via `Application.class.isAssignableFrom(rc)`),
+  treat such a class as the application instead of just a
+  resource, and read its `@ApplicationPath` to derive
+  `rootPath`. No DRY problem.
+- **C.** Both A and B — most flexible.
+
+Recommended: B (or C if belt-and-suspenders). New scenario
+covering the case: `@EnableJaxRs(restResources={DemoRestApp.class})`
+where `DemoRestApp` carries `@ApplicationPath("demoRest")` and a
+`@Path("/customers")` resource is reachable at
+`<TestUrl>/demoRest/customers`.
