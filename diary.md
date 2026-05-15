@@ -4344,3 +4344,16 @@ No production source yet — annotation types, lifecycle adapter, producer, CDI 
 - `@WireMockEndpoint` — `@Target(ANNOTATION_TYPE)`, meta-annotation for `@Qualifier`-marked endpoint annotations; carries an `int port() default 0` for OS-assigned-vs-fixed-port configuration.
 
 `./mvnw verify -pl modules/wiremock-module/api -am` green; javadoc-strict passes; api jar contains exactly the two annotation types and nothing else (no interfaces, no upstream WireMock library imports).
+
+## 2026-05-15 — TICKET-012 impl
+
+`wiremock-module/impl` now ships:
+- `WireMockServerRegistry` — `@ApplicationScoped` + impl-internal `@WireMockManagedScope` marker; holds `ConcurrentMap<Class<? extends Annotation>, WireMockServer>` keyed by endpoint identity. The scope-module `ScopeRemapCdiExtension` rewrites the registry's scope to `@TestClassScoped` at `ProcessAnnotatedType` time.
+- `WireMockProducer` — `@Default @Produces` methods for `WireMockServer` and `WireMock`; vetoed by the CDI extension when at least one `@WireMockEndpoint` qualifier is discovered.
+- `WireMockCdiExtension` — `BeforeBeanDiscovery` walks the test class hierarchy's fields, collects every `@Qualifier`-marked annotation reaching a `@WireMockEndpoint` ancestor (recursive meta-annotation walk), and exposes the `(userQualifierType -> endpointKey)` map. `ProcessAnnotatedType` vetoes `WireMockProducer` when discovery is non-empty. `AfterBeanDiscovery` registers two synthetic `@Dependent` beans per discovered qualifier (one for `WireMockServer`, one for `WireMock`); each carries `@Default` plus a Proxy-built qualifier literal so unqualified injection resolves in single-endpoint mode and raises `AmbiguousResolutionException` in multi-endpoint mode (matching scenario 9).
+- `WireMockLifecycleAdapter` — `@Priority(75)` `TestModuleLifecyclePort` adapter; `beforeAll` reads endpoints off the extension, starts one `WireMockServer` per unique endpoint key on the `@WireMockEndpoint.port()` (defaulting to OS-assigned port 0), populates the registry, and stops already-started servers on partial start failure. `beforeEach` calls `WireMockServer.resetAll()` on every server. `afterAll` stops every server (collecting failures via `addSuppressed`) and clears the registry in `finally`.
+- `WireMockRegistryScopeRemap` — `AnnotationScopeRemap` SPI provider triggered by `@WireMockManagedScope`, target `@TestClassScoped`.
+- META-INF/services: `jakarta.enterprise.inject.spi.Extension` (for `WireMockCdiExtension`), `core/api/TestModuleLifecyclePort` (for the lifecycle adapter), `scope/api/AnnotationScopeRemap` (for the registry-marker remap).
+- META-INF/beans.xml: `bean-discovery-mode="annotated"`, documenting the registry + producer + the synthetic-bean machinery the extension contributes.
+
+`./mvnw verify -pl modules/wiremock-module/impl -am` green; checkstyle, javadoc-strict, RAT, dependency-convergence all pass. No test scenarios yet — that's the next commit.
