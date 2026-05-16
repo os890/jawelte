@@ -4660,3 +4660,26 @@ Renamed the event-class result-mutator method for clarity. `complete` shared its
 The method remains internal-only (observer + `TimeoutHandler` SPI callers); javadoc kept the unchanged-from-test-code warning. Updated callers in `BatchExecutionObserver` (terminal-status branch) and `PopulateLatestSnapshotTimeoutHandler` (timeout-handler opt-in path); updated `{@link}` references in `TimeoutHandler`'s javadoc.
 
 All 14 batch-module scenarios green under both `-Powb` and `-Pweld`.
+
+## TICKET-013: cross-runtime compatibility scenario against JBeret
+
+Added `tests/batch-module/scenario-15-jberet-runtime-compatibility/` to verify the observer + producer code paths work against a non-BatchEE jBatch implementation. Scenario ships `org.jberet:jberet-core 3.1.0.Final` instead of `batchee-jbatch`; `BatchRuntime.getJobOperator()` picks up JBeret's `DelegatingJobOperator` via `META-INF/services/jakarta.batch.operations.JobOperator`, JBeret's CDI portable extension wires under the active CDI runtime, and the same JSL job + `@Named @Dependent` batchlet shape used by scenario 01 runs to `BatchStatus.COMPLETED` without any production-code change.
+
+**Why we don't use `jberet-se`:** JBeret's stock SE bootstrap (`org.jberet.se.BatchSEEnvironment` / `SEArtifactFactory`) hard-references `org.jboss.weld.environment.se.WeldContainer` at class init. Including it pulls Weld onto the test classpath transitively, which either fights OpenWebBeans at `SeContainerInitializer` time under `-Powb` or duplicates the active CDI runtime under `-Pweld`. We bypass `jberet-se` entirely.
+
+**The minimum-viable replacement** lives in the scenario's test source as three classes:
+- `TestBatchEnvironment` (`org.jberet.spi.BatchEnvironment` impl) — provides JBeret's `InMemoryRepository` singleton for state, `MetaInfBatchJobsJobXmlResolver` for JSL lookup, a cached daemon thread pool for `submitTask`, an empty configuration `Properties`, and a `NoOpTransactionManager` that satisfies JBeret's `invokeTransaction` chain since this scenario's batchlet never opens a transaction.
+- `TestArtifactFactory` (`org.jberet.spi.ArtifactFactory` impl) — resolves batch artefacts by `@Named` ref via `CDI.current()`, runtime-agnostic between OWB and Weld.
+- `NoOpTransactionManager` — every method is a no-op; `getStatus()` returns `STATUS_NO_TRANSACTION` so JBeret's suspend/resume code path stays in the "no active transaction" branch.
+
+Registered via `META-INF/services/org.jberet.spi.BatchEnvironment`.
+
+**JBeret jar-coupling fixes** (test-scope additions): JBeret's static initialisers reference `jakarta.transaction.InvalidTransactionException` and `org.wildfly.security.manager.WildFlySecurityManager`, neither of which is declared in JBeret's own pom (both are provided by WildFly's platform at JBeret's normal deployment site). The scenario adds both explicitly:
+- `jakarta.transaction:jakarta.transaction-api` (test) — promoted from provided in our parent depMgmt.
+- `org.wildfly.core:wildfly-security-manager:18.1.2.Final` (test).
+
+**Reactor wiring:** `pom.xml` adds `jberet.version=3.1.0.Final` + `org.jberet:jberet-core` in depMgmt (test scope); `tests/batch-module/pom.xml` registers `scenario-15-jberet-runtime-compatibility` in `<modules>`; `coverage-report/pom.xml` indexes the new test module for JaCoCo aggregation.
+
+**The test class** verifies (a) `BatchRuntime.getJobOperator().getClass().getName()` starts with `org.jberet.` (proving JBeret's `DelegatingJobOperator` is what `BatchRuntime` returned on this scenario's classpath — the CDI-proxied `@Inject JobOperator` shows the proxy class instead, hence the direct static call), (b) the job reaches `BatchStatus.COMPLETED` through the same `BatchExecutionObserver`, (c) the event is populated with a non-null `JobExecution`, (d) the cached executionId matches the snapshot's id.
+
+All 15 batch-module scenarios green under both `-Powb` and `-Pweld`.

@@ -2215,6 +2215,11 @@
             <artifactId>jawelte-tests-batch-module-scenario-14-alternative-timeout-handler</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-batch-module-scenario-15-jberet-runtime-compatibility</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

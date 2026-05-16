@@ -91,6 +91,7 @@
         <wiremock.version>3.13.2</wiremock.version>
         <jakarta.batch.version>2.1.1</jakarta.batch.version>
         <batchee.version>2.0.0</batchee.version>
+        <jberet.version>3.1.0.Final</jberet.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -742,6 +743,23 @@
                 <groupId>org.apache.batchee</groupId>
                 <artifactId>batchee-jbatch</artifactId>
                 <version>${batchee.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!--
+                JBeret: the second jBatch runtime exercised by
+                tests/batch-module to confirm BatchExecutionObserver
+                works against any spec-compliant impl, not just
+                BatchEE. test-scope; registers its own
+                DelegatingJobOperator via
+                META-INF/services/jakarta.batch.operations.JobOperator
+                and ships a CDI portable extension that the active
+                runtime (OWB or Weld) picks up automatically.
+            -->
+            <dependency>
+                <groupId>org.jberet</groupId>
+                <artifactId>jberet-core</artifactId>
+                <version>${jberet.version}</version>
                 <scope>test</scope>
             </dependency>
 

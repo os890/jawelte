@@ -48,6 +48,7 @@
         <module>scenario-12-result-populated-on-event</module>
         <module>scenario-13-timeout-does-not-cancel</module>
         <module>scenario-14-alternative-timeout-handler</module>
+        <module>scenario-15-jberet-runtime-compatibility</module>
     </modules>
 
     <dependencies>
