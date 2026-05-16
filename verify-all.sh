@@ -16,21 +16,31 @@
 #
 # Verification driver for the jawelte project.
 #
-# Two modes:
+# Three modes:
 #
 #   bash verify-all.sh
 #     Full matrix — install full reactor, then sweep every test
 #     module under every applicable {owb, weld} × {jta-*} profile,
 #     then aggregate coverage. Use before finishing a topic.
+#     LNP scenarios are NOT run in this mode (they are skipTests-by-
+#     default and require -P lnp to execute).
 #
 #   bash verify-all.sh wip
 #     Iteration mode — install full reactor, then run only those
 #     test modules whose pom.xml declares a `<id>wip</id>` profile,
 #     activating that profile. Lets the in-flight topic's scenarios
 #     run fast without sweeping everything. Skips the coverage
-#     aggregation phase.
+#     aggregation phase. LNP scenarios are NOT run in this mode.
 #
-# Both modes fail fast: any single phase's non-zero exit aborts
+#   bash verify-all.sh lnp
+#     Load-and-performance mode — install full reactor, then sweep
+#     ONLY tests/lnp-module under the {owb, weld} × lnp profile
+#     combinations. Surefire produces a per-class timing/heap table
+#     in System.out plus a final aggregated summary. Skips the
+#     coverage aggregation phase. None of the normal correctness
+#     test modules run in this mode.
+#
+# All three modes fail fast: any single phase's non-zero exit aborts
 # the script (the `set -euo pipefail` envelope plus an explicit
 # FAIL banner from the `run` helper).
 
@@ -48,14 +58,18 @@ MVN="$REPO_ROOT/mvnw"
 MVN_ARGS=(-B -ntp -T 1)
 
 WIP_MODE=false
+LNP_MODE=false
 case "${1:-}" in
     "")
         ;;
     wip|--wip)
         WIP_MODE=true
         ;;
+    lnp|--lnp)
+        LNP_MODE=true
+        ;;
     *)
-        echo "Usage: $(basename "$0") [wip]" >&2
+        echo "Usage: $(basename "$0") [wip|lnp]" >&2
         exit 2
         ;;
 esac
@@ -106,7 +120,21 @@ run() {
 run "clean install full reactor" \
     "$REPO_ROOT/verify-all" clean install
 
-if [ "$WIP_MODE" = true ]; then
+if [ "$LNP_MODE" = true ]; then
+    # --- lnp mode ----------------------------------------------------
+    # Load-and-performance sweep. Surefire is skipTests=true in the
+    # lnp-module aggregator's base build config; activating -P lnp
+    # flips it back on. Combined with -P owb / -P weld this picks a
+    # CDI runtime AND turns on the perf execution. Each lnp scenario
+    # produces a per-class table via PerformanceExtension and a final
+    # aggregated summary via FinalSummaryTest. Coverage aggregation is
+    # skipped on purpose - perf runs are not coverage runs and the
+    # huge per-method volume would skew the coverage exec data.
+    for cdi in owb weld; do
+        run "tests/lnp-module [$cdi,lnp]" \
+            "$REPO_ROOT/tests/lnp-module" -P "$cdi,lnp" verify
+    done
+elif [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------
     # Find every tests/<module>/pom.xml that declares a wip profile.
     # Each ticket-in-flight adds the profile to the relevant test
@@ -200,7 +228,10 @@ fi
 total_elapsed=$(( $(date +%s) - start_epoch ))
 echo
 echo "=================================================================="
-if [ "$WIP_MODE" = true ]; then
+if [ "$LNP_MODE" = true ]; then
+    printf "  LNP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
+           "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+elif [ "$WIP_MODE" = true ]; then
     printf "  WIP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
 else

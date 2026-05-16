@@ -5052,3 +5052,15 @@ updated the package declaration in the class and the FQN in
 `META-INF/services/org.junit.platform.launcher.LauncherSessionListener`.
 Smoke-tested again with tests/core/scenario-01 — banner still
 prints once before the first test class, test green.
+
+## 2026-05-17 — TICKET-030 load-and-performance scenario (lnp-module, untested first pass)
+
+Issue #30 / branch `30-load-and-performance-test-module-lnp-module`. Goal: a load-and-performance test sweep gated behind `bash verify-all.sh lnp` so the normal full-matrix run is untouched.
+
+Added:
+- `tests/lnp-module/` aggregator with `<id>owb</id>` / `<id>weld</id>` / `<id>lnp</id>` profiles. Surefire is `skipTests=true` in the base build config; `-Plnp` flips it back to false. None of the three default modes (no-args, `wip`) ever execute the LNP scenarios.
+- `tests/lnp-module/scenario-01-full-crud/`: 50-entity domain across ecommerce, hr, content, finance, inventory, logistics, marketing, support, crm, analytics (109 entity files). `TestDataPopulator` seeds ~1000 rows per run, split into one helper per domain so each helper stays under the MethodLength=200 limit. `AbstractFullCrudScenarioTest` holds the CRUD `@Test` methods; 50 thin `FullCrudScenarioNNTest` subclasses extend it so each per-JVM run amplifies CDI bootstrap and class-load costs across ~50 separate scenario classes.
+- `metrics/PerformanceExtension` (Jupiter extension) captures per-method wall time and per-class heap delta. `metrics/FinalSummaryTest` is pinned with `@Order(MAX_VALUE)` via `junit-platform.properties` ClassOrderer so the aggregated table prints after the last subclass.
+- `verify-all.sh`: third mode `lnp` sweeps `tests/lnp-module` with `-Powb,lnp` and `-Pweld,lnp`. Skips coverage aggregation (perf runs are not coverage runs).
+
+Cross-cutting: RAT clean, Checkstyle clean (Indentation + ImportOrder + UnusedImports + LeftCurly + VisibilityModifier all pass after a post-port cleanup pass). Tests not yet run; commit is `UNTESTED` until the first `bash verify-all.sh lnp` pass goes green.
