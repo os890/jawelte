@@ -16,34 +16,31 @@
 package org.os890.jawelte.module.wiremock.impl.adapter.extension.remap;
 
 import java.lang.annotation.Annotation;
+import java.util.Optional;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.core.api.port.BeanScopeMapper;
 
 /**
  * {@link BeanScopeMapper} provider that remaps types carrying
- * the impl-internal {@link WireMockManagedScope} marker to
- * {@code org.os890.jawelte.module.scope.api.TestClassScoped}.
+ * the impl-internal {@link WireMockManagedScope} marker to the
+ * CDI scope configured under MP Config key
+ * {@value #TARGET_SCOPE_KEY}.
  *
- * <p>Used by wiremock-module to upgrade the per-class
- * {@code WireMockServerRegistry} bean's scope so the registry's
- * lifetime matches the {@code WireMockServer} lifetime (started in
- * {@code beforeAll}, stopped in {@code afterAll}). Under
- * cdi-module's per-test-class CDI container the upgrade is
- * observably equivalent to {@code @ApplicationScoped}; the explicit
- * remap is a cosmetic guarantee for a future per-method CDI
- * container — the same rationale jaxrs-module documents for its
- * own scope-upgrade pattern.
+ * <p><b>Default value.</b> scope-module/impl's
+ * {@code microprofile-config.properties} ships the key with
+ * value {@code org.os890.jawelte.module.scope.api.TestClassScoped}.
+ * Consumers override by setting the same key in any
+ * higher-priority MP Config source.
  *
- * <p><b>Target loaded reflectively, no compile-time dep on
- * scope-module.</b> {@link #targetScope()} resolves
- * {@code TestClassScoped} via {@link Class#forName(String)} —
- * usually the project avoids reflection, but here it pays for
- * itself: wiremock-module/impl no longer compile-depends on
- * scope-module/api. If {@code TestClassScoped} is not on the
- * runtime classpath (scope-module absent), the method returns
- * {@code null} and {@code BeanScopeMapperPort} skips the mapping
- * entirely — the registry then keeps its declared
- * {@code @ApplicationScoped} scope.
+ * <p><b>Reflective load, no compile-time scope-module dep.</b>
+ * The configured class is resolved once at class-load time via
+ * {@link Class#forName(String, boolean, ClassLoader)}. When the
+ * key is unset, or the configured class isn't on the runtime
+ * classpath (typically scope-module absent),
+ * {@link #targetScope()} returns {@code null} and the active
+ * {@code BeanScopeMapperPort} skips this provider — the
+ * registry keeps its declared {@code @ApplicationScoped} scope.
  *
  * <p>{@link #preserveExplicitDirectScopes()} returns {@code false}
  * (inherited default): {@code @WireMockManagedScope} is an
@@ -61,10 +58,17 @@ import org.os890.jawelte.core.api.port.BeanScopeMapper;
  */
 public class WireMockRegistryScopeRemap implements BeanScopeMapper {
 
-    private static final String TEST_CLASS_SCOPED_FQCN =
-            "org.os890.jawelte.module.scope.api.TestClassScoped";
+    /**
+     * MP Config key whose value is the FQCN of the CDI scope
+     * annotation to install on the {@code WireMockServerRegistry}
+     * bean. scope-module/impl supplies the default
+     * ({@code org.os890.jawelte.module.scope.api.TestClassScoped})
+     * via its {@code microprofile-config.properties}.
+     */
+    public static final String TARGET_SCOPE_KEY =
+            "org.os890.jawelte.module.wiremock.registry.default-scope";
 
-    private static final Class<? extends Annotation> TEST_CLASS_SCOPED = loadTestClassScoped();
+    private static final Class<? extends Annotation> TARGET_SCOPE = loadTargetScope();
 
     /** No-arg constructor required by {@code ServiceLoader}. */
     public WireMockRegistryScopeRemap() {
@@ -77,14 +81,21 @@ public class WireMockRegistryScopeRemap implements BeanScopeMapper {
 
     @Override
     public Class<? extends Annotation> targetScope() {
-        return TEST_CLASS_SCOPED;
+        return TARGET_SCOPE;
     }
 
     @SuppressWarnings("unchecked")
-    private static Class<? extends Annotation> loadTestClassScoped() {
+    private static Class<? extends Annotation> loadTargetScope() {
+        Optional<String> configured = ConfigProvider.getConfig()
+                .getOptionalValue(TARGET_SCOPE_KEY, String.class)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty());
+        if (configured.isEmpty()) {
+            return null;
+        }
         try {
             Class<?> loaded = Class.forName(
-                    TEST_CLASS_SCOPED_FQCN,
+                    configured.get(),
                     true,
                     WireMockRegistryScopeRemap.class.getClassLoader());
             if (!Annotation.class.isAssignableFrom(loaded)) {

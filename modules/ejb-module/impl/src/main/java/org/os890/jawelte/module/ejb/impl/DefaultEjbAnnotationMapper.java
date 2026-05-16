@@ -18,6 +18,7 @@ package org.os890.jawelte.module.ejb.impl;
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import jakarta.annotation.Priority;
 import jakarta.ejb.Singleton;
@@ -29,6 +30,7 @@ import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.inject.Scope;
 import jakarta.transaction.Transactional;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
 
 /**
@@ -79,16 +81,35 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  * {@code ServiceLoader}.
  *
  * <p>The resolved scope class is read once at class-load time via
- * a reflective {@code Class.forName} of
- * {@code org.os890.jawelte.module.scope.api.TestClassScoped} — the
- * same pattern used by {@code WireMockRegistryScopeRemap}. When
- * scope-module isn't on the classpath the load returns
- * {@code null} and the mapper falls back to
- * {@code @ApplicationScoped}.
+ * the MP Config key {@value #SINGLETON_DEFAULT_SCOPE_KEY}.
+ * scope-module/impl supplies the default value
+ * ({@code org.os890.jawelte.module.scope.api.TestClassScoped}) via
+ * its {@code microprofile-config.properties}; consumers override
+ * by setting the same key in any higher-priority MP Config source.
+ * The configured class is loaded reflectively, keeping ejb-module
+ * free of a compile-time dependency on scope-module. When the key
+ * is unset or the configured class isn't loadable, the mapper
+ * falls back to {@code @ApplicationScoped} — the same pattern
+ * used by {@code WireMockRegistryScopeRemap}.
  */
 @Priority(Integer.MAX_VALUE)
 public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
 
+    /**
+     * MP Config key whose value is the FQCN of the CDI scope
+     * annotation to assign to {@code @jakarta.ejb.Singleton}-mapped
+     * beans. scope-module/impl supplies the default
+     * ({@code org.os890.jawelte.module.scope.api.TestClassScoped})
+     * via its {@code microprofile-config.properties}; consumers
+     * override by setting the same key in any higher-priority MP
+     * Config source. When the key is unset or the configured
+     * class isn't loadable, the mapper falls back to
+     * {@code @ApplicationScoped}.
+     */
+    public static final String SINGLETON_DEFAULT_SCOPE_KEY =
+            "org.os890.jawelte.module.ejb.singleton.default-scope";
+
+    private static final Class<? extends Annotation> TEST_CLASS_SCOPED = loadSingletonScope();
 
     /**
      * Required public no-arg constructor for
@@ -163,16 +184,18 @@ public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
         return AnnotationInstanceFactory.create(TEST_CLASS_SCOPED);
     }
 
-    private static final String TEST_CLASS_SCOPED_FQCN =
-            "org.os890.jawelte.module.scope.api.TestClassScoped";
-
-    private static final Class<? extends Annotation> TEST_CLASS_SCOPED = loadTestClassScoped();
-
     @SuppressWarnings("unchecked")
-    private static Class<? extends Annotation> loadTestClassScoped() {
+    private static Class<? extends Annotation> loadSingletonScope() {
+        Optional<String> configured = ConfigProvider.getConfig()
+                .getOptionalValue(SINGLETON_DEFAULT_SCOPE_KEY, String.class)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty());
+        if (configured.isEmpty()) {
+            return null;
+        }
         try {
             Class<?> loaded = Class.forName(
-                    TEST_CLASS_SCOPED_FQCN,
+                    configured.get(),
                     true,
                     DefaultEjbAnnotationMapper.class.getClassLoader());
             if (!Annotation.class.isAssignableFrom(loaded)) {

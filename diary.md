@@ -4505,3 +4505,34 @@ No consumer migration yet — cdi-module + ejb-module still read `ScopeBinding.T
 `scope-module/impl/TestScopeCdiExtension` no longer binds anything on `TestContext` — its only responsibility now is creating the two scope stores + contexts in `AfterBeanDiscovery`. The `BeforeBeanDiscovery` observer (which used to bind the records) is gone.
 
 `./mvnw verify` green end-to-end (9:49 min). 25 / 25 wiremock scenarios pass; existing scope / cdi / jpa / jta / ejb / content-diff / db-testdata / testcontrol / jaxrs scenarios all pass — including the ejb-module scenarios 17-21 that specifically exercise the @Singleton-with-and-without-scope-module paths the reflective load replaces.
+
+## 2026-05-16: TICKET-012 — MP Config generalization for cross-module scope defaults
+
+Completed the in-progress generalization of cross-module CDI scope
+defaults to MP Config keys, following the precedent set by cdi-module's
+auto-mock default-scope key. Two more consumer sites joined the pattern:
+
+- wiremock-module's `WireMockRegistryScopeRemap.targetScope()` now
+  reads the FQCN of the target scope class from MP Config key
+  `org.os890.jawelte.module.wiremock.registry.default-scope`
+  (scope-module/impl supplies the default
+  `org.os890.jawelte.module.scope.api.TestClassScoped` via its
+  `microprofile-config.properties`). The configured class is loaded
+  reflectively at class-load time; an unset key or unloadable class
+  returns null, causing `BeanScopeMapperPort` to skip this provider
+  and the registry to keep its declared `@ApplicationScoped`.
+
+- ejb-module's `DefaultEjbAnnotationMapper.singletonScopeLiteral()`
+  now reads the FQCN of the target scope class for
+  `@jakarta.ejb.Singleton`-mapped beans from MP Config key
+  `org.os890.jawelte.module.ejb.singleton.default-scope`
+  (scope-module/impl supplies the default
+  `org.os890.jawelte.module.scope.api.TestClassScoped`). Replaces the
+  previous hardcoded FQCN string. Fallback when key is unset or
+  unloadable: `@ApplicationScoped`.
+
+Added both new keys to scope-module/impl's
+`microprofile-config.properties`. scope-module is now the single
+source-of-truth for the FQCNs of `TestClassScoped` and
+`TestMethodScoped` across the wiremock/cdi/ejb consumer modules — no
+Java code in any consumer module names those classes anymore.
