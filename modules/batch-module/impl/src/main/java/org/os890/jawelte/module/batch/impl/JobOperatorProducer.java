@@ -15,6 +15,9 @@
  */
 package org.os890.jawelte.module.batch.impl;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
+
 import jakarta.batch.operations.JobOperator;
 import jakarta.batch.runtime.BatchRuntime;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -46,6 +49,9 @@ import jakarta.enterprise.inject.Produces;
 @ApplicationScoped
 public class JobOperatorProducer {
 
+    private static final Logger LOG =
+            System.getLogger(JobOperatorProducer.class.getName());
+
     /** No-arg constructor required by the CDI runtime. */
     public JobOperatorProducer() {
     }
@@ -76,6 +82,8 @@ public class JobOperatorProducer {
             throw new IllegalStateException(
                     "No JobOperator found via ServiceLoader. Add a jBatch implementation to the test classpath.");
         }
+        LOG.log(Level.INFO,
+                "Resolved JobOperator: " + operator.getClass().getName());
         return operator;
     }
 }

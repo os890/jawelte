@@ -4624,3 +4624,15 @@ Cross-module scenarios deferred (batch + JPA, batch + `@TestControl(testData)`) 
 **Test outcome:** all 13 scenarios green under both `-Powb` and `-Pweld`. Full reactor `install -DskipTests` green.
 
 **Ticket alignment:** before opening the GitHub issue I reconciled an internal inconsistency in `tickets/013-batch-module.md` — Performance + Acceptance Criteria referenced an explicit-`TestContext`-classloader bridge plus a "Revisit note in Use Cases" that did not exist, contradicting the "JobOperator Resolution" section. After user choice (BatchRuntime/TCCL), both passages now describe the TCCL path with no custom bridge.
+
+## TICKET-013: add `java.lang.System.Logger` to observer + producer
+
+Three INFO log lines added to make the blocking-event lifecycle visible without forcing exception inspection:
+- `BatchExecutionObserver` logs job-start (`"Started batch job '<name>' (executionId=<n>)"`) right after `JobOperator.start(...)`, and job-finish (`"Batch job '<name>' finished: <status> (exit=<exit>)"`) right before `complete(...)`.
+- `JobOperatorProducer` logs the resolved `JobOperator` impl class (`"Resolved JobOperator: <fqcn>"`) right before returning it from `produceJobOperator()`.
+
+Matches the rest of the codebase — every other production module that logs (`jta`, `jpa`, `jaxrs`, `ejb`) uses `java.lang.System.Logger`, not SLF4J. The `slf4j-api` provided dep in the parent pom is only there because WireMock and DbUnit pull it transitively. No SLF4J import in any module under `core/` or `modules/`.
+
+No log on timeout — the thrown `IllegalStateException` already carries job name, timeout, and last observed status, so a `WARNING` log there would be redundant noise.
+
+All 13 batch-module scenarios re-verified green under `-Powb`.

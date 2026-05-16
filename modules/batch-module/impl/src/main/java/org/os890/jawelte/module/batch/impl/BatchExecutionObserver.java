@@ -15,6 +15,9 @@
  */
 package org.os890.jawelte.module.batch.impl;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
+
 import jakarta.batch.operations.JobOperator;
 import jakarta.batch.runtime.BatchStatus;
 import jakarta.batch.runtime.JobExecution;
@@ -66,6 +69,9 @@ public class BatchExecutionObserver {
 
     private static final long BACKOFF_CAP_MS = 5000L;
 
+    private static final Logger LOG =
+            System.getLogger(BatchExecutionObserver.class.getName());
+
     @Inject
     private JobOperator jobOperator;
 
@@ -82,6 +88,8 @@ public class BatchExecutionObserver {
      */
     public void observe(@Observes BatchExecution event) {
         long executionId = jobOperator.start(event.getJobName(), event.getJobParameters());
+        LOG.log(Level.INFO,
+                "Started batch job '" + event.getJobName() + "' (executionId=" + executionId + ")");
 
         long pollMs = event.getInitialPollMs();
         long timeoutMs = event.getTimeout().toMillis();
@@ -94,6 +102,9 @@ public class BatchExecutionObserver {
             lastStatus = status;
             if (isTerminal(status)) {
                 event.complete(executionId, snapshot);
+                LOG.log(Level.INFO,
+                        "Batch job '" + event.getJobName() + "' finished: " + status
+                                + " (exit=" + snapshot.getExitStatus() + ")");
                 return;
             }
 
