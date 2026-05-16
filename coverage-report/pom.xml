@@ -155,6 +155,11 @@
             <artifactId>jawelte-batch-module-impl</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-spring-data-module</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             Test scenario modules: their jacoco.exec files contain the
@@ -265,6 +270,11 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-core-scenario-config-07-null-key</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-config-08-alias-aggregation</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -685,6 +695,21 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-scope-module-scenario-27-no-scope-module-fallbacks-apply</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-scope-module-scenario-28-configbean-remapped-to-testclass</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-scope-module-scenario-29-configbean-remap-unconditional</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-scope-module-scenario-30-configbean-with-explicit-scope-not-remapped</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -1916,21 +1941,6 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-testcontrol-module-scenario-21-configbean-remapped-to-testclass</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-testcontrol-module-scenario-22-configbean-remap-unconditional</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-testcontrol-module-scenario-23-configbean-with-explicit-scope-not-remapped</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-testcontrol-module-scenario-24-testcontrol-inherited-from-superclass-method</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -2218,6 +2228,76 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-batch-module-scenario-15-jberet-runtime-compatibility</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-01-repository-injectable</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-02-crud-operations</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-03-derived-query-method</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-04-query-annotation-jpql</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-05-query-annotation-native</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-06-mixed-em-and-repository</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-07-service-with-transactional</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-08-back-off-on-user-produces</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-09-no-repository-bean-skipped</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-10-no-repository-bean-on-parent</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-11-limit-to-test-beans</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-12-request-scoped-per-test-method</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-13-paging-and-sorting</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-spring-data-module-scenario-14-multiple-repositories</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

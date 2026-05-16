@@ -4927,3 +4927,35 @@ verify-all uses (`-B -ntp -T 1 -P owb verify` and `-P weld`):
 14 scenarios green on each runtime.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — coverage-report: spring-data wiring + stale-testcontrol fix
+
+`mvn clean install -DskipTests` from the repo root was failing
+once Maven evicted some long-cached artefacts: `coverage-report/pom.xml`
+listed three modules that no longer exist —
+`jawelte-tests-testcontrol-module-scenario-21-configbean-remapped-to-testclass`,
+`-22-configbean-remap-unconditional`,
+`-23-configbean-with-explicit-scope-not-remapped` — that had been
+moved to `tests/scope-module` as scenarios 28 / 29 / 30 at some
+earlier point. The stale references were silent as long as the
+old jars stayed cached in `~/.m2`, then surfaced as a
+`Could not resolve dependencies` failure the moment Maven did
+not find them locally.
+
+Three fixes in one pom edit:
+- Removed the three stale `testcontrol-module-scenario-21|22|23`
+  entries.
+- Added the three corresponding
+  `scope-module-scenario-28|29|30` entries to the scope-module
+  block.
+- Added `jawelte-spring-data-module` (production module) +
+  the 14 `tests/spring-data-module/scenario-*` modules + the
+  new `tests/core/scenario-config-08-alias-aggregation` module
+  to the aggregation set so their classes show up in the
+  per-module coverage report and their `jacoco.exec` files feed
+  into `target/site/jacoco-aggregate/`.
+
+`./mvnw clean install -DskipTests` from the repo root now exits
+0 deterministically.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
