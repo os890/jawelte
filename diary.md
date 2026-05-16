@@ -4790,3 +4790,19 @@ All 14 scenarios green on `-Powb` and `-Pweld`.
   spring-data-module the equivalent is `<module>.adapter.extension`).
 - Updated the `META-INF/services/jakarta.enterprise.inject.spi.Extension`
   registration to the new FQCN. All 14 scenarios still green.
+
+## 2026-05-16 — TICKET-014 follow-up: defer optional classpath scan to todo.md
+
+Compared `~/workspace/poc/spring-data-module` against our
+`modules/spring-data-module/` and wrote
+`tickets/014-poc-comparison.html` (local-only, gitignored)
+listing 14 comparison items. G1 (discovery strategy — POC eagerly
+scans the classpath; ours discovers via `ProcessInjectionPoint` +
+test-class field walk) was closed by recording a follow-up in
+`todo.md` titled "TICKET-014 follow-up — optional classpath scan
+for never-injected repositories". The follow-up captures three
+shapes (MP Config additional-registration key; feature-flag-gated
+scan via xbean-finder; combination) and the constraint that a real
+consumer ask should drive when this lands. Two open items remain
+on the comparison report (G2 bean scope, G3 bean-type set) for a
+later discussion. No code change to the module itself.
