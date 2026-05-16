@@ -171,19 +171,28 @@ else
     # profile-active TM (Geronimo / Narayana) and are unaffected.
 
     # --- Coverage aggregation ----------------------------------------
-    # Run from the repo root with `-pl :coverage-report -am`, not from
-    # inside coverage-report/. The `jacoco:report-aggregate` goal binds
-    # to verify but it discovers per-module `target/jacoco.exec` files
-    # by walking the active Maven reactor session — running from
-    # coverage-report/ alone gives it a single-module session that
-    # contains no exec data, so it silently overwrites the previously
-    # populated aggregate with an empty report. `-am` brings every
-    # dependency module into the session; with the local repo already
-    # warm from Phase 01 install, each transitive module reports as
-    # ~0.015s SUCCESS (up-to-date, nothing to recompile) so the
-    # overhead is single-digit seconds. `-DskipTests` keeps Surefire
-    # from re-running tests we already executed in Phases 02-17.
-    run "coverage-report" "$REPO_ROOT" \
+    # Run from the verify-all aggregator (where coverage-report is a
+    # listed module) with `-pl :coverage-report -am`, not from inside
+    # coverage-report/ and not from the repo root. The repo-root pom
+    # only lists core + modules, so `-pl :coverage-report` from there
+    # fails immediately with "Could not find the selected project in
+    # the reactor: :coverage-report"; verify-all/pom.xml lists
+    # core + modules + tests + coverage-report, which gives `-pl`
+    # something to resolve.
+    #
+    # Why not run inside coverage-report/ directly: the
+    # `jacoco:report-aggregate` goal binds to verify but it discovers
+    # per-module `target/jacoco.exec` files by walking the active
+    # Maven reactor session — running from coverage-report/ alone
+    # gives it a single-module session that contains no exec data, so
+    # it silently overwrites the previously populated aggregate with
+    # an empty report. `-am` brings every dependency module into the
+    # session; with the local repo already warm from Phase 01 install,
+    # each transitive module reports as ~0.015s SUCCESS (up-to-date,
+    # nothing to recompile) so the overhead is single-digit seconds.
+    # `-DskipTests` keeps Surefire from re-running tests we already
+    # executed in the per-profile phases above.
+    run "coverage-report" "$REPO_ROOT/verify-all" \
         -pl :coverage-report -am -DskipTests verify
 fi
 

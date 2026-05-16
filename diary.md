@@ -5010,3 +5010,34 @@ JUnit launcher opens its session (before any test class boots).
 The banner shows `jawelte` in ANSI-shadow block style with the
 subtitle "JUnit 6 · CDI SE · Jakarta EE 11" — set the tone for
 what's booting before the per-module noise starts.
+
+## 2026-05-16 — verify-all.sh Phase 20 fixed (cd into verify-all/)
+
+User ran the full suite for a final TICKET-014 check; build died at
+`>>> FAILED at phase 20: coverage-report`. Real Maven cause hidden
+above the script banner: `Could not find the selected project in
+the reactor: :coverage-report`.
+
+Root cause: Phase 20 runs `mvn -pl :coverage-report -am verify`
+from `$REPO_ROOT`, but the root pom's `<modules>` was trimmed to
+`core` + `modules` only when the verify-all aggregator landed.
+`coverage-report` is no longer in the root reactor, so `-pl`
+can't resolve it. The verify-all aggregator (`verify-all/pom.xml`)
+DOES list it.
+
+Fix: change Phase 20's working dir from `$REPO_ROOT` to
+`$REPO_ROOT/verify-all` (same place Phase 1 already cds into).
+The aggregator's modules: `core, modules, tests, coverage-report`,
+so `-pl :coverage-report -am` resolves and brings every upstream
+module into the session - jacoco:report-aggregate then sees all
+the per-module `target/jacoco.exec` files.
+
+Also rewrote the explanatory comment block — the old wording
+("Run from the repo root") was correct under the pre-split layout
+but stayed behind when the split landed.
+
+Verified locally: `cd verify-all && ../mvnw -B -ntp -T 1 \
+-pl :coverage-report -am -DskipTests verify` finishes in ~14 s,
+BUILD SUCCESS, and `coverage-report/target/site/jacoco-aggregate`
+ships ~8.9 MB of real HTML (not the empty-overwrite failure mode
+the comment warned about).
