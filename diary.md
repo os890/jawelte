@@ -4536,3 +4536,24 @@ Added both new keys to scope-module/impl's
 source-of-truth for the FQCNs of `TestClassScoped` and
 `TestMethodScoped` across the wiremock/cdi/ejb consumer modules — no
 Java code in any consumer module names those classes anymore.
+
+## 2026-05-16: TICKET-012 — cache `Config` object in `TestBeansCdiExtension` static initializer
+
+Optimisation refactor follow-up to the MP Config generalization.
+Profiled the call sites and `TestBeansCdiExtension.resolveAutoMockNonJdkScope()`
+was the only spot calling `ConfigProvider.getConfig()` per CDI
+bootstrap (once per test class), unlike the two SPI providers
+(`WireMockRegistryScopeRemap`, `DefaultEjbAnnotationMapper`) which
+already cached via `static final` fields.
+
+Promoted the resolved scope to a `private static final
+AUTO_MOCK_NON_JDK_SCOPE` field initialised from the existing
+`resolveAutoMockNonJdkScope()`. `onAfterBeanDiscovery` now reads
+the cached static field directly. Net effect:
+`ConfigProvider.getConfig()` runs **exactly once per JVM (per
+ClassLoader)** for `TestBeansCdiExtension`, regardless of how many
+test classes bootstrap a CDI container in the same session — same
+shape as the two SPI providers.
+
+Verified by a second full `verify-all.sh` matrix — 18/18 phases
+green. No behaviour change; pure performance polish.

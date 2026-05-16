@@ -52,6 +52,7 @@ import jakarta.inject.Qualifier;
 import jakarta.inject.Scope;
 import jakarta.inject.Singleton;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.BeanScopeMapperPort;
 import org.os890.jawelte.core.api.port.TestContext;
@@ -101,6 +102,8 @@ public class TestBeansCdiExtension implements Extension {
      */
     public static final String AUTO_MOCK_DEFAULT_SCOPE_KEY =
             "org.os890.jawelte.module.cdi.auto-mock.default-scope";
+
+    private static final Class<? extends Annotation> AUTO_MOCK_NON_JDK_SCOPE = resolveAutoMockNonJdkScope();
 
     private TestContext activeContext;
     private TestBeanScanner.Result scanResult;
@@ -258,7 +261,10 @@ public class TestBeansCdiExtension implements Extension {
         //      annotation class; resolved reflectively.
         //   2. cdi-module's @RequestScoped fallback (when the key is
         //      unset or the configured class isn't loadable).
-        Class<? extends Annotation> autoMockNonJdkScope = resolveAutoMockNonJdkScope();
+        // The scope is resolved once at class-load time into
+        // AUTO_MOCK_NON_JDK_SCOPE; ConfigProvider.getConfig() runs
+        // exactly once per JVM for this extension regardless of how
+        // many test classes bootstrap a CDI container.
         for (IpKey key : unsatisfiedCandidateIps) {
             Type targetType = key.targetType;
             Class<?> rawType = rawClassOf(targetType);
@@ -289,7 +295,7 @@ public class TestBeansCdiExtension implements Extension {
             SyntheticBeanUtil.registerAutoMockBean(
                     event, rawType, targetType, qualifiers,
                     () -> mockFactory.create(rawType),
-                    autoMockNonJdkScope);
+                    AUTO_MOCK_NON_JDK_SCOPE);
         }
     }
 
@@ -472,7 +478,11 @@ public class TestBeansCdiExtension implements Extension {
 
     /**
      * Resolve the default CDI scope for auto-mock synthetic beans
-     * of non-JDK target types.
+     * of non-JDK target types. Invoked exactly once per JVM (per
+     * ClassLoader) from the {@link #AUTO_MOCK_NON_JDK_SCOPE} static
+     * initializer; subsequent reads on every CDI bootstrap consult
+     * the cached static field, so {@link ConfigProvider#getConfig()}
+     * runs only once for this extension.
      *
      * <p>Reads MP Config key
      * {@value #AUTO_MOCK_DEFAULT_SCOPE_KEY}; the value is the FQCN
@@ -489,8 +499,7 @@ public class TestBeansCdiExtension implements Extension {
      *         never {@code null}
      */
     private static Class<? extends Annotation> resolveAutoMockNonJdkScope() {
-        Optional<String> configured = org.eclipse.microprofile.config.ConfigProvider
-                .getConfig()
+        Optional<String> configured = ConfigProvider.getConfig()
                 .getOptionalValue(AUTO_MOCK_DEFAULT_SCOPE_KEY, String.class)
                 .map(String::trim)
                 .filter(value -> !value.isEmpty());
