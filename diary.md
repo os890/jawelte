@@ -4324,3 +4324,264 @@ or both) with the recommendation to take the auto-detect route.
 
 Commit: docs(todo): TICKET-011 follow-up — honour @ApplicationPath
 in jaxrs-module.
+
+## 2026-05-15 — TICKET-012 scaffold (wiremock-module)
+
+Phase 6 scaffold for wiremock-module landed on branch `24-wiremock-module-wiremock-module`:
+
+- Parent pom: `wiremock.version=3.13.2` property and depMgmt entry for `org.wiremock:wiremock`; internal cross-references for `jawelte-wiremock-module-{api,impl}`. Jackson version bumped from 2.18.2 to 2.20.1 (transitively required by WireMock 3.13.2; jackson-bom imported for converging jackson-core / jackson-annotations / jackson-datatype-jsr310 / jackson-dataformat-yaml). slf4j-api pinned at 2.0.17 in depMgmt to converge wiremock's 2.x against dbunit's 1.7.x; provided scope so consumers bring their own binding.
+- `modules/pom.xml` and `tests/pom.xml`: `wiremock-module` added to `<modules>`.
+- `modules/wiremock-module/{pom.xml, api/pom.xml, impl/pom.xml}`: aggregator + leaf poms following the jaxrs-module shape. Compile deps on the api side: core-api, jakarta.enterprise.cdi-api (provided), jakarta.annotation-api (provided). Compile deps on the impl side: wiremock-module-api, core-api, scope-module-api, org.wiremock:wiremock, jakarta.enterprise.cdi-api (provided), jakarta.annotation-api (provided), microprofile-config-api (provided).
+- `tests/wiremock-module/pom.xml`: aggregator + parent for per-scenario test sub-modules; empty `<modules>` for now (scenarios land in subsequent commits). Same dep shape as `tests/jaxrs-module/pom.xml` minus the JAX-RS provider profiles — there's no WireMock provider profile (only one WireMock implementation exists).
+- `./mvnw validate` passes across the full reactor; `tests/content-diff-module/scenario-01-json-match` re-run against Jackson 2.20.1 stays green (existing Jackson consumer un-impacted).
+
+No production source yet — annotation types, lifecycle adapter, producer, CDI extension, registry bean, and the `AnnotationScopeRemap` provider land in subsequent commits.
+
+## 2026-05-15 — TICKET-012 api types
+
+`wiremock-module/api` now ships its two public annotation types:
+- `@EnableWireMock` — `@Target(TYPE)`, meta-annotated with `@EnableTestBeans`, no attributes.
+- `@WireMockEndpoint` — `@Target(ANNOTATION_TYPE)`, meta-annotation for `@Qualifier`-marked endpoint annotations; carries an `int port() default 0` for OS-assigned-vs-fixed-port configuration.
+
+`./mvnw verify -pl modules/wiremock-module/api -am` green; javadoc-strict passes; api jar contains exactly the two annotation types and nothing else (no interfaces, no upstream WireMock library imports).
+
+## 2026-05-15 — TICKET-012 impl
+
+`wiremock-module/impl` now ships:
+- `WireMockServerRegistry` — `@ApplicationScoped` + impl-internal `@WireMockManagedScope` marker; holds `ConcurrentMap<Class<? extends Annotation>, WireMockServer>` keyed by endpoint identity. The scope-module `ScopeRemapCdiExtension` rewrites the registry's scope to `@TestClassScoped` at `ProcessAnnotatedType` time.
+- `WireMockProducer` — `@Default @Produces` methods for `WireMockServer` and `WireMock`; vetoed by the CDI extension when at least one `@WireMockEndpoint` qualifier is discovered.
+- `WireMockCdiExtension` — `BeforeBeanDiscovery` walks the test class hierarchy's fields, collects every `@Qualifier`-marked annotation reaching a `@WireMockEndpoint` ancestor (recursive meta-annotation walk), and exposes the `(userQualifierType -> endpointKey)` map. `ProcessAnnotatedType` vetoes `WireMockProducer` when discovery is non-empty. `AfterBeanDiscovery` registers two synthetic `@Dependent` beans per discovered qualifier (one for `WireMockServer`, one for `WireMock`); each carries `@Default` plus a Proxy-built qualifier literal so unqualified injection resolves in single-endpoint mode and raises `AmbiguousResolutionException` in multi-endpoint mode (matching scenario 9).
+- `WireMockLifecycleAdapter` — `@Priority(75)` `TestModuleLifecyclePort` adapter; `beforeAll` reads endpoints off the extension, starts one `WireMockServer` per unique endpoint key on the `@WireMockEndpoint.port()` (defaulting to OS-assigned port 0), populates the registry, and stops already-started servers on partial start failure. `beforeEach` calls `WireMockServer.resetAll()` on every server. `afterAll` stops every server (collecting failures via `addSuppressed`) and clears the registry in `finally`.
+- `WireMockRegistryScopeRemap` — `AnnotationScopeRemap` SPI provider triggered by `@WireMockManagedScope`, target `@TestClassScoped`.
+- META-INF/services: `jakarta.enterprise.inject.spi.Extension` (for `WireMockCdiExtension`), `core/api/TestModuleLifecyclePort` (for the lifecycle adapter), `scope/api/AnnotationScopeRemap` (for the registry-marker remap).
+- META-INF/beans.xml: `bean-discovery-mode="annotated"`, documenting the registry + producer + the synthetic-bean machinery the extension contributes.
+
+`./mvnw verify -pl modules/wiremock-module/impl -am` green; checkstyle, javadoc-strict, RAT, dependency-convergence all pass. No test scenarios yet — that's the next commit.
+
+## 2026-05-15 — TICKET-012 first test scenarios
+
+`tests/wiremock-module` aggregator + the first two scenarios are now in tree and green:
+- **scenario-01-single-endpoint-default-mode** — `@EnableWireMock` with no qualifier; `WireMockProducer`'s `@Default @Produces WireMockServer` resolves and the server reports an OS-assigned port + a `http://localhost:{port}` base URL.
+- **scenario-02-stub-registration** — registers a stub via the injected `WireMock` client, issues an HTTP GET against the live server via `java.net.http.HttpClient`, verifies the response status + body. First end-to-end HTTP scenario proving the producer-supplied `WireMock` and `WireMockServer` point at the same running server.
+
+The previously-coded `WireMockLifecycleAdapter` validation that required an explicit `@EnableTestBeans` was removed — `@EnableWireMock` is meta-annotated with `@EnableTestBeans`, so by the time `beforeAll` runs jawelte's machinery is by definition active. Same call as 011 made for `@EnableJaxRs`.
+
+## 2026-05-15 — TICKET-012 scenarios 03–08
+
+Six more scenarios now in tree and green:
+- **scenario-03-stubs-reset-between-methods** — two ordered test methods; method 1 registers a stub + verifies it serves; method 2 hits the same path and expects 404 (lifecycle adapter called `resetAll()` in `beforeEach`).
+- **scenario-04-multi-endpoint-fixed-ports** — `@PaymentApi(port=18081)` and `@InventoryApi(port=18082)` discovered; two distinct `WireMockServer` instances bound to their declared ports.
+- **scenario-05-random-port** — `@WireMockEndpoint` (default `port=0`); server bound to a strictly-positive OS-assigned port.
+- **scenario-06-meta-annotation-discovery** — qualifier `@PaymentService` meta-annotated by `@PaymentApi` (which carries `@WireMockEndpoint(port=18091)`); recursive scan resolves the field-level `@PaymentService` qualifier to the right endpoint.
+- **scenario-07-wiremock-and-wiremockserver-share-endpoint** — qualified `WireMock` client stubs are served by the same-qualified `WireMockServer` (verified end-to-end via HTTP, not via reflective port-read since `WireMock.port()` isn't a public method in 3.13.2).
+- **scenario-08-unqualified-with-one-endpoint** — single `@PaymentApi` qualifier discovered; unqualified `@Inject WireMockServer` resolves to the synthetic bean (which carries `@Default + @PaymentApi`); same instance as the qualified injection.
+
+`tests/wiremock-module/pom.xml` also gained the `mockito-core` test dep — cdi-module's auto-mock loop is invoked at `AfterBeanDiscovery` for any unsatisfied injection point and crashes with `NoClassDefFoundError` if Mockito isn't on the test classpath, even when no `@TestBean(mock=true)` is declared.
+
+## 2026-05-15 — TICKET-012 scenarios 09 + 11–19
+
+Eight more scenarios in tree and green — full in-scope set for TICKET-012 now stands at 16 of 20:
+- **scenario-09-unqualified-with-multiple-endpoints** — EngineTestKit launches a Subject with two qualifiers + an unqualified `@Inject WireMockServer`; asserts deployment failure surfaces as a JUnit failure event and the `@Test` method never completes.
+- **scenario-11-no-endpoint-qualifiers** — direct probe of the `WireMockServerRegistry` confirming exactly one entry, keyed by `Default.class`, in default-only mode.
+- **scenario-12-multiple-test-classes** — EngineTestKit runs two `@EnableWireMock` subjects sequentially; each records its OS-assigned port into a shared `AtomicInteger` holder; asserts the two ports differ.
+- **scenario-14-https-state-not-configured** — `httpsSettings().enabled() == false`; `httpsPort()` throws (WireMock 3.x changed the contract from "returns -1" to "raises `IllegalStateException`", scenario asserts the new shape).
+- **scenario-15-enable-wiremock-alone-boots-the-lifecycle** — repurposed from the original "@EnableWireMock without @EnableTestBeans throws" (unreachable by design once @EnableWireMock is `@EnableTestBeans`-meta-annotated); now verifies the meta-annotation chain activates jawelte's machinery.
+- **scenario-16-producer-satisfies-default-injection** — `BeanManager.getBeans(WireMockServer.class).getBeanClass() == WireMockProducer.class` in default-only mode; the CDI extension didn't veto the producer and didn't register a synthetic bean.
+- **scenario-18-registry-remapped-to-testclassscoped** — `Bean.getScope() == TestClassScoped.class`; testcontrol-module deliberately not on the classpath.
+- **scenario-19-annotationscoperemap-sl-wired** — `ServiceLoader.load(AnnotationScopeRemap.class)` includes a provider with `trigger() == WireMockManagedScope.class` and `targetScope() == TestClassScoped.class`.
+
+Deferred to follow-up tickets (logged separately):
+- Scenario 10 (server stopped after class) — TCP-probe timing same as 011 scenario 10.
+- Scenario 13 (fixed-port conflict) — needs pre-bound socket + verification mechanism.
+- Scenario 17 (@Priority(75) ordering) — needs test-scope `TestModuleLifecyclePort` recorder adapter.
+- Scenario 20 (independence from jaxrs-module) — needs jaxrs-module + wiremock-module on the same test classpath.
+
+`./mvnw test -f tests/wiremock-module/pom.xml` green across all 16 in-scope scenarios.
+
+## 2026-05-15 — TICKET-012 verify-green + arch.md update
+
+- `pom.xml`: pinned `snakeyaml.version=2.4` in `<dependencyManagement>` (DbUnit pulls 2.2 transitively; WireMock 3.13.2 pulls 2.4 via jackson-dataformat-yaml — converge on the higher version).
+- `coverage-report/pom.xml`: added `jawelte-wiremock-module-api`, `jawelte-wiremock-module-impl`, and all 16 in-scope `tests-wiremock-module-scenario-*` modules so JaCoCo's `report-aggregate` picks up wiremock-module's production classes and exec data.
+- `architecture.md`: integrations-table row renamed `jawelte-wiremock` → `jawelte-wiremock-module` (consistent with every other module's coordinate); adapters table gained a row for `WireMockLifecycleAdapter` (`@Priority(75)`) + `WireMockCdiExtension` + `WireMockRegistryScopeRemap`; the "Planned (forward-looking)" line dropped `HttpStubContainerPort` since wiremock-module ships no new SPI port.
+
+`./mvnw verify` from clean: green end-to-end (12:48 min). Line coverage (from `coverage-report/target/site/jacoco-aggregate/jacoco.csv`):
+- `WireMockProducer` — 100%
+- `WireMockRegistryScopeRemap` — 100%
+- `WireMockCdiExtension` — 88%
+- `WireMockServerRegistry` — 87%
+- `WireMockLifecycleAdapter` — 69% (the uncovered lines are the partial-start-failure recovery and the afterAll suppressed-exception aggregation, both reachable only via the deferred scenarios 10 + 13)
+
+## 2026-05-15 — TICKET-012 all 20 scenarios in scope
+
+`@WireMockEndpoint.port` lost its `default 0` (user must always declare the port; `port=0` is still the OS-assigned mode but the user has to ask for it explicitly). Existing scenarios 05/07/08/09 that previously relied on the default now write `(port = 0)`.
+
+Four new scenarios — formerly deferred — landed green:
+- **scenario-10-server-stopped-after-class.** Lifecycle adapter now fires a new `WireMockServersStopped` CDI event from its `afterAll` (api/event package, ApplicationScoped observers can listen). Scenario subject runs via `EngineTestKit`; `@ApplicationScoped` observer increments an `AtomicInteger`; test asserts it became `1`. Replaces the TCP-probe approach.
+- **scenario-13-fixed-port-conflict.** Pre-binds a `ServerSocket(51777)` inside a `try-with-resources`; `EngineTestKit` runs a subject whose `@SquattedApi` qualifier pins `@WireMockEndpoint(port=51777)`. Test asserts the engine reported a failure whose throwable chain contains `java.net.BindException`.
+- **scenario-17-scope-sandwich.** Reframed from the original "verify @Priority numbers". A `@TestClassScoped` observer captures the injected `WireMockServer`; its `@PreDestroy` (driven by scope-module's `afterAll` at `@Priority(100)`) probes `server.isRunning()` and records the result. Test asserts the probe saw `true` — wiremock's `afterAll` at `@Priority(75)` runs AFTER scope-module's in LIFO, so the server is still up when scope contexts deactivate.
+- **scenario-20-independence-from-jaxrs-module.** Scenario subject carries both `@EnableJaxRs(restResources={Scenario20JaxRsResource.class})` and `@EnableWireMock`; test fires HTTP at both servers and asserts both respond on distinct ports. Uses RESTEasy + Undertow (not CXF) because CXF 4.1.2 transitively pulls Jetty 12 which collides with WireMock 3.13.2's Jetty 11 expectation.
+
+`./mvnw verify` from clean green end-to-end (8:59 min). Coverage from `coverage-report/target/site/jacoco-aggregate/jacoco.csv`:
+- `WireMockServersStopped` — 100%
+- `WireMockProducer` — 100%
+- `WireMockRegistryScopeRemap` — 100%
+- `WireMockCdiExtension` — 88%
+- `WireMockServerRegistry` — 87%
+- `WireMockLifecycleAdapter` — 77% (up from 69% — the partial-start-failure cleanup and multi-server suppressed-exception path remain uncovered; reachable only by intentionally throwing from `server.start()` / `server.stop()` which requires bytecode-level fault injection).
+
+## 2026-05-16 — WireMockRuntimeInfo injectable + EndpointResources caching
+
+`com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo` is now injectable per endpoint alongside `WireMockServer` and `WireMock`:
+- `WireMockProducer` adds a `@Default @Produces WireMockRuntimeInfo`.
+- `WireMockCdiExtension.onAfterBeanDiscovery` registers a third synthetic `@Dependent` bean per discovered qualifier.
+
+The cache contract: each endpoint's `WireMock` stub client and `WireMockRuntimeInfo` are constructed exactly **once**, at server registration time. The new `EndpointResources` record (`server` + `client` + `runtimeInfo`) is built by `EndpointResources.from(WireMockServer)` inside `WireMockServerRegistry.register`; subsequent CDI injection points (producer methods and synthetic-bean `produceWith` callbacks) read the cached fields back instead of constructing fresh wrappers per-injection. Previously the `WireMock` client was rebuilt on every injection — that's gone too.
+
+Two new scenarios cover the contract:
+- **scenario-21-wiremockruntimeinfo-default-injection** — default-only mode; injects `WireMockRuntimeInfo` twice + `WireMock` twice; asserts same-Java-instance across pairs AND that `runtimeInfo.getHttpPort()` / `getHttpBaseUrl()` match the running `WireMockServer`.
+- **scenario-22-wiremockruntimeinfo-qualified-injection** — qualified mode with `@PaymentApi`; same caching + metadata assertions, this time via the synthetic-bean path.
+
+`./mvnw verify` green from clean (9:15 min). 22 / 22 scenarios pass. Line coverage on the wiremock production classes: `EndpointResources` 100%, `WireMockProducer` 100%, `WireMockRegistryScopeRemap` 100%, `WireMockServersStopped` 100%, `WireMockCdiExtension` 89%, `WireMockServerRegistry` 89%, `WireMockLifecycleAdapter` 77%.
+
+## 2026-05-16 — @Inherited on @EnableWireMock + @Priority-driven implicit default
+
+Two new contracts for `@EnableWireMock` test classes:
+
+1. **`@EnableWireMock` is `@Inherited`.** A test class extending a base annotated `@EnableWireMock` picks the activation up without re-declaring it. The lifecycle adapter's `testClass.getAnnotation(EnableWireMock.class)` probe walks the class hierarchy; JUnit Jupiter likewise discovers the meta-annotated `@ExtendWith(EnableTestBeans.Proxy.class)` through the inheritance chain.
+
+2. **`@Priority` on the user qualifier resolves the implicit `@Default` for unqualified injection in multi-endpoint mode.** `WireMockCdiExtension.resolveDefaultWinner(...)` reads `qualifierType.getAnnotation(Priority.class)` on every discovered qualifier. When exactly one qualifier holds the strict-minimum priority value, its synthetic bean is registered with `@Default + @Q`; the others drop `@Default` and carry only their user qualifier. Unqualified `@Inject WireMockServer` / `@Inject WireMock` / `@Inject WireMockRuntimeInfo` then resolves to the priority winner. With no `@Priority` anywhere or with multiple qualifiers tied at the lowest value, the legacy "every synthetic bean carries `@Default`" path applies and unqualified injection in multi-endpoint mode surfaces the standard `AmbiguousResolutionException` at deployment (same shape as scenario 09). Qualified injection is unaffected — it always follows standard CDI qualifier resolution.
+
+Three new scenarios:
+- **scenario-23-enablewiremock-inherited** — `Scenario23Base` carries `@EnableWireMock` + the injected `WireMockServer`; `Scenario23Test extends Scenario23Base` (no own `@EnableWireMock`). Test asserts the inherited annotation activated the lifecycle and the inherited field resolved.
+- **scenario-24-priority-resolves-default** — `@PaymentApi @Priority(1) @WireMockEndpoint(port=19101)`; `@InventoryApi @WireMockEndpoint(port=19102)` (no priority). Unqualified `@Inject WireMockServer` resolves to the port-19101 server (the priority winner); qualified `@PaymentApi` / `@InventoryApi` injections still resolve to their respective servers.
+- **scenario-25-priority-tie-stays-ambiguous** — two qualifiers both at `@Priority(1)`; `Scenario25Subject` declares an unqualified injection point; `EngineTestKit` asserts the deployment fails (same diagnostic shape as scenario 09).
+
+`./mvnw verify` green end-to-end (9:44 min). 25 / 25 scenarios pass.
+
+## 2026-05-16 — BeanScopeMapper SPI moves to core/api
+
+`AnnotationScopeRemap` was renamed `BeanScopeMapper` and moved to `core/api/port`. The new `BeanScopeMapperPort` (also in core/api/port) wraps a Class-in / Optional<ScopeMappingMetadata>-out method — the nested `ScopeMappingMetadata` record carries the target scope plus the explicit set of annotation types to strip. The CDI Extension that drives the remap (`ScopeRemapCdiExtension`) and the default port impl (`DefaultBeanScopeMapper`) live in `core/impl`; customers swap the port via SL-priority. The default sits at `@Priority(Integer.MAX_VALUE)` so any explicit customer impl wins.
+
+`WireMockRegistryScopeRemap` now resolves `@TestClassScoped` via `Class.forName(...)` and returns `null` if the class is missing; `BeanScopeMapper.targetScope()` documents `null` as the "skip this provider" signal, and `DefaultBeanScopeMapper.mapScope(...)` continues to the next provider on null. Net effect: `wiremock-module/impl` drops the `scope-module-api` compile dep entirely (the scope target is now reflective). Same logic generalises to any other feature module's provider.
+
+The two scope-module-shipped providers (`SessionScopedToTestMethodScoped`, `ConfigBeanToTestClassScoped`) now implement the relocated SPI; the old extension class + the old SL service files are gone. The new SL service path is `META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper`.
+
+scenario 19 renamed `scenario-19-annotationscoperemap-sl-wired` → `scenario-19-beanscopemapper-sl-wired`. `./mvnw verify` green end-to-end (10:45 min); all 25 wiremock scenarios + the existing scope-module / cdi-module / jpa-module / jta-module / ejb-module / content-diff / db-testdata / testcontrol / jaxrs scenarios pass.
+
+`ScopeBinding` cleanup is deferred — `cdi-module/impl/TestBeansCdiExtension`, `ejb-module/impl/DefaultEjbAnnotationMapper`, and `scope-module/impl/TestScopeCdiExtension` still read / bind the records. Two open design questions noted in the comparison report for the synthetic-bean-default-scope replacement.
+
+## 2026-05-16 — Endpoint discovery: type filter on the scan
+
+`WireMockCdiExtension.onBeforeBeanDiscovery` now narrows its field scan to the three injectable WireMock types — `WireMockServer`, `WireMock`, `WireMockRuntimeInfo` — before walking annotations. Fields of any other type are skipped, so a `@PaymentApi`-qualified `Database` field (or any other coincidental qualifier landing on a non-wiremock field) no longer triggers endpoint discovery. The recursive meta-annotation walk (scenario 06's `@PaymentService → @PaymentApi → @WireMockEndpoint`) stays.
+
+`./mvnw test -f tests/wiremock-module/pom.xml` green; all 25 scenarios pass with the tighter filter.
+
+## 2026-05-16 — Drop WireMockServersStopped event + lifecycle-decoupled stop list
+
+`WireMockServersStopped` (the CDI event in `wiremock-module/api/event/`) is gone. The event was created only to give scenario 10 a deterministic signal that `afterAll` ran; the test now captures the injected `WireMockServer` reference into a scenario-local static holder and asserts `isRunning() == false` after `EngineTestKit.execute()` returns. `WireMockServer.stop()` is synchronous in WireMock 3.x — once it returns, `isRunning()` flips to `false` — so the captured-reference assertion is just as deterministic as the event, with one fewer public-api contract to maintain.
+
+A real lifecycle bug surfaced once the test stopped accepting a fired event as proof: scope-module's `afterAll` (priority 100) deactivates `@TestClassScoped` BEFORE wiremock-module's `afterAll` (priority 75) runs in LIFO order. The registry bean's contextual instance was destroyed by that deactivation, so wiremock's afterAll was reading from a freshly-allocated empty registry and never calling `stop()` on any actual server. Fixed by binding the started-servers list to `TestContext` metadata in `beforeAll` (new `WireMockLifecycleAdapter.StartedWireMockServers` record) and reading from there in `afterAll` — `TestContext` outlives every `TestModuleLifecyclePort.afterAll`, decoupling the stop loop from the per-test-class CDI scope lifecycle.
+
+`./mvnw test -f tests/wiremock-module/pom.xml` green; all 25 scenarios pass — scenario 10 now genuinely verifies the server stopped.
+
+## 2026-05-16 — T17A: Field + Method overloads on BeanScopeMapperPort
+
+`BeanScopeMapperPort` gains two overloads — `Optional<Class<? extends Annotation>> mapScope(Field)` and `Optional<Class<? extends Annotation>> mapScope(Method)` — that walk the same `BeanScopeMapper` provider set as the existing class-level `mapScope(Class<?>)`. They return the target scope directly (no `ScopeMappingMetadata` wrapping needed; the caller is synthesising a bean, not mutating an existing `AnnotatedType`).
+
+`DefaultBeanScopeMapper` implements both via a shared `targetScopeForElement(AnnotatedElement)` helper. `preserveExplicitDirectScopes()` is class-level-only — Field / Method callers handle explicit-scope-on-the-declaration themselves (cdi-module checks the field's own scope annotations first, falls through to the port, falls through to `@Dependent`).
+
+scope-module/impl ships `TestBeanToTestClassScoped` (`trigger == TestBean.class`, `target == TestClassScoped.class`) so the two new overloads automatically resolve `@TestBean`-declared synthetic beans to `@TestClassScoped`. The provider is SL-registered alongside the existing `SessionScopedToTestMethodScoped` + `ConfigBeanToTestClassScoped`.
+
+No consumer migration yet — cdi-module + ejb-module still read `ScopeBinding.TestBeanDefaultScope`. The overloads are unused for now, but the contract is in place.
+
+## 2026-05-16 — ScopeBinding retired
+
+`core/api/port/ScopeBinding.java` is gone. Its three consumer sites migrated as follows:
+
+- **cdi-module / @TestBean static-field synthetic beans:** `TestBeansCdiExtension` now calls `BeanScopeMapperPort.mapScope(field)` instead of reading the `TestBeanDefaultScope` record. scope-module/impl ships a `TestBeanToTestClassScoped` mapper provider (`trigger == TestBean.class`, `target == TestClassScoped.class`); the port walks providers and returns the first match. Explicit scope on the field (e.g. `@TestBean @RequestScoped Foo foo`) is checked first by cdi-module before consulting the port; cdi-module falls back to `@Singleton` (unchanged) when the port returns empty.
+- **cdi-module / auto-mock synthetic beans:** `TestBeansCdiExtension.resolveAutoMockNonJdkScope()` reads the new MP Config key `org.os890.jawelte.module.cdi.auto-mock.default-scope` and reflectively `Class.forName`s the value. scope-module/impl's `META-INF/microprofile-config.properties` supplies the default value `org.os890.jawelte.module.scope.api.TestMethodScoped`. Falls back to `@RequestScoped` when the key is unset or the configured class is unloadable. No compile-time link between cdi-module and scope-module on this surface.
+- **ejb-module / @jakarta.ejb.Singleton mapping:** `DefaultEjbAnnotationMapper` now reads `TEST_CLASS_SCOPED` (a static final, resolved once via `Class.forName("org.os890.jawelte.module.scope.api.TestClassScoped")`) and falls back to `@ApplicationScoped` when the class isn't reachable. Same reflective-load pattern as `WireMockRegistryScopeRemap`. The cached-volatile field is gone (static-final replaces lazy-init).
+
+`scope-module/impl/TestScopeCdiExtension` no longer binds anything on `TestContext` — its only responsibility now is creating the two scope stores + contexts in `AfterBeanDiscovery`. The `BeforeBeanDiscovery` observer (which used to bind the records) is gone.
+
+`./mvnw verify` green end-to-end (9:49 min). 25 / 25 wiremock scenarios pass; existing scope / cdi / jpa / jta / ejb / content-diff / db-testdata / testcontrol / jaxrs scenarios all pass — including the ejb-module scenarios 17-21 that specifically exercise the @Singleton-with-and-without-scope-module paths the reflective load replaces.
+
+## 2026-05-16: TICKET-012 — MP Config generalization for cross-module scope defaults
+
+Completed the in-progress generalization of cross-module CDI scope
+defaults to MP Config keys, following the precedent set by cdi-module's
+auto-mock default-scope key. Two more consumer sites joined the pattern:
+
+- wiremock-module's `WireMockRegistryScopeRemap.targetScope()` now
+  reads the FQCN of the target scope class from MP Config key
+  `org.os890.jawelte.module.wiremock.registry.default-scope`
+  (scope-module/impl supplies the default
+  `org.os890.jawelte.module.scope.api.TestClassScoped` via its
+  `microprofile-config.properties`). The configured class is loaded
+  reflectively at class-load time; an unset key or unloadable class
+  returns null, causing `BeanScopeMapperPort` to skip this provider
+  and the registry to keep its declared `@ApplicationScoped`.
+
+- ejb-module's `DefaultEjbAnnotationMapper.singletonScopeLiteral()`
+  now reads the FQCN of the target scope class for
+  `@jakarta.ejb.Singleton`-mapped beans from MP Config key
+  `org.os890.jawelte.module.ejb.singleton.default-scope`
+  (scope-module/impl supplies the default
+  `org.os890.jawelte.module.scope.api.TestClassScoped`). Replaces the
+  previous hardcoded FQCN string. Fallback when key is unset or
+  unloadable: `@ApplicationScoped`.
+
+Added both new keys to scope-module/impl's
+`microprofile-config.properties`. scope-module is now the single
+source-of-truth for the FQCNs of `TestClassScoped` and
+`TestMethodScoped` across the wiremock/cdi/ejb consumer modules — no
+Java code in any consumer module names those classes anymore.
+
+## 2026-05-16: TICKET-012 — cache `Config` object in `TestBeansCdiExtension` static initializer
+
+Optimisation refactor follow-up to the MP Config generalization.
+Profiled the call sites and `TestBeansCdiExtension.resolveAutoMockNonJdkScope()`
+was the only spot calling `ConfigProvider.getConfig()` per CDI
+bootstrap (once per test class), unlike the two SPI providers
+(`WireMockRegistryScopeRemap`, `DefaultEjbAnnotationMapper`) which
+already cached via `static final` fields.
+
+Promoted the resolved scope to a `private static final
+AUTO_MOCK_NON_JDK_SCOPE` field initialised from the existing
+`resolveAutoMockNonJdkScope()`. `onAfterBeanDiscovery` now reads
+the cached static field directly. Net effect:
+`ConfigProvider.getConfig()` runs **exactly once per JVM (per
+ClassLoader)** for `TestBeansCdiExtension`, regardless of how many
+test classes bootstrap a CDI container in the same session — same
+shape as the two SPI providers.
+
+Verified by a second full `verify-all.sh` matrix — 18/18 phases
+green. No behaviour change; pure performance polish.
+
+## 2026-05-16: TICKET-012 — architecture.md sync with `BeanScopeMapper` SPI + MP Config generalization
+
+Final docs sweep before opening the PR. Three places in
+`architecture.md` still referenced the old scope-override
+mechanics:
+
+- scope-module description still narrated the retired sealed
+  `ScopeBinding` interface and the
+  `TestContext.bindMetadata(ScopeBinding.TestBeanDefaultScope, ...)`
+  pattern. Replaced with the current two-mechanism story:
+  `BeanScopeMapper` SPI in `core/api/port` (SL-registered
+  providers) for `@TestBean` / `@SessionScoped` / `@ConfigBean`
+  remaps; and MP Config keys defaulted in scope-module's
+  `microprofile-config.properties` for FQCN resolution
+  (cdi-module auto-mock, wiremock-module registry, ejb-module
+  `@Singleton`).
+- wiremock-module row in the port-impl table called
+  `WireMockRegistryScopeRemap` an `AnnotationScopeRemap`
+  provider — renamed to `BeanScopeMapper`. Added
+  `WireMockRuntimeInfo` to the WireMock-library deps cell.
+- ejb-module `EjbAnnotationMapper` description had a stale
+  `ScopeBinding.TestBeanDefaultScope` reference; rewritten to
+  point at the MP Config key
+  `org.os890.jawelte.module.ejb.singleton.default-scope` +
+  reflective load (no compile-time scope-module dep).
+
+Pure docs change, no source touched, no test re-run needed.

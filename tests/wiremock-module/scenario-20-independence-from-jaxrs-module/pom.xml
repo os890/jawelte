@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests-wiremock-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>jawelte-tests-wiremock-module-scenario-20-independence-from-jaxrs-module</artifactId>
+    <packaging>jar</packaging>
+    <name>jawelte tests/wiremock-module scenario 20: a test class carrying both @EnableJaxRs and @EnableWireMock boots a working JAX-RS server AND a working WireMock server on different ports, with no cross-interference</name>
+
+    <!--
+        This scenario is the only one in tests/wiremock-module
+        that pulls jaxrs-module + a JAX-RS provider on its
+        classpath. The wiremock-module test aggregator
+        intentionally doesn't ship CXF/RESTEasy as global
+        test deps — scenario 20 opts in locally so the rest
+        of the wiremock scenarios stay free of JAX-RS
+        transitive deps.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-content-diff-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-content-diff-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.ws.rs</groupId>
+            <artifactId>jakarta.ws.rs-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            JAX-RS provider for scenario 20: RESTEasy (Undertow
+            transport). CXF 4.1.2 transitively pulls Jetty 12 which
+            collides with WireMock 3.13.2's Jetty 11 expectation
+            (WireMock's HttpServerFactoryLoader can't find the
+            Jetty 11 classes Maven nearest-wins resolves away).
+            RESTEasy ships its own Undertow transport, no Jetty
+            on its classpath — the two embedded servers coexist
+            cleanly.
+        -->
+        <dependency>
+            <groupId>org.jboss.resteasy</groupId>
+            <artifactId>resteasy-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.resteasy</groupId>
+            <artifactId>resteasy-undertow</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.resteasy</groupId>
+            <artifactId>resteasy-client</artifactId>
+        </dependency>
+    </dependencies>
+</project>

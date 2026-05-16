@@ -20,7 +20,7 @@ import jakarta.ejb.Singleton;
 /**
  * Plain {@code @Singleton} with no user-declared CDI scope. With
  * scope-module on the classpath the default mapper resolves the
- * scope through {@code ScopeBinding.TestBeanDefaultScope} (bound
+ * scope through {@code BeanScopeMapper provider} (bound
  * by scope-module to {@code @TestClassScoped}) instead of falling
  * back to {@code @ApplicationScoped}.
  */

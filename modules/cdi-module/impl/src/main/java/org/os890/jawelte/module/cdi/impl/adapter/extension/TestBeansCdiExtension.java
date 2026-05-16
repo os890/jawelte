@@ -52,8 +52,9 @@ import jakarta.inject.Qualifier;
 import jakarta.inject.Scope;
 import jakarta.inject.Singleton;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.core.api.EnableTestBeans;
-import org.os890.jawelte.core.api.port.ScopeBinding;
+import org.os890.jawelte.core.api.port.BeanScopeMapperPort;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 import org.os890.jawelte.module.cdi.api.port.MockFactory;
@@ -89,6 +90,20 @@ import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
  * registration shipped in this module.
  */
 public class TestBeansCdiExtension implements Extension {
+
+    /**
+     * MP Config key whose value is the FQCN of the CDI scope
+     * annotation to assign to auto-mock synthetic beans of
+     * non-JDK target types. scope-module/impl ships a
+     * {@code microprofile-config.properties} default of
+     * {@code org.os890.jawelte.module.scope.api.TestMethodScoped};
+     * consumers override by setting the same key in any
+     * higher-priority MP Config source.
+     */
+    public static final String AUTO_MOCK_DEFAULT_SCOPE_KEY =
+            "org.os890.jawelte.module.cdi.auto-mock.default-scope";
+
+    private static final Class<? extends Annotation> AUTO_MOCK_NON_JDK_SCOPE = resolveAutoMockNonJdkScope();
 
     private TestContext activeContext;
     private TestBeanScanner.Result scanResult;
@@ -202,19 +217,17 @@ public class TestBeansCdiExtension implements Extension {
         //      (any annotation meta-annotated with @NormalScope or
         //      @Scope - covers @TestClassScoped, @RequestScoped,
         //      @Singleton, @Dependent, custom user scopes, ...).
-        //   2. TestBeanDefaultScope record on TestContext (bound by
-        //      scope-module's TestScopeCdiExtension during
-        //      BeforeBeanDiscovery, when scope-module is present).
+        //   2. BeanScopeMapper provider triggered by @TestBean
+        //      (scope-module ships one with target @TestClassScoped;
+        //      queried via BeanScopeMapperPort.mapScope(Field)).
         //   3. cdi-module's @Singleton fallback.
-        Class<? extends Annotation> testBeanDefaultScope = activeContext
-                .getMetadata(ScopeBinding.TestBeanDefaultScope.class)
-                .map(ScopeBinding.TestBeanDefaultScope::scope)
-                .orElse(Singleton.class);
+        BeanScopeMapperPort scopeMapperPort = TestContext.loadService(BeanScopeMapperPort.class);
         for (TestBeanScanner.StaticField staticField : scanResult.staticFields()) {
             Field field = staticField.field();
             Set<Annotation> qualifiers = collectFieldQualifiers(field);
             Class<? extends Annotation> scope = userDeclaredScopeOnField(field)
-                    .orElse(testBeanDefaultScope);
+                    .or(() -> scopeMapperPort.mapScope(field))
+                    .orElse(Singleton.class);
             SyntheticBeanUtil.registerStaticFieldBean(
                     event, field.getType(), staticField.value(), qualifiers, scope);
         }
@@ -239,13 +252,19 @@ public class TestBeansCdiExtension implements Extension {
         // Auto-mock scope precedence (only applies to non-JDK types;
         // JDK types are always @Dependent because the normal-scope
         // proxy cannot subclass final JDK classes):
-        //   1. AutoMockDefaultScope record on TestContext (bound by
-        //      scope-module's TestScopeCdiExtension when present).
-        //   2. cdi-module's @RequestScoped fallback.
-        Class<? extends Annotation> autoMockNonJdkScope = activeContext
-                .getMetadata(ScopeBinding.AutoMockDefaultScope.class)
-                .map(ScopeBinding.AutoMockDefaultScope::scope)
-                .orElse(RequestScoped.class);
+        //   1. MP Config key `org.os890.jawelte.module.cdi.auto-mock.default-scope`
+        //      (scope-module's microprofile-config.properties supplies
+        //      the default `org.os890.jawelte.module.scope.api.TestMethodScoped`
+        //      when scope-module is on the classpath; any consumer
+        //      overrides by setting the same key in a higher-priority
+        //      MP Config source). The value is the FQCN of a CDI scope
+        //      annotation class; resolved reflectively.
+        //   2. cdi-module's @RequestScoped fallback (when the key is
+        //      unset or the configured class isn't loadable).
+        // The scope is resolved once at class-load time into
+        // AUTO_MOCK_NON_JDK_SCOPE; ConfigProvider.getConfig() runs
+        // exactly once per JVM for this extension regardless of how
+        // many test classes bootstrap a CDI container.
         for (IpKey key : unsatisfiedCandidateIps) {
             Type targetType = key.targetType;
             Class<?> rawType = rawClassOf(targetType);
@@ -276,7 +295,7 @@ public class TestBeansCdiExtension implements Extension {
             SyntheticBeanUtil.registerAutoMockBean(
                     event, rawType, targetType, qualifiers,
                     () -> mockFactory.create(rawType),
-                    autoMockNonJdkScope);
+                    AUTO_MOCK_NON_JDK_SCOPE);
         }
     }
 
@@ -455,6 +474,52 @@ public class TestBeansCdiExtension implements Extension {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Resolve the default CDI scope for auto-mock synthetic beans
+     * of non-JDK target types. Invoked exactly once per JVM (per
+     * ClassLoader) from the {@link #AUTO_MOCK_NON_JDK_SCOPE} static
+     * initializer; subsequent reads on every CDI bootstrap consult
+     * the cached static field, so {@link ConfigProvider#getConfig()}
+     * runs only once for this extension.
+     *
+     * <p>Reads MP Config key
+     * {@value #AUTO_MOCK_DEFAULT_SCOPE_KEY}; the value is the FQCN
+     * of a CDI scope annotation. scope-module/impl supplies
+     * {@code org.os890.jawelte.module.scope.api.TestMethodScoped}
+     * via its {@code META-INF/microprofile-config.properties}
+     * default; consumers override the value in any higher-priority
+     * MP Config source. The class is loaded reflectively — when
+     * the configured class isn't on the runtime classpath (e.g.
+     * scope-module not deployed), the method falls back to
+     * {@link RequestScoped @RequestScoped}.
+     *
+     * @return the auto-mock default scope for non-JDK targets;
+     *         never {@code null}
+     */
+    private static Class<? extends Annotation> resolveAutoMockNonJdkScope() {
+        Optional<String> configured = ConfigProvider.getConfig()
+                .getOptionalValue(AUTO_MOCK_DEFAULT_SCOPE_KEY, String.class)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty());
+        if (configured.isEmpty()) {
+            return RequestScoped.class;
+        }
+        try {
+            Class<?> loaded = Class.forName(
+                    configured.get(),
+                    true,
+                    Thread.currentThread().getContextClassLoader());
+            if (!Annotation.class.isAssignableFrom(loaded)) {
+                return RequestScoped.class;
+            }
+            @SuppressWarnings("unchecked")
+            Class<? extends Annotation> scope = (Class<? extends Annotation>) loaded;
+            return scope;
+        } catch (ClassNotFoundException | LinkageError missing) {
+            return RequestScoped.class;
+        }
     }
 
     private static Optional<EnableTestBeans> findEnableTestBeans(Class<?> testClass) {

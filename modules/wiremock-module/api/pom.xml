@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-wiremock-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-wiremock-module-api</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (wiremock-module/api)</name>
+    <description>Ships exactly two public annotation types — @EnableWireMock (the test-class entry-point, meta-annotated with @EnableTestBeans) and @WireMockEndpoint (the meta-qualifier placed on user @Qualifier annotations to identify a WireMock endpoint). The api jar holds NO reference to upstream WireMock library types; the api↔library bridge lives entirely in wiremock-module/impl's CDI producer. Compile-depends only on jawelte-core-api and the jakarta annotation / CDI provided APIs.</description>
+
+    <dependencies>
+        <!--
+            core-api supplies @EnableTestBeans, which @EnableWireMock
+            is meta-annotated with (so the user writes only one
+            annotation on the test class).
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.enterprise.cdi-api supplies @Qualifier — the
+            meta-annotation rule the user applies to their own
+            @WireMockEndpoint-stamped qualifier annotations. The api
+            jar itself doesn't declare any @Qualifier-annotated
+            class, but the documented usage requires consumers to
+            put @Qualifier on their endpoint annotations, so we
+            keep the api visible at compile time on the consumer
+            classpath. provided scope (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.annotation-api is reserved for future api
+            additions (e.g. @Priority on a future spi surface).
+            provided scope (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -46,7 +46,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 | `jawelte-dbunit` | DB-Unit | Dataset-based database state management |
 | `jawelte-h2` | H2 | In-memory database for fast persistence tests |
 | `jawelte-mockito` | Mockito | CDI-aware mock injection |
-| `jawelte-wiremock` | WireMock | HTTP stub server lifecycle management |
+| `jawelte-wiremock-module` | WireMock | HTTP stub server lifecycle management |
 
 New integrations follow the same pattern and require no changes to the core.
 
@@ -79,7 +79,7 @@ Each port represents the integration boundary between jawelte's core and an exte
 - `@TestMethodScoped` — CDI normal scope (`@NormalScope(passivating=false)`); follows `@ApplicationScoped` semantics with a per-test-method bean lifetime. Contexts always report `isActive() == true`; `@PreDestroy` runs in `afterEach`.
 - `@TestClassScoped` — CDI normal scope (`@NormalScope(passivating=false)`); same shape, with a per-test-class bean lifetime. `@PreDestroy` runs after `@AfterAll`, before the CDI container shuts down.
 
-scope-module ships **no new ports of its own**. It implements the existing `TestModuleLifecyclePort` and the standard CDI `Extension` SPI. The sealed `ScopeBinding` interface in `core/api/port` groups the cross-module override records as nested types: `ScopeBinding.TestBeanDefaultScope` and `ScopeBinding.AutoMockDefaultScope`. scope-module binds them on `TestContext` during `BeforeBeanDiscovery`; cdi-module reads them in `AfterBeanDiscovery` to pick the scope of `@TestBean` static-field synthetic beans and auto-mocks. The records carry no behaviour — just a `Class<? extends Annotation>` token — so neither module compile-depends on the other. The sealed interface relies on implicit-permits (every direct subtype lives in the same compilation unit), so adding a new binding kind means editing `ScopeBinding.java` itself, which doubles as a code-review nudge for the cross-module contract.
+scope-module ships **no new ports of its own**. It implements the existing `TestModuleLifecyclePort` and the standard CDI `Extension` SPI. The cross-module scope-override contract uses two mechanisms — both keep consumer modules free of a compile-time dep on scope-module: (1) the `BeanScopeMapper` SPI in `core/api/port` (TICKET-001) — scope-module ships SL-registered providers (`@TestBean` → `@TestClassScoped`, `@SessionScoped` → `@TestMethodScoped`, `@ConfigBean` → `@TestClassScoped`) that `core/impl`'s `ScopeRemapCdiExtension` walks at `ProcessAnnotatedType` time; (2) MP Config keys defaulted in scope-module's `microprofile-config.properties`, read reflectively by consumer modules to resolve scope-annotation FQCNs (cdi-module's auto-mock scope, wiremock-module's registry remap, ejb-module's `@Singleton` mapping). When scope-module is absent at runtime the SPI providers don't exist and the MP Config defaults aren't shipped — consumer modules degrade cleanly to their `@Dependent` / `@RequestScoped` / `@ApplicationScoped` fallbacks.
 
 **jpa-module additions (in `jpa-module/api`):**
 
@@ -110,14 +110,15 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `EntityResolver` | `JpaMetamodelEntityResolver` (`@Priority(Integer.MAX_VALUE)`) | JPA metamodel | `jpa-module/impl` |
 | `PersistenceUnitConnectionResolver` | `DefaultPersistenceUnitConnectionResolver` (`@Priority(Integer.MAX_VALUE)`) | JDBC | `jpa-module/impl` |
 | `EjbAnnotationMapper` | `DefaultEjbAnnotationMapper` (`@Priority(Integer.MAX_VALUE)`) + `EjbAnnotationExtension` | CDI runtime + xbean-finder classpath scan | `ejb-module/impl` |
+| `TestModuleLifecyclePort` | `WireMockLifecycleAdapter` (`@Priority(75)`) + `WireMockCdiExtension` + `WireMockRegistryScopeRemap` (`BeanScopeMapper` SPI provider) | CDI runtime + WireMock library (`WireMockServer`, `WireMockRuntimeInfo`) | `wiremock-module/impl` |
 
 **ejb-module additions (in `ejb-module/api`):**
 
-- `EjbAnnotationMapper` — pluggable mapping from EJB session-bean annotations to CDI scopes plus interceptor bindings. The default impl maps `@jakarta.ejb.Singleton` → `@ApplicationScoped` (or `@TestClassScoped` when `ScopeBinding.TestBeanDefaultScope` is bound on `TestContext`) plus an implicit class-level `@jakarta.transaction.Transactional`, and `@jakarta.ejb.Stateless` → `@Dependent` plus the same `@Transactional`. `@Stateful`, `@MessageDriven`, `@Lock`, `@AccessTimeout`, `@Startup`, `@DependsOn`, `@Schedule`, `@Asynchronous`, `@TransactionAttribute` are silently ignored by the default; a custom additional mapper at lower `@Priority` can claim any of them.
+- `EjbAnnotationMapper` — pluggable mapping from EJB session-bean annotations to CDI scopes plus interceptor bindings. The default impl maps `@jakarta.ejb.Singleton` → `@ApplicationScoped` (upgraded to the scope configured under MP Config key `org.os890.jawelte.module.ejb.singleton.default-scope` — scope-module ships `@TestClassScoped` as the default; FQCN loaded reflectively so ejb-module has no compile-time dep on scope-module) plus an implicit class-level `@jakarta.transaction.Transactional`, and `@jakarta.ejb.Stateless` → `@Dependent` plus the same `@Transactional`. `@Stateful`, `@MessageDriven`, `@Lock`, `@AccessTimeout`, `@Startup`, `@DependsOn`, `@Schedule`, `@Asynchronous`, `@TransactionAttribute` are silently ignored by the default; a custom additional mapper at lower `@Priority` can claim any of them.
 
 `ejb-module/impl` scans the classpath for `@Singleton` / `@Stateless` types during `BeforeBeanDiscovery` and feeds them to `addAnnotatedType` — neither OpenWebBeans nor Weld treats `BeforeBeanDiscovery.addStereotype(...)`-registered annotations as bean-defining for type discovery (the CDI 4.0 spec only encourages this), so the scan is required to keep `bean-discovery-mode="annotated"` working for plain EJB-annotated classes.
 
-**Planned (forward-looking, not yet shipped):** `DatasetContainerPort` (e.g. DB-Unit), `HttpStubContainerPort` (e.g. WireMock). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
+**Planned (forward-looking, not yet shipped):** `DatasetContainerPort` (e.g. DB-Unit). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 
 New integrations are simply new adapters — the core remains untouched.
 

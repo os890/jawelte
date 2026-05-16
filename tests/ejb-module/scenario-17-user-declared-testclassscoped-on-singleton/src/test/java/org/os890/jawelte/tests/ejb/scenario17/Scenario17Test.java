@@ -30,7 +30,7 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
  * carries {@code @TestClassScoped} keeps that scope: ejb-module
  * skips the EJB-mapped {@code @ApplicationScoped} (and the
  * scope-module-supplied
- * {@code ScopeBinding.TestBeanDefaultScope} override) because the
+ * {@code BeanScopeMapper provider} override) because the
  * class is bean-defining through its own scope. The implicit
  * {@code @Transactional} is still added by the mapper.
  */

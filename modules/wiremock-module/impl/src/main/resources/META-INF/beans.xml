@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<beans xmlns="https://jakarta.ee/xml/ns/jakartaee"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee
+                           https://jakarta.ee/xml/ns/jakartaee/beans_4_0.xsd"
+       version="4.0"
+       bean-discovery-mode="annotated">
+    <!--
+        wiremock-module/impl's CDI bean surface:
+
+          - WireMockServerRegistry (@ApplicationScoped, with the
+            impl-internal @WireMockManagedScope marker — scope-module's
+            ScopeRemapCdiExtension remaps the marker to
+            @TestClassScoped at ProcessAnnotatedType time).
+          - WireMockProducer (@ApplicationScoped, vetoed by
+            WireMockCdiExtension when at least one
+            @WireMockEndpoint qualifier is discovered).
+
+        WireMockLifecycleAdapter is NOT a CDI bean — it is
+        ServiceLoader-loaded via TestModuleLifecyclePort.
+        WireMockCdiExtension is also not a CDI bean in the user
+        sense — it is loaded via the CDI runtime's own
+        ServiceLoader-driven Extension SPI.
+
+        The synthetic per-qualifier beans (one WireMockServer +
+        one WireMock per discovered @WireMockEndpoint qualifier)
+        are registered programmatically by
+        WireMockCdiExtension.onAfterBeanDiscovery and don't appear
+        in this beans.xml.
+    -->
+</beans>

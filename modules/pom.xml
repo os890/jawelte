@@ -43,5 +43,6 @@
         <module>db-testdata-module</module>
         <module>testcontrol-module</module>
         <module>jaxrs-module</module>
+        <module>wiremock-module</module>
     </modules>
 </project>

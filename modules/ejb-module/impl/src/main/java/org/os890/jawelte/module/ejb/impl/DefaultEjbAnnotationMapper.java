@@ -30,8 +30,7 @@ import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.inject.Scope;
 import jakarta.transaction.Transactional;
 
-import org.os890.jawelte.core.api.port.ScopeBinding;
-import org.os890.jawelte.core.api.port.TestContext;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
 
 /**
@@ -43,8 +42,9 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  *   <li>{@code @jakarta.ejb.Singleton} — defaults to
  *       {@code @ApplicationScoped}; promoted to
  *       {@code @TestClassScoped} when scope-module's
- *       {@link ScopeBinding.TestBeanDefaultScope} record is bound on
- *       {@link TestContext}. Distinguished from
+ *       annotation class is reachable on the runtime classpath
+ *       (resolved reflectively to avoid a compile-time dep on
+ *       scope-module/api). Distinguished from
  *       {@code jakarta.inject.Singleton} by direct
  *       {@code Class<? extends Annotation>} identity — full class
  *       name distinction by string is wrong and must not be
@@ -80,17 +80,36 @@ import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
  * {@link EjbAnnotationMapper} and registers it via
  * {@code ServiceLoader}.
  *
- * <p>The resolved scope class is read lazily from
- * {@code TestContext.getMetadata(ScopeBinding.TestBeanDefaultScope.class)}
- * on first {@code @Singleton} encounter and cached for the rest of
- * the bootstrap; the metadata is bound during
- * {@code BeforeBeanDiscovery} and never changes after.
+ * <p>The resolved scope class is read once at class-load time via
+ * the MP Config key {@value #SINGLETON_DEFAULT_SCOPE_KEY}.
+ * scope-module/impl supplies the default value
+ * ({@code org.os890.jawelte.module.scope.api.TestClassScoped}) via
+ * its {@code microprofile-config.properties}; consumers override
+ * by setting the same key in any higher-priority MP Config source.
+ * The configured class is loaded reflectively, keeping ejb-module
+ * free of a compile-time dependency on scope-module. When the key
+ * is unset or the configured class isn't loadable, the mapper
+ * falls back to {@code @ApplicationScoped} — the same pattern
+ * used by {@code WireMockRegistryScopeRemap}.
  */
 @Priority(Integer.MAX_VALUE)
 public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
 
-    /** Cached singleton-scope class, resolved lazily on first {@code @Singleton} encounter. */
-    private volatile Class<? extends Annotation> cachedSingletonScope;
+    /**
+     * MP Config key whose value is the FQCN of the CDI scope
+     * annotation to assign to {@code @jakarta.ejb.Singleton}-mapped
+     * beans. scope-module/impl supplies the default
+     * ({@code org.os890.jawelte.module.scope.api.TestClassScoped})
+     * via its {@code microprofile-config.properties}; consumers
+     * override by setting the same key in any higher-priority MP
+     * Config source. When the key is unset or the configured
+     * class isn't loadable, the mapper falls back to
+     * {@code @ApplicationScoped}.
+     */
+    public static final String SINGLETON_DEFAULT_SCOPE_KEY =
+            "org.os890.jawelte.module.ejb.singleton.default-scope";
+
+    private static final Class<? extends Annotation> TEST_CLASS_SCOPED = loadSingletonScope();
 
     /**
      * Required public no-arg constructor for
@@ -145,39 +164,47 @@ public class DefaultEjbAnnotationMapper implements EjbAnnotationMapper {
     }
 
     /**
-     * Resolve the scope annotation to use for {@code @Singleton}
-     * beans. Reads
-     * {@code ScopeBinding.TestBeanDefaultScope} from
-     * {@link TestContext} on the first call and caches the result;
-     * subsequent calls return the cached value.
+     * Resolve the scope annotation literal to use for
+     * {@code @Singleton} beans. Returns scope-module's
+     * {@code @TestClassScoped} when its annotation class is
+     * loadable on the runtime classpath (resolved once at
+     * class-load time into {@link #TEST_CLASS_SCOPED}); otherwise
+     * falls back to {@code @ApplicationScoped}.
+     *
+     * @return the annotation literal to apply to {@code @Singleton}
+     *         beans
      */
-    private Annotation singletonScopeLiteral() {
-        Class<? extends Annotation> resolved = cachedSingletonScope;
-        if (resolved == null) {
-            resolved = resolveSingletonScope();
-            cachedSingletonScope = resolved;
-        }
-        if (resolved == ApplicationScoped.class) {
+    private static Annotation singletonScopeLiteral() {
+        if (TEST_CLASS_SCOPED == null) {
             return ApplicationScoped.Literal.INSTANCE;
         }
-        // For any other scope (notably scope-module's
-        // @TestClassScoped, which we do not have on the compile
-        // classpath), build the annotation instance reflectively.
-        return AnnotationInstanceFactory.create(resolved);
+        // scope-module's @TestClassScoped is not on the compile
+        // classpath of ejb-module/impl; build the literal
+        // reflectively from the class loaded above.
+        return AnnotationInstanceFactory.create(TEST_CLASS_SCOPED);
     }
 
-    private Class<? extends Annotation> resolveSingletonScope() {
-        Optional<ScopeBinding.TestBeanDefaultScope> bound;
-        try {
-            bound = TestContext.get().getMetadata(ScopeBinding.TestBeanDefaultScope.class);
-        } catch (IllegalStateException notInBootstrap) {
-            // No active TestContext (out-of-band test usage). Fall
-            // back to @ApplicationScoped — the original baseline.
-            return ApplicationScoped.class;
+    @SuppressWarnings("unchecked")
+    private static Class<? extends Annotation> loadSingletonScope() {
+        Optional<String> configured = ConfigProvider.getConfig()
+                .getOptionalValue(SINGLETON_DEFAULT_SCOPE_KEY, String.class)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty());
+        if (configured.isEmpty()) {
+            return null;
         }
-        return bound
-                .map(ScopeBinding.TestBeanDefaultScope::scope)
-                .orElse(ApplicationScoped.class);
+        try {
+            Class<?> loaded = Class.forName(
+                    configured.get(),
+                    true,
+                    DefaultEjbAnnotationMapper.class.getClassLoader());
+            if (!Annotation.class.isAssignableFrom(loaded)) {
+                return null;
+            }
+            return (Class<? extends Annotation>) loaded;
+        } catch (ClassNotFoundException | LinkageError missing) {
+            return null;
+        }
     }
 
     /**
