@@ -4469,3 +4469,9 @@ The two scope-module-shipped providers (`SessionScopedToTestMethodScoped`, `Conf
 scenario 19 renamed `scenario-19-annotationscoperemap-sl-wired` → `scenario-19-beanscopemapper-sl-wired`. `./mvnw verify` green end-to-end (10:45 min); all 25 wiremock scenarios + the existing scope-module / cdi-module / jpa-module / jta-module / ejb-module / content-diff / db-testdata / testcontrol / jaxrs scenarios pass.
 
 `ScopeBinding` cleanup is deferred — `cdi-module/impl/TestBeansCdiExtension`, `ejb-module/impl/DefaultEjbAnnotationMapper`, and `scope-module/impl/TestScopeCdiExtension` still read / bind the records. Two open design questions noted in the comparison report for the synthetic-bean-default-scope replacement.
+
+## 2026-05-16 — Endpoint discovery: type filter on the scan
+
+`WireMockCdiExtension.onBeforeBeanDiscovery` now narrows its field scan to the three injectable WireMock types — `WireMockServer`, `WireMock`, `WireMockRuntimeInfo` — before walking annotations. Fields of any other type are skipped, so a `@PaymentApi`-qualified `Database` field (or any other coincidental qualifier landing on a non-wiremock field) no longer triggers endpoint discovery. The recursive meta-annotation walk (scenario 06's `@PaymentService → @PaymentApi → @WireMockEndpoint`) stays.
+
+`./mvnw test -f tests/wiremock-module/pom.xml` green; all 25 scenarios pass with the tighter filter.

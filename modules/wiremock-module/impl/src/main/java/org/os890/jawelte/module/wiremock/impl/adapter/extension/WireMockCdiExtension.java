@@ -136,6 +136,11 @@ import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
  */
 public class WireMockCdiExtension implements Extension {
 
+    private static final Set<Class<?>> INJECTABLE_WIREMOCK_TYPES = Set.of(
+            WireMockServer.class,
+            WireMock.class,
+            WireMockRuntimeInfo.class);
+
     private final Map<Class<? extends Annotation>, Class<? extends Annotation>> discoveredEndpoints =
             new LinkedHashMap<>();
 
@@ -160,6 +165,9 @@ public class WireMockCdiExtension implements Extension {
         for (Class<?> current = testClass; current != null && current != Object.class;
                 current = current.getSuperclass()) {
             for (Field field : current.getDeclaredFields()) {
+                if (!INJECTABLE_WIREMOCK_TYPES.contains(field.getType())) {
+                    continue;
+                }
                 for (Annotation annotation : field.getAnnotations()) {
                     collectEndpoint(annotation.annotationType(), discoveredEndpoints, new HashSet<>());
                 }
