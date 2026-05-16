@@ -16,6 +16,9 @@
 package org.os890.jawelte.core.impl.adapter.extension;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -80,6 +83,30 @@ public class DefaultBeanScopeMapper implements BeanScopeMapperPort {
             return Optional.of(new BeanScopeMapperPort.ScopeMappingMetadata(
                     target,
                     directCdiScopesOn(beanClass)));
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public Optional<Class<? extends Annotation>> mapScope(Field testBeanField) {
+        return targetScopeForElement(testBeanField);
+    }
+
+    @Override
+    public Optional<Class<? extends Annotation>> mapScope(Method testBeanMethod) {
+        return targetScopeForElement(testBeanMethod);
+    }
+
+    private Optional<Class<? extends Annotation>> targetScopeForElement(AnnotatedElement element) {
+        for (BeanScopeMapper mapper : mappers) {
+            if (!element.isAnnotationPresent(mapper.trigger())) {
+                continue;
+            }
+            Class<? extends Annotation> target = mapper.targetScope();
+            if (target == null) {
+                continue;
+            }
+            return Optional.of(target);
         }
         return Optional.empty();
     }

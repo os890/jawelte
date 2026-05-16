@@ -14,3 +14,4 @@
 
 org.os890.jawelte.module.scope.impl.adapter.extension.remap.SessionScopedToTestMethodScoped
 org.os890.jawelte.module.scope.impl.adapter.extension.remap.ConfigBeanToTestClassScoped
+org.os890.jawelte.module.scope.impl.adapter.extension.remap.TestBeanToTestClassScoped

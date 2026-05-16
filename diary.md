@@ -4483,3 +4483,13 @@ scenario 19 renamed `scenario-19-annotationscoperemap-sl-wired` → `scenario-19
 A real lifecycle bug surfaced once the test stopped accepting a fired event as proof: scope-module's `afterAll` (priority 100) deactivates `@TestClassScoped` BEFORE wiremock-module's `afterAll` (priority 75) runs in LIFO order. The registry bean's contextual instance was destroyed by that deactivation, so wiremock's afterAll was reading from a freshly-allocated empty registry and never calling `stop()` on any actual server. Fixed by binding the started-servers list to `TestContext` metadata in `beforeAll` (new `WireMockLifecycleAdapter.StartedWireMockServers` record) and reading from there in `afterAll` — `TestContext` outlives every `TestModuleLifecyclePort.afterAll`, decoupling the stop loop from the per-test-class CDI scope lifecycle.
 
 `./mvnw test -f tests/wiremock-module/pom.xml` green; all 25 scenarios pass — scenario 10 now genuinely verifies the server stopped.
+
+## 2026-05-16 — T17A: Field + Method overloads on BeanScopeMapperPort
+
+`BeanScopeMapperPort` gains two overloads — `Optional<Class<? extends Annotation>> mapScope(Field)` and `Optional<Class<? extends Annotation>> mapScope(Method)` — that walk the same `BeanScopeMapper` provider set as the existing class-level `mapScope(Class<?>)`. They return the target scope directly (no `ScopeMappingMetadata` wrapping needed; the caller is synthesising a bean, not mutating an existing `AnnotatedType`).
+
+`DefaultBeanScopeMapper` implements both via a shared `targetScopeForElement(AnnotatedElement)` helper. `preserveExplicitDirectScopes()` is class-level-only — Field / Method callers handle explicit-scope-on-the-declaration themselves (cdi-module checks the field's own scope annotations first, falls through to the port, falls through to `@Dependent`).
+
+scope-module/impl ships `TestBeanToTestClassScoped` (`trigger == TestBean.class`, `target == TestClassScoped.class`) so the two new overloads automatically resolve `@TestBean`-declared synthetic beans to `@TestClassScoped`. The provider is SL-registered alongside the existing `SessionScopedToTestMethodScoped` + `ConfigBeanToTestClassScoped`.
+
+No consumer migration yet — cdi-module + ejb-module still read `ScopeBinding.TestBeanDefaultScope`. The overloads are unused for now, but the contract is in place.

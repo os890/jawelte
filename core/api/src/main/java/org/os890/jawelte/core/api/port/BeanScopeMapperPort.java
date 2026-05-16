@@ -16,6 +16,8 @@
 package org.os890.jawelte.core.api.port;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Optional;
 import java.util.Set;
 
@@ -36,17 +38,28 @@ import java.util.Set;
  * of CDI scope annotations to strip from the type before adding
  * the new one.
  *
- * <p><b>CDI-typed surface deliberately avoided.</b> This port's
- * single method takes a plain {@link Class}, not a
- * {@code ProcessAnnotatedType} — so the port contract has no
- * reference to CDI extension lifecycle types. The CDI extension
- * (which IS coupled to those types) translates the port's
- * decision into {@code AnnotatedTypeConfigurator} operations
- * internally. Custom port impls therefore don't need to know
- * anything about CDI extension internals; they just answer the
- * question "given this bean class, what scope (if any) should it
- * have, and what existing scope annotations should be removed
- * first?".
+ * <p><b>CDI-typed surface deliberately avoided.</b> The port's
+ * methods take plain reflection types ({@link Class},
+ * {@link Field}, {@link Method}) — never a
+ * {@code ProcessAnnotatedType} or any other CDI extension
+ * lifecycle type. The fixed thin CDI extension translates the
+ * port's class-level decision into
+ * {@code AnnotatedTypeConfigurator} operations internally; the
+ * Field / Method overloads are queried by cdi-module /
+ * ejb-module from outside the CDI extension lifecycle (when
+ * synthesising beans from {@code @TestBean} static fields or
+ * producer methods). Custom port impls only need to answer
+ * "given this declaration, what scope (if any) should it
+ * have?".
+ *
+ * <p><b>Three overloads, one shared provider set.</b> All three
+ * <code>mapScope</code> methods iterate the same SL-registered
+ * {@link BeanScopeMapper} providers. The class-level overload
+ * returns full {@link ScopeMappingMetadata} (the CDI extension
+ * needs the set of annotations to strip from the type). The
+ * Field / Method overloads return only the target scope —
+ * cdi-module / ejb-module use it as the synthetic bean's
+ * declared scope; there is no existing annotation to strip.
  */
 public interface BeanScopeMapperPort {
 
@@ -61,6 +74,40 @@ public interface BeanScopeMapperPort {
      *         this class
      */
     Optional<ScopeMappingMetadata> mapScope(Class<?> beanClass);
+
+    /**
+     * Compute the scope a synthetic bean derived from the given
+     * field should carry. Called by cdi-module when it synthesises
+     * a bean for an {@code @TestBean}-annotated static field. The
+     * port walks the {@link BeanScopeMapper} providers and returns
+     * the target of the first one whose {@link BeanScopeMapper#trigger()}
+     * is directly present on the field.
+     *
+     * <p>Explicit-scope handling is the <b>caller's</b>
+     * responsibility — cdi-module checks the field's own scope
+     * annotations first, falls through to this method only when
+     * none is present, and falls through to {@code @Dependent}
+     * only when this method also returns {@link Optional#empty()}.
+     *
+     * @param testBeanField the static field declaring the synthetic
+     *                      bean; never {@code null}
+     * @return the target CDI scope, or {@link Optional#empty()} if
+     *         no provider matched
+     */
+    Optional<Class<? extends Annotation>> mapScope(Field testBeanField);
+
+    /**
+     * Compute the scope a synthetic bean derived from the given
+     * producer method should carry. Same contract as
+     * {@link #mapScope(Field)} for the producer-method shape of
+     * {@code @TestBean}.
+     *
+     * @param testBeanMethod the producer method declaring the
+     *                       synthetic bean; never {@code null}
+     * @return the target CDI scope, or {@link Optional#empty()} if
+     *         no provider matched
+     */
+    Optional<Class<? extends Annotation>> mapScope(Method testBeanMethod);
 
     /**
      * Result of a successful {@link #mapScope(Class)} call.
