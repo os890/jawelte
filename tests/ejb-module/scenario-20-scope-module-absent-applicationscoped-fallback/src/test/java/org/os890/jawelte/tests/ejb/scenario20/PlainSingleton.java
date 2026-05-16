@@ -19,7 +19,7 @@ import jakarta.ejb.Singleton;
 
 /**
  * Plain {@code @Singleton}. scope-module is intentionally NOT on
- * this scenario's classpath, so {@code ScopeBinding.TestBeanDefaultScope}
+ * this scenario's classpath, so {@code BeanScopeMapper provider}
  * is unbound; the default mapper falls back to
  * {@code @ApplicationScoped}.
  */

@@ -28,7 +28,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 /**
  * TICKET-007 scenario 20 — scope-module is NOT on the test
  * classpath. The default mapper sees an unbound
- * {@code ScopeBinding.TestBeanDefaultScope} and falls back to the
+ * {@code BeanScopeMapper provider} and falls back to the
  * baseline {@code @ApplicationScoped} for {@code @Singleton}.
  */
 @EnableTestBeans

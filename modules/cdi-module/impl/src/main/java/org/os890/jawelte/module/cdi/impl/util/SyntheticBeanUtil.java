@@ -53,10 +53,11 @@ public abstract class SyntheticBeanUtil {
      * <p>Precedence (resolved by
      * {@link org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension}):
      * a CDI scope annotation declared by the test author on the
-     * static field; the
-     * {@link org.os890.jawelte.core.api.port.ScopeBinding.TestBeanDefaultScope}
-     * record bound on {@code TestContext} (when scope-module is on
-     * the classpath); cdi-module's {@code @Singleton} fallback.
+     * static field; the target scope returned by
+     * {@code BeanScopeMapperPort.mapScope(Field)} (scope-module
+     * ships a provider with trigger {@code @TestBean} / target
+     * {@code @TestClassScoped}); cdi-module's
+     * {@code @Singleton} fallback.
      *
      * @param event           the {@code AfterBeanDiscovery} event
      * @param fieldType       the declared type of the field
@@ -92,9 +93,13 @@ public abstract class SyntheticBeanUtil {
      *
      * <p>{@code nonJdkScope} is resolved by
      * {@link org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension}:
-     * the {@link org.os890.jawelte.core.api.port.ScopeBinding.AutoMockDefaultScope}
-     * record bound on {@code TestContext} (when scope-module is on
-     * the classpath); cdi-module's {@code @RequestScoped} fallback.
+     * the FQCN-valued MP Config key
+     * {@code org.os890.jawelte.module.cdi.auto-mock.default-scope}
+     * (scope-module ships the
+     * {@code TestMethodScoped} default via its
+     * {@code microprofile-config.properties}); cdi-module's
+     * {@code @RequestScoped} fallback when the key is unset or
+     * the configured class is unloadable.
      *
      * @param event       the {@code AfterBeanDiscovery} event
      * @param rawType     the unsatisfied injection-point raw type

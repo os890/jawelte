@@ -4493,3 +4493,15 @@ A real lifecycle bug surfaced once the test stopped accepting a fired event as p
 scope-module/impl ships `TestBeanToTestClassScoped` (`trigger == TestBean.class`, `target == TestClassScoped.class`) so the two new overloads automatically resolve `@TestBean`-declared synthetic beans to `@TestClassScoped`. The provider is SL-registered alongside the existing `SessionScopedToTestMethodScoped` + `ConfigBeanToTestClassScoped`.
 
 No consumer migration yet — cdi-module + ejb-module still read `ScopeBinding.TestBeanDefaultScope`. The overloads are unused for now, but the contract is in place.
+
+## 2026-05-16 — ScopeBinding retired
+
+`core/api/port/ScopeBinding.java` is gone. Its three consumer sites migrated as follows:
+
+- **cdi-module / @TestBean static-field synthetic beans:** `TestBeansCdiExtension` now calls `BeanScopeMapperPort.mapScope(field)` instead of reading the `TestBeanDefaultScope` record. scope-module/impl ships a `TestBeanToTestClassScoped` mapper provider (`trigger == TestBean.class`, `target == TestClassScoped.class`); the port walks providers and returns the first match. Explicit scope on the field (e.g. `@TestBean @RequestScoped Foo foo`) is checked first by cdi-module before consulting the port; cdi-module falls back to `@Singleton` (unchanged) when the port returns empty.
+- **cdi-module / auto-mock synthetic beans:** `TestBeansCdiExtension.resolveAutoMockNonJdkScope()` reads the new MP Config key `org.os890.jawelte.module.cdi.auto-mock.default-scope` and reflectively `Class.forName`s the value. scope-module/impl's `META-INF/microprofile-config.properties` supplies the default value `org.os890.jawelte.module.scope.api.TestMethodScoped`. Falls back to `@RequestScoped` when the key is unset or the configured class is unloadable. No compile-time link between cdi-module and scope-module on this surface.
+- **ejb-module / @jakarta.ejb.Singleton mapping:** `DefaultEjbAnnotationMapper` now reads `TEST_CLASS_SCOPED` (a static final, resolved once via `Class.forName("org.os890.jawelte.module.scope.api.TestClassScoped")`) and falls back to `@ApplicationScoped` when the class isn't reachable. Same reflective-load pattern as `WireMockRegistryScopeRemap`. The cached-volatile field is gone (static-final replaces lazy-init).
+
+`scope-module/impl/TestScopeCdiExtension` no longer binds anything on `TestContext` — its only responsibility now is creating the two scope stores + contexts in `AfterBeanDiscovery`. The `BeforeBeanDiscovery` observer (which used to bind the records) is gone.
+
+`./mvnw verify` green end-to-end (9:49 min). 25 / 25 wiremock scenarios pass; existing scope / cdi / jpa / jta / ejb / content-diff / db-testdata / testcontrol / jaxrs scenarios all pass — including the ejb-module scenarios 17-21 that specifically exercise the @Singleton-with-and-without-scope-module paths the reflective load replaces.

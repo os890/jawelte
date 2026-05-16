@@ -21,7 +21,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 /**
  * Test author explicitly declared {@code @ApplicationScoped}.
  * scope-module is on the classpath (so the
- * {@code ScopeBinding.TestBeanDefaultScope} fallback would have
+ * {@code BeanScopeMapper provider} fallback would have
  * picked {@code @TestClassScoped}), but the user-declared CDI scope
  * wins.
  */
