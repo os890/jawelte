@@ -4557,3 +4557,31 @@ shape as the two SPI providers.
 
 Verified by a second full `verify-all.sh` matrix — 18/18 phases
 green. No behaviour change; pure performance polish.
+
+## 2026-05-16: TICKET-012 — architecture.md sync with `BeanScopeMapper` SPI + MP Config generalization
+
+Final docs sweep before opening the PR. Three places in
+`architecture.md` still referenced the old scope-override
+mechanics:
+
+- scope-module description still narrated the retired sealed
+  `ScopeBinding` interface and the
+  `TestContext.bindMetadata(ScopeBinding.TestBeanDefaultScope, ...)`
+  pattern. Replaced with the current two-mechanism story:
+  `BeanScopeMapper` SPI in `core/api/port` (SL-registered
+  providers) for `@TestBean` / `@SessionScoped` / `@ConfigBean`
+  remaps; and MP Config keys defaulted in scope-module's
+  `microprofile-config.properties` for FQCN resolution
+  (cdi-module auto-mock, wiremock-module registry, ejb-module
+  `@Singleton`).
+- wiremock-module row in the port-impl table called
+  `WireMockRegistryScopeRemap` an `AnnotationScopeRemap`
+  provider — renamed to `BeanScopeMapper`. Added
+  `WireMockRuntimeInfo` to the WireMock-library deps cell.
+- ejb-module `EjbAnnotationMapper` description had a stale
+  `ScopeBinding.TestBeanDefaultScope` reference; rewritten to
+  point at the MP Config key
+  `org.os890.jawelte.module.ejb.singleton.default-scope` +
+  reflective load (no compile-time scope-module dep).
+
+Pure docs change, no source touched, no test re-run needed.
