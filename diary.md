@@ -5041,3 +5041,14 @@ Verified locally: `cd verify-all && ../mvnw -B -ntp -T 1 \
 BUILD SUCCESS, and `coverage-report/target/site/jacoco-aggregate`
 ships ~8.9 MB of real HTML (not the empty-overwrite failure mode
 the comment warned about).
+
+## 2026-05-16 — BootBanner moved to adapter/launcher/
+
+`adapter/extension/` houses Jupiter-level extensions
+(DelegatingJUnitExtension + the CDI ones); BootBanner is a JUnit
+Platform Launcher SPI implementation, a different API layer.
+Moved to `adapter/launcher/` (`git mv` to preserve history),
+updated the package declaration in the class and the FQN in
+`META-INF/services/org.junit.platform.launcher.LauncherSessionListener`.
+Smoke-tested again with tests/core/scenario-01 — banner still
+prints once before the first test class, test green.
