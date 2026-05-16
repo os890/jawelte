@@ -47,6 +47,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 | `jawelte-h2` | H2 | In-memory database for fast persistence tests |
 | `jawelte-mockito` | Mockito | CDI-aware mock injection |
 | `jawelte-wiremock-module` | WireMock | HTTP stub server lifecycle management |
+| `jawelte-batch-module` | Jakarta Batch (jBatch) | CDI event-driven job execution with synchronous polling and pluggable timeout policy |
 
 New integrations follow the same pattern and require no changes to the core.
 
@@ -111,12 +112,20 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `PersistenceUnitConnectionResolver` | `DefaultPersistenceUnitConnectionResolver` (`@Priority(Integer.MAX_VALUE)`) | JDBC | `jpa-module/impl` |
 | `EjbAnnotationMapper` | `DefaultEjbAnnotationMapper` (`@Priority(Integer.MAX_VALUE)`) + `EjbAnnotationExtension` | CDI runtime + xbean-finder classpath scan | `ejb-module/impl` |
 | `TestModuleLifecyclePort` | `WireMockLifecycleAdapter` (`@Priority(75)`) + `WireMockCdiExtension` + `WireMockRegistryScopeRemap` (`BeanScopeMapper` SPI provider) | CDI runtime + WireMock library (`WireMockServer`, `WireMockRuntimeInfo`) | `wiremock-module/impl` |
+| `TimeoutHandler` | `ThrowingTimeoutHandler` (`@Priority(Integer.MAX_VALUE)`) plus opt-in `PopulateLatestSnapshotTimeoutHandler` (`@Priority(Integer.MAX_VALUE - 100)`, ships in the same jar but not pre-registered) | CDI runtime + any jBatch implementation (BatchEE, JBeret) discovered via `BatchRuntime.getJobOperator()` | `batch-module/impl` |
 
 **ejb-module additions (in `ejb-module/api`):**
 
 - `EjbAnnotationMapper` — pluggable mapping from EJB session-bean annotations to CDI scopes plus interceptor bindings. The default impl maps `@jakarta.ejb.Singleton` → `@ApplicationScoped` (upgraded to the scope configured under MP Config key `org.os890.jawelte.module.ejb.singleton.default-scope` — scope-module ships `@TestClassScoped` as the default; FQCN loaded reflectively so ejb-module has no compile-time dep on scope-module) plus an implicit class-level `@jakarta.transaction.Transactional`, and `@jakarta.ejb.Stateless` → `@Dependent` plus the same `@Transactional`. `@Stateful`, `@MessageDriven`, `@Lock`, `@AccessTimeout`, `@Startup`, `@DependsOn`, `@Schedule`, `@Asynchronous`, `@TransactionAttribute` are silently ignored by the default; a custom additional mapper at lower `@Priority` can claim any of them.
 
 `ejb-module/impl` scans the classpath for `@Singleton` / `@Stateless` types during `BeforeBeanDiscovery` and feeds them to `addAnnotatedType` — neither OpenWebBeans nor Weld treats `BeforeBeanDiscovery.addStereotype(...)`-registered annotations as bean-defining for type discovery (the CDI 4.0 spec only encourages this), so the scan is required to keep `bean-discovery-mode="annotated"` working for plain EJB-annotated classes.
+
+**batch-module additions (in `batch-module/api`):**
+
+- `BatchExecution` — concrete CDI event class carrying both the request (jobName, parameters, timeout) and, after the synchronous observer in `batch-module/impl` has driven the job to a terminal `BatchStatus`, the result (executionId, `JobExecution`, status, exit-status). Test code fires it via `Event<BatchExecution>` and reads the result accessors on the same instance once `fire(...)` unblocks.
+- `TimeoutHandler` — pluggable policy for "polling loop exceeded `BatchExecution.getTimeout()` while the job is still in a non-terminal status." Resolved via `TestContext.loadService(TimeoutHandler.class)` once per JVM. The default `ThrowingTimeoutHandler` raises `IllegalStateException`; consumers swap behaviour by registering an alternative impl with a lower numeric `@Priority`. `batch-module/impl` ships the opt-in `PopulateLatestSnapshotTimeoutHandler` (populates the event with the latest snapshot and returns without throwing) but does not pre-register it.
+
+`batch-module/impl` ships no `TestModuleLifecyclePort` adapter — it is purely CDI-driven. Two `@ApplicationScoped` beans (the observer that drives the polling loop, and a `@Produces JobOperator` bridge that delegates to `BatchRuntime.getJobOperator()`) handle everything; the CDI runtime discovers them via `beans.xml` with `bean-discovery-mode="annotated"`.
 
 **Planned (forward-looking, not yet shipped):** `DatasetContainerPort` (e.g. DB-Unit). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 

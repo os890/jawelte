@@ -4687,3 +4687,15 @@ All 15 batch-module scenarios green under both `-Powb` and `-Pweld`.
 ## TICKET-013: scenario 15 javadoc — note that the custom env scaffolding is only OWB-driven
 
 Added a "Why the custom BatchEnvironment / ArtifactFactory?" section to `Scenario15Test`'s class-level javadoc explaining that the three test-source replacement classes (`TestBatchEnvironment`, `TestArtifactFactory`, `NoOpTransactionManager`) only exist because the scenario must run under both `-Powb` and `-Pweld`. A Weld-only consumer can drop all of that and simply depend on `org.jberet:jberet-se` — JBeret's own SE environment picks everything up for free. The scaffolding is the cost of OpenWebBeans co-residency in the same scenario.
+
+## TICKET-013: architecture.md + GitHub issue refreshed
+
+**architecture.md** — three additions:
+
+1. Integration Layer table: new row for `jawelte-batch-module` (Jakarta Batch / jBatch, CDI event-driven job execution with synchronous polling and pluggable timeout policy).
+2. Adapter-implementations table: new row for the `TimeoutHandler` SPI showing the default `ThrowingTimeoutHandler` (`@Priority Integer.MAX_VALUE`) plus the opt-in `PopulateLatestSnapshotTimeoutHandler` (`@Priority Integer.MAX_VALUE - 100`, ships in the same jar but not pre-registered).
+3. New "batch-module additions (in `batch-module/api`):" paragraph mirroring the jpa/ejb pattern — describes `BatchExecution` (the CDI event class), `TimeoutHandler` (the pluggable SPI), and notes that `batch-module/impl` ships no `TestModuleLifecyclePort` since the module is purely CDI-driven (`@Observes`-based observer + `@Produces JobOperator` bridge discovered through `beans.xml`).
+
+**GitHub issue #26 body** — added "TICKET-013 Addendum — `TimeoutHandler` SPI port + cross-runtime verification" section after the Acceptance Criteria. Covers: the new SPI port + two impls + activation contract, the `java.lang.System.Logger` lines at INFO on start/finish/resolve, the `markCompleted` naming choice, and the two extra test scenarios (14 alternative-handler-activation, 15 JBeret cross-runtime compatibility with the Weld-only simplification note).
+
+Local `tickets/013-batch-module.md` mirrors the issue body (still gitignored; only the GitHub issue is the canonical record).
