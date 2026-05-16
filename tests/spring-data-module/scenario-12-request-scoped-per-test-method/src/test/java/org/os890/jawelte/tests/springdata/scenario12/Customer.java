@@ -20,7 +20,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
-/** Backing entity for the @ApplicationScoped scenario. */
+/** Backing entity for the request-scoped-per-test-method scenario. */
 @Entity
 public class Customer {
 

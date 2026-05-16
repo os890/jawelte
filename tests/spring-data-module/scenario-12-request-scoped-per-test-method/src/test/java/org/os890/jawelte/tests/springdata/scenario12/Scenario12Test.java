@@ -23,8 +23,11 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 /**
- * Scenario 12 — repositories are `@ApplicationScoped`. Two injection
- * sites resolve to the same CDI proxy reference.
+ * Scenario 12 — synthetic repository beans are
+ * {@code @RequestScoped}. Within a single test method (one
+ * request context) every injection site resolves to the same CDI
+ * client proxy reference; CRUD round-trip through that shared
+ * reference works end-to-end.
  */
 @EnableTestBeans
 public class Scenario12Test {
@@ -35,16 +38,20 @@ public class Scenario12Test {
     @Inject
     private SiblingHolder siblingHolder;
 
-    /** No-arg constructor for CDI. */
-    public Scenario12Test() {
-    }
-
-    /** Both injection points get the same `@ApplicationScoped` proxy reference. */
+    /** Cross-IP proxy identity within one request context + a CRUD round-trip. */
     @Test
-    public void repositoryIsApplicationScopedSingleton() {
+    public void requestScopedRepositoryIsSharedAcrossInjectionSitesWithinATestMethod() {
         assertThat(customerRepository)
-                .as("CDI proxy reference is identical across injection points "
-                        + "for an @ApplicationScoped bean")
+                .as("@RequestScoped — every injection point in the same request context "
+                        + "resolves to the same CDI client proxy reference")
                 .isSameAs(siblingHolder.getCustomerRepository());
+
+        Long id = siblingHolder.saveCustomer("Alice");
+        assertThat(id)
+                .as("the request-scoped repository persists rows")
+                .isNotNull();
+        assertThat(siblingHolder.customerCount())
+                .as("CRUD via the shared request-scoped repository works")
+                .isEqualTo(1L);
     }
 }

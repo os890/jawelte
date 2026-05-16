@@ -4806,3 +4806,44 @@ scan via xbean-finder; combination) and the constraint that a real
 consumer ask should drive when this lands. Two open items remain
 on the comparison report (G2 bean scope, G3 bean-type set) for a
 later discussion. No code change to the module itself.
+
+## 2026-05-16 — TICKET-014 G2 + G3 closed (scope + bean types)
+
+Flipped the synthetic Spring Data repository bean from
+`@ApplicationScoped` to `@RequestScoped` (G2) and narrowed the bean
+type set from "discovered repository interface + every Spring Data
+super-interface + Object" down to "discovered repository interface
++ Object" (G3). Trade-offs:
+
+- `@RequestScoped` is a normal scope, so CDI hands every IP a
+  client proxy and materialisation is deferred to the first method
+  call. The first call lands inside the caller's `@Transactional`
+  boundary, where jpa-module/impl's `EntityManagerProxy` resolves a
+  live `EntityManager` via `TransactionScopedEmHolder` — and
+  Spring Data's `JpaRepositoryFactory.<init>` succeeds when it asks
+  the EM for its `EntityManagerFactory`. Per-test-method lifetime
+  (cdi-module's `CdiTestBeanContainer` activates a
+  `RequestContextController` per test) gives stronger isolation
+  than the previous `@ApplicationScoped` would, and the EMF that
+  Spring Data reaches through the EM is itself a CDI bean whose
+  scope/caching is the producer's choice (jpa-module ships a
+  JVM-cached default; consumers without jpa-module define their
+  own).
+- Narrowing the bean type set means the synthetic beans no longer
+  appear type-assignable to `JpaRepository<…>`,
+  `CrudRepository<…>`, etc. With multiple repositories on the
+  classpath the framework parents would otherwise become ambiguous;
+  with the narrow type set they simply remain unsatisfied (which is
+  the same shape upstream Spring Data's CDI extension and the POC
+  ship).
+
+Scenario 12 renamed `scenario-12-application-scoped-singleton` →
+`scenario-12-request-scoped-per-test-method`. New assertion:
+within one test method (one request context), every IP resolves to
+the same CDI client proxy reference, AND a CRUD round-trip via that
+shared reference persists rows correctly. `SiblingHolder` updated
+to expose CRUD methods so the round-trip can run through it.
+
+jpa-module untouched. 14×2 = 28 scenario runs green on OWB + Weld.
+The "TICKET-014 follow-up — optional classpath scan" todo entry
+from the previous diary entry is unchanged.

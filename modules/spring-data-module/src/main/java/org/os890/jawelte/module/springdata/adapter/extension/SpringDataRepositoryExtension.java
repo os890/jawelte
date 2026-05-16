@@ -22,7 +22,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Any;
 import jakarta.enterprise.inject.Default;
@@ -42,8 +42,8 @@ import org.springframework.data.repository.Repository;
 /**
  * CDI {@link Extension} that auto-discovers Spring Data
  * {@link Repository}-extending interfaces during CDI bootstrap and
- * registers a real Spring Data implementation per interface as an
- * {@link ApplicationScoped @ApplicationScoped} CDI bean.
+ * registers a real Spring Data implementation per interface as a
+ * {@link RequestScoped @RequestScoped} CDI bean.
  *
  * <h2>Lifecycle</h2>
  *
@@ -67,11 +67,10 @@ import org.springframework.data.repository.Repository;
  *       extension's synthetic bean).</li>
  *   <li><b>{@code AfterBeanDiscovery}</b> — for each discovered
  *       repository interface that has no existing bean, the
- *       extension registers a synthetic
- *       {@code @ApplicationScoped} bean. The bean's
- *       {@code produceWith} callback (invoked lazily on first
- *       injection) resolves the
- *       {@link EntityManager} from CDI, constructs a
+ *       extension registers a synthetic {@code @RequestScoped} bean.
+ *       The bean's {@code produceWith} callback (invoked lazily on
+ *       first method call through the CDI client proxy) resolves
+ *       the {@link EntityManager} from CDI, constructs a
  *       {@link JpaRepositoryFactory}, and returns
  *       {@code factory.getRepository(repositoryInterface)} — the
  *       same real implementation Spring Data builds in production.</li>
@@ -79,18 +78,42 @@ import org.springframework.data.repository.Repository;
  *
  * <h2>Bean types and qualifiers</h2>
  *
- * <p>The registered bean's types include the repository interface
- * itself, every superinterface up to (but excluding) the framework
- * marker interfaces from {@code org.springframework.data}, and
- * {@link Object}. Qualifiers are {@link Default @Default} and
- * {@link Any @Any}; no {@code @Named} is added.
+ * <p>The registered bean's types are exactly the discovered
+ * repository interface itself plus {@link Object} — framework
+ * super-interfaces ({@code JpaRepository}, {@code CrudRepository},
+ * &hellip;) are deliberately NOT added as bean types so the
+ * synthetic beans never compete for resolution on framework
+ * super-types when multiple repositories ship together. Qualifiers
+ * are {@link Default @Default} and {@link Any @Any}; no
+ * {@code @Named} is added.
+ *
+ * <h2>Why {@code @RequestScoped}</h2>
+ *
+ * <p>The synthetic bean is a normal-scoped CDI bean, so consumers
+ * receive a CDI client proxy at every injection point and the
+ * underlying {@link JpaRepositoryFactory} is materialised lazily on
+ * the first method invocation — which always happens inside a
+ * {@code @Transactional} or programmatic-transaction boundary,
+ * where the EM proxy supplied by jpa-module/impl can resolve a
+ * live {@link EntityManager}. {@code @RequestScoped} (rather than
+ * {@code @ApplicationScoped}) limits the factory's lifetime to a
+ * single test method: cdi-module's {@code CdiTestBeanContainer}
+ * activates a {@code RequestContextController} per test method, so
+ * each test gets a fresh factory and any (theoretical) Spring Data
+ * metadata-cache mutation cannot leak between tests. The
+ * {@link jakarta.persistence.EntityManagerFactory} that Spring Data
+ * resolves through the injected {@code EntityManager} is itself a
+ * CDI bean — its scope and caching are the EMF producer's choice,
+ * not this extension's. If jpa-module is on the classpath it ships
+ * a JVM-cached default producer; otherwise the consumer must define
+ * their own.
  *
  * <h2>EntityManager resolution</h2>
  *
  * <p>The {@code produceWith} callback resolves the
  * {@code @Default} {@link EntityManager} via
  * {@code CDI.current().select(EntityManager.class).get()} — the
- * transaction-scoped proxy registered by jpa-module/impl. Repository
+ * per-call routing proxy registered by jpa-module/impl. Repository
  * methods therefore participate in the caller's
  * {@code @Transactional} boundary automatically. Multi-persistence-unit
  * routing is not supported (the default EM is always used); consumers
@@ -165,12 +188,13 @@ public class SpringDataRepositoryExtension implements Extension {
     }
 
     /**
-     * Register one synthetic {@code @ApplicationScoped} CDI bean per
+     * Register one synthetic {@code @RequestScoped} CDI bean per
      * discovered repository interface that is not already covered by
      * an existing bean. The {@code produceWith} callback resolves the
      * {@code @Default} {@link EntityManager} via {@code CDI.current()}
-     * at first-use time and builds the repository through Spring
-     * Data's {@link JpaRepositoryFactory}.
+     * lazily on the first method call through the CDI client proxy
+     * and builds the repository through Spring Data's
+     * {@link JpaRepositoryFactory}.
      *
      * @param event the CDI {@code AfterBeanDiscovery} event
      */
@@ -183,15 +207,14 @@ public class SpringDataRepositoryExtension implements Extension {
                                 + " — an existing bean already covers this type");
                 continue;
             }
-            Set<Type> beanTypes = collectRepositoryBeanTypes(repositoryInterface);
             event.addBean()
                     .beanClass(repositoryInterface)
-                    .types(beanTypes.toArray(new Type[0]))
+                    .types(repositoryInterface, Object.class)
                     .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
-                    .scope(ApplicationScoped.class)
+                    .scope(RequestScoped.class)
                     .produceWith(ctx -> buildRepository(repositoryInterface));
             LOGGER.log(Logger.Level.INFO,
-                    "Registered synthetic @ApplicationScoped CDI bean for repository interface "
+                    "Registered synthetic @RequestScoped CDI bean for repository interface "
                             + repositoryInterface.getName());
         }
     }
@@ -236,25 +259,6 @@ public class SpringDataRepositoryExtension implements Extension {
         EntityManager entityManager = CDI.current().select(EntityManager.class).get();
         JpaRepositoryFactory factory = new JpaRepositoryFactory(entityManager);
         return factory.getRepository(repositoryInterface);
-    }
-
-    private static Set<Type> collectRepositoryBeanTypes(Class<?> repositoryInterface) {
-        Set<Type> types = new LinkedHashSet<>();
-        types.add(repositoryInterface);
-        collectSuperInterfaces(repositoryInterface, types);
-        types.add(Object.class);
-        return types;
-    }
-
-    private static void collectSuperInterfaces(Class<?> current, Set<Type> sink) {
-        for (Class<?> parent : current.getInterfaces()) {
-            if (!Repository.class.isAssignableFrom(parent)) {
-                continue;
-            }
-            if (sink.add(parent)) {
-                collectSuperInterfaces(parent, sink);
-            }
-        }
     }
 
     private static boolean isSpringDataMarker(Class<?> candidate) {

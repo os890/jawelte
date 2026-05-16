@@ -17,8 +17,14 @@ package org.os890.jawelte.tests.springdata.scenario12;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
-/** A second bean that also injects the repository. */
+/**
+ * Application-scoped sibling bean whose injection of
+ * {@code CustomerRepository} resolves — through the CDI client
+ * proxy — to the same {@code @RequestScoped} instance that the
+ * test class holds, for the duration of one test method.
+ */
 @ApplicationScoped
 public class SiblingHolder {
 
@@ -30,11 +36,33 @@ public class SiblingHolder {
     }
 
     /**
-     * Get the repository this bean was injected with.
+     * Get the CDI client proxy reference for the repository
+     * injected into this bean.
      *
-     * @return the auto-discovered repository
+     * @return the auto-discovered, request-scoped repository proxy
      */
     public CustomerRepository getCustomerRepository() {
         return customerRepository;
+    }
+
+    /**
+     * Save a customer through the shared request-scoped repository.
+     *
+     * @param name the customer's name
+     * @return the assigned id
+     */
+    @Transactional
+    public Long saveCustomer(String name) {
+        return customerRepository.save(new Customer(name)).getId();
+    }
+
+    /**
+     * Count rows via the shared request-scoped repository.
+     *
+     * @return the customer count
+     */
+    @Transactional
+    public long customerCount() {
+        return customerRepository.count();
     }
 }

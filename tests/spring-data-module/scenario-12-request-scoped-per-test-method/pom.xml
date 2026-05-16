@@ -27,9 +27,9 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-tests-spring-data-module-scenario-12-application-scoped-singleton</artifactId>
+    <artifactId>jawelte-tests-spring-data-module-scenario-12-request-scoped-per-test-method</artifactId>
     <packaging>jar</packaging>
 
-    <name>jawelte tests/spring-data-module scenario 12: application-scoped-singleton</name>
-    <description>spring-data-module test scenario covering ticket-014 scenario #15 — repository beans are `@ApplicationScoped`. Two injection sites observe the same proxy reference.</description>
+    <name>jawelte tests/spring-data-module scenario 12: request-scoped-per-test-method</name>
+    <description>spring-data-module test scenario covering ticket-014 scenario #15 — repository beans are `@RequestScoped`. Within a single test method (one request context) every injection site resolves to the same CDI client proxy reference; CRUD round-trip via that shared reference works end-to-end.</description>
 </project>

@@ -45,7 +45,7 @@
         <module>scenario-09-no-repository-bean-skipped</module>
         <module>scenario-10-no-repository-bean-on-parent</module>
         <module>scenario-11-limit-to-test-beans</module>
-        <module>scenario-12-application-scoped-singleton</module>
+        <module>scenario-12-request-scoped-per-test-method</module>
         <module>scenario-13-paging-and-sorting</module>
         <module>scenario-14-multiple-repositories</module>
     </modules>
