@@ -4778,3 +4778,15 @@ Local `tickets/013-batch-module.md` mirrors the issue body (still gitignored; on
   functional in a single test.
 
 All 14 scenarios green on `-Powb` and `-Pweld`.
+
+## 2026-05-16 TICKET-014 — extension package alignment
+
+- Moved `SpringDataRepositoryExtension` from
+  `org.os890.jawelte.module.springdata` to
+  `org.os890.jawelte.module.springdata.adapter.extension` to match the
+  project convention (cdi-module's `TestBeansCdiExtension`,
+  jpa-module's `JpaCdiExtension`, wiremock-module's `WireMockCdiExtension`
+  all live under `<module>.impl.adapter.extension`; for the single-jar
+  spring-data-module the equivalent is `<module>.adapter.extension`).
+- Updated the `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  registration to the new FQCN. All 14 scenarios still green.

@@ -16,4 +16,4 @@
 # extension. The active CDI runtime (OWB or Weld) loads this via
 # ServiceLoader during CDI bootstrap and wires it into the
 # extension lifecycle (ProcessInjectionPoint + AfterBeanDiscovery).
-org.os890.jawelte.module.springdata.SpringDataRepositoryExtension
+org.os890.jawelte.module.springdata.adapter.extension.SpringDataRepositoryExtension
