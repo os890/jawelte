@@ -92,8 +92,15 @@ run() {
 # at test time even after the source file is gone). One clean pass
 # at the start avoids the whole class of "ghost file in target/"
 # false failures.
+#
+# Driven through verify-all/pom.xml — the dedicated aggregator
+# that lists core + modules + tests + coverage-report. Running
+# from there ensures the test scenarios and the JaCoCo aggregate
+# report get built; a normal `mvn clean install` from the repo
+# root only builds core + modules (the framework code), so the
+# regular developer build stays fast.
 run "clean install full reactor (-DskipTests)" \
-    "$REPO_ROOT" -DskipTests clean install
+    "$REPO_ROOT/verify-all" -DskipTests clean install
 
 if [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------

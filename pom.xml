@@ -43,11 +43,17 @@
         <url>https://github.com/os890/jawelte</url>
     </scm>
 
+    <!--
+        Default reactor. A plain `mvn clean install` from the repo
+        root builds only the framework code (core + modules) and
+        skips the test scenarios + the JaCoCo coverage aggregator.
+        Run `mvn -f verify-all/pom.xml clean install` (or
+        `verify-all.sh`) to build the full tree including
+        tests/* and coverage-report/.
+    -->
     <modules>
         <module>core</module>
         <module>modules</module>
-        <module>tests</module>
-        <module>coverage-report</module>
     </modules>
 
     <properties>

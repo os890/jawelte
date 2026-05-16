@@ -4959,3 +4959,31 @@ Three fixes in one pom edit:
 0 deterministically.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — Split full-stack reactor into verify-all aggregator
+
+Normal `mvn clean install` from the repo root no longer compiles
+the test scenarios + the JaCoCo coverage aggregator. Developer
+builds drop from ~41s to ~19s on a clean repo.
+
+- New `verify-all/pom.xml` aggregator. Parent: root pom. Modules:
+  `../core`, `../modules`, `../tests`, `../coverage-report`. Use
+  `mvn -f verify-all/pom.xml clean install -DskipTests` to build
+  the full tree (or run `verify-all.sh`).
+- Root `pom.xml` <modules> reduced to `core, modules` only. A
+  comment in the same block documents the split.
+- `verify-all.sh` Phase 1 now invokes `mvn ... -f verify-all`
+  instead of running from the repo root, so the test scenarios
+  and the coverage-report aggregator are part of the same Phase 1
+  reactor build the script always relied on. All later phases
+  (per-module CDI / JTA sweeps + the final coverage-report run)
+  are unchanged — they invoke each test aggregator directly.
+
+The split has no effect on the wip-mode discovery in
+`verify-all.sh` (still file-system based — greps for
+`<id>wip</id>` in `tests/*/pom.xml`), and no per-module pom needs
+to be updated — every `tests/*/pom.xml` and
+`tests/*/scenario-*/pom.xml` keeps its existing parent reference
+to root.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
