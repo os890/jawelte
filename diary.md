@@ -4585,3 +4585,42 @@ mechanics:
   reflective load (no compile-time scope-module dep).
 
 Pure docs change, no source touched, no test re-run needed.
+
+## TICKET-013: Batch Module — first draft
+
+Created `modules/batch-module/` (aggregator + api/impl) and wired it into the reactor, coverage-report, and dependency-management.
+
+**API surface (one type):**
+- `BatchExecution` (event class, `modules/batch-module/api/.../api/`) — fluent builder for request fields (`jobName`, `param(...)`, `timeout(...)`) plus result accessors (`getExecutionId`, `getJobExecution`, `getStatus`, `getExitStatus`) populated in place by the impl-side observer via the package-public `complete(long, JobExecution)` hook. Default timeout = 60 s, initial poll = 50 ms (not configurable). Constructor rejects null/empty `jobName`. `getExecutionId()` throws `IllegalStateException` before completion.
+
+**Impl (two CDI beans, no extension, no lifecycle adapter, no SPI providers):**
+- `JobOperatorProducer` (`@ApplicationScoped`, `@Produces @ApplicationScoped JobOperator`) — the api↔library bridge. Delegates to `BatchRuntime.getJobOperator()` (TCCL-based ServiceLoader, no custom classloader bridge — JUnit's test thread already has the test classpath as TCCL). Wraps both null-return and runtime-throw into the documented `IllegalStateException("No JobOperator found via ServiceLoader. Add a jBatch implementation to the test classpath.")`.
+- `BatchExecutionObserver` (`@ApplicationScoped`, `@Observes BatchExecution`) — synchronous observer that drives every fired event through `JobOperator.start(...)` then polls `getJobExecution(executionId).getBatchStatus()` with 50→100→200→...→5000 ms exponential backoff (cap 5 s) until terminal status (`COMPLETED`/`FAILED`/`STOPPED`/`ABANDONED`) or timeout. On terminal status: populates the event via `complete(...)`. On timeout: throws `IllegalStateException("Batch job '{name}' did not complete within {timeout}. Last status: {status}")`; job is NOT cancelled.
+- `META-INF/beans.xml` (`bean-discovery-mode="annotated"`) — both beans are regular annotated CDI beans, no extension or synthetic registration.
+
+**Wiring (parent pom):**
+- Properties: `jakarta.batch.version=2.1.1`, `batchee.version=2.0.0`.
+- DepMgmt: `jakarta.batch-api` (provided), `org.apache.batchee:batchee-jbatch` (test), batch-module-api/-impl cross-refs.
+- `modules/pom.xml` + `tests/pom.xml` register `batch-module`.
+- `coverage-report/pom.xml` adds batch-module-api/-impl + the 13 test-scenario sub-modules.
+
+**Test matrix (`tests/batch-module/`, 13 scenarios):**
+1. simple-job-completes — smoke test of full fire→observe→populate path
+2. job-with-parameters — `param(k,v)` accumulates; batchlet reads back via `JobOperator.getParameters(executionId)`
+3. custom-timeout (success path)
+4. timeout-exceeded — observer throws with descriptive message
+5. fluent-api — builder accumulates, returns `this`, constructor rejects empty
+6. job-failure — batchlet throws → `BatchStatus.FAILED`, no observer exception
+7. joboperator-not-found — NO batchee on classpath; producer's wrapped `IllegalStateException` surfaces
+8. multiple-sequential-jobs — second fire waits for first
+9. dependent-named-artifact — `@Dependent @Named` batchlet receives CDI `@Inject`
+10. exponential-backoff — fast job converges quickly (timing bound)
+11. backoff-cap-five-seconds — 6 s job; total wall time bounded by job duration + 5 s cap (`@Tag("slow")`)
+12. result-populated-on-event — all four accessors line up after fire
+13. timeout-does-not-cancel — observer timeout throws, batchlet keeps running, later `JobOperator.getJobExecution(...)` confirms COMPLETED (`@Tag("slow")`)
+
+Cross-module scenarios deferred (batch + JPA, batch + `@TestControl(testData)`) — flagged in the ticket for a future master-integration sweep, mirroring the TICKET-012 addendum pattern.
+
+**Test outcome:** all 13 scenarios green under both `-Powb` and `-Pweld`. Full reactor `install -DskipTests` green.
+
+**Ticket alignment:** before opening the GitHub issue I reconciled an internal inconsistency in `tickets/013-batch-module.md` — Performance + Acceptance Criteria referenced an explicit-`TestContext`-classloader bridge plus a "Revisit note in Use Cases" that did not exist, contradicting the "JobOperator Resolution" section. After user choice (BatchRuntime/TCCL), both passages now describe the TCCL path with no custom bridge.

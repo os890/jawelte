@@ -44,5 +44,6 @@
         <module>testcontrol-module</module>
         <module>jaxrs-module</module>
         <module>wiremock-module</module>
+        <module>batch-module</module>
     </modules>
 </project>
