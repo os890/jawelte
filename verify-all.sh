@@ -98,9 +98,13 @@ run() {
 # from there ensures the test scenarios and the JaCoCo aggregate
 # report get built; a normal `mvn clean install` from the repo
 # root only builds core + modules (the framework code), so the
-# regular developer build stays fast.
-run "clean install full reactor (-DskipTests)" \
-    "$REPO_ROOT/verify-all" -DskipTests clean install
+# regular developer build stays fast. No `-DskipTests` here —
+# no `-P` is active in this phase, so the test scenarios skip
+# their runtime-gated surefire runs by themselves; the explicit
+# CDI / JTA per-profile sweeps in the later phases are where the
+# tests actually execute.
+run "clean install full reactor" \
+    "$REPO_ROOT/verify-all" clean install
 
 if [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------
