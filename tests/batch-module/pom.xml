@@ -47,6 +47,7 @@
         <module>scenario-11-backoff-cap-five-seconds</module>
         <module>scenario-12-result-populated-on-event</module>
         <module>scenario-13-timeout-does-not-cancel</module>
+        <module>scenario-14-alternative-timeout-handler</module>
     </modules>
 
     <dependencies>

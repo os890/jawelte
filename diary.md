@@ -4636,3 +4636,19 @@ Matches the rest of the codebase — every other production module that logs (`j
 No log on timeout — the thrown `IllegalStateException` already carries job name, timeout, and last observed status, so a `WARNING` log there would be redundant noise.
 
 All 13 batch-module scenarios re-verified green under `-Powb`.
+
+## TICKET-013: TimeoutHandler SPI port + two pluggable handlers
+
+Extracted the observer's timeout policy behind a `TimeoutHandler` SPI port (`modules/batch-module/api/src/main/java/.../api/port/TimeoutHandler.java`). The observer no longer hardcodes the throw — it delegates to whichever handler the `ServicePriorityResolver` picks.
+
+**Default impl (pre-registered):** `ThrowingTimeoutHandler` (`@Priority(Integer.MAX_VALUE)`) — raises `IllegalStateException` naming the job, timeout, and last observed status. Behaviour identical to the previous inline throw. Listed in `batch-module/impl`'s `META-INF/services/org.os890.jawelte.module.batch.api.port.TimeoutHandler`.
+
+**Opt-in impl (ships in the same impl jar, NOT pre-registered):** `PopulateLatestSnapshotTimeoutHandler` (`@Priority(Integer.MAX_VALUE - 100)`) — logs a `WARNING` and calls `BatchExecution.complete(executionId, latestSnapshot)` with the non-terminal snapshot so `fire(...)` returns normally and test code inspects `getStatus()` to see whatever intermediate status the job was in. Consumers activate by shipping their own `META-INF/services` file that names this class's FQCN; the lower numeric `@Priority` ensures it wins the resolver sort whenever it appears.
+
+**Observer changes** (`BatchExecutionObserver`): resolves the handler once per JVM via `private static final TimeoutHandler TIMEOUT_HANDLER = TestContext.loadService(TimeoutHandler.class)`, replaces the inline `throw new IllegalStateException(...)` with `TIMEOUT_HANDLER.onTimeout(event, executionId, snapshot); return;`. Dropped the now-redundant `lastStatus` local — the handler receives the full snapshot. Class-level javadoc updated to describe the SPI delegation.
+
+**Event-class change** (`BatchExecution`): relaxed `complete(long, JobExecution)`'s javadoc contract to allow a non-terminal `JobExecution` (the new "I'm done waiting" path through the opt-in handler), keeping the documented "internal-only — observer + handler use" warning.
+
+**New scenario 14** (`tests/batch-module/scenario-14-alternative-timeout-handler/`): ships a `META-INF/services` file that names `PopulateLatestSnapshotTimeoutHandler`, fires a 3-second batchlet with a 500 ms timeout, asserts `fire(...)` does NOT throw, asserts the event is populated with a non-terminal `BatchStatus` (`STARTING`/`STARTED`/`STOPPING`), and confirms the executionId matches the snapshot's id. Coverage-report registration added.
+
+All 14 scenarios green under both `-Powb` and `-Pweld`.

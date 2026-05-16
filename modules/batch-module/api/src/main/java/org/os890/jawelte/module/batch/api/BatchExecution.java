@@ -220,15 +220,21 @@ public class BatchExecution {
     }
 
     /**
-     * <b>Internal — for the {@code batch-module/impl} observer only.</b>
-     * Populates the result fields once the polling loop has seen a
-     * terminal {@link BatchStatus}. Calling this from test code is
-     * unsupported and breaks the invariant that
+     * <b>Internal — for the {@code batch-module/impl} observer and
+     * its configured {@code TimeoutHandler} SPI only.</b>
+     * Populates the result fields when the run finishes from the
+     * observer's perspective. The {@link JobExecution} typically
+     * carries a terminal {@link BatchStatus}
+     * ({@code COMPLETED}/{@code FAILED}/{@code STOPPED}/{@code ABANDONED})
+     * — but a non-terminal snapshot is also valid when a
+     * {@code TimeoutHandler} chose to populate the event with the
+     * latest observed state instead of throwing. Calling this from
+     * test code is unsupported and breaks the invariant that
      * {@link #getExecutionId()} corresponds to a real
      * {@code JobOperator}-assigned id.
      *
      * @param newExecutionId the {@code JobOperator}-assigned id
-     * @param newJobExecution the final {@link JobExecution}
+     * @param newJobExecution the {@link JobExecution} snapshot
      */
     public void complete(long newExecutionId, JobExecution newJobExecution) {
         Objects.requireNonNull(newJobExecution, "jobExecution");

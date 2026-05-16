@@ -25,7 +25,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.batch.api.BatchExecution;
+import org.os890.jawelte.module.batch.api.port.TimeoutHandler;
 
 /**
  * Synchronous CDI observer for {@link BatchExecution}. Drives every
@@ -49,15 +51,15 @@ import org.os890.jawelte.module.batch.api.BatchExecution;
  *
  * <p><b>Timeout behavior.</b> When the cumulative wall-clock time
  * since the first {@code JobOperator.start(...)} exceeds
- * {@link BatchExecution#getTimeout()}, the observer throws
- * {@link IllegalStateException} naming the job, the timeout, and
- * the last observed status. The job itself is <b>not</b>
- * cancelled — it keeps running on the jBatch thread pool. Test
- * authors who need deterministic cleanup must catch the exception
- * and call {@code JobOperator.stop(executionId)} themselves; the
- * executionId is recoverable from the {@link JobOperator} (the
- * event's own {@link BatchExecution#getExecutionId()} accessor
- * throws when the event never reached completed state).
+ * {@link BatchExecution#getTimeout()}, the observer delegates to
+ * the configured {@link TimeoutHandler} SPI (resolved once per JVM
+ * via {@code TestContext.loadService(TimeoutHandler.class)}). The
+ * default handler throws {@link IllegalStateException} naming the
+ * job, the timeout, and the last observed status; consumers swap
+ * the behaviour by registering an alternative {@code TimeoutHandler}
+ * with a lower numeric {@code @Priority}. Either way, the job
+ * itself is <b>not</b> cancelled — it keeps running on the jBatch
+ * thread pool.
  *
  * <p><b>Threading.</b> The observer runs on the test thread that
  * called {@code fire(...)}. The jBatch runtime runs the actual
@@ -71,6 +73,9 @@ public class BatchExecutionObserver {
 
     private static final Logger LOG =
             System.getLogger(BatchExecutionObserver.class.getName());
+
+    private static final TimeoutHandler TIMEOUT_HANDLER =
+            TestContext.loadService(TimeoutHandler.class);
 
     @Inject
     private JobOperator jobOperator;
@@ -94,12 +99,10 @@ public class BatchExecutionObserver {
         long pollMs = event.getInitialPollMs();
         long timeoutMs = event.getTimeout().toMillis();
         long startMs = System.currentTimeMillis();
-        BatchStatus lastStatus = null;
 
         while (true) {
             JobExecution snapshot = jobOperator.getJobExecution(executionId);
             BatchStatus status = snapshot.getBatchStatus();
-            lastStatus = status;
             if (isTerminal(status)) {
                 event.complete(executionId, snapshot);
                 LOG.log(Level.INFO,
@@ -110,10 +113,8 @@ public class BatchExecutionObserver {
 
             long elapsed = System.currentTimeMillis() - startMs;
             if (elapsed >= timeoutMs) {
-                throw new IllegalStateException(
-                        "Batch job '" + event.getJobName()
-                                + "' did not complete within " + event.getTimeout()
-                                + ". Last status: " + lastStatus);
+                TIMEOUT_HANDLER.onTimeout(event, executionId, snapshot);
+                return;
             }
 
             try {

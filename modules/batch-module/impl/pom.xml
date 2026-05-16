@@ -31,7 +31,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (batch-module/impl)</name>
-    <description>Implementation of batch-module: BatchExecutionObserver (synchronous CDI observer of BatchExecution that drives the polling loop with exponential backoff and populates the event with the final JobExecution); JobOperatorProducer (the api↔library bridge — @Produces @ApplicationScoped JobOperator resolved via BatchRuntime.getJobOperator()). Pure CDI side-car: no TestModuleLifecyclePort, no CDI extension, no ServiceLoader registrations. The CDI runtime discovers both beans via META-INF/beans.xml with bean-discovery-mode=annotated.</description>
+    <description>Implementation of batch-module: BatchExecutionObserver (synchronous CDI observer of BatchExecution that drives the polling loop with exponential backoff and delegates to the configured TimeoutHandler SPI when the timeout fires); JobOperatorProducer (the api↔library bridge — @Produces @ApplicationScoped JobOperator resolved via BatchRuntime.getJobOperator()). Ships two TimeoutHandler SPI providers: the default ThrowingTimeoutHandler (@Priority Integer.MAX_VALUE, pre-registered in META-INF/services) that raises IllegalStateException on timeout, and the opt-in PopulateLatestSnapshotTimeoutHandler (@Priority Integer.MAX_VALUE - 100, not pre-registered) that populates the event with the latest snapshot and returns normally. No TestModuleLifecyclePort, no CDI extension. The CDI runtime discovers the producer and observer via META-INF/beans.xml with bean-discovery-mode=annotated; the TimeoutHandler providers are picked up via TestContext.loadService.</description>
 
     <dependencies>
         <!--
