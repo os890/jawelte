@@ -5064,3 +5064,18 @@ Added:
 - `verify-all.sh`: third mode `lnp` sweeps `tests/lnp-module` with `-Powb,lnp` and `-Pweld,lnp`. Skips coverage aggregation (perf runs are not coverage runs).
 
 Cross-cutting: RAT clean, Checkstyle clean (Indentation + ImportOrder + UnusedImports + LeftCurly + VisibilityModifier all pass after a post-port cleanup pass). Tests not yet run; commit is `UNTESTED` until the first `bash verify-all.sh lnp` pass goes green.
+
+## 2026-05-17 — TICKET-030 verify-all.sh lnp green
+
+First full `bash verify-all.sh lnp` pass came back green. Three phases, 12m 24s wall time.
+
+Numbers from the two summary tables (one per runtime, 50 scenario classes each, 21 `@Test` methods per class, ~1000-row dataset re-populated per test method):
+
+- **OWB**: first scenario (cold JIT + EMF bootstrap) 2786 ms total / 71 ms median; steady-state 700-820 ms total / 27-32 ms median. Heap-delta swings from -296 MB to +161 MB across classes (GC timing variance, not a real leak).
+- **Weld**: first scenario 2984 ms / 79 ms median; steady-state 700-840 ms / 28-34 ms median. Heap-delta much tighter: most classes within ±5 MB, occasional -100 MB GC.
+
+OWB and Weld are within ~5 % of each other on per-method median. Heap behaviour is the bigger difference: Weld releases more aggressively between classes; OWB accumulates and then GCs in larger steps.
+
+Phase 1 (full reactor `clean install`) runs every non-LNP scenario's tests by inheritance — that's where most of the 12 min went. Possible future optimisation: pass `-DskipTests` in Phase 1 when in `lnp` mode, since the LNP sweep doesn't need the other modules' tests to be green to start.
+
+Commit prefix flipped from `UNTESTED` to `WORKING`.
