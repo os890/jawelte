@@ -53,10 +53,11 @@ import jakarta.batch.runtime.JobExecution;
  *
  * <p>This class is intentionally a concrete mutable value carrier:
  * the test thread instantiates it, the impl-side observer mutates
- * the result fields during dispatch, and the test thread reads the
- * result back off the same instance. No builder type, no immutable
- * snapshot — the single-threaded fire→observe→read sequence keeps
- * the lifecycle obvious.
+ * the result fields during dispatch (via the internal
+ * {@link #markCompleted(long, JobExecution)} hook), and the test
+ * thread reads the result back off the same instance. No builder
+ * type, no immutable snapshot — the single-threaded
+ * fire→observe→read sequence keeps the lifecycle obvious.
  */
 public class BatchExecution {
 
@@ -222,9 +223,9 @@ public class BatchExecution {
     /**
      * <b>Internal — for the {@code batch-module/impl} observer and
      * its configured {@code TimeoutHandler} SPI only.</b>
-     * Populates the result fields when the run finishes from the
-     * observer's perspective. The {@link JobExecution} typically
-     * carries a terminal {@link BatchStatus}
+     * Marks the run as completed from the observer's perspective and
+     * populates the result fields. The {@link JobExecution}
+     * typically carries a terminal {@link BatchStatus}
      * ({@code COMPLETED}/{@code FAILED}/{@code STOPPED}/{@code ABANDONED})
      * — but a non-terminal snapshot is also valid when a
      * {@code TimeoutHandler} chose to populate the event with the
@@ -236,7 +237,7 @@ public class BatchExecution {
      * @param newExecutionId the {@code JobOperator}-assigned id
      * @param newJobExecution the {@link JobExecution} snapshot
      */
-    public void complete(long newExecutionId, JobExecution newJobExecution) {
+    public void markCompleted(long newExecutionId, JobExecution newJobExecution) {
         Objects.requireNonNull(newJobExecution, "jobExecution");
         this.executionId = newExecutionId;
         this.jobExecution = newJobExecution;

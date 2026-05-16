@@ -68,7 +68,7 @@ public interface TimeoutHandler {
      *   <li>throw a {@link RuntimeException} — propagated to the
      *       test thread out of {@code Event.fire(...)}, or
      *   <li>populate the event by calling
-     *       {@link BatchExecution#complete(long, JobExecution)}
+     *       {@link BatchExecution#markCompleted(long, JobExecution)}
      *       and return normally — the test thread sees a populated
      *       event with the latest (non-terminal)
      *       {@link JobExecution} and decides what to do.

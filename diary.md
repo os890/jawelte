@@ -4652,3 +4652,11 @@ Extracted the observer's timeout policy behind a `TimeoutHandler` SPI port (`mod
 **New scenario 14** (`tests/batch-module/scenario-14-alternative-timeout-handler/`): ships a `META-INF/services` file that names `PopulateLatestSnapshotTimeoutHandler`, fires a 3-second batchlet with a 500 ms timeout, asserts `fire(...)` does NOT throw, asserts the event is populated with a non-terminal `BatchStatus` (`STARTING`/`STARTED`/`STOPPING`), and confirms the executionId matches the snapshot's id. Coverage-report registration added.
 
 All 14 scenarios green under both `-Powb` and `-Pweld`.
+
+## TICKET-013: rename `BatchExecution.complete()` to `markCompleted()`
+
+Renamed the event-class result-mutator method for clarity. `complete` shared its name with `CompletableFuture.complete(value)` and read as generic state-setting; `markCompleted` reads as "transition this event to the completed state and publish results" and pairs naturally with the existing private `completed` invariant flag that `getExecutionId()` checks.
+
+The method remains internal-only (observer + `TimeoutHandler` SPI callers); javadoc kept the unchanged-from-test-code warning. Updated callers in `BatchExecutionObserver` (terminal-status branch) and `PopulateLatestSnapshotTimeoutHandler` (timeout-handler opt-in path); updated `{@link}` references in `TimeoutHandler`'s javadoc.
+
+All 14 batch-module scenarios green under both `-Powb` and `-Pweld`.

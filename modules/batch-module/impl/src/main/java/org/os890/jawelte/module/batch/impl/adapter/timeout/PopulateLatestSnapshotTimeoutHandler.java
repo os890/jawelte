@@ -31,8 +31,8 @@ import org.os890.jawelte.module.batch.api.port.TimeoutHandler;
  *
  * <p>Logs a {@code WARNING} naming the job, the executionId, and
  * the last observed {@code BatchStatus}, then calls
- * {@link BatchExecution#complete(long, JobExecution)} with the
- * non-terminal snapshot. Test code sees a populated event after
+ * {@link BatchExecution#markCompleted(long, JobExecution)} with
+ * the non-terminal snapshot. Test code sees a populated event after
  * {@code Event.fire(...)} returns and inspects
  * {@link BatchExecution#getStatus()} to react to whatever
  * intermediate status the job was in
@@ -72,6 +72,6 @@ public class PopulateLatestSnapshotTimeoutHandler implements TimeoutHandler {
                         + "' (executionId=" + executionId
                         + ", lastStatus=" + latestSnapshot.getBatchStatus()
                         + "); populating event with latest snapshot without throwing");
-        event.complete(executionId, latestSnapshot);
+        event.markCompleted(executionId, latestSnapshot);
     }
 }

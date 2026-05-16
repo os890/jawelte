@@ -104,7 +104,7 @@ public class BatchExecutionObserver {
             JobExecution snapshot = jobOperator.getJobExecution(executionId);
             BatchStatus status = snapshot.getBatchStatus();
             if (isTerminal(status)) {
-                event.complete(executionId, snapshot);
+                event.markCompleted(executionId, snapshot);
                 LOG.log(Level.INFO,
                         "Batch job '" + event.getJobName() + "' finished: " + status
                                 + " (exit=" + snapshot.getExitStatus() + ")");
