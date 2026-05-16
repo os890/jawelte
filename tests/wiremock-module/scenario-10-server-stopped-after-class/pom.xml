@@ -26,5 +26,5 @@
     </parent>
     <artifactId>jawelte-tests-wiremock-module-scenario-10-server-stopped-after-class</artifactId>
     <packaging>jar</packaging>
-    <name>jawelte tests/wiremock-module scenario 10: WireMockServer.stop() is invoked in afterAll for every registered server (verified via the WireMockServersStopped CDI event the lifecycle adapter fires after all server.stop() calls)</name>
+    <name>jawelte tests/wiremock-module scenario 10: WireMockServer.stop() is invoked in afterAll for every registered server (verified by capturing the injected WireMockServer in a static holder during the test method and asserting isRunning() == false after EngineTestKit returns)</name>
 </project>

@@ -20,36 +20,40 @@ import static org.junit.platform.engine.discovery.DiscoverySelectors.selectClass
 
 import org.junit.jupiter.api.Test;
 import org.junit.platform.testkit.engine.EngineTestKit;
-import org.os890.jawelte.module.wiremock.api.event.WireMockServersStopped;
+
+import com.github.tomakehurst.wiremock.WireMockServer;
 
 /**
  * Scenario 10 — verifies the lifecycle adapter stops every
- * registered {@code WireMockServer} in {@code afterAll}. Uses
- * the {@link WireMockServersStopped} CDI event the adapter
- * fires after the last {@code server.stop()} call as a
- * deterministic signal — avoids the TCP-probe timing race
- * (server stop returns before the OS releases the listening
- * socket on some kernels).
+ * registered {@code WireMockServer} in {@code afterAll}. The
+ * subject captures its injected server into
+ * {@link Scenario10ServerHolder#SERVER} during the test method;
+ * after {@code EngineTestKit} returns the test asserts the
+ * captured reference's {@link WireMockServer#isRunning()} is
+ * {@code false}.
  *
- * <p>{@link Scenario10Subject} boots a default
- * {@code WireMockServer}; {@link Scenario10StopRecorder} (an
- * {@code @ApplicationScoped} bean) observes the event and
- * bumps a static counter. After the engine returns, the
- * counter must be {@code 1} — exactly one stop-event was
- * published.
+ * <p>WireMock 3.x's {@code stop()} is synchronous — once it
+ * returns, the underlying Jetty lifecycle is finished and
+ * {@code isRunning()} flips to {@code false}. No timing race
+ * (the previous TCP-probe approach was deferred for exactly that
+ * reason).
  */
 class Scenario10Test {
 
     @Test
-    void wireMockServersStoppedEventIsFiredInAfterAll() {
-        Scenario10StopRecorder.FIRED_COUNT.set(0);
+    void serverIsStoppedAfterTestClass() {
+        Scenario10ServerHolder.SERVER.set(null);
 
         EngineTestKit.engine("junit-jupiter")
                 .selectors(selectClass(Scenario10Subject.class))
                 .execute();
 
-        assertThat(Scenario10StopRecorder.FIRED_COUNT.get())
-                .as("WireMockServersStopped fired exactly once after the subject's afterAll")
-                .isEqualTo(1);
+        WireMockServer captured = Scenario10ServerHolder.SERVER.get();
+        assertThat(captured)
+                .as("the subject's test method captured a WireMockServer reference")
+                .isNotNull();
+        assertThat(captured.isRunning())
+                .as("after the subject's afterAll, the lifecycle adapter has stopped the server")
+                .isFalse();
     }
 }

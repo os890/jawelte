@@ -23,11 +23,13 @@ import org.os890.jawelte.module.wiremock.api.EnableWireMock;
 import com.github.tomakehurst.wiremock.WireMockServer;
 
 /**
- * Subject for scenario 10. {@link Scenario10Test} runs it via
- * {@code EngineTestKit}; after the engine returns,
- * {@link Scenario10StopRecorder#FIRED_COUNT} should be exactly
- * {@code 1} — the lifecycle adapter fired
- * {@code WireMockServersStopped} once in its {@code afterAll}.
+ * Subject for scenario 10. Captures the injected
+ * {@link WireMockServer} reference into
+ * {@link Scenario10ServerHolder#SERVER} during the test method.
+ * After {@link Scenario10Test}'s {@code EngineTestKit} call
+ * returns, the lifecycle adapter's {@code afterAll} has run and
+ * stopped the server; the held reference's
+ * {@link WireMockServer#isRunning()} must report {@code false}.
  */
 @EnableWireMock
 class Scenario10Subject {
@@ -36,12 +38,11 @@ class Scenario10Subject {
     private WireMockServer server;
 
     @Test
-    void serverIsRunningDuringTest() {
-        // No-op probe — the subject needs at least one running
-        // test method so JUnit reaches the @AfterAll path that
-        // drives wiremock-module's afterAll.
-        if (server.port() <= 0) {
-            throw new IllegalStateException("WireMockServer not running");
+    void captureServerReference() {
+        Scenario10ServerHolder.SERVER.set(server);
+        if (!server.isRunning()) {
+            throw new IllegalStateException(
+                    "WireMockServer not running during the test method");
         }
     }
 }

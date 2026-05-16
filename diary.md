@@ -4475,3 +4475,11 @@ scenario 19 renamed `scenario-19-annotationscoperemap-sl-wired` → `scenario-19
 `WireMockCdiExtension.onBeforeBeanDiscovery` now narrows its field scan to the three injectable WireMock types — `WireMockServer`, `WireMock`, `WireMockRuntimeInfo` — before walking annotations. Fields of any other type are skipped, so a `@PaymentApi`-qualified `Database` field (or any other coincidental qualifier landing on a non-wiremock field) no longer triggers endpoint discovery. The recursive meta-annotation walk (scenario 06's `@PaymentService → @PaymentApi → @WireMockEndpoint`) stays.
 
 `./mvnw test -f tests/wiremock-module/pom.xml` green; all 25 scenarios pass with the tighter filter.
+
+## 2026-05-16 — Drop WireMockServersStopped event + lifecycle-decoupled stop list
+
+`WireMockServersStopped` (the CDI event in `wiremock-module/api/event/`) is gone. The event was created only to give scenario 10 a deterministic signal that `afterAll` ran; the test now captures the injected `WireMockServer` reference into a scenario-local static holder and asserts `isRunning() == false` after `EngineTestKit.execute()` returns. `WireMockServer.stop()` is synchronous in WireMock 3.x — once it returns, `isRunning()` flips to `false` — so the captured-reference assertion is just as deterministic as the event, with one fewer public-api contract to maintain.
+
+A real lifecycle bug surfaced once the test stopped accepting a fired event as proof: scope-module's `afterAll` (priority 100) deactivates `@TestClassScoped` BEFORE wiremock-module's `afterAll` (priority 75) runs in LIFO order. The registry bean's contextual instance was destroyed by that deactivation, so wiremock's afterAll was reading from a freshly-allocated empty registry and never calling `stop()` on any actual server. Fixed by binding the started-servers list to `TestContext` metadata in `beforeAll` (new `WireMockLifecycleAdapter.StartedWireMockServers` record) and reading from there in `afterAll` — `TestContext` outlives every `TestModuleLifecyclePort.afterAll`, decoupling the stop loop from the per-test-class CDI scope lifecycle.
+
+`./mvnw test -f tests/wiremock-module/pom.xml` green; all 25 scenarios pass — scenario 10 now genuinely verifies the server stopped.

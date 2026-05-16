@@ -31,7 +31,6 @@ import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.wiremock.api.EnableWireMock;
 import org.os890.jawelte.module.wiremock.api.WireMockEndpoint;
-import org.os890.jawelte.module.wiremock.api.event.WireMockServersStopped;
 import org.os890.jawelte.module.wiremock.impl.WireMockServerRegistry;
 import org.os890.jawelte.module.wiremock.impl.adapter.extension.WireMockCdiExtension;
 
@@ -117,6 +116,8 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
             stopBestEffort(started, startFailure);
             throw startFailure;
         }
+        testContext.bindMetadata(StartedWireMockServers.class,
+                new StartedWireMockServers(List.copyOf(started)));
     }
 
     @Override
@@ -137,10 +138,12 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
         if (testClass.getAnnotation(EnableWireMock.class) == null) {
             return;
         }
-        WireMockServerRegistry registry = CDI.current().select(WireMockServerRegistry.class).get();
+        List<WireMockServer> servers = testContext.getMetadata(StartedWireMockServers.class)
+                .map(StartedWireMockServers::servers)
+                .orElseGet(List::of);
         RuntimeException aggregate = null;
         try {
-            for (WireMockServer server : registry.allServers()) {
+            for (WireMockServer server : servers) {
                 try {
                     server.stop();
                 } catch (RuntimeException stopFailure) {
@@ -151,12 +154,8 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
                     }
                 }
             }
-            CDI.current().getBeanManager()
-                    .getEvent()
-                    .select(WireMockServersStopped.class)
-                    .fire(new WireMockServersStopped());
         } finally {
-            registry.clear();
+            testContext.unbindMetadata(StartedWireMockServers.class);
         }
         if (aggregate != null) {
             throw aggregate;
@@ -182,6 +181,33 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
             } catch (RuntimeException stopFailure) {
                 originalFailure.addSuppressed(stopFailure);
             }
+        }
+    }
+
+    /**
+     * Per-test-class metadata bound on {@code TestContext} during
+     * {@code beforeAll} and read back during {@code afterAll}.
+     * Carries the list of {@link WireMockServer} instances this
+     * adapter started so the {@code stop()} loop is decoupled
+     * from the per-test-class {@code WireMockServerRegistry}
+     * bean's lifecycle — scope-module's {@code afterAll}
+     * (priority 100) deactivates {@code @TestClassScoped} BEFORE
+     * wiremock-module's {@code afterAll} (priority 75) runs in
+     * LIFO order, so by that point the registry's contextual
+     * instance has been destroyed and a fresh read would see no
+     * servers. The metadata list lives on {@code TestContext}
+     * which outlives every {@code TestModuleLifecyclePort.afterAll}
+     * — same survival window as the captured-reference assertion
+     * in scenario 10.
+     *
+     * @param servers the started servers; defensively copied to
+     *                immutable form on construction
+     */
+    public record StartedWireMockServers(List<WireMockServer> servers) {
+
+        /** Defensive-copy compact constructor. */
+        public StartedWireMockServers {
+            servers = List.copyOf(servers);
         }
     }
 }
