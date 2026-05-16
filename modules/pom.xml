@@ -45,5 +45,6 @@
         <module>jaxrs-module</module>
         <module>wiremock-module</module>
         <module>batch-module</module>
+        <module>spring-data-module</module>
     </modules>
 </project>

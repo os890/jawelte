@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-modules</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-spring-data-module</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (spring-data-module)</name>
+    <description>Single-jar CDI side-car that auto-discovers Spring Data repository interfaces from the test classpath during CDI bootstrap and registers real Spring Data implementations as @ApplicationScoped CDI beans, dispatching to jpa-module's transaction-scoped EntityManager. No api/impl split, no TestModuleLifecyclePort adapter, no SPI ports: discovery is implicit (ship the jar, the extension does the rest). The only place org.springframework.data.* types appear; the CDI runtime discovers the extension via META-INF/services/jakarta.enterprise.inject.spi.Extension.</description>
+
+    <dependencies>
+        <!--
+            core-api: javadoc references only. No runtime dependency
+            on TestModuleLifecyclePort or TestContext — this module
+            doesn't implement the SPI.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            jpa-module/api supplies references in javadoc only
+            (PersistenceConfig, the transaction-scoped EntityManager
+            proxy this module dispatches to). No runtime classes
+            from jpa-module/api are exercised here; the
+            EntityManager bean is resolved via CDI lookup at
+            produceWith time.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.enterprise.cdi-api: Extension SPI
+            (ProcessInjectionPoint, AfterBeanDiscovery), bean
+            registration helpers, @ApplicationScoped. provided
+            (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.persistence-api: EntityManager type referenced
+            by the produceWith callback that builds the Spring Data
+            repository. provided (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.annotation-api: reserved for future @Priority
+            declarations on the extension. provided (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+
+        <!--
+            Spring Data JPA: provides JpaRepositoryFactory plus the
+            Repository / JpaRepository / @NoRepositoryBean types
+            referenced by the extension. provided — consumers bring
+            their own Spring Data jar at test time. The version is
+            pinned in the root pom dependencyManagement.
+        -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-jpa</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

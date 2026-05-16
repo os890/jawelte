@@ -4699,3 +4699,35 @@ Added a "Why the custom BatchEnvironment / ArtifactFactory?" section to `Scenari
 **GitHub issue #26 body** — added "TICKET-013 Addendum — `TimeoutHandler` SPI port + cross-runtime verification" section after the Acceptance Criteria. Covers: the new SPI port + two impls + activation contract, the `java.lang.System.Logger` lines at INFO on start/finish/resolve, the `markCompleted` naming choice, and the two extra test scenarios (14 alternative-handler-activation, 15 JBeret cross-runtime compatibility with the Weld-only simplification note).
 
 Local `tickets/013-batch-module.md` mirrors the issue body (still gitignored; only the GitHub issue is the canonical record).
+
+## 2026-05-16 TICKET-014 first-draft scaffold + scenarios 01/02
+
+- Wired root pom (`spring.data.jpa.version=3.4.1`, internal cross-ref, depMgmt
+  entry) and added `spring-data-module` to `modules/` and `tests/` aggregators.
+- Created single-jar `modules/spring-data-module/` (no api/impl split — first
+  side-car module in the project): `SpringDataRepositoryExtension`,
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`, `beans.xml`,
+  `microprofile-config.properties`.
+- Extension observes `ProcessInjectionPoint<T, X>` (not
+  `ProcessAnnotatedType` — the spec rationale: `bean-discovery-mode="annotated"`
+  hides repository interfaces from `ProcessAnnotatedType`), skips
+  `@NoRepositoryBean`-marked interfaces and Spring Data marker types,
+  accumulates existing-bean types via `ProcessBean` for back-off, and registers
+  one synthetic `@ApplicationScoped` bean per discovered interface in
+  `AfterBeanDiscovery` (`@Priority(LIBRARY_BEFORE)` to sort ahead of the
+  auto-mocker observer). The `produceWith` callback resolves
+  `EntityManager` via `CDI.current()` and builds the repository through
+  `JpaRepositoryFactory.getRepository(...)`.
+- Auto-mock conflict resolved at the package-filter layer: shipped
+  `microprofile-config.properties` with
+  `org.os890.jawelte.module.cdi.auto-mock.exclude-packages=org.springframework.data.`.
+  `DefaultExcludedPackageFilter.supertypeMatches` walks user repo interfaces'
+  hierarchies and trips on `JpaRepository` / `CrudRepository` etc. living
+  under `org.springframework.data.*`, so the auto-mocker skips them without
+  any user MP Config opt-in.
+- Test scaffolding under `tests/spring-data-module/`: aggregator pom (OWB
+  default profile, Weld via `-Pweld`) + first two scenarios green on OWB:
+  - scenario-01-repository-injectable — assert injected repo is not a
+    Mockito mock
+  - scenario-02-crud-operations — save / findById / deleteById through a
+    `@Transactional` invoker bean against H2

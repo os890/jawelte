@@ -92,6 +92,7 @@
         <jakarta.batch.version>2.1.1</jakarta.batch.version>
         <batchee.version>2.0.0</batchee.version>
         <jberet.version>3.1.0.Final</jberet.version>
+        <spring.data.jpa.version>3.4.1</spring.data.jpa.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -363,6 +364,13 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-batch-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal spring-data-module cross-reference -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-spring-data-module</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -761,6 +769,20 @@
                 <artifactId>jberet-core</artifactId>
                 <version>${jberet.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!--
+                Spring Data JPA: provided at the spring-data-module
+                level (the module's CDI extension references
+                JpaRepositoryFactory + Repository). Consumers bring
+                their own Spring Data jar at test time — same
+                convention as jakarta.batch-api / WireMock above.
+            -->
+            <dependency>
+                <groupId>org.springframework.data</groupId>
+                <artifactId>spring-data-jpa</artifactId>
+                <version>${spring.data.jpa.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!--
