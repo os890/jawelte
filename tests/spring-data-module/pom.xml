@@ -41,6 +41,13 @@
         <module>scenario-05-query-annotation-native</module>
         <module>scenario-06-mixed-em-and-repository</module>
         <module>scenario-07-service-with-transactional</module>
+        <module>scenario-08-back-off-on-user-produces</module>
+        <module>scenario-09-no-repository-bean-skipped</module>
+        <module>scenario-10-no-repository-bean-on-parent</module>
+        <module>scenario-11-limit-to-test-beans</module>
+        <module>scenario-12-application-scoped-singleton</module>
+        <module>scenario-13-paging-and-sorting</module>
+        <module>scenario-14-multiple-repositories</module>
     </modules>
 
     <dependencies>

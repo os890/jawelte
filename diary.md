@@ -4753,3 +4753,28 @@ Local `tickets/013-batch-module.md` mirrors the issue body (still gitignored; on
     the same bean see the same row inside a single tx
   - scenario-07-service-with-transactional — service bean's
     `@Transactional` boundary commits via the repository
+
+## 2026-05-16 TICKET-014 first-draft complete — scenarios 08–14 green on OWB and Weld
+
+- scenario-08-back-off-on-user-produces — user `@Produces CustomerRepository`
+  returns a no-op JDK proxy that records the invoked method name on a static
+  `AtomicReference`. The test calls `count()` and confirms the user's
+  InvocationHandler ran (proving the extension's back-off declined to register
+  its synthetic).
+- scenario-09-no-repository-bean-skipped — interface annotated
+  `@NoRepositoryBean`; `BeanManager.getBeans(MarkerRepository.class)` returns
+  empty.
+- scenario-10-no-repository-bean-on-parent — parent interface has
+  `@NoRepositoryBean`; the concrete child is registered. No orphan bean
+  whose `getBeanClass()` is the parent.
+- scenario-11-limit-to-test-beans — `@EnableTestBeans(limitToTestBeans=true)`
+  disables the auto-mocker; the extension's synthetic is still registered.
+- scenario-12-application-scoped-singleton — same proxy reference across two
+  injection sites.
+- scenario-13-paging-and-sorting — `findAll(PageRequest.of(0, 2, Sort.by("name").ascending()))`
+  returns the first page sorted by name.
+- scenario-14-multiple-repositories — `CustomerRepository` and
+  `OrderRepository` over two different entities both injected and both
+  functional in a single test.
+
+All 14 scenarios green on `-Powb` and `-Pweld`.
