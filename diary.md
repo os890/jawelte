@@ -4987,3 +4987,26 @@ to be updated — every `tests/*/pom.xml` and
 to root.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — Boot banner via LauncherSessionListener
+
+Added an ASCII boot banner that prints once per JVM, right when the
+JUnit launcher opens its session (before any test class boots).
+
+- `core/impl/.../adapter/extension/BootBanner.java` —
+  `LauncherSessionListener` that writes the banner string to
+  `System.out` in `launcherSessionOpened`. No `AtomicBoolean` guard
+  needed; JUnit instantiates and invokes the listener once per
+  session via ServiceLoader.
+- `core/impl/src/main/resources/META-INF/services/org.junit.platform.launcher.LauncherSessionListener`
+  registers `BootBanner` for auto-discovery.
+- Parent pom: added `junit-platform-launcher` to `dependencyManagement`
+  (provided scope, `${junit.version}`); core/impl declares the
+  dependency without a version.
+- Smoke test: `mvn -f tests/core/scenario-01-.../pom.xml test` —
+  banner prints once between the Surefire "T E S T S" header and
+  the first test class line; test green.
+
+The banner shows `jawelte` in ANSI-shadow block style with the
+subtitle "JUnit 6 · CDI SE · Jakarta EE 11" — set the tone for
+what's booting before the per-module noise starts.

@@ -182,6 +182,18 @@
                 <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
+            <!--
+                junit-platform-launcher is `provided` because the
+                BootBanner LauncherSessionListener compiles against it
+                but consumers' Surefire/IDE runtime already brings the
+                launcher onto the classpath.
+            -->
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-launcher</artifactId>
+                <version>${junit.version}</version>
+                <scope>provided</scope>
+            </dependency>
 
             <!--
                 MicroProfile Config: API on the production side is
