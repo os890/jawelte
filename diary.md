@@ -4683,3 +4683,7 @@ Registered via `META-INF/services/org.jberet.spi.BatchEnvironment`.
 **The test class** verifies (a) `BatchRuntime.getJobOperator().getClass().getName()` starts with `org.jberet.` (proving JBeret's `DelegatingJobOperator` is what `BatchRuntime` returned on this scenario's classpath — the CDI-proxied `@Inject JobOperator` shows the proxy class instead, hence the direct static call), (b) the job reaches `BatchStatus.COMPLETED` through the same `BatchExecutionObserver`, (c) the event is populated with a non-null `JobExecution`, (d) the cached executionId matches the snapshot's id.
 
 All 15 batch-module scenarios green under both `-Powb` and `-Pweld`.
+
+## TICKET-013: scenario 15 javadoc — note that the custom env scaffolding is only OWB-driven
+
+Added a "Why the custom BatchEnvironment / ArtifactFactory?" section to `Scenario15Test`'s class-level javadoc explaining that the three test-source replacement classes (`TestBatchEnvironment`, `TestArtifactFactory`, `NoOpTransactionManager`) only exist because the scenario must run under both `-Powb` and `-Pweld`. A Weld-only consumer can drop all of that and simply depend on `org.jberet:jberet-se` — JBeret's own SE environment picks everything up for free. The scaffolding is the cost of OpenWebBeans co-residency in the same scenario.

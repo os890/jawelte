@@ -45,6 +45,28 @@ import org.os890.jawelte.module.batch.api.BatchExecution;
  * confirms it lives in the {@code org.jberet.*} package: proof
  * that we really did pick the JBeret implementation off this
  * scenario's classpath.
+ *
+ * <h2>Why the custom {@code BatchEnvironment} / {@code ArtifactFactory}?</h2>
+ *
+ * <p>The {@code TestBatchEnvironment}, {@code TestArtifactFactory},
+ * and {@code NoOpTransactionManager} in this package only exist
+ * because this scenario has to run under <strong>both</strong>
+ * {@code -Powb} and {@code -Pweld}. JBeret's stock SE bootstrap
+ * ({@code org.jberet.se.BatchSEEnvironment} +
+ * {@code org.jberet.se.SEArtifactFactory}) hard-references
+ * {@code org.jboss.weld.environment.se.WeldContainer} at class
+ * init; pulling it in transitively pollutes the OWB run with
+ * Weld classes and fights the active CDI runtime.
+ *
+ * <p><b>A Weld-only project would be considerably simpler.</b>
+ * Drop the three test-source replacement classes and the
+ * {@code META-INF/services/org.jberet.spi.BatchEnvironment}
+ * registration, depend on {@code org.jberet:jberet-se} (no
+ * exclusions needed beyond optional repository backends), and
+ * JBeret's own SE environment picks everything up for free —
+ * no custom factory, no no-op TM, no manual JBeret SPI
+ * registration. The scaffolding here is the cost of supporting
+ * OpenWebBeans alongside Weld in the same scenario.
  */
 @EnableTestBeans
 class Scenario15Test {
