@@ -38,7 +38,14 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MVN="$REPO_ROOT/mvnw"
-MVN_ARGS=(-B -ntp)
+# -T 1 forces single-threaded reactor builds even if a future
+# .mvn/maven.config or environment override turns on parallel
+# builds — verify-all is the canonical correctness gate and must
+# stay deterministic. Combined with the absence of any `parallel` /
+# `forkCount > 1` / `threadCount` surefire configuration in the
+# poms, every phase is fully sequential: one module at a time,
+# one test class at a time, one test method at a time.
+MVN_ARGS=(-B -ntp -T 1)
 
 WIP_MODE=false
 case "${1:-}" in
@@ -118,14 +125,16 @@ else
     run "tests/core" "$REPO_ROOT/tests/core" verify
 
     # tests/cdi-module, tests/scope-module, tests/jpa-module,
-    # tests/ejb-module, tests/testcontrol-module: CDI-runtime sweep
-    # only (owb default + weld).
+    # tests/ejb-module, tests/testcontrol-module,
+    # tests/spring-data-module: CDI-runtime sweep only (owb default
+    # + weld).
     for cdi in owb weld; do
         run "tests/cdi-module [$cdi]"         "$REPO_ROOT/tests/cdi-module"         -P "$cdi" verify
         run "tests/scope-module [$cdi]"       "$REPO_ROOT/tests/scope-module"       -P "$cdi" verify
         run "tests/jpa-module [$cdi]"         "$REPO_ROOT/tests/jpa-module"         -P "$cdi" verify
         run "tests/ejb-module [$cdi]"         "$REPO_ROOT/tests/ejb-module"         -P "$cdi" verify
         run "tests/testcontrol-module [$cdi]" "$REPO_ROOT/tests/testcontrol-module" -P "$cdi" verify
+        run "tests/spring-data-module [$cdi]" "$REPO_ROOT/tests/spring-data-module" -P "$cdi" verify
     done
 
     # tests/content-diff-module: utility library — does not bootstrap a

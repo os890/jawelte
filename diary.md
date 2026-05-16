@@ -4899,3 +4899,31 @@ full verify-all matrix (every test/* module under owb + weld).
 silently break ServiceLoader-driven discovery in later phases.
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — verify-all.sh: spring-data sweep + explicit single-thread
+
+Two follow-ups before the TICKET-014 PR opens:
+
+- `tests/spring-data-module` added to `verify-all.sh`'s full-matrix
+  CDI sweep loop, so its 14 scenarios run under both `-P owb` and
+  `-P weld` alongside cdi-module / scope-module / jpa-module /
+  ejb-module / testcontrol-module. Before this change the module
+  was only built (via the coverage-report phase's `-am`) and its
+  scenarios never ran from the script; I had been verifying them
+  manually via direct `mvn -f tests/spring-data-module/pom.xml`
+  invocations. Other later modules (`jaxrs-module`,
+  `wiremock-module`, `batch-module`, `db-testdata-module`) have
+  the same gap — pre-existing, not in scope for this ticket;
+  db-testdata-module is already tracked in `todo.md`.
+- `MVN_ARGS` extended with `-T 1` and a comment documenting why
+  (correctness gate must stay deterministic; defends against a
+  future `.mvn/maven.config` or environment override toggling
+  parallel reactor builds). No surefire-level parallelism config
+  exists in any pom, so every phase is fully sequential — one
+  module, one test class, one test method at a time.
+
+Both spring-data phases verified locally with the exact flags
+verify-all uses (`-B -ntp -T 1 -P owb verify` and `-P weld`):
+14 scenarios green on each runtime.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
