@@ -89,6 +89,9 @@
         <cxf.version>4.1.2</cxf.version>
         <resteasy.version>7.0.0.Final</resteasy.version>
         <wiremock.version>3.13.2</wiremock.version>
+        <jakarta.batch.version>2.1.1</jakarta.batch.version>
+        <batchee.version>2.0.0</batchee.version>
+        <jberet.version>3.1.0.Final</jberet.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -348,6 +351,18 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-wiremock-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal batch-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-batch-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-batch-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -696,6 +711,56 @@
                 <groupId>org.wiremock</groupId>
                 <artifactId>wiremock</artifactId>
                 <version>${wiremock.version}</version>
+            </dependency>
+
+            <!--
+                Jakarta Batch spec API: provided on both batch-module
+                submodules. batch-module/api references JobExecution
+                and BatchStatus on the BatchExecution event class's
+                accessors; batch-module/impl additionally references
+                JobOperator and BatchRuntime in the producer / observer.
+                Same convention as jakarta.persistence-api /
+                jakarta.ws.rs-api — consumers bring their own batch
+                runtime at test time.
+            -->
+            <dependency>
+                <groupId>jakarta.batch</groupId>
+                <artifactId>jakarta.batch-api</artifactId>
+                <version>${jakarta.batch.version}</version>
+                <scope>provided</scope>
+            </dependency>
+
+            <!--
+                Apache BatchEE: the default jBatch runtime used by
+                tests/batch-module scenarios. test-scope by default —
+                consumers pick their own runtime in production
+                deployments. BatchExecutionObserver resolves
+                JobOperator via BatchRuntime.getJobOperator(), so any
+                spec-compliant runtime works; BatchEE is just the
+                concrete impl this project's scenarios run against.
+            -->
+            <dependency>
+                <groupId>org.apache.batchee</groupId>
+                <artifactId>batchee-jbatch</artifactId>
+                <version>${batchee.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!--
+                JBeret: the second jBatch runtime exercised by
+                tests/batch-module to confirm BatchExecutionObserver
+                works against any spec-compliant impl, not just
+                BatchEE. test-scope; registers its own
+                DelegatingJobOperator via
+                META-INF/services/jakarta.batch.operations.JobOperator
+                and ships a CDI portable extension that the active
+                runtime (OWB or Weld) picks up automatically.
+            -->
+            <dependency>
+                <groupId>org.jberet</groupId>
+                <artifactId>jberet-core</artifactId>
+                <version>${jberet.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <!--

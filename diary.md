@@ -4585,3 +4585,117 @@ mechanics:
   reflective load (no compile-time scope-module dep).
 
 Pure docs change, no source touched, no test re-run needed.
+
+## TICKET-013: Batch Module — first draft
+
+Created `modules/batch-module/` (aggregator + api/impl) and wired it into the reactor, coverage-report, and dependency-management.
+
+**API surface (one type):**
+- `BatchExecution` (event class, `modules/batch-module/api/.../api/`) — fluent builder for request fields (`jobName`, `param(...)`, `timeout(...)`) plus result accessors (`getExecutionId`, `getJobExecution`, `getStatus`, `getExitStatus`) populated in place by the impl-side observer via the package-public `complete(long, JobExecution)` hook. Default timeout = 60 s, initial poll = 50 ms (not configurable). Constructor rejects null/empty `jobName`. `getExecutionId()` throws `IllegalStateException` before completion.
+
+**Impl (two CDI beans, no extension, no lifecycle adapter, no SPI providers):**
+- `JobOperatorProducer` (`@ApplicationScoped`, `@Produces @ApplicationScoped JobOperator`) — the api↔library bridge. Delegates to `BatchRuntime.getJobOperator()` (TCCL-based ServiceLoader, no custom classloader bridge — JUnit's test thread already has the test classpath as TCCL). Wraps both null-return and runtime-throw into the documented `IllegalStateException("No JobOperator found via ServiceLoader. Add a jBatch implementation to the test classpath.")`.
+- `BatchExecutionObserver` (`@ApplicationScoped`, `@Observes BatchExecution`) — synchronous observer that drives every fired event through `JobOperator.start(...)` then polls `getJobExecution(executionId).getBatchStatus()` with 50→100→200→...→5000 ms exponential backoff (cap 5 s) until terminal status (`COMPLETED`/`FAILED`/`STOPPED`/`ABANDONED`) or timeout. On terminal status: populates the event via `complete(...)`. On timeout: throws `IllegalStateException("Batch job '{name}' did not complete within {timeout}. Last status: {status}")`; job is NOT cancelled.
+- `META-INF/beans.xml` (`bean-discovery-mode="annotated"`) — both beans are regular annotated CDI beans, no extension or synthetic registration.
+
+**Wiring (parent pom):**
+- Properties: `jakarta.batch.version=2.1.1`, `batchee.version=2.0.0`.
+- DepMgmt: `jakarta.batch-api` (provided), `org.apache.batchee:batchee-jbatch` (test), batch-module-api/-impl cross-refs.
+- `modules/pom.xml` + `tests/pom.xml` register `batch-module`.
+- `coverage-report/pom.xml` adds batch-module-api/-impl + the 13 test-scenario sub-modules.
+
+**Test matrix (`tests/batch-module/`, 13 scenarios):**
+1. simple-job-completes — smoke test of full fire→observe→populate path
+2. job-with-parameters — `param(k,v)` accumulates; batchlet reads back via `JobOperator.getParameters(executionId)`
+3. custom-timeout (success path)
+4. timeout-exceeded — observer throws with descriptive message
+5. fluent-api — builder accumulates, returns `this`, constructor rejects empty
+6. job-failure — batchlet throws → `BatchStatus.FAILED`, no observer exception
+7. joboperator-not-found — NO batchee on classpath; producer's wrapped `IllegalStateException` surfaces
+8. multiple-sequential-jobs — second fire waits for first
+9. dependent-named-artifact — `@Dependent @Named` batchlet receives CDI `@Inject`
+10. exponential-backoff — fast job converges quickly (timing bound)
+11. backoff-cap-five-seconds — 6 s job; total wall time bounded by job duration + 5 s cap (`@Tag("slow")`)
+12. result-populated-on-event — all four accessors line up after fire
+13. timeout-does-not-cancel — observer timeout throws, batchlet keeps running, later `JobOperator.getJobExecution(...)` confirms COMPLETED (`@Tag("slow")`)
+
+Cross-module scenarios deferred (batch + JPA, batch + `@TestControl(testData)`) — flagged in the ticket for a future master-integration sweep, mirroring the TICKET-012 addendum pattern.
+
+**Test outcome:** all 13 scenarios green under both `-Powb` and `-Pweld`. Full reactor `install -DskipTests` green.
+
+**Ticket alignment:** before opening the GitHub issue I reconciled an internal inconsistency in `tickets/013-batch-module.md` — Performance + Acceptance Criteria referenced an explicit-`TestContext`-classloader bridge plus a "Revisit note in Use Cases" that did not exist, contradicting the "JobOperator Resolution" section. After user choice (BatchRuntime/TCCL), both passages now describe the TCCL path with no custom bridge.
+
+## TICKET-013: add `java.lang.System.Logger` to observer + producer
+
+Three INFO log lines added to make the blocking-event lifecycle visible without forcing exception inspection:
+- `BatchExecutionObserver` logs job-start (`"Started batch job '<name>' (executionId=<n>)"`) right after `JobOperator.start(...)`, and job-finish (`"Batch job '<name>' finished: <status> (exit=<exit>)"`) right before `complete(...)`.
+- `JobOperatorProducer` logs the resolved `JobOperator` impl class (`"Resolved JobOperator: <fqcn>"`) right before returning it from `produceJobOperator()`.
+
+Matches the rest of the codebase — every other production module that logs (`jta`, `jpa`, `jaxrs`, `ejb`) uses `java.lang.System.Logger`, not SLF4J. The `slf4j-api` provided dep in the parent pom is only there because WireMock and DbUnit pull it transitively. No SLF4J import in any module under `core/` or `modules/`.
+
+No log on timeout — the thrown `IllegalStateException` already carries job name, timeout, and last observed status, so a `WARNING` log there would be redundant noise.
+
+All 13 batch-module scenarios re-verified green under `-Powb`.
+
+## TICKET-013: TimeoutHandler SPI port + two pluggable handlers
+
+Extracted the observer's timeout policy behind a `TimeoutHandler` SPI port (`modules/batch-module/api/src/main/java/.../api/port/TimeoutHandler.java`). The observer no longer hardcodes the throw — it delegates to whichever handler the `ServicePriorityResolver` picks.
+
+**Default impl (pre-registered):** `ThrowingTimeoutHandler` (`@Priority(Integer.MAX_VALUE)`) — raises `IllegalStateException` naming the job, timeout, and last observed status. Behaviour identical to the previous inline throw. Listed in `batch-module/impl`'s `META-INF/services/org.os890.jawelte.module.batch.api.port.TimeoutHandler`.
+
+**Opt-in impl (ships in the same impl jar, NOT pre-registered):** `PopulateLatestSnapshotTimeoutHandler` (`@Priority(Integer.MAX_VALUE - 100)`) — logs a `WARNING` and calls `BatchExecution.complete(executionId, latestSnapshot)` with the non-terminal snapshot so `fire(...)` returns normally and test code inspects `getStatus()` to see whatever intermediate status the job was in. Consumers activate by shipping their own `META-INF/services` file that names this class's FQCN; the lower numeric `@Priority` ensures it wins the resolver sort whenever it appears.
+
+**Observer changes** (`BatchExecutionObserver`): resolves the handler once per JVM via `private static final TimeoutHandler TIMEOUT_HANDLER = TestContext.loadService(TimeoutHandler.class)`, replaces the inline `throw new IllegalStateException(...)` with `TIMEOUT_HANDLER.onTimeout(event, executionId, snapshot); return;`. Dropped the now-redundant `lastStatus` local — the handler receives the full snapshot. Class-level javadoc updated to describe the SPI delegation.
+
+**Event-class change** (`BatchExecution`): relaxed `complete(long, JobExecution)`'s javadoc contract to allow a non-terminal `JobExecution` (the new "I'm done waiting" path through the opt-in handler), keeping the documented "internal-only — observer + handler use" warning.
+
+**New scenario 14** (`tests/batch-module/scenario-14-alternative-timeout-handler/`): ships a `META-INF/services` file that names `PopulateLatestSnapshotTimeoutHandler`, fires a 3-second batchlet with a 500 ms timeout, asserts `fire(...)` does NOT throw, asserts the event is populated with a non-terminal `BatchStatus` (`STARTING`/`STARTED`/`STOPPING`), and confirms the executionId matches the snapshot's id. Coverage-report registration added.
+
+All 14 scenarios green under both `-Powb` and `-Pweld`.
+
+## TICKET-013: rename `BatchExecution.complete()` to `markCompleted()`
+
+Renamed the event-class result-mutator method for clarity. `complete` shared its name with `CompletableFuture.complete(value)` and read as generic state-setting; `markCompleted` reads as "transition this event to the completed state and publish results" and pairs naturally with the existing private `completed` invariant flag that `getExecutionId()` checks.
+
+The method remains internal-only (observer + `TimeoutHandler` SPI callers); javadoc kept the unchanged-from-test-code warning. Updated callers in `BatchExecutionObserver` (terminal-status branch) and `PopulateLatestSnapshotTimeoutHandler` (timeout-handler opt-in path); updated `{@link}` references in `TimeoutHandler`'s javadoc.
+
+All 14 batch-module scenarios green under both `-Powb` and `-Pweld`.
+
+## TICKET-013: cross-runtime compatibility scenario against JBeret
+
+Added `tests/batch-module/scenario-15-jberet-runtime-compatibility/` to verify the observer + producer code paths work against a non-BatchEE jBatch implementation. Scenario ships `org.jberet:jberet-core 3.1.0.Final` instead of `batchee-jbatch`; `BatchRuntime.getJobOperator()` picks up JBeret's `DelegatingJobOperator` via `META-INF/services/jakarta.batch.operations.JobOperator`, JBeret's CDI portable extension wires under the active CDI runtime, and the same JSL job + `@Named @Dependent` batchlet shape used by scenario 01 runs to `BatchStatus.COMPLETED` without any production-code change.
+
+**Why we don't use `jberet-se`:** JBeret's stock SE bootstrap (`org.jberet.se.BatchSEEnvironment` / `SEArtifactFactory`) hard-references `org.jboss.weld.environment.se.WeldContainer` at class init. Including it pulls Weld onto the test classpath transitively, which either fights OpenWebBeans at `SeContainerInitializer` time under `-Powb` or duplicates the active CDI runtime under `-Pweld`. We bypass `jberet-se` entirely.
+
+**The minimum-viable replacement** lives in the scenario's test source as three classes:
+- `TestBatchEnvironment` (`org.jberet.spi.BatchEnvironment` impl) — provides JBeret's `InMemoryRepository` singleton for state, `MetaInfBatchJobsJobXmlResolver` for JSL lookup, a cached daemon thread pool for `submitTask`, an empty configuration `Properties`, and a `NoOpTransactionManager` that satisfies JBeret's `invokeTransaction` chain since this scenario's batchlet never opens a transaction.
+- `TestArtifactFactory` (`org.jberet.spi.ArtifactFactory` impl) — resolves batch artefacts by `@Named` ref via `CDI.current()`, runtime-agnostic between OWB and Weld.
+- `NoOpTransactionManager` — every method is a no-op; `getStatus()` returns `STATUS_NO_TRANSACTION` so JBeret's suspend/resume code path stays in the "no active transaction" branch.
+
+Registered via `META-INF/services/org.jberet.spi.BatchEnvironment`.
+
+**JBeret jar-coupling fixes** (test-scope additions): JBeret's static initialisers reference `jakarta.transaction.InvalidTransactionException` and `org.wildfly.security.manager.WildFlySecurityManager`, neither of which is declared in JBeret's own pom (both are provided by WildFly's platform at JBeret's normal deployment site). The scenario adds both explicitly:
+- `jakarta.transaction:jakarta.transaction-api` (test) — promoted from provided in our parent depMgmt.
+- `org.wildfly.core:wildfly-security-manager:18.1.2.Final` (test).
+
+**Reactor wiring:** `pom.xml` adds `jberet.version=3.1.0.Final` + `org.jberet:jberet-core` in depMgmt (test scope); `tests/batch-module/pom.xml` registers `scenario-15-jberet-runtime-compatibility` in `<modules>`; `coverage-report/pom.xml` indexes the new test module for JaCoCo aggregation.
+
+**The test class** verifies (a) `BatchRuntime.getJobOperator().getClass().getName()` starts with `org.jberet.` (proving JBeret's `DelegatingJobOperator` is what `BatchRuntime` returned on this scenario's classpath — the CDI-proxied `@Inject JobOperator` shows the proxy class instead, hence the direct static call), (b) the job reaches `BatchStatus.COMPLETED` through the same `BatchExecutionObserver`, (c) the event is populated with a non-null `JobExecution`, (d) the cached executionId matches the snapshot's id.
+
+All 15 batch-module scenarios green under both `-Powb` and `-Pweld`.
+
+## TICKET-013: scenario 15 javadoc — note that the custom env scaffolding is only OWB-driven
+
+Added a "Why the custom BatchEnvironment / ArtifactFactory?" section to `Scenario15Test`'s class-level javadoc explaining that the three test-source replacement classes (`TestBatchEnvironment`, `TestArtifactFactory`, `NoOpTransactionManager`) only exist because the scenario must run under both `-Powb` and `-Pweld`. A Weld-only consumer can drop all of that and simply depend on `org.jberet:jberet-se` — JBeret's own SE environment picks everything up for free. The scaffolding is the cost of OpenWebBeans co-residency in the same scenario.
+
+## TICKET-013: architecture.md + GitHub issue refreshed
+
+**architecture.md** — three additions:
+
+1. Integration Layer table: new row for `jawelte-batch-module` (Jakarta Batch / jBatch, CDI event-driven job execution with synchronous polling and pluggable timeout policy).
+2. Adapter-implementations table: new row for the `TimeoutHandler` SPI showing the default `ThrowingTimeoutHandler` (`@Priority Integer.MAX_VALUE`) plus the opt-in `PopulateLatestSnapshotTimeoutHandler` (`@Priority Integer.MAX_VALUE - 100`, ships in the same jar but not pre-registered).
+3. New "batch-module additions (in `batch-module/api`):" paragraph mirroring the jpa/ejb pattern — describes `BatchExecution` (the CDI event class), `TimeoutHandler` (the pluggable SPI), and notes that `batch-module/impl` ships no `TestModuleLifecyclePort` since the module is purely CDI-driven (`@Observes`-based observer + `@Produces JobOperator` bridge discovered through `beans.xml`).
+
+**GitHub issue #26 body** — added "TICKET-013 Addendum — `TimeoutHandler` SPI port + cross-runtime verification" section after the Acceptance Criteria. Covers: the new SPI port + two impls + activation contract, the `java.lang.System.Logger` lines at INFO on start/finish/resolve, the `markCompleted` naming choice, and the two extra test scenarios (14 alternative-handler-activation, 15 JBeret cross-runtime compatibility with the Weld-only simplification note).
+
+Local `tickets/013-batch-module.md` mirrors the issue body (still gitignored; only the GitHub issue is the canonical record).

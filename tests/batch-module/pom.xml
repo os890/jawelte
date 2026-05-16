@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-batch-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/batch-module aggregator and parent)</name>
+    <description>Aggregator AND parent for per-scenario test modules covering jawelte-batch-module. Each scenario boots a CDI SE container (via cdi-module) so batch-module's observer + producer run end-to-end against a real jBatch runtime (Apache BatchEE on the test classpath of every scenario except scenario-07, which deliberately omits the runtime to exercise the "no JobOperator" error path). Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld) for the CDI runtime.</description>
+
+    <modules>
+        <module>scenario-01-simple-job-completes</module>
+        <module>scenario-02-job-with-parameters</module>
+        <module>scenario-03-custom-timeout</module>
+        <module>scenario-04-timeout-exceeded</module>
+        <module>scenario-05-fluent-api</module>
+        <module>scenario-06-job-failure</module>
+        <module>scenario-07-joboperator-not-found</module>
+        <module>scenario-08-multiple-sequential-jobs</module>
+        <module>scenario-09-dependent-named-artifact</module>
+        <module>scenario-10-exponential-backoff</module>
+        <module>scenario-11-backoff-cap-five-seconds</module>
+        <module>scenario-12-result-populated-on-event</module>
+        <module>scenario-13-timeout-does-not-cancel</module>
+        <module>scenario-14-alternative-timeout-handler</module>
+        <module>scenario-15-jberet-runtime-compatibility</module>
+    </modules>
+
+    <dependencies>
+        <!--
+            Same shape as tests/wiremock-module: every scenario brings
+            up a CDI container via cdi-module and exercises batch-module
+            on top of it. scope=test on the impl jars so JaCoCo indexes
+            the production classes for coverage.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-batch-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-batch-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.batch</groupId>
+            <artifactId>jakarta.batch-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-testkit</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <!--
+            CDI SE runtime selection. Mirrors the -Powb / -Pweld
+            split used by every other tests/<module>/pom.xml.
+            No batch-runtime profile — only Apache BatchEE is in use
+            (a single runtime suffices since the impl bridges through
+            the spec API). Each scenario adds batchee-jbatch in its
+            own test scope, except scenario-07 which omits it on
+            purpose.
+        -->
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-se</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.weld.se</groupId>
+                    <artifactId>weld-se-shaded</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>

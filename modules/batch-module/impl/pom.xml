@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-batch-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-batch-module-impl</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (batch-module/impl)</name>
+    <description>Implementation of batch-module: BatchExecutionObserver (synchronous CDI observer of BatchExecution that drives the polling loop with exponential backoff and delegates to the configured TimeoutHandler SPI when the timeout fires); JobOperatorProducer (the api↔library bridge — @Produces @ApplicationScoped JobOperator resolved via BatchRuntime.getJobOperator()). Ships two TimeoutHandler SPI providers: the default ThrowingTimeoutHandler (@Priority Integer.MAX_VALUE, pre-registered in META-INF/services) that raises IllegalStateException on timeout, and the opt-in PopulateLatestSnapshotTimeoutHandler (@Priority Integer.MAX_VALUE - 100, not pre-registered) that populates the event with the latest snapshot and returns normally. No TestModuleLifecyclePort, no CDI extension. The CDI runtime discovers the producer and observer via META-INF/beans.xml with bean-discovery-mode=annotated; the TimeoutHandler providers are picked up via TestContext.loadService.</description>
+
+    <dependencies>
+        <!--
+            batch-module/api supplies BatchExecution — observed by
+            BatchExecutionObserver and mutated in place once the job
+            reaches terminal status.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-batch-module-api</artifactId>
+        </dependency>
+
+        <!--
+            core-api: javadoc references only. No runtime dependency
+            on TestModuleLifecyclePort or TestContext — this module
+            doesn't implement the SPI and doesn't read TestContext at
+            observation time.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.batch-api: JobOperator + BatchRuntime are
+            referenced by the producer; JobExecution + BatchStatus
+            by the observer's terminal-status check. provided
+            scope — the jBatch runtime brings the spec API
+            transitively at test time.
+        -->
+        <dependency>
+            <groupId>jakarta.batch</groupId>
+            <artifactId>jakarta.batch-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.enterprise.cdi-api supplies @Observes,
+            @ApplicationScoped, @Produces, @Dependent annotations
+            used by the observer and producer. provided.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.annotation-api: reserved for future @Priority
+            usage on the observer (e.g. ordering against other
+            BatchExecution observers a consumer might register).
+            provided.
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
