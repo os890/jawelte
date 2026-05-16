@@ -4428,3 +4428,17 @@ Four new scenarios — formerly deferred — landed green:
 - `WireMockCdiExtension` — 88%
 - `WireMockServerRegistry` — 87%
 - `WireMockLifecycleAdapter` — 77% (up from 69% — the partial-start-failure cleanup and multi-server suppressed-exception path remain uncovered; reachable only by intentionally throwing from `server.start()` / `server.stop()` which requires bytecode-level fault injection).
+
+## 2026-05-16 — WireMockRuntimeInfo injectable + EndpointResources caching
+
+`com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo` is now injectable per endpoint alongside `WireMockServer` and `WireMock`:
+- `WireMockProducer` adds a `@Default @Produces WireMockRuntimeInfo`.
+- `WireMockCdiExtension.onAfterBeanDiscovery` registers a third synthetic `@Dependent` bean per discovered qualifier.
+
+The cache contract: each endpoint's `WireMock` stub client and `WireMockRuntimeInfo` are constructed exactly **once**, at server registration time. The new `EndpointResources` record (`server` + `client` + `runtimeInfo`) is built by `EndpointResources.from(WireMockServer)` inside `WireMockServerRegistry.register`; subsequent CDI injection points (producer methods and synthetic-bean `produceWith` callbacks) read the cached fields back instead of constructing fresh wrappers per-injection. Previously the `WireMock` client was rebuilt on every injection — that's gone too.
+
+Two new scenarios cover the contract:
+- **scenario-21-wiremockruntimeinfo-default-injection** — default-only mode; injects `WireMockRuntimeInfo` twice + `WireMock` twice; asserts same-Java-instance across pairs AND that `runtimeInfo.getHttpPort()` / `getHttpBaseUrl()` match the running `WireMockServer`.
+- **scenario-22-wiremockruntimeinfo-qualified-injection** — qualified mode with `@PaymentApi`; same caching + metadata assertions, this time via the synthetic-bean path.
+
+`./mvnw verify` green from clean (9:15 min). 22 / 22 scenarios pass. Line coverage on the wiremock production classes: `EndpointResources` 100%, `WireMockProducer` 100%, `WireMockRegistryScopeRemap` 100%, `WireMockServersStopped` 100%, `WireMockCdiExtension` 89%, `WireMockServerRegistry` 89%, `WireMockLifecycleAdapter` 77%.

@@ -44,6 +44,7 @@ import org.os890.jawelte.module.wiremock.impl.WireMockServerRegistry;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 
 /**
  * CDI Extension shipped by wiremock-module/impl. Owns two
@@ -67,14 +68,19 @@ import com.github.tomakehurst.wiremock.client.WireMock;
  *       {@code BeanManager.getExtension(...)}).</li>
  *   <li><b>Synthetic-bean registration</b> — during
  *       {@code AfterBeanDiscovery}, for every discovered user
- *       qualifier, two synthetic {@code @Dependent} beans are
- *       registered: one for {@link WireMockServer} and one for
- *       {@link WireMock}. Each carries
- *       {@code @Default} <b>plus</b> a Proxy-built literal of the
- *       user qualifier; the {@code produceWith} function looks the
- *       running server up in
- *       {@link WireMockServerRegistry#getFor(Class)} keyed by the
- *       endpoint identity. Single-qualifier mode resolves
+ *       qualifier, three synthetic {@code @Dependent} beans are
+ *       registered: one for {@link WireMockServer}, one for
+ *       {@link WireMock}, and one for
+ *       {@link WireMockRuntimeInfo} (the upstream metadata
+ *       view). Each carries {@code @Default} <b>plus</b> a
+ *       Proxy-built literal of the user qualifier; the
+ *       {@code produceWith} function reads the cached
+ *       {@code EndpointResources} bundle off
+ *       {@link WireMockServerRegistry#getFor(Class)} keyed by
+ *       the endpoint identity and returns the bundled
+ *       {@code server()} / {@code client()} / {@code runtimeInfo()}
+ *       instance — no fresh construction per injection point.
+ *       Single-qualifier mode resolves
  *       {@code @Inject WireMockServer} (no qualifier) to the lone
  *       synthetic bean; multi-qualifier mode produces
  *       {@code AmbiguousResolutionException} on unqualified
@@ -83,13 +89,14 @@ import com.github.tomakehurst.wiremock.client.WireMock;
  * </ol>
  *
  * <p><b>Producer veto.</b> {@link WireMockProducer} ships
- * {@code @Default @Produces} methods for {@code WireMockServer} and
- * {@code WireMock} — the default-only path. When at least one
- * {@code @WireMockEndpoint} qualifier is discovered the producer is
- * vetoed via {@code ProcessAnnotatedType.veto()} so the synthetic
- * beans alone drive resolution. In default-only mode (no qualifier
- * discovered) the producer is left intact and serves both
- * injection points.
+ * {@code @Default @Produces} methods for {@code WireMockServer},
+ * {@code WireMock}, and {@code WireMockRuntimeInfo} — the
+ * default-only path. When at least one {@code @WireMockEndpoint}
+ * qualifier is discovered the producer is vetoed via
+ * {@code ProcessAnnotatedType.veto()} so the synthetic beans alone
+ * drive resolution. In default-only mode (no qualifier discovered)
+ * the producer is left intact and serves all three injection
+ * types.
  *
  * <p><b>Default-only mode.</b> When the discovered map is empty
  * (the typical {@code @EnableWireMock} case with no user qualifier
@@ -157,13 +164,19 @@ public class WireMockCdiExtension implements Extension {
                     .types(WireMockServer.class)
                     .qualifiers(Default.Literal.INSTANCE, userQualifierLiteral)
                     .scope(Dependent.class)
-                    .produceWith(ctx -> resolveRegistry().getFor(endpointKey));
+                    .produceWith(ctx -> resolveRegistry().getFor(endpointKey).server());
 
             event.addBean()
                     .types(WireMock.class)
                     .qualifiers(Default.Literal.INSTANCE, userQualifierLiteral)
                     .scope(Dependent.class)
-                    .produceWith(ctx -> new WireMock(resolveRegistry().getFor(endpointKey).port()));
+                    .produceWith(ctx -> resolveRegistry().getFor(endpointKey).client());
+
+            event.addBean()
+                    .types(WireMockRuntimeInfo.class)
+                    .qualifiers(Default.Literal.INSTANCE, userQualifierLiteral)
+                    .scope(Dependent.class)
+                    .produceWith(ctx -> resolveRegistry().getFor(endpointKey).runtimeInfo());
         }
     }
 

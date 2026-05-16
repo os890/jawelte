@@ -23,19 +23,24 @@ import jakarta.inject.Inject;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 
 /**
  * Default-endpoint producer — the api↔library bridge for the case
  * where no {@code @WireMockEndpoint}-stamped qualifier is
  * discovered in the test class hierarchy.
  *
- * <p>Both producer methods are {@link Default @Default}-qualified
+ * <p>All three producer methods are {@link Default @Default}-qualified
  * and {@link Dependent @Dependent}-scoped, satisfying
- * {@code @Inject WireMockServer} and {@code @Inject WireMock}
- * without a qualifier on the injection point. The methods read the
- * single default {@code WireMockServer} off
- * {@link WireMockServerRegistry#defaultServer()} — which is
- * populated by {@code WireMockLifecycleAdapter.beforeAll}.
+ * {@code @Inject WireMockServer}, {@code @Inject WireMock}, and
+ * {@code @Inject WireMockRuntimeInfo} without a qualifier on the
+ * injection point. The methods read the cached default
+ * {@link EndpointResources} bundle off
+ * {@link WireMockServerRegistry#defaultEndpoint()} — populated
+ * by {@code WireMockLifecycleAdapter.beforeAll} when the server
+ * was started; the {@code WireMock} client and the
+ * {@code WireMockRuntimeInfo} are built exactly once at that point
+ * and reused for every injection.
  *
  * <p><b>Vetoing.</b> {@code WireMockCdiExtension} vetoes this whole
  * producer class via {@code ProcessAnnotatedType.veto()} when at
@@ -66,30 +71,53 @@ public class WireMockProducer {
     }
 
     /**
-     * Produce the default endpoint's {@code WireMockServer}.
+     * Produce the default endpoint's {@code WireMockServer} —
+     * reads the cached bundle off
+     * {@link WireMockServerRegistry#defaultEndpoint()}.
      *
-     * @return the {@code WireMockServer} for the default endpoint
+     * @return the cached {@code WireMockServer} for the default
+     *         endpoint
      */
     @Produces
     @Default
     @Dependent
     public WireMockServer produceWireMockServer() {
-        return registry.defaultServer();
+        return registry.defaultEndpoint().server();
     }
 
     /**
      * Produce the default endpoint's
      * {@code com.github.tomakehurst.wiremock.client.WireMock} stub
-     * registration client. The client targets the default server's
-     * host + HTTP port.
+     * registration client — the cached instance on the
+     * {@link EndpointResources} bundle, built once when the
+     * server was registered.
      *
-     * @return the {@code WireMock} client for the default endpoint
+     * @return the cached {@code WireMock} client for the default
+     *         endpoint
      */
     @Produces
     @Default
     @Dependent
     public WireMock produceWireMockClient() {
-        WireMockServer server = registry.defaultServer();
-        return new WireMock(server.port());
+        return registry.defaultEndpoint().client();
+    }
+
+    /**
+     * Produce the default endpoint's
+     * {@code com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo}
+     * — the upstream metadata view over the running server (HTTP /
+     * HTTPS ports, base URLs, enabled flags, embedded
+     * {@code WireMock} client). Returned from the cached
+     * {@link EndpointResources} bundle, built once at server
+     * registration.
+     *
+     * @return the cached {@code WireMockRuntimeInfo} for the
+     *         default endpoint
+     */
+    @Produces
+    @Default
+    @Dependent
+    public WireMockRuntimeInfo produceWireMockRuntimeInfo() {
+        return registry.defaultEndpoint().runtimeInfo();
     }
 }

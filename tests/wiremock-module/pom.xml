@@ -54,6 +54,8 @@
         <module>scenario-18-registry-remapped-to-testclassscoped</module>
         <module>scenario-19-annotationscoperemap-sl-wired</module>
         <module>scenario-20-independence-from-jaxrs-module</module>
+        <module>scenario-21-wiremockruntimeinfo-default-injection</module>
+        <module>scenario-22-wiremockruntimeinfo-qualified-injection</module>
     </modules>
 
     <dependencies>

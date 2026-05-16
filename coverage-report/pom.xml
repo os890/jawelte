@@ -2110,6 +2110,16 @@
             <artifactId>jawelte-tests-wiremock-module-scenario-20-independence-from-jaxrs-module</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-21-wiremockruntimeinfo-default-injection</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-22-wiremockruntimeinfo-qualified-injection</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
