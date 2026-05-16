@@ -16,12 +16,12 @@
 package org.os890.jawelte.module.springdata;
 
 import java.lang.System.Logger;
+import java.lang.reflect.Field;
 import java.lang.reflect.Type;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Any;
@@ -31,9 +31,10 @@ import jakarta.enterprise.inject.spi.CDI;
 import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.ProcessBean;
 import jakarta.enterprise.inject.spi.ProcessInjectionPoint;
-import jakarta.interceptor.Interceptor;
+import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 
+import org.os890.jawelte.core.api.port.TestContext;
 import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import org.springframework.data.repository.NoRepositoryBean;
 import org.springframework.data.repository.Repository;
@@ -171,18 +172,10 @@ public class SpringDataRepositoryExtension implements Extension {
      * at first-use time and builds the repository through Spring
      * Data's {@link JpaRepositoryFactory}.
      *
-     * <p>{@link Priority @Priority} at
-     * {@link Interceptor.Priority#LIBRARY_BEFORE} sorts this
-     * observer before cdi-module's auto-mocker (default-priority,
-     * {@code Interceptor.Priority.APPLICATION + 500}). The repository
-     * synthetic bean therefore exists in the deployment before the
-     * auto-mocker probes whether the injection point is unsatisfied,
-     * suppressing the would-be Mockito mock at the {@code BeanManager}
-     * level — no MP Config opt-in required for the common case.
-     *
      * @param event the CDI {@code AfterBeanDiscovery} event
      */
-    void onAfterBeanDiscovery(@Observes @Priority(Interceptor.Priority.LIBRARY_BEFORE) AfterBeanDiscovery event) {
+    void onAfterBeanDiscovery(@Observes AfterBeanDiscovery event) {
+        collectFromTestClass();
         for (Class<?> repositoryInterface : discoveredRepositories) {
             if (existingBeanTypes.contains(repositoryInterface)) {
                 LOGGER.log(Logger.Level.INFO,
@@ -200,6 +193,42 @@ public class SpringDataRepositoryExtension implements Extension {
             LOGGER.log(Logger.Level.INFO,
                     "Registered synthetic @ApplicationScoped CDI bean for repository interface "
                             + repositoryInterface.getName());
+        }
+    }
+
+    private void collectFromTestClass() {
+        TestContext testContext;
+        try {
+            testContext = TestContext.get();
+        } catch (IllegalStateException notInBootstrap) {
+            return;
+        }
+        for (Class<?> current = testContext.getTestClass();
+                current != null && current != Object.class;
+                current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                if (!field.isAnnotationPresent(Inject.class)) {
+                    continue;
+                }
+                Class<?> fieldType = field.getType();
+                if (!fieldType.isInterface()) {
+                    continue;
+                }
+                if (isSpringDataMarker(fieldType)) {
+                    continue;
+                }
+                if (fieldType.isAnnotationPresent(NoRepositoryBean.class)) {
+                    continue;
+                }
+                if (!Repository.class.isAssignableFrom(fieldType)) {
+                    continue;
+                }
+                if (discoveredRepositories.add(fieldType)) {
+                    LOGGER.log(Logger.Level.INFO,
+                            "Discovered Spring Data repository interface from test class field: "
+                                    + fieldType.getName());
+                }
+            }
         }
     }
 

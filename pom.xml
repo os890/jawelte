@@ -92,7 +92,7 @@
         <jakarta.batch.version>2.1.1</jakarta.batch.version>
         <batchee.version>2.0.0</batchee.version>
         <jberet.version>3.1.0.Final</jberet.version>
-        <spring.data.jpa.version>3.4.1</spring.data.jpa.version>
+        <spring.data.jpa.version>4.0.5</spring.data.jpa.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>

@@ -36,6 +36,11 @@
     <modules>
         <module>scenario-01-repository-injectable</module>
         <module>scenario-02-crud-operations</module>
+        <module>scenario-03-derived-query-method</module>
+        <module>scenario-04-query-annotation-jpql</module>
+        <module>scenario-05-query-annotation-native</module>
+        <module>scenario-06-mixed-em-and-repository</module>
+        <module>scenario-07-service-with-transactional</module>
     </modules>
 
     <dependencies>

@@ -4731,3 +4731,25 @@ Local `tickets/013-batch-module.md` mirrors the issue body (still gitignored; on
     Mockito mock
   - scenario-02-crud-operations — save / findById / deleteById through a
     `@Transactional` invoker bean against H2
+
+## 2026-05-16 TICKET-014 spring-data 4.0 + test-class IP walk + scenarios 03–07
+
+- Bumped `spring.data.jpa.version` from 3.4.1 to 4.0.5: Hibernate 7 removed
+  `org.hibernate.query.BindableType` which 3.4.x depends on; 4.0.5 targets
+  Hibernate 7 / Spring Framework 7 cleanly.
+- `SpringDataRepositoryExtension` learned to walk `TestContext.getTestClass()`
+  declared fields during `AfterBeanDiscovery`: container lifecycle events fire
+  *before* `InjectFieldsHelper.inject` builds an on-demand InjectionTarget for
+  the test class, so `ProcessInjectionPoint` never picks up the test class's
+  `@Inject Repo`. Mirrors cdi-module's `addTestClassInjectionPoints` pattern.
+- Removed the `@Priority(LIBRARY_BEFORE)` on the AFD observer — the MP Config
+  `exclude-packages` default already keeps the auto-mocker from interfering,
+  and the priority annotation added complexity without observable benefit.
+- New scenarios all green on OWB:
+  - scenario-03-derived-query-method — `findByName(String)`
+  - scenario-04-query-annotation-jpql — `@Query("SELECT … FROM Customer …")`
+  - scenario-05-query-annotation-native — `@Query(nativeQuery = true, value …)`
+  - scenario-06-mixed-em-and-repository — `EntityManager` and repository in
+    the same bean see the same row inside a single tx
+  - scenario-07-service-with-transactional — service bean's
+    `@Transactional` boundary commits via the repository
