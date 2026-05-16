@@ -26,5 +26,5 @@
     </parent>
     <artifactId>jawelte-tests-wiremock-module-scenario-18-registry-remapped-to-testclassscoped</artifactId>
     <packaging>jar</packaging>
-    <name>jawelte tests/wiremock-module scenario 18: WireMockServerRegistry resolved CDI scope is @TestClassScoped (via scope-module's AnnotationScopeRemap SPI provider this module ships, triggered by the @WireMockManagedScope marker)</name>
+    <name>jawelte tests/wiremock-module scenario 18: WireMockServerRegistry resolved CDI scope is @TestClassScoped (via core/api's BeanScopeMapper SPI provider this module ships, triggered by the @WireMockManagedScope marker)</name>
 </project>

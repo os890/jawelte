@@ -31,7 +31,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (wiremock-module/impl)</name>
-    <description>Implementation of wiremock-module: WireMockLifecycleAdapter (TestModuleLifecyclePort at @Priority(75) — same band as jaxrs-module, between testcontrol at 50 and scope at 100); a CDI producer (the api↔library bridge — the ONLY place upstream org.wiremock library types are imported, satisfying @Inject WireMock / @Inject WireMockServer); a CDI extension for @WireMockEndpoint discovery + synthetic-bean registration in AfterBeanDiscovery; the per-class WireMockServerRegistry bean carrying an impl-internal marker annotation; and an AnnotationScopeRemap SPI provider (SL-registered on scope-module/api's SPI) that remaps the registry's marker to @TestClassScoped at ProcessAnnotatedType time, driven by scope-module's ScopeRemapCdiExtension. SPI lookups for core go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
+    <description>Implementation of wiremock-module: WireMockLifecycleAdapter (TestModuleLifecyclePort at @Priority(75) — same band as jaxrs-module, between testcontrol at 50 and scope at 100); a CDI producer (the api↔library bridge — the ONLY place upstream org.wiremock library types are imported, satisfying @Inject WireMock / @Inject WireMockServer); a CDI extension for @WireMockEndpoint discovery + synthetic-bean registration in AfterBeanDiscovery; the per-class WireMockServerRegistry bean carrying an impl-internal marker annotation; and a BeanScopeMapper SPI provider (SL-registered on core/api's SPI) that remaps the registry's marker to @TestClassScoped at ProcessAnnotatedType time, driven by core/impl's ScopeRemapCdiExtension. SPI lookups for core go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
 
     <dependencies>
         <!--
@@ -57,17 +57,14 @@
         </dependency>
 
         <!--
-            scope-module/api supplies the @TestClassScoped scope
-            (the remap target) and the AnnotationScopeRemap SPI (the
-            mechanism the registry-marker remap provider implements).
-            Hard compile dep — the impl ships an SL provider for
-            scope-module's SPI; scope-module is always on the
-            classpath of any wiremock-module/impl consumer.
+            No compile dep on scope-module — the BeanScopeMapper SPI
+            itself lives in core/api, and WireMockRegistryScopeRemap
+            resolves @TestClassScoped reflectively via
+            Class.forName at SL provider load. If scope-module is
+            absent at runtime, targetScope() returns null and the
+            registry remap is skipped (the registry's declared
+            @ApplicationScoped scope stays in place).
         -->
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-scope-module-api</artifactId>
-        </dependency>
 
         <!--
             org.wiremock:wiremock supplies WireMockServer (booted in

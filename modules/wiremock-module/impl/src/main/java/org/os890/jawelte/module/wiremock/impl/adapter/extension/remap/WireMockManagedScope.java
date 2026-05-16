@@ -20,15 +20,15 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.os890.jawelte.module.scope.api.AnnotationScopeRemap;
+import org.os890.jawelte.core.api.port.BeanScopeMapper;
 
 /**
  * Impl-internal marker annotation declared on the
  * {@code WireMockServerRegistry} bean. {@link WireMockRegistryScopeRemap}
- * (the {@link AnnotationScopeRemap} provider shipped by this module)
+ * (the {@link BeanScopeMapper} provider shipped by this module)
  * triggers on this marker and remaps the bean's scope to
  * {@code @TestClassScoped} at {@code ProcessAnnotatedType} time —
- * the actual rewrite is driven by scope-module's
+ * the actual rewrite is driven by core/impl's
  * {@code ScopeRemapCdiExtension}.
  *
  * <p>This annotation is impl-only — not part of the wiremock-module

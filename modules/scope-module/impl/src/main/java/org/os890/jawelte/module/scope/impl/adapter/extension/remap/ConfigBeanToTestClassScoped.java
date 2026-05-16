@@ -18,11 +18,11 @@ package org.os890.jawelte.module.scope.impl.adapter.extension.remap;
 import java.lang.annotation.Annotation;
 
 import org.os890.jawelte.core.api.ConfigBean;
-import org.os890.jawelte.module.scope.api.AnnotationScopeRemap;
+import org.os890.jawelte.core.api.port.BeanScopeMapper;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 
 /**
- * {@link AnnotationScopeRemap} provider that rewrites
+ * {@link BeanScopeMapper} provider that rewrites
  * {@link ConfigBean @ConfigBean}-stereotyped beans to
  * {@link TestClassScoped @TestClassScoped}.
  *
@@ -38,7 +38,7 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
  * {@code @ConfigBean @RequestScoped class}), the remap is
  * skipped and the user's choice is honoured.
  */
-public class ConfigBeanToTestClassScoped implements AnnotationScopeRemap {
+public class ConfigBeanToTestClassScoped implements BeanScopeMapper {
 
     /** No-arg constructor required by {@code ServiceLoader}. */
     public ConfigBeanToTestClassScoped() {

@@ -4457,3 +4457,15 @@ Three new scenarios:
 - **scenario-25-priority-tie-stays-ambiguous** — two qualifiers both at `@Priority(1)`; `Scenario25Subject` declares an unqualified injection point; `EngineTestKit` asserts the deployment fails (same diagnostic shape as scenario 09).
 
 `./mvnw verify` green end-to-end (9:44 min). 25 / 25 scenarios pass.
+
+## 2026-05-16 — BeanScopeMapper SPI moves to core/api
+
+`AnnotationScopeRemap` was renamed `BeanScopeMapper` and moved to `core/api/port`. The new `BeanScopeMapperPort` (also in core/api/port) wraps a Class-in / Optional<ScopeMappingMetadata>-out method — the nested `ScopeMappingMetadata` record carries the target scope plus the explicit set of annotation types to strip. The CDI Extension that drives the remap (`ScopeRemapCdiExtension`) and the default port impl (`DefaultBeanScopeMapper`) live in `core/impl`; customers swap the port via SL-priority. The default sits at `@Priority(Integer.MAX_VALUE)` so any explicit customer impl wins.
+
+`WireMockRegistryScopeRemap` now resolves `@TestClassScoped` via `Class.forName(...)` and returns `null` if the class is missing; `BeanScopeMapper.targetScope()` documents `null` as the "skip this provider" signal, and `DefaultBeanScopeMapper.mapScope(...)` continues to the next provider on null. Net effect: `wiremock-module/impl` drops the `scope-module-api` compile dep entirely (the scope target is now reflective). Same logic generalises to any other feature module's provider.
+
+The two scope-module-shipped providers (`SessionScopedToTestMethodScoped`, `ConfigBeanToTestClassScoped`) now implement the relocated SPI; the old extension class + the old SL service files are gone. The new SL service path is `META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper`.
+
+scenario 19 renamed `scenario-19-annotationscoperemap-sl-wired` → `scenario-19-beanscopemapper-sl-wired`. `./mvnw verify` green end-to-end (10:45 min); all 25 wiremock scenarios + the existing scope-module / cdi-module / jpa-module / jta-module / ejb-module / content-diff / db-testdata / testcontrol / jaxrs scenarios pass.
+
+`ScopeBinding` cleanup is deferred — `cdi-module/impl/TestBeansCdiExtension`, `ejb-module/impl/DefaultEjbAnnotationMapper`, and `scope-module/impl/TestScopeCdiExtension` still read / bind the records. Two open design questions noted in the comparison report for the synthetic-bean-default-scope replacement.

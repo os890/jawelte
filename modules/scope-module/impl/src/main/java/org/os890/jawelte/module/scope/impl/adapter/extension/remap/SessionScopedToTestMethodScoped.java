@@ -19,11 +19,11 @@ import java.lang.annotation.Annotation;
 
 import jakarta.enterprise.context.SessionScoped;
 
-import org.os890.jawelte.module.scope.api.AnnotationScopeRemap;
+import org.os890.jawelte.core.api.port.BeanScopeMapper;
 import org.os890.jawelte.module.scope.api.TestMethodScoped;
 
 /**
- * {@link AnnotationScopeRemap} provider that rewrites
+ * {@link BeanScopeMapper} provider that rewrites
  * {@link SessionScoped @SessionScoped} beans to
  * {@link TestMethodScoped @TestMethodScoped}.
  *
@@ -37,7 +37,7 @@ import org.os890.jawelte.module.scope.api.TestMethodScoped;
  * {@code @SessionScoped} IS the scope being remapped, so there
  * is no separate user-override semantic to preserve.
  */
-public class SessionScopedToTestMethodScoped implements AnnotationScopeRemap {
+public class SessionScopedToTestMethodScoped implements BeanScopeMapper {
 
     /** No-arg constructor required by {@code ServiceLoader}. */
     public SessionScopedToTestMethodScoped() {

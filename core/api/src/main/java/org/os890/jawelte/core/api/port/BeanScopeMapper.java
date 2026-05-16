@@ -13,22 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.module.scope.api;
+package org.os890.jawelte.core.api.port;
 
 import java.lang.annotation.Annotation;
 
 /**
  * SPI for declarative CDI scope rewriting at
- * {@code ProcessAnnotatedType} time. Providers are loaded by
- * scope-module's {@code ScopeRemapCdiExtension} via
- * {@link java.util.ServiceLoader} and consumed in a single pass
- * over the bean archive — so adding a new remap is just shipping
- * one {@code AnnotationScopeRemap} implementation plus a
+ * {@code ProcessAnnotatedType} time. Providers are loaded via
+ * {@link java.util.ServiceLoader} by the active
+ * {@link BeanScopeMapperPort} implementation and consumed in a
+ * single pass over the bean archive — so adding a new remap is
+ * just shipping one {@code BeanScopeMapper} implementation plus a
  * {@code META-INF/services/} line; no new CDI Extension class
  * per remap.
  *
  * <p>For every type the CDI runtime delivers as a
- * {@code ProcessAnnotatedType} event, the extension walks the
+ * {@code ProcessAnnotatedType} event, the port walks the
  * registered providers and, on the first whose {@link #trigger()}
  * annotation is directly present on the type, applies the remap:
  *
@@ -63,14 +63,25 @@ import java.lang.annotation.Annotation;
  *       is not direct); the target is added directly and wins
  *       over the stereotype's contribution.</li>
  * </ul>
+ *
+ * <p><b>Hex-arch note.</b> {@code BeanScopeMapper} lives in
+ * {@code core/api/port} so any feature module can ship a mapper
+ * without compile-depending on scope-module's own jar. The
+ * {@code targetScope()} return type is a plain
+ * {@code Class<? extends Annotation>} — a mapper that targets a
+ * scope-module-defined annotation (e.g.
+ * {@code @TestClassScoped}) still needs scope-module/api at
+ * compile time for the {@code .class} reference, but that's an
+ * explicit dependency on a specific annotation, not an implicit
+ * dependency on the SPI itself.
  */
-public interface AnnotationScopeRemap {
+public interface BeanScopeMapper {
 
     /**
      * The marker annotation whose direct presence on a bean's
-     * {@code AnnotatedType} triggers this remap. Implementations
-     * return a single annotation class — the trigger is matched
-     * via {@code AnnotatedType.isAnnotationPresent(trigger())}.
+     * class triggers this remap. Implementations return a single
+     * annotation class — the trigger is matched via
+     * {@link Class#isAnnotationPresent(Class)}.
      *
      * @return the trigger annotation class
      */
@@ -83,15 +94,24 @@ public interface AnnotationScopeRemap {
      * {@code jakarta.enterprise.context.NormalScope} or
      * {@code jakarta.inject.Scope}.
      *
-     * @return the replacement CDI scope annotation class
+     * <p>May return {@code null} to opt out of the remap at lookup
+     * time. The active {@code BeanScopeMapperPort} (and any custom
+     * impl) skips a mapper whose {@code targetScope()} resolves to
+     * {@code null} and continues with the next mapper. This is the
+     * documented escape hatch for providers that load their target
+     * scope class reflectively — when the scope-defining module
+     * isn't on the runtime classpath, the provider returns
+     * {@code null} and the type's declared scope is left untouched.
+     *
+     * @return the replacement CDI scope annotation class, or
+     *         {@code null} to skip this provider for this lookup
      */
     Class<? extends Annotation> targetScope();
 
     /**
-     * Whether the remap should be skipped when the bean's
-     * {@code AnnotatedType} directly carries an explicit CDI
-     * scope other than the trigger or the trigger's
-     * stereotype-contributed scope.
+     * Whether the remap should be skipped when the bean's class
+     * directly carries an explicit CDI scope other than the
+     * trigger or the trigger's stereotype-contributed scope.
      *
      * <p>Useful for stereotype-style triggers (e.g.
      * {@code @ConfigBean}) where the user might add an explicit

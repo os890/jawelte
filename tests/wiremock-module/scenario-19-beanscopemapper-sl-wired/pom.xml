@@ -24,7 +24,7 @@
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <artifactId>jawelte-tests-wiremock-module-scenario-19-annotationscoperemap-sl-wired</artifactId>
+    <artifactId>jawelte-tests-wiremock-module-scenario-19-beanscopemapper-sl-wired</artifactId>
     <packaging>jar</packaging>
-    <name>jawelte tests/wiremock-module scenario 19: wiremock-module's AnnotationScopeRemap provider is SL-wired (ServiceLoader.load(AnnotationScopeRemap.class) returns an instance whose trigger is @WireMockManagedScope and whose targetScope is @TestClassScoped)</name>
+    <name>jawelte tests/wiremock-module scenario 19: wiremock-module's BeanScopeMapper provider is SL-wired (ServiceLoader.load(BeanScopeMapper.class) returns an instance whose trigger is @WireMockManagedScope and whose targetScope is @TestClassScoped)</name>
 </project>

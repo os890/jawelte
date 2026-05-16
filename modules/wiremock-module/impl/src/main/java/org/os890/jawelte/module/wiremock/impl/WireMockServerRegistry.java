@@ -41,9 +41,9 @@ import com.github.tomakehurst.wiremock.WireMockServer;
  * <p><b>Scope.</b> Declared {@link ApplicationScoped}; carries the
  * impl-internal {@link WireMockManagedScope} marker so
  * {@code WireMockRegistryScopeRemap} (the
- * {@code AnnotationScopeRemap} provider this module ships) remaps
+ * {@code BeanScopeMapper} provider this module ships) remaps
  * the scope to {@code @TestClassScoped} at
- * {@code ProcessAnnotatedType} time — driven by scope-module's
+ * {@code ProcessAnnotatedType} time — driven by core/impl's
  * {@code ScopeRemapCdiExtension}. The effective lifetime is
  * per-test-class, matching the {@code WireMockServer} lifetime
  * managed by {@code WireMockLifecycleAdapter}.

@@ -2102,7 +2102,7 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-wiremock-module-scenario-19-annotationscoperemap-sl-wired</artifactId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-19-beanscopemapper-sl-wired</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

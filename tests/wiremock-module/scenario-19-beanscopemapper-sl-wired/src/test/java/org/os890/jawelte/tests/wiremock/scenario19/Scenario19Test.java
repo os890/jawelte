@@ -22,15 +22,15 @@ import java.util.List;
 import java.util.ServiceLoader;
 
 import org.junit.jupiter.api.Test;
-import org.os890.jawelte.module.scope.api.AnnotationScopeRemap;
+import org.os890.jawelte.core.api.port.BeanScopeMapper;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 import org.os890.jawelte.module.wiremock.impl.adapter.extension.remap.WireMockManagedScope;
 
 /**
  * Scenario 19 — verifies the wiremock-module
- * {@link AnnotationScopeRemap} provider is wired via
+ * {@link BeanScopeMapper} provider is wired via
  * {@code ServiceLoader}. Loads every provider on the classpath
- * with {@code ServiceLoader.load(AnnotationScopeRemap.class)} —
+ * with {@code ServiceLoader.load(BeanScopeMapper.class)} —
  * the same call scope-module's
  * {@code ScopeRemapCdiExtension} makes at extension load time —
  * and asserts that at least one provider has
@@ -45,8 +45,8 @@ class Scenario19Test {
 
     @Test
     void wireMockRegistryScopeRemapIsServiceLoaderRegistered() {
-        List<AnnotationScopeRemap> providers = new ArrayList<>();
-        for (AnnotationScopeRemap remap : ServiceLoader.load(AnnotationScopeRemap.class)) {
+        List<BeanScopeMapper> providers = new ArrayList<>();
+        for (BeanScopeMapper remap : ServiceLoader.load(BeanScopeMapper.class)) {
             providers.add(remap);
         }
         assertThat(providers)
