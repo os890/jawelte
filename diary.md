@@ -4442,3 +4442,18 @@ Two new scenarios cover the contract:
 - **scenario-22-wiremockruntimeinfo-qualified-injection** — qualified mode with `@PaymentApi`; same caching + metadata assertions, this time via the synthetic-bean path.
 
 `./mvnw verify` green from clean (9:15 min). 22 / 22 scenarios pass. Line coverage on the wiremock production classes: `EndpointResources` 100%, `WireMockProducer` 100%, `WireMockRegistryScopeRemap` 100%, `WireMockServersStopped` 100%, `WireMockCdiExtension` 89%, `WireMockServerRegistry` 89%, `WireMockLifecycleAdapter` 77%.
+
+## 2026-05-16 — @Inherited on @EnableWireMock + @Priority-driven implicit default
+
+Two new contracts for `@EnableWireMock` test classes:
+
+1. **`@EnableWireMock` is `@Inherited`.** A test class extending a base annotated `@EnableWireMock` picks the activation up without re-declaring it. The lifecycle adapter's `testClass.getAnnotation(EnableWireMock.class)` probe walks the class hierarchy; JUnit Jupiter likewise discovers the meta-annotated `@ExtendWith(EnableTestBeans.Proxy.class)` through the inheritance chain.
+
+2. **`@Priority` on the user qualifier resolves the implicit `@Default` for unqualified injection in multi-endpoint mode.** `WireMockCdiExtension.resolveDefaultWinner(...)` reads `qualifierType.getAnnotation(Priority.class)` on every discovered qualifier. When exactly one qualifier holds the strict-minimum priority value, its synthetic bean is registered with `@Default + @Q`; the others drop `@Default` and carry only their user qualifier. Unqualified `@Inject WireMockServer` / `@Inject WireMock` / `@Inject WireMockRuntimeInfo` then resolves to the priority winner. With no `@Priority` anywhere or with multiple qualifiers tied at the lowest value, the legacy "every synthetic bean carries `@Default`" path applies and unqualified injection in multi-endpoint mode surfaces the standard `AmbiguousResolutionException` at deployment (same shape as scenario 09). Qualified injection is unaffected — it always follows standard CDI qualifier resolution.
+
+Three new scenarios:
+- **scenario-23-enablewiremock-inherited** — `Scenario23Base` carries `@EnableWireMock` + the injected `WireMockServer`; `Scenario23Test extends Scenario23Base` (no own `@EnableWireMock`). Test asserts the inherited annotation activated the lifecycle and the inherited field resolved.
+- **scenario-24-priority-resolves-default** — `@PaymentApi @Priority(1) @WireMockEndpoint(port=19101)`; `@InventoryApi @WireMockEndpoint(port=19102)` (no priority). Unqualified `@Inject WireMockServer` resolves to the port-19101 server (the priority winner); qualified `@PaymentApi` / `@InventoryApi` injections still resolve to their respective servers.
+- **scenario-25-priority-tie-stays-ambiguous** — two qualifiers both at `@Priority(1)`; `Scenario25Subject` declares an unqualified injection point; `EngineTestKit` asserts the deployment fails (same diagnostic shape as scenario 09).
+
+`./mvnw verify` green end-to-end (9:44 min). 25 / 25 scenarios pass.

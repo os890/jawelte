@@ -56,6 +56,9 @@
         <module>scenario-20-independence-from-jaxrs-module</module>
         <module>scenario-21-wiremockruntimeinfo-default-injection</module>
         <module>scenario-22-wiremockruntimeinfo-qualified-injection</module>
+        <module>scenario-23-enablewiremock-inherited</module>
+        <module>scenario-24-priority-resolves-default</module>
+        <module>scenario-25-priority-tie-stays-ambiguous</module>
     </modules>
 
     <dependencies>

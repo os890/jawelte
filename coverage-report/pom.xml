@@ -2120,6 +2120,21 @@
             <artifactId>jawelte-tests-wiremock-module-scenario-22-wiremockruntimeinfo-qualified-injection</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-23-enablewiremock-inherited</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-24-priority-resolves-default</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-wiremock-module-scenario-25-priority-tie-stays-ambiguous</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

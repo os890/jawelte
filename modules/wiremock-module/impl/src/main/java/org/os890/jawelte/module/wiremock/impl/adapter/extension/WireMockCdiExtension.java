@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Default;
@@ -72,20 +73,39 @@ import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
  *       registered: one for {@link WireMockServer}, one for
  *       {@link WireMock}, and one for
  *       {@link WireMockRuntimeInfo} (the upstream metadata
- *       view). Each carries {@code @Default} <b>plus</b> a
- *       Proxy-built literal of the user qualifier; the
- *       {@code produceWith} function reads the cached
- *       {@code EndpointResources} bundle off
+ *       view). Each carries a Proxy-built literal of the user
+ *       qualifier; the {@code produceWith} function reads the
+ *       cached {@code EndpointResources} bundle off
  *       {@link WireMockServerRegistry#getFor(Class)} keyed by
  *       the endpoint identity and returns the bundled
  *       {@code server()} / {@code client()} / {@code runtimeInfo()}
  *       instance — no fresh construction per injection point.
- *       Single-qualifier mode resolves
- *       {@code @Inject WireMockServer} (no qualifier) to the lone
- *       synthetic bean; multi-qualifier mode produces
- *       {@code AmbiguousResolutionException} on unqualified
- *       injection because every synthetic bean carries
- *       {@code @Default}.</li>
+ *
+ *       <p>Whether the synthetic beans additionally carry
+ *       {@code @Default} depends on
+ *       {@link #resolveDefaultWinner(Iterable)}:
+ *       <ul>
+ *         <li><b>Single-qualifier mode</b>: the lone bean always
+ *             gets {@code @Default} so unqualified injection
+ *             resolves to it.</li>
+ *         <li><b>Multi-qualifier mode with a
+ *             {@link Priority @Priority} winner</b>: the
+ *             qualifier with the strict-minimum
+ *             {@code @Priority} value (and only that one) gets
+ *             {@code @Default}; the rest carry only their user
+ *             qualifier. Unqualified injection resolves to the
+ *             priority winner.</li>
+ *         <li><b>Multi-qualifier mode without a clear winner</b>
+ *             (no {@code @Priority} anywhere, or two qualifiers
+ *             tied at the lowest value): every synthetic bean
+ *             gets {@code @Default}, surfacing the standard
+ *             CDI {@code AmbiguousResolutionException} on
+ *             unqualified injection at deployment time.</li>
+ *       </ul>
+ *       Qualified injection (the injection point names a
+ *       specific {@code @WireMockEndpoint} qualifier) always
+ *       follows standard CDI resolution and is unaffected by
+ *       the priority logic.</li>
  * </ol>
  *
  * <p><b>Producer veto.</b> {@link WireMockProducer} ships
@@ -154,30 +174,107 @@ public class WireMockCdiExtension implements Extension {
     }
 
     void onAfterBeanDiscovery(@Observes AfterBeanDiscovery event) {
+        Class<? extends Annotation> defaultWinner = resolveDefaultWinner(discoveredEndpoints.keySet());
+        boolean hasWinner = defaultWinner != null;
+
         for (Map.Entry<Class<? extends Annotation>, Class<? extends Annotation>> entry
                 : discoveredEndpoints.entrySet()) {
             Class<? extends Annotation> userQualifierType = entry.getKey();
             Class<? extends Annotation> endpointKey = entry.getValue();
             Annotation userQualifierLiteral = literalFor(userQualifierType);
+            Annotation[] qualifiers = qualifierArrayFor(
+                    userQualifierLiteral, userQualifierType, defaultWinner, hasWinner);
 
             event.addBean()
                     .types(WireMockServer.class)
-                    .qualifiers(Default.Literal.INSTANCE, userQualifierLiteral)
+                    .qualifiers(qualifiers)
                     .scope(Dependent.class)
                     .produceWith(ctx -> resolveRegistry().getFor(endpointKey).server());
 
             event.addBean()
                     .types(WireMock.class)
-                    .qualifiers(Default.Literal.INSTANCE, userQualifierLiteral)
+                    .qualifiers(qualifiers)
                     .scope(Dependent.class)
                     .produceWith(ctx -> resolveRegistry().getFor(endpointKey).client());
 
             event.addBean()
                     .types(WireMockRuntimeInfo.class)
-                    .qualifiers(Default.Literal.INSTANCE, userQualifierLiteral)
+                    .qualifiers(qualifiers)
                     .scope(Dependent.class)
                     .produceWith(ctx -> resolveRegistry().getFor(endpointKey).runtimeInfo());
         }
+    }
+
+    /**
+     * Decide which discovered qualifier (if any) becomes the
+     * implicit {@code @Default} when an unqualified injection
+     * point asks for one of the bridged WireMock types in
+     * multi-endpoint mode. The rule: a qualifier carries
+     * {@link Priority @Priority}; among the qualifiers with the
+     * lowest priority value, exactly one must hold that minimum
+     * for a winner to be declared. No {@code @Priority} on any
+     * qualifier, or two-or-more qualifiers tied at the lowest
+     * value, returns {@code null} — every synthetic bean then
+     * keeps {@code @Default} (the pre-priority behaviour) and
+     * unqualified injection in multi-endpoint mode raises the
+     * usual CDI {@code AmbiguousResolutionException}.
+     *
+     * <p>Single-endpoint mode short-circuits this — when only one
+     * qualifier was discovered, that one always wins by virtue of
+     * being the only candidate, regardless of whether it carries
+     * {@code @Priority}.
+     *
+     * @return the qualifier annotation type that should carry
+     *         {@code @Default}, or {@code null} when no winner
+     *         exists and the legacy "every synthetic bean has
+     *         {@code @Default}" path should apply
+     */
+    private static Class<? extends Annotation> resolveDefaultWinner(
+            Iterable<Class<? extends Annotation>> qualifiers) {
+        Class<? extends Annotation> lowestPriorityQualifier = null;
+        int lowestPriorityValue = Integer.MAX_VALUE;
+        int countAtLowest = 0;
+        int totalQualifiers = 0;
+        for (Class<? extends Annotation> qualifier : qualifiers) {
+            totalQualifiers++;
+            Priority priorityAnnotation = qualifier.getAnnotation(Priority.class);
+            if (priorityAnnotation == null) {
+                continue;
+            }
+            int value = priorityAnnotation.value();
+            if (value < lowestPriorityValue) {
+                lowestPriorityValue = value;
+                lowestPriorityQualifier = qualifier;
+                countAtLowest = 1;
+            } else if (value == lowestPriorityValue) {
+                countAtLowest++;
+            }
+        }
+        if (totalQualifiers <= 1) {
+            // single-endpoint mode: caller treats hasWinner==false
+            // as "give the lone qualifier @Default", which lands
+            // at the same observable behaviour anyway.
+            return null;
+        }
+        if (lowestPriorityQualifier == null) {
+            return null;
+        }
+        if (countAtLowest != 1) {
+            return null;
+        }
+        return lowestPriorityQualifier;
+    }
+
+    private static Annotation[] qualifierArrayFor(
+            Annotation userQualifierLiteral,
+            Class<? extends Annotation> userQualifierType,
+            Class<? extends Annotation> defaultWinner,
+            boolean hasWinner) {
+        boolean addDefault = !hasWinner || userQualifierType == defaultWinner;
+        if (addDefault) {
+            return new Annotation[]{Default.Literal.INSTANCE, userQualifierLiteral};
+        }
+        return new Annotation[]{userQualifierLiteral};
     }
 
     /**

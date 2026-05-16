@@ -60,6 +60,44 @@ import java.lang.annotation.Target;
  * the compiler — endpoint identity is always carried by a user
  * {@code @Qualifier} annotation.
  *
+ * <p><b>Optional {@code @Priority} on the qualifier — implicit
+ * default winner.</b> A user qualifier may additionally carry
+ * {@link jakarta.annotation.Priority @Priority}. In multi-endpoint
+ * mode the qualifier with the strict-minimum priority becomes the
+ * implicit default: its synthetic bean keeps {@code @Default}, the
+ * others drop it. Unqualified {@code @Inject WireMockServer} /
+ * {@code @Inject WireMock} / {@code @Inject WireMockRuntimeInfo}
+ * then resolves to that qualifier's server.
+ *
+ * <p>When no qualifier carries {@code @Priority}, or when multiple
+ * qualifiers share the lowest priority value, every synthetic bean
+ * keeps {@code @Default} — unqualified injection in multi-endpoint
+ * mode then surfaces the regular CDI
+ * {@code AmbiguousResolutionException} at deployment time, just as
+ * it did before the feature existed. Qualified injection (the
+ * injection point names a specific {@code @WireMockEndpoint}
+ * qualifier) always follows standard CDI resolution and is
+ * unaffected by {@code @Priority}.
+ *
+ * <pre>{@code
+ *   // @PaymentApi wins because it carries the lowest @Priority
+ *   @WireMockEndpoint(port = 0)
+ *   @jakarta.annotation.Priority(1)
+ *   @Qualifier @Retention(RUNTIME) @Target({FIELD, ...})
+ *   public @interface PaymentApi {}
+ *
+ *   @WireMockEndpoint(port = 0)
+ *   @Qualifier @Retention(RUNTIME) @Target({FIELD, ...})
+ *   public @interface InventoryApi {}
+ *
+ *   @EnableWireMock
+ *   class MyTest {
+ *       @Inject WireMockServer server;             // → @PaymentApi
+ *       @Inject @PaymentApi   WireMockServer p;
+ *       @Inject @InventoryApi WireMockServer i;
+ *   }
+ * }</pre>
+ *
  * <p><b>Hex-arch note.</b> Like {@link EnableWireMock}, this type
  * holds no reference to the upstream WireMock library. Endpoint
  * identity is a compile-time CDI qualifier, not a string name;

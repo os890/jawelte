@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.wiremock.api;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
@@ -73,9 +74,21 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  *
  * <p>{@code @EnableWireMock} is {@code TYPE}-only. Placing it on a
  * method or any other element is rejected by the compiler.
+ *
+ * <p><b>Inheritance.</b> The annotation is meta-annotated with
+ * {@link Inherited @Inherited}: a test class extending a base
+ * class that carries {@code @EnableWireMock} picks the
+ * activation up without re-declaring it. The lifecycle adapter's
+ * {@code testClass.getAnnotation(EnableWireMock.class)} probe
+ * walks the class hierarchy and sees the inherited annotation;
+ * JUnit Jupiter likewise discovers the meta-annotated
+ * {@code @ExtendWith(EnableTestBeans.Proxy.class)} through the
+ * inheritance chain. Useful for shared-setup base classes that
+ * a family of test classes extends.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
+@Inherited
 @EnableTestBeans
 public @interface EnableWireMock {
 }
