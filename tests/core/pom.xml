@@ -55,6 +55,7 @@
         <module>scenario-config-05-key-without-dot-no-fallback</module>
         <module>scenario-config-06-key-without-dot-not-set</module>
         <module>scenario-config-07-null-key</module>
+        <module>scenario-config-08-alias-aggregation</module>
         <module>scenario-quarkus-auto-skip</module>
     </modules>
 

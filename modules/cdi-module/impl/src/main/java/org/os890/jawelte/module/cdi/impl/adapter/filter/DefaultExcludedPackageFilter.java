@@ -15,19 +15,19 @@
  */
 package org.os890.jawelte.module.cdi.impl.adapter.filter;
 
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
 
 import jakarta.annotation.Priority;
 
+import org.os890.jawelte.core.api.port.ConfigKeyAliasProvider;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 
 /**
- * Default {@link ExcludedPackageFilter}. Reads two comma-separated
- * package-prefix lists from MicroProfile Config via the active
+ * Default {@link ExcludedPackageFilter}. Reads two package-prefix
+ * lists from MicroProfile Config via the active
  * {@link ConfigResolver} (resolved through
  * {@link TestContext#loadService(Class)}, so the dot-then-underscore
  * fallback and any user-supplied {@code @Alternative ConfigResolver}
@@ -36,9 +36,14 @@ import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
  * <ul>
  *   <li>{@link #DOT_KEY} feeds {@link #isExcluded(Class)} — a target
  *       type is excluded when any class in its supertype hierarchy
- *       lives under one of the configured prefixes. Empty by default;
- *       set the key in a higher-priority MP Config source to
- *       exclude application types from auto-mocking.</li>
+ *       lives under one of the configured prefixes. The owner key
+ *       ({@code DOT_KEY}) is the consumer's user-override channel;
+ *       contributing modules (jpa-module, spring-data-module, …)
+ *       extend the list via the
+ *       {@link ConfigKeyAliasProvider} SPI, mapping
+ *       {@code DOT_KEY} to their own module-specific MP Config keys
+ *       that ship their framework-owned package prefixes as
+ *       defaults.</li>
  *   <li>{@link #OWNING_BEAN_DOT_KEY} feeds
  *       {@link #isOwningBeanExcluded(Class)} — an IP is dropped
  *       when its owning bean's package starts with one of the
@@ -47,8 +52,14 @@ import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
  *       CDI-runtime infrastructure ({@code org.jboss.weld.},
  *       {@code org.apache.webbeans.},
  *       {@code org.apache.deltaspike.}, {@code io.smallrye.}) whose
- *       IPs the runtime satisfies internally.</li>
+ *       IPs the runtime satisfies internally. Same alias-extension
+ *       channel applies.</li>
  * </ul>
+ *
+ * <p>The owner-key string itself is also the logical key the
+ * {@code ConfigKeyAliasProvider} SPI dispatches on, so contributor
+ * modules switch on {@code DOT_KEY} / {@code OWNING_BEAN_DOT_KEY}
+ * without inventing separate logical-key identifiers.
  *
  * <p>Annotated {@code @Priority(Integer.MAX_VALUE)} so any user-supplied
  * implementation with a lower priority value automatically wins via
@@ -60,10 +71,16 @@ import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 @Priority(Integer.MAX_VALUE)
 public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
 
-    /** MP Config key that lists target-type package prefixes excluded from auto-mocking. */
+    /**
+     * MP Config key that lists target-type package prefixes excluded from auto-mocking.
+     * Also the logical key contributors switch on via {@link ConfigKeyAliasProvider}.
+     */
     public static final String DOT_KEY = "org.os890.jawelte.module.cdi.auto-mock.exclude-packages";
 
-    /** MP Config key that lists owning-bean package prefixes whose IPs are dropped before auto-mocking. */
+    /**
+     * MP Config key that lists owning-bean package prefixes whose IPs are dropped before auto-mocking.
+     * Also the logical key contributors switch on via {@link ConfigKeyAliasProvider}.
+     */
     public static final String OWNING_BEAN_DOT_KEY =
             "org.os890.jawelte.module.cdi.auto-mock.exclude-owning-bean-packages";
 
@@ -130,14 +147,25 @@ public class DefaultExcludedPackageFilter implements ExcludedPackageFilter {
         }
     }
 
-    private static List<String> readPrefixes(String key) {
+    private static List<String> readPrefixes(String ownerAndLogicalKey) {
         ConfigResolver resolver = TestContext.loadService(ConfigResolver.class);
-        return resolver.resolve(key)
-                .map(value -> Arrays.stream(value.split(","))
-                        .map(String::trim)
-                        .filter(s -> !s.isEmpty())
-                        .toList())
-                .orElseGet(Collections::emptyList);
+        List<String> result = new ArrayList<>();
+        for (String aliasKey : resolver.resolveAliasKeysFor(ownerAndLogicalKey)) {
+            appendValues(resolver, aliasKey, result);
+        }
+        appendValues(resolver, ownerAndLogicalKey, result);
+        return List.copyOf(result);
+    }
+
+    private static void appendValues(ConfigResolver resolver, String key, List<String> sink) {
+        resolver.resolve(key).ifPresent(value -> {
+            for (String entry : value.split(",")) {
+                String trimmed = entry.trim();
+                if (!trimmed.isEmpty()) {
+                    sink.add(trimmed);
+                }
+            }
+        });
     }
 
     private static boolean supertypeMatches(Class<?> rawType, List<String> prefixes) {

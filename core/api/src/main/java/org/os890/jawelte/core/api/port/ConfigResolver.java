@@ -15,6 +15,7 @@
  */
 package org.os890.jawelte.core.api.port;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -41,6 +42,18 @@ import java.util.Optional;
  * framework does not use {@code ServiceLoader} for this SPI; it is a
  * normal CDI bean overridable via standard CDI mechanisms.
  *
+ * <p>For configuration that several modules can contribute to under
+ * one umbrella concept (for example, the auto-mock exclude-packages
+ * list — owned by cdi-module, extended by jpa-module and
+ * spring-data-module), the caller passes a logical key to
+ * {@link #resolveAliasKeysFor(String)} and gets back the union of
+ * the module-specific MP Config keys that every registered
+ * {@link ConfigKeyAliasProvider} contributes. The caller then
+ * resolves each returned key via {@link #resolve(String)} and
+ * merges the values. The owning module's own MP Config key is
+ * <strong>not</strong> returned (the owner reads it directly); only
+ * contributor modules' keys are aggregated here.
+ *
  * <p><strong>Contract.</strong>
  * <ul>
  *   <li>{@code dotKey} on {@link #resolve(String)} must not be
@@ -52,6 +65,14 @@ import java.util.Optional;
  *   <li>{@link #resolveKeys()} returns every configured key the
  *       resolver knows about, in an unspecified but stable order;
  *       never {@code null}.</li>
+ *   <li>{@code logicalKey} on
+ *       {@link #resolveAliasKeysFor(String)} must not be
+ *       {@code null}; passing {@code null} throws
+ *       {@link NullPointerException}.</li>
+ *   <li>{@link #resolveAliasKeysFor(String)} returns every
+ *       contributor key for the given logical key in provider
+ *       discovery order; never {@code null}; empty when no provider
+ *       contributes for that key.</li>
  * </ul>
  */
 public interface ConfigResolver {
@@ -83,4 +104,20 @@ public interface ConfigResolver {
      *         the underlying configuration is empty
      */
     Iterable<String> resolveKeys();
+
+    /**
+     * Return the module-specific MP Config keys that every
+     * registered {@link ConfigKeyAliasProvider} contributes for the
+     * given logical key, in provider discovery order. The owning
+     * module's own MP Config key is not in the result — the owner
+     * is expected to resolve that one directly via
+     * {@link #resolve(String)} and merge it with the aliases this
+     * method returns.
+     *
+     * @param logicalKey the canonical key; must not be {@code null}
+     * @return contributor keys, possibly empty; never {@code null}
+     * @throws NullPointerException if {@code logicalKey} is
+     *         {@code null}
+     */
+    List<String> resolveAliasKeysFor(String logicalKey);
 }

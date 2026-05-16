@@ -36,12 +36,13 @@
     <dependencies>
         <!--
             Compile deps. All scopes inherited from jawelte-parent's
-            <dependencyManagement>. jpa-module/impl compile-depends on
-            cdi-module/api so that JpaTypesExcludedPackageFilter can
-            implement the auto-mock exclude SPI cdi-module ships;
-            cross-module wiring otherwise goes through TestContext /
-            TestModuleLifecyclePort and the CDI runtime — no
-            compile-time dep on cdi-module/impl or scope-module.
+            <dependencyManagement>. jpa-module/impl has no compile-time
+            dep on cdi-module: it contributes to cdi-module's
+            auto-mock exclude list through the ConfigKeyAliasProvider
+            SPI in core/api, switching on the literal logical-key
+            string (no import). Cross-module wiring otherwise goes
+            through TestContext / TestModuleLifecyclePort and the CDI
+            runtime.
         -->
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -50,10 +51,6 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-cdi-module-api</artifactId>
         </dependency>
 
         <dependency>

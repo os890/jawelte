@@ -78,8 +78,15 @@ run() {
 }
 
 # --- Phase 1 ---------------------------------------------------------
-run "install full reactor (-DskipTests)" \
-    "$REPO_ROOT" -DskipTests install
+# Always `clean install` (not just `install`) — without `clean`,
+# Maven's incremental build leaves stale target/ artefacts behind
+# when a source file is deleted (most painfully: stale
+# META-INF/services entries that ServiceLoader.load then fails on
+# at test time even after the source file is gone). One clean pass
+# at the start avoids the whole class of "ghost file in target/"
+# false failures.
+run "clean install full reactor (-DskipTests)" \
+    "$REPO_ROOT" -DskipTests clean install
 
 if [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------

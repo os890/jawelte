@@ -4847,3 +4847,55 @@ to expose CRUD methods so the round-trip can run through it.
 jpa-module untouched. 14×2 = 28 scenario runs green on OWB + Weld.
 The "TICKET-014 follow-up — optional classpath scan" todo entry
 from the previous diary entry is unchanged.
+
+## 2026-05-16 — TICKET-014 G8 close (ConfigKeyAliasProvider SPI)
+
+Replaced spring-data-module's `META-INF/microprofile-config.properties`
+shipping cdi-module's user-override key with a multi-module
+aggregation pattern:
+
+- New `core/api/port/ConfigKeyAliasProvider` SPI (single method
+  `aliasesFor(String logicalKey)`).
+- New `ConfigResolver.resolveAliasKeysFor(String logicalKey)`
+  method on the existing port; `ConfigResolverAdapter` aggregates
+  every `ConfigKeyAliasProvider` discovered via `ServiceLoader` in
+  discovery order.
+- `DefaultExcludedPackageFilter` (cdi-module/impl) reads its own
+  owner key (`auto-mock.exclude-packages` / `…exclude-owning-bean-packages`,
+  the consumer's user-override channel) plus every alias the
+  resolver returns, and merges all values.
+- jpa-module/impl ships `JpaConfigKeyAliasProvider` mapping the
+  exclude-packages logical key to a new MP Config key
+  `org.os890.jawelte.module.jpa.auto-mock.framework-exclude-packages`
+  with values `jakarta.persistence., jakarta.transaction.`. The
+  former `JpaTypesExcludedPackageFilter` was deleted (its
+  `JPA_PROVIDED_PREFIXES` constant migrated to MP Config; the
+  filter's other behaviour was just reading the standard keys,
+  which `DefaultExcludedPackageFilter` now subsumes via the alias
+  aggregation). jpa-module/impl no longer compile-depends on
+  cdi-module/api — its contribution channel is the core/api SPI.
+- spring-data-module ships `SpringDataConfigKeyAliasProvider`
+  mapping the same logical key to its own
+  `org.os890.jawelte.module.springdata.auto-mock.framework-exclude-packages`
+  with value `org.springframework.data.`. The earlier hijack of
+  cdi-module's owner key is gone.
+
+Result: each framework module owns its own MP Config key, no two
+modules contend for the same key, and consumers can either override
+any individual module's key at higher ordinal or extend the
+combined exclude list through their own user-override on
+cdi-module's owner key. The cross-module Weld / OWB / DeltaSpike /
+SmallRye owning-bean defaults in cdi-module/impl's
+`microprofile-config.properties` and the framework allowlist key
+are untouched.
+
+Verified by `tests/core/scenario-config-08-alias-aggregation`
+(two test-classpath providers returning overlapping + disjoint
+aliases for two logical keys; empty for an unknown key) plus the
+full verify-all matrix (every test/* module under owb + weld).
+`verify-all.sh` now runs `clean install` in Phase 1 (was just
+`install`) so future stale `target/` artefacts — particularly
+`META-INF/services` lingering after source deletes — can't
+silently break ServiceLoader-driven discovery in later phases.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>

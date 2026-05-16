@@ -41,4 +41,9 @@ public class TestScenarioSentinelConfigResolver implements ConfigResolver {
     public Iterable<String> resolveKeys() {
         return List.of();
     }
+
+    @Override
+    public List<String> resolveAliasKeysFor(String logicalKey) {
+        return List.of();
+    }
 }
