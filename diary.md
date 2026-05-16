@@ -4699,3 +4699,356 @@ Added a "Why the custom BatchEnvironment / ArtifactFactory?" section to `Scenari
 **GitHub issue #26 body** — added "TICKET-013 Addendum — `TimeoutHandler` SPI port + cross-runtime verification" section after the Acceptance Criteria. Covers: the new SPI port + two impls + activation contract, the `java.lang.System.Logger` lines at INFO on start/finish/resolve, the `markCompleted` naming choice, and the two extra test scenarios (14 alternative-handler-activation, 15 JBeret cross-runtime compatibility with the Weld-only simplification note).
 
 Local `tickets/013-batch-module.md` mirrors the issue body (still gitignored; only the GitHub issue is the canonical record).
+
+## 2026-05-16 TICKET-014 first-draft scaffold + scenarios 01/02
+
+- Wired root pom (`spring.data.jpa.version=3.4.1`, internal cross-ref, depMgmt
+  entry) and added `spring-data-module` to `modules/` and `tests/` aggregators.
+- Created single-jar `modules/spring-data-module/` (no api/impl split — first
+  side-car module in the project): `SpringDataRepositoryExtension`,
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension`, `beans.xml`,
+  `microprofile-config.properties`.
+- Extension observes `ProcessInjectionPoint<T, X>` (not
+  `ProcessAnnotatedType` — the spec rationale: `bean-discovery-mode="annotated"`
+  hides repository interfaces from `ProcessAnnotatedType`), skips
+  `@NoRepositoryBean`-marked interfaces and Spring Data marker types,
+  accumulates existing-bean types via `ProcessBean` for back-off, and registers
+  one synthetic `@ApplicationScoped` bean per discovered interface in
+  `AfterBeanDiscovery` (`@Priority(LIBRARY_BEFORE)` to sort ahead of the
+  auto-mocker observer). The `produceWith` callback resolves
+  `EntityManager` via `CDI.current()` and builds the repository through
+  `JpaRepositoryFactory.getRepository(...)`.
+- Auto-mock conflict resolved at the package-filter layer: shipped
+  `microprofile-config.properties` with
+  `org.os890.jawelte.module.cdi.auto-mock.exclude-packages=org.springframework.data.`.
+  `DefaultExcludedPackageFilter.supertypeMatches` walks user repo interfaces'
+  hierarchies and trips on `JpaRepository` / `CrudRepository` etc. living
+  under `org.springframework.data.*`, so the auto-mocker skips them without
+  any user MP Config opt-in.
+- Test scaffolding under `tests/spring-data-module/`: aggregator pom (OWB
+  default profile, Weld via `-Pweld`) + first two scenarios green on OWB:
+  - scenario-01-repository-injectable — assert injected repo is not a
+    Mockito mock
+  - scenario-02-crud-operations — save / findById / deleteById through a
+    `@Transactional` invoker bean against H2
+
+## 2026-05-16 TICKET-014 spring-data 4.0 + test-class IP walk + scenarios 03–07
+
+- Bumped `spring.data.jpa.version` from 3.4.1 to 4.0.5: Hibernate 7 removed
+  `org.hibernate.query.BindableType` which 3.4.x depends on; 4.0.5 targets
+  Hibernate 7 / Spring Framework 7 cleanly.
+- `SpringDataRepositoryExtension` learned to walk `TestContext.getTestClass()`
+  declared fields during `AfterBeanDiscovery`: container lifecycle events fire
+  *before* `InjectFieldsHelper.inject` builds an on-demand InjectionTarget for
+  the test class, so `ProcessInjectionPoint` never picks up the test class's
+  `@Inject Repo`. Mirrors cdi-module's `addTestClassInjectionPoints` pattern.
+- Removed the `@Priority(LIBRARY_BEFORE)` on the AFD observer — the MP Config
+  `exclude-packages` default already keeps the auto-mocker from interfering,
+  and the priority annotation added complexity without observable benefit.
+- New scenarios all green on OWB:
+  - scenario-03-derived-query-method — `findByName(String)`
+  - scenario-04-query-annotation-jpql — `@Query("SELECT … FROM Customer …")`
+  - scenario-05-query-annotation-native — `@Query(nativeQuery = true, value …)`
+  - scenario-06-mixed-em-and-repository — `EntityManager` and repository in
+    the same bean see the same row inside a single tx
+  - scenario-07-service-with-transactional — service bean's
+    `@Transactional` boundary commits via the repository
+
+## 2026-05-16 TICKET-014 first-draft complete — scenarios 08–14 green on OWB and Weld
+
+- scenario-08-back-off-on-user-produces — user `@Produces CustomerRepository`
+  returns a no-op JDK proxy that records the invoked method name on a static
+  `AtomicReference`. The test calls `count()` and confirms the user's
+  InvocationHandler ran (proving the extension's back-off declined to register
+  its synthetic).
+- scenario-09-no-repository-bean-skipped — interface annotated
+  `@NoRepositoryBean`; `BeanManager.getBeans(MarkerRepository.class)` returns
+  empty.
+- scenario-10-no-repository-bean-on-parent — parent interface has
+  `@NoRepositoryBean`; the concrete child is registered. No orphan bean
+  whose `getBeanClass()` is the parent.
+- scenario-11-limit-to-test-beans — `@EnableTestBeans(limitToTestBeans=true)`
+  disables the auto-mocker; the extension's synthetic is still registered.
+- scenario-12-application-scoped-singleton — same proxy reference across two
+  injection sites.
+- scenario-13-paging-and-sorting — `findAll(PageRequest.of(0, 2, Sort.by("name").ascending()))`
+  returns the first page sorted by name.
+- scenario-14-multiple-repositories — `CustomerRepository` and
+  `OrderRepository` over two different entities both injected and both
+  functional in a single test.
+
+All 14 scenarios green on `-Powb` and `-Pweld`.
+
+## 2026-05-16 TICKET-014 — extension package alignment
+
+- Moved `SpringDataRepositoryExtension` from
+  `org.os890.jawelte.module.springdata` to
+  `org.os890.jawelte.module.springdata.adapter.extension` to match the
+  project convention (cdi-module's `TestBeansCdiExtension`,
+  jpa-module's `JpaCdiExtension`, wiremock-module's `WireMockCdiExtension`
+  all live under `<module>.impl.adapter.extension`; for the single-jar
+  spring-data-module the equivalent is `<module>.adapter.extension`).
+- Updated the `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  registration to the new FQCN. All 14 scenarios still green.
+
+## 2026-05-16 — TICKET-014 follow-up: defer optional classpath scan to todo.md
+
+Compared `~/workspace/poc/spring-data-module` against our
+`modules/spring-data-module/` and wrote
+`tickets/014-poc-comparison.html` (local-only, gitignored)
+listing 14 comparison items. G1 (discovery strategy — POC eagerly
+scans the classpath; ours discovers via `ProcessInjectionPoint` +
+test-class field walk) was closed by recording a follow-up in
+`todo.md` titled "TICKET-014 follow-up — optional classpath scan
+for never-injected repositories". The follow-up captures three
+shapes (MP Config additional-registration key; feature-flag-gated
+scan via xbean-finder; combination) and the constraint that a real
+consumer ask should drive when this lands. Two open items remain
+on the comparison report (G2 bean scope, G3 bean-type set) for a
+later discussion. No code change to the module itself.
+
+## 2026-05-16 — TICKET-014 G2 + G3 closed (scope + bean types)
+
+Flipped the synthetic Spring Data repository bean from
+`@ApplicationScoped` to `@RequestScoped` (G2) and narrowed the bean
+type set from "discovered repository interface + every Spring Data
+super-interface + Object" down to "discovered repository interface
++ Object" (G3). Trade-offs:
+
+- `@RequestScoped` is a normal scope, so CDI hands every IP a
+  client proxy and materialisation is deferred to the first method
+  call. The first call lands inside the caller's `@Transactional`
+  boundary, where jpa-module/impl's `EntityManagerProxy` resolves a
+  live `EntityManager` via `TransactionScopedEmHolder` — and
+  Spring Data's `JpaRepositoryFactory.<init>` succeeds when it asks
+  the EM for its `EntityManagerFactory`. Per-test-method lifetime
+  (cdi-module's `CdiTestBeanContainer` activates a
+  `RequestContextController` per test) gives stronger isolation
+  than the previous `@ApplicationScoped` would, and the EMF that
+  Spring Data reaches through the EM is itself a CDI bean whose
+  scope/caching is the producer's choice (jpa-module ships a
+  JVM-cached default; consumers without jpa-module define their
+  own).
+- Narrowing the bean type set means the synthetic beans no longer
+  appear type-assignable to `JpaRepository<…>`,
+  `CrudRepository<…>`, etc. With multiple repositories on the
+  classpath the framework parents would otherwise become ambiguous;
+  with the narrow type set they simply remain unsatisfied (which is
+  the same shape upstream Spring Data's CDI extension and the POC
+  ship).
+
+Scenario 12 renamed `scenario-12-application-scoped-singleton` →
+`scenario-12-request-scoped-per-test-method`. New assertion:
+within one test method (one request context), every IP resolves to
+the same CDI client proxy reference, AND a CRUD round-trip via that
+shared reference persists rows correctly. `SiblingHolder` updated
+to expose CRUD methods so the round-trip can run through it.
+
+jpa-module untouched. 14×2 = 28 scenario runs green on OWB + Weld.
+The "TICKET-014 follow-up — optional classpath scan" todo entry
+from the previous diary entry is unchanged.
+
+## 2026-05-16 — TICKET-014 G8 close (ConfigKeyAliasProvider SPI)
+
+Replaced spring-data-module's `META-INF/microprofile-config.properties`
+shipping cdi-module's user-override key with a multi-module
+aggregation pattern:
+
+- New `core/api/port/ConfigKeyAliasProvider` SPI (single method
+  `aliasesFor(String logicalKey)`).
+- New `ConfigResolver.resolveAliasKeysFor(String logicalKey)`
+  method on the existing port; `ConfigResolverAdapter` aggregates
+  every `ConfigKeyAliasProvider` discovered via `ServiceLoader` in
+  discovery order.
+- `DefaultExcludedPackageFilter` (cdi-module/impl) reads its own
+  owner key (`auto-mock.exclude-packages` / `…exclude-owning-bean-packages`,
+  the consumer's user-override channel) plus every alias the
+  resolver returns, and merges all values.
+- jpa-module/impl ships `JpaConfigKeyAliasProvider` mapping the
+  exclude-packages logical key to a new MP Config key
+  `org.os890.jawelte.module.jpa.auto-mock.framework-exclude-packages`
+  with values `jakarta.persistence., jakarta.transaction.`. The
+  former `JpaTypesExcludedPackageFilter` was deleted (its
+  `JPA_PROVIDED_PREFIXES` constant migrated to MP Config; the
+  filter's other behaviour was just reading the standard keys,
+  which `DefaultExcludedPackageFilter` now subsumes via the alias
+  aggregation). jpa-module/impl no longer compile-depends on
+  cdi-module/api — its contribution channel is the core/api SPI.
+- spring-data-module ships `SpringDataConfigKeyAliasProvider`
+  mapping the same logical key to its own
+  `org.os890.jawelte.module.springdata.auto-mock.framework-exclude-packages`
+  with value `org.springframework.data.`. The earlier hijack of
+  cdi-module's owner key is gone.
+
+Result: each framework module owns its own MP Config key, no two
+modules contend for the same key, and consumers can either override
+any individual module's key at higher ordinal or extend the
+combined exclude list through their own user-override on
+cdi-module's owner key. The cross-module Weld / OWB / DeltaSpike /
+SmallRye owning-bean defaults in cdi-module/impl's
+`microprofile-config.properties` and the framework allowlist key
+are untouched.
+
+Verified by `tests/core/scenario-config-08-alias-aggregation`
+(two test-classpath providers returning overlapping + disjoint
+aliases for two logical keys; empty for an unknown key) plus the
+full verify-all matrix (every test/* module under owb + weld).
+`verify-all.sh` now runs `clean install` in Phase 1 (was just
+`install`) so future stale `target/` artefacts — particularly
+`META-INF/services` lingering after source deletes — can't
+silently break ServiceLoader-driven discovery in later phases.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — verify-all.sh: spring-data sweep + explicit single-thread
+
+Two follow-ups before the TICKET-014 PR opens:
+
+- `tests/spring-data-module` added to `verify-all.sh`'s full-matrix
+  CDI sweep loop, so its 14 scenarios run under both `-P owb` and
+  `-P weld` alongside cdi-module / scope-module / jpa-module /
+  ejb-module / testcontrol-module. Before this change the module
+  was only built (via the coverage-report phase's `-am`) and its
+  scenarios never ran from the script; I had been verifying them
+  manually via direct `mvn -f tests/spring-data-module/pom.xml`
+  invocations. Other later modules (`jaxrs-module`,
+  `wiremock-module`, `batch-module`, `db-testdata-module`) have
+  the same gap — pre-existing, not in scope for this ticket;
+  db-testdata-module is already tracked in `todo.md`.
+- `MVN_ARGS` extended with `-T 1` and a comment documenting why
+  (correctness gate must stay deterministic; defends against a
+  future `.mvn/maven.config` or environment override toggling
+  parallel reactor builds). No surefire-level parallelism config
+  exists in any pom, so every phase is fully sequential — one
+  module, one test class, one test method at a time.
+
+Both spring-data phases verified locally with the exact flags
+verify-all uses (`-B -ntp -T 1 -P owb verify` and `-P weld`):
+14 scenarios green on each runtime.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — coverage-report: spring-data wiring + stale-testcontrol fix
+
+`mvn clean install -DskipTests` from the repo root was failing
+once Maven evicted some long-cached artefacts: `coverage-report/pom.xml`
+listed three modules that no longer exist —
+`jawelte-tests-testcontrol-module-scenario-21-configbean-remapped-to-testclass`,
+`-22-configbean-remap-unconditional`,
+`-23-configbean-with-explicit-scope-not-remapped` — that had been
+moved to `tests/scope-module` as scenarios 28 / 29 / 30 at some
+earlier point. The stale references were silent as long as the
+old jars stayed cached in `~/.m2`, then surfaced as a
+`Could not resolve dependencies` failure the moment Maven did
+not find them locally.
+
+Three fixes in one pom edit:
+- Removed the three stale `testcontrol-module-scenario-21|22|23`
+  entries.
+- Added the three corresponding
+  `scope-module-scenario-28|29|30` entries to the scope-module
+  block.
+- Added `jawelte-spring-data-module` (production module) +
+  the 14 `tests/spring-data-module/scenario-*` modules + the
+  new `tests/core/scenario-config-08-alias-aggregation` module
+  to the aggregation set so their classes show up in the
+  per-module coverage report and their `jacoco.exec` files feed
+  into `target/site/jacoco-aggregate/`.
+
+`./mvnw clean install -DskipTests` from the repo root now exits
+0 deterministically.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — Split full-stack reactor into verify-all aggregator
+
+Normal `mvn clean install` from the repo root no longer compiles
+the test scenarios + the JaCoCo coverage aggregator. Developer
+builds drop from ~41s to ~19s on a clean repo.
+
+- New `verify-all/pom.xml` aggregator. Parent: root pom. Modules:
+  `../core`, `../modules`, `../tests`, `../coverage-report`. Use
+  `mvn -f verify-all/pom.xml clean install -DskipTests` to build
+  the full tree (or run `verify-all.sh`).
+- Root `pom.xml` <modules> reduced to `core, modules` only. A
+  comment in the same block documents the split.
+- `verify-all.sh` Phase 1 now invokes `mvn ... -f verify-all`
+  instead of running from the repo root, so the test scenarios
+  and the coverage-report aggregator are part of the same Phase 1
+  reactor build the script always relied on. All later phases
+  (per-module CDI / JTA sweeps + the final coverage-report run)
+  are unchanged — they invoke each test aggregator directly.
+
+The split has no effect on the wip-mode discovery in
+`verify-all.sh` (still file-system based — greps for
+`<id>wip</id>` in `tests/*/pom.xml`), and no per-module pom needs
+to be updated — every `tests/*/pom.xml` and
+`tests/*/scenario-*/pom.xml` keeps its existing parent reference
+to root.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+
+## 2026-05-16 — Boot banner via LauncherSessionListener
+
+Added an ASCII boot banner that prints once per JVM, right when the
+JUnit launcher opens its session (before any test class boots).
+
+- `core/impl/.../adapter/extension/BootBanner.java` —
+  `LauncherSessionListener` that writes the banner string to
+  `System.out` in `launcherSessionOpened`. No `AtomicBoolean` guard
+  needed; JUnit instantiates and invokes the listener once per
+  session via ServiceLoader.
+- `core/impl/src/main/resources/META-INF/services/org.junit.platform.launcher.LauncherSessionListener`
+  registers `BootBanner` for auto-discovery.
+- Parent pom: added `junit-platform-launcher` to `dependencyManagement`
+  (provided scope, `${junit.version}`); core/impl declares the
+  dependency without a version.
+- Smoke test: `mvn -f tests/core/scenario-01-.../pom.xml test` —
+  banner prints once between the Surefire "T E S T S" header and
+  the first test class line; test green.
+
+The banner shows `jawelte` in ANSI-shadow block style with the
+subtitle "JUnit 6 · CDI SE · Jakarta EE 11" — set the tone for
+what's booting before the per-module noise starts.
+
+## 2026-05-16 — verify-all.sh Phase 20 fixed (cd into verify-all/)
+
+User ran the full suite for a final TICKET-014 check; build died at
+`>>> FAILED at phase 20: coverage-report`. Real Maven cause hidden
+above the script banner: `Could not find the selected project in
+the reactor: :coverage-report`.
+
+Root cause: Phase 20 runs `mvn -pl :coverage-report -am verify`
+from `$REPO_ROOT`, but the root pom's `<modules>` was trimmed to
+`core` + `modules` only when the verify-all aggregator landed.
+`coverage-report` is no longer in the root reactor, so `-pl`
+can't resolve it. The verify-all aggregator (`verify-all/pom.xml`)
+DOES list it.
+
+Fix: change Phase 20's working dir from `$REPO_ROOT` to
+`$REPO_ROOT/verify-all` (same place Phase 1 already cds into).
+The aggregator's modules: `core, modules, tests, coverage-report`,
+so `-pl :coverage-report -am` resolves and brings every upstream
+module into the session - jacoco:report-aggregate then sees all
+the per-module `target/jacoco.exec` files.
+
+Also rewrote the explanatory comment block — the old wording
+("Run from the repo root") was correct under the pre-split layout
+but stayed behind when the split landed.
+
+Verified locally: `cd verify-all && ../mvnw -B -ntp -T 1 \
+-pl :coverage-report -am -DskipTests verify` finishes in ~14 s,
+BUILD SUCCESS, and `coverage-report/target/site/jacoco-aggregate`
+ships ~8.9 MB of real HTML (not the empty-overwrite failure mode
+the comment warned about).
+
+## 2026-05-16 — BootBanner moved to adapter/launcher/
+
+`adapter/extension/` houses Jupiter-level extensions
+(DelegatingJUnitExtension + the CDI ones); BootBanner is a JUnit
+Platform Launcher SPI implementation, a different API layer.
+Moved to `adapter/launcher/` (`git mv` to preserve history),
+updated the package declaration in the class and the FQN in
+`META-INF/services/org.junit.platform.launcher.LauncherSessionListener`.
+Smoke-tested again with tests/core/scenario-01 — banner still
+prints once before the first test class, test green.

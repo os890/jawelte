@@ -43,11 +43,17 @@
         <url>https://github.com/os890/jawelte</url>
     </scm>
 
+    <!--
+        Default reactor. A plain `mvn clean install` from the repo
+        root builds only the framework code (core + modules) and
+        skips the test scenarios + the JaCoCo coverage aggregator.
+        Run `mvn -f verify-all/pom.xml clean install` (or
+        `verify-all.sh`) to build the full tree including
+        tests/* and coverage-report/.
+    -->
     <modules>
         <module>core</module>
         <module>modules</module>
-        <module>tests</module>
-        <module>coverage-report</module>
     </modules>
 
     <properties>
@@ -92,6 +98,7 @@
         <jakarta.batch.version>2.1.1</jakarta.batch.version>
         <batchee.version>2.0.0</batchee.version>
         <jberet.version>3.1.0.Final</jberet.version>
+        <spring.data.jpa.version>4.0.5</spring.data.jpa.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -174,6 +181,18 @@
                 <artifactId>junit-platform-testkit</artifactId>
                 <version>${junit.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <!--
+                junit-platform-launcher is `provided` because the
+                BootBanner LauncherSessionListener compiles against it
+                but consumers' Surefire/IDE runtime already brings the
+                launcher onto the classpath.
+            -->
+            <dependency>
+                <groupId>org.junit.platform</groupId>
+                <artifactId>junit-platform-launcher</artifactId>
+                <version>${junit.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!--
@@ -363,6 +382,13 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-batch-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal spring-data-module cross-reference -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-spring-data-module</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -761,6 +787,20 @@
                 <artifactId>jberet-core</artifactId>
                 <version>${jberet.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!--
+                Spring Data JPA: provided at the spring-data-module
+                level (the module's CDI extension references
+                JpaRepositoryFactory + Repository). Consumers bring
+                their own Spring Data jar at test time — same
+                convention as jakarta.batch-api / WireMock above.
+            -->
+            <dependency>
+                <groupId>org.springframework.data</groupId>
+                <artifactId>spring-data-jpa</artifactId>
+                <version>${spring.data.jpa.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!--

@@ -173,3 +173,45 @@ covering the case: `@EnableJaxRs(restResources={DemoRestApp.class})`
 where `DemoRestApp` carries `@ApplicationPath("demoRest")` and a
 `@Path("/customers")` resource is reachable at
 `<TestUrl>/demoRest/customers`.
+
+## TICKET-014 follow-up — optional classpath scan for never-injected repositories
+
+Context: G1 of the TICKET-014 POC comparison
+(`tickets/014-poc-comparison.html`). Our `SpringDataRepositoryExtension`
+discovers repository interfaces via two channels: `ProcessInjectionPoint`
+(catches every `@Inject CustomerRepository` site anywhere in the
+deployment) and a walk of `TestContext.getTestClass().getDeclaredFields()`
+(catches repositories declared on the test class, which is typically
+not a CDI bean itself). The POC additionally walks the classpath
+eagerly at `AfterBeanDiscovery` time.
+
+The only consumer shape our discovery does NOT catch: a repository
+that is never written as an injection point and is only resolved
+programmatically, e.g.
+`CDI.current().select(CustomerRepository.class).get()`. No scenario
+in our 14-scenario suite exercises this. The first-draft decision
+was to accept the gap rather than reintroduce an eager classpath
+scan (which the POC implemented with `cl.getResources("")` walking
+`file:` URLs only — JARs silently skipped, errors silently swallowed,
+every class on the classpath force-loaded).
+
+If a consumer ever asks for the programmatic-lookup case, the
+follow-up options (cheapest first):
+
+- **Cheapest** — add an MP Config key
+  `jawelte.spring-data.additional-repository-interfaces` taking a
+  comma-separated list of repository FQCNs. The extension reads it
+  during `AfterBeanDiscovery` and adds each named class to
+  `discoveredRepositories`. Opt-in, no scanning, no classpath cost.
+- **Feature flag-gated scan** — re-introduce a classpath walk
+  behind `jawelte.spring-data.scan-classpath=true` (default `false`).
+  Build it on top of `xbean-finder-shaded` (already on the test
+  classpath via the cdi-module ecosystem) so JAR archives are
+  scanned correctly and class-init side-effects are avoided. Add a
+  scenario that injects via `CDI.current().select(...)` only,
+  asserts the repository resolves.
+- **Combination** — ship both, document the trade-off in the
+  module javadoc.
+
+Defer until a consumer asks. Add a scenario at the same time so
+the contract is locked in.

@@ -15,14 +15,18 @@
  */
 package org.os890.jawelte.core.impl.adapter.config;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.os890.jawelte.core.api.port.ConfigKeyAliasProvider;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 
 /**
@@ -54,7 +58,14 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
  * <p>Users replace this default by providing their own
  * {@code ConfigResolver} bean annotated with
  * {@code @Alternative @Priority(...)} — standard CDI mechanics, no
- * {@code ServiceLoader} involved.
+ * {@code ServiceLoader} involved for the resolver itself.
+ *
+ * <p>{@link #resolveAliasKeysFor(String)} on the other hand walks
+ * {@link ConfigKeyAliasProvider} instances discovered via
+ * {@link ServiceLoader} (one provider per contributing module is
+ * the typical layout) and returns the concatenation of every
+ * provider's {@code aliasesFor(logicalKey)} result in discovery
+ * order. The returned list is unmodifiable.
  */
 @ApplicationScoped
 public class ConfigResolverAdapter implements ConfigResolver {
@@ -85,6 +96,24 @@ public class ConfigResolverAdapter implements ConfigResolver {
     @Override
     public Iterable<String> resolveKeys() {
         return cachedConfig().getPropertyNames();
+    }
+
+    @Override
+    public List<String> resolveAliasKeysFor(String logicalKey) {
+        Objects.requireNonNull(logicalKey, "logicalKey");
+        List<String> aliases = new ArrayList<>();
+        for (ConfigKeyAliasProvider provider : ServiceLoader.load(ConfigKeyAliasProvider.class)) {
+            List<String> contributed = provider.aliasesFor(logicalKey);
+            if (contributed == null || contributed.isEmpty()) {
+                continue;
+            }
+            for (String key : contributed) {
+                if (key != null && !key.isBlank()) {
+                    aliases.add(key);
+                }
+            }
+        }
+        return List.copyOf(aliases);
     }
 
     /**

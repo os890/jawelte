@@ -38,7 +38,14 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MVN="$REPO_ROOT/mvnw"
-MVN_ARGS=(-B -ntp)
+# -T 1 forces single-threaded reactor builds even if a future
+# .mvn/maven.config or environment override turns on parallel
+# builds — verify-all is the canonical correctness gate and must
+# stay deterministic. Combined with the absence of any `parallel` /
+# `forkCount > 1` / `threadCount` surefire configuration in the
+# poms, every phase is fully sequential: one module at a time,
+# one test class at a time, one test method at a time.
+MVN_ARGS=(-B -ntp -T 1)
 
 WIP_MODE=false
 case "${1:-}" in
@@ -78,8 +85,26 @@ run() {
 }
 
 # --- Phase 1 ---------------------------------------------------------
-run "install full reactor (-DskipTests)" \
-    "$REPO_ROOT" -DskipTests install
+# Always `clean install` (not just `install`) — without `clean`,
+# Maven's incremental build leaves stale target/ artefacts behind
+# when a source file is deleted (most painfully: stale
+# META-INF/services entries that ServiceLoader.load then fails on
+# at test time even after the source file is gone). One clean pass
+# at the start avoids the whole class of "ghost file in target/"
+# false failures.
+#
+# Driven through verify-all/pom.xml — the dedicated aggregator
+# that lists core + modules + tests + coverage-report. Running
+# from there ensures the test scenarios and the JaCoCo aggregate
+# report get built; a normal `mvn clean install` from the repo
+# root only builds core + modules (the framework code), so the
+# regular developer build stays fast. No `-DskipTests` here —
+# no `-P` is active in this phase, so the test scenarios skip
+# their runtime-gated surefire runs by themselves; the explicit
+# CDI / JTA per-profile sweeps in the later phases are where the
+# tests actually execute.
+run "clean install full reactor" \
+    "$REPO_ROOT/verify-all" clean install
 
 if [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------
@@ -111,14 +136,16 @@ else
     run "tests/core" "$REPO_ROOT/tests/core" verify
 
     # tests/cdi-module, tests/scope-module, tests/jpa-module,
-    # tests/ejb-module, tests/testcontrol-module: CDI-runtime sweep
-    # only (owb default + weld).
+    # tests/ejb-module, tests/testcontrol-module,
+    # tests/spring-data-module: CDI-runtime sweep only (owb default
+    # + weld).
     for cdi in owb weld; do
         run "tests/cdi-module [$cdi]"         "$REPO_ROOT/tests/cdi-module"         -P "$cdi" verify
         run "tests/scope-module [$cdi]"       "$REPO_ROOT/tests/scope-module"       -P "$cdi" verify
         run "tests/jpa-module [$cdi]"         "$REPO_ROOT/tests/jpa-module"         -P "$cdi" verify
         run "tests/ejb-module [$cdi]"         "$REPO_ROOT/tests/ejb-module"         -P "$cdi" verify
         run "tests/testcontrol-module [$cdi]" "$REPO_ROOT/tests/testcontrol-module" -P "$cdi" verify
+        run "tests/spring-data-module [$cdi]" "$REPO_ROOT/tests/spring-data-module" -P "$cdi" verify
     done
 
     # tests/content-diff-module: utility library — does not bootstrap a
@@ -144,19 +171,28 @@ else
     # profile-active TM (Geronimo / Narayana) and are unaffected.
 
     # --- Coverage aggregation ----------------------------------------
-    # Run from the repo root with `-pl :coverage-report -am`, not from
-    # inside coverage-report/. The `jacoco:report-aggregate` goal binds
-    # to verify but it discovers per-module `target/jacoco.exec` files
-    # by walking the active Maven reactor session — running from
-    # coverage-report/ alone gives it a single-module session that
-    # contains no exec data, so it silently overwrites the previously
-    # populated aggregate with an empty report. `-am` brings every
-    # dependency module into the session; with the local repo already
-    # warm from Phase 01 install, each transitive module reports as
-    # ~0.015s SUCCESS (up-to-date, nothing to recompile) so the
-    # overhead is single-digit seconds. `-DskipTests` keeps Surefire
-    # from re-running tests we already executed in Phases 02-17.
-    run "coverage-report" "$REPO_ROOT" \
+    # Run from the verify-all aggregator (where coverage-report is a
+    # listed module) with `-pl :coverage-report -am`, not from inside
+    # coverage-report/ and not from the repo root. The repo-root pom
+    # only lists core + modules, so `-pl :coverage-report` from there
+    # fails immediately with "Could not find the selected project in
+    # the reactor: :coverage-report"; verify-all/pom.xml lists
+    # core + modules + tests + coverage-report, which gives `-pl`
+    # something to resolve.
+    #
+    # Why not run inside coverage-report/ directly: the
+    # `jacoco:report-aggregate` goal binds to verify but it discovers
+    # per-module `target/jacoco.exec` files by walking the active
+    # Maven reactor session — running from coverage-report/ alone
+    # gives it a single-module session that contains no exec data, so
+    # it silently overwrites the previously populated aggregate with
+    # an empty report. `-am` brings every dependency module into the
+    # session; with the local repo already warm from Phase 01 install,
+    # each transitive module reports as ~0.015s SUCCESS (up-to-date,
+    # nothing to recompile) so the overhead is single-digit seconds.
+    # `-DskipTests` keeps Surefire from re-running tests we already
+    # executed in the per-profile phases above.
+    run "coverage-report" "$REPO_ROOT/verify-all" \
         -pl :coverage-report -am -DskipTests verify
 fi
 
