@@ -23,12 +23,15 @@ import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.Customer;
 import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.CustomerOrder;
 import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.OrderItem;
 import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.Product;
+import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.ProductStatus;
 
 /**
  * E-commerce domain service. {@code @Stateless} so jawelte's
  * ejb-module manages the lifecycle and implicit
  * {@code @Transactional} interceptor applies REQUIRED semantics on
- * every public method.
+ * every public method. Method names mirror scenario-01's CRUD test
+ * methods 1-on-1 so every scenario-09 test body is a single delegate
+ * call into this EJB.
  */
 @Stateless
 public class EcommerceService {
@@ -40,24 +43,34 @@ public class EcommerceService {
     public EcommerceService() {
     }
 
-    /** Touch every Customer row — read-only query. */
-    public void listCustomers() {
+    /** SELECT c FROM Customer c. */
+    public void queryAllCustomers() {
         em.createQuery("SELECT c FROM Customer c", Customer.class)
                 .getResultList();
     }
 
-    /** Touch every Product row — read-only query. */
-    public void listProducts() {
-        em.createQuery("SELECT p FROM Product p", Product.class)
+    /** SELECT p FROM Product p WHERE p.status = ACTIVE. */
+    public void queryProductsByStatus() {
+        em.createQuery(
+                "SELECT p FROM Product p WHERE p.status = :s",
+                Product.class)
+                .setParameter("s", ProductStatus.ACTIVE)
                 .getResultList();
     }
 
-    /** Touch every CustomerOrder row — read-only query. */
-    public void listOrders() {
+    /** SELECT DISTINCT o FROM CustomerOrder o JOIN FETCH o.items. */
+    public void queryOrdersWithItems() {
         em.createQuery(
-                "SELECT DISTINCT o FROM CustomerOrder o "
-                        + "LEFT JOIN FETCH o.items",
-                CustomerOrder.class).getResultList();
+                "SELECT DISTINCT o FROM CustomerOrder o JOIN FETCH o.items",
+                CustomerOrder.class)
+                .getResultList();
+    }
+
+    /** SELECT AVG(p.price) FROM Product p. */
+    public void averageProductPrice() {
+        em.createQuery(
+                "SELECT AVG(p.price) FROM Product p", Double.class)
+                .getSingleResult();
     }
 
     /** Update the email on customer N. */
@@ -78,7 +91,7 @@ public class EcommerceService {
     }
 
     /** Add an OrderItem to order N referencing product P. */
-    public void addItem(Long orderId, Long productId, int quantity) {
+    public void addItemToOrder(Long orderId, Long productId, int quantity) {
         CustomerOrder o = em.find(CustomerOrder.class, orderId);
         Product prod = em.find(Product.class, productId);
         OrderItem item = new OrderItem();

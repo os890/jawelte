@@ -32,7 +32,9 @@ import org.os890.jawelte.tests.lnp.scenario02.entity.ecommerce.Customer;
 import org.os890.jawelte.tests.lnp.scenario02.entity.ecommerce.CustomerOrder;
 import org.os890.jawelte.tests.lnp.scenario02.entity.ecommerce.OrderItem;
 import org.os890.jawelte.tests.lnp.scenario02.entity.ecommerce.Product;
+import org.os890.jawelte.tests.lnp.scenario02.entity.ecommerce.ProductStatus;
 import org.os890.jawelte.tests.lnp.scenario02.entity.finance.Account;
+import org.os890.jawelte.tests.lnp.scenario02.entity.finance.FinancialTransaction;
 import org.os890.jawelte.tests.lnp.scenario02.entity.hr.Department;
 import org.os890.jawelte.tests.lnp.scenario02.entity.hr.Employee;
 import org.os890.jawelte.tests.lnp.scenario02.entity.inventory.StockItem;
@@ -41,20 +43,19 @@ import org.os890.jawelte.tests.lnp.scenario02.entity.inventory.StockItem;
  * Mirrors scenario-01-full-crud's 21 CRUD methods, but seeds the
  * fixture via db-testdata-module's {@code @TestControl(testData=...)}
  * (dbIn/*.xml) and asserts via {@code DbDiff} against
- * dbExpected/*.xml. The test method bodies perform the same
- * mutations but never run JPQL assertions — the dbExpected phase
- * handles verification automatically after the method's transaction
- * commits.
+ * dbExpected/*.xml. Every test body runs the same JPQL as the
+ * scenario-01 baseline — only the in-test {@code assertX(...)} calls
+ * are dropped, because the dbExpected phase handles verification
+ * automatically after the method's transaction commits.
  *
  * <p>testData layout — every {@code @TestControl} folder is a
  * self-contained pair carrying both {@code dbIn/full.xml} (the
- * input fixture, optional by db-testdata-module's contract but
- * always present here) and {@code dbExpected/full.xml} (the
- * mandatory verification snapshot):
+ * input fixture) and {@code dbExpected/full.xml} (the verification
+ * snapshot):
  * <ul>
  *   <li>{@code lnp-full-crud/seed/} — full ~1000-row fixture;
  *       {@code dbExpected} mirrors {@code dbIn} (DB unchanged),
- *       referenced by the 14 read-only methods.</li>
+ *       referenced by the read-only methods.</li>
  *   <li>{@code lnp-full-crud/method-NN-<name>/} — same seed in
  *       {@code dbIn/}, post-mutation snapshot in
  *       {@code dbExpected/}, referenced by the matching mutation
@@ -73,37 +74,41 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
 
     // ==================== E-COMMERCE ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(1)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query all customers")
     public void queryAllCustomers() {
-        // No-op: dbExpected verifies the seed remained unchanged.
+        em.createQuery("SELECT c FROM Customer c", Customer.class)
+                .getResultList();
     }
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(2)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query products by status")
     public void queryProductsByStatus() {
-        // No-op.
+        em.createQuery(
+                "SELECT p FROM Product p WHERE p.status = :s",
+                Product.class)
+                .setParameter("s", ProductStatus.ACTIVE)
+                .getResultList();
     }
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(3)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query orders with items (join fetch)")
     public void queryOrdersWithItems() {
-        // No-op.
+        em.createQuery(
+                "SELECT DISTINCT o FROM CustomerOrder o JOIN FETCH o.items",
+                CustomerOrder.class)
+                .getResultList();
     }
 
-    /** Mutation: updates customer 1's email. */
     @Test
     @Order(4)
     @Transactional
@@ -115,10 +120,6 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
         em.flush();
     }
 
-    /**
-     * Mutation: deletes order 1 (cascade removes its items) plus the
-     * matching payment row.
-     */
     @Test
     @Order(5)
     @Transactional
@@ -133,17 +134,17 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
         em.flush();
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(6)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average product price")
     public void averageProductPrice() {
-        // No-op.
+        em.createQuery(
+                "SELECT AVG(p.price) FROM Product p", Double.class)
+                .getSingleResult();
     }
 
-    /** Mutation: adds one OrderItem to order 2. */
     @Test
     @Order(7)
     @Transactional
@@ -165,27 +166,32 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
 
     // ==================== HR ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(10)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query employees by department")
     public void queryEmployeesByDepartment() {
-        // No-op.
+        em.createQuery(
+                "SELECT e FROM Employee e WHERE e.department.id = :d",
+                Employee.class)
+                .setParameter("d", 1L)
+                .getResultList();
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(11)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Count employees per department")
     public void countEmployeesPerDepartment() {
-        // No-op.
+        em.createQuery(
+                "SELECT e.department.name, COUNT(e) FROM Employee e "
+                        + "GROUP BY e.department.name",
+                Object[].class)
+                .getResultList();
     }
 
-    /** Mutation: re-assigns employee 1 to the last department. */
     @Test
     @Order(12)
     @Transactional
@@ -198,39 +204,46 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
         em.flush();
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(13)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average salary across all employees")
     public void averageSalary() {
-        // No-op.
+        em.createQuery(
+                "SELECT AVG(s.amount) FROM Salary s", Double.class)
+                .getSingleResult();
     }
 
     // ==================== CONTENT ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(20)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles by author")
     public void queryArticlesByAuthor() {
-        // No-op.
+        em.createQuery(
+                "SELECT a FROM Article a WHERE a.author.id = :id",
+                Article.class)
+                .setParameter("id", 1L)
+                .getResultList();
     }
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(21)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles with tags (join)")
     public void queryArticlesWithTags() {
-        // No-op.
+        em.createQuery(
+                "SELECT DISTINCT a FROM Article a JOIN a.tags t "
+                        + "WHERE t.name = :tag",
+                Article.class)
+                .setParameter("tag", "Tag-0")
+                .getResultList();
     }
 
-    /** Mutation: replaces article 1's body. */
     @Test
     @Order(22)
     @Transactional
@@ -244,27 +257,30 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
 
     // ==================== FINANCE ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(30)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query transactions by account")
     public void queryTransactionsByAccount() {
-        // No-op.
+        em.createQuery(
+                "SELECT t FROM FinancialTransaction t WHERE t.account.id = :id",
+                FinancialTransaction.class)
+                .setParameter("id", 1L)
+                .getResultList();
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(31)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Sum account balances")
     public void sumAccountBalances() {
-        // No-op.
+        em.createQuery(
+                "SELECT SUM(a.balance) FROM Account a", BigDecimal.class)
+                .getSingleResult();
     }
 
-    /** Mutation: increases account 1's balance by 500. */
     @Test
     @Order(32)
     @Transactional
@@ -278,27 +294,30 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
 
     // ==================== INVENTORY ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(40)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query stock by warehouse")
     public void queryStockByWarehouse() {
-        // No-op.
+        em.createQuery(
+                "SELECT si FROM StockItem si WHERE si.warehouse.id = :id",
+                StockItem.class)
+                .setParameter("id", 1L)
+                .getResultList();
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(41)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Total stock across all warehouses")
     public void totalStockQuantity() {
-        // No-op.
+        em.createQuery(
+                "SELECT SUM(si.quantity) FROM StockItem si", Long.class)
+                .getSingleResult();
     }
 
-    /** Mutation: bumps stock item 1's quantity by 50. */
     @Test
     @Order(42)
     @Transactional
@@ -312,13 +331,50 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
 
     // ==================== CROSS-DOMAIN ====================
 
-    /** Read-only check — verified by dbExpected = seed. */
     @Test
     @Order(50)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Cross-domain: count all entity tables have data")
+    @DisplayName("Cross-domain: count every populated table")
     public void allTablesPopulated() {
-        // No-op.
+        for (String entity : ENTITIES) {
+            count(entity);
+        }
     }
+
+    private long count(String entity) {
+        return em.createQuery(
+                "SELECT COUNT(e) FROM " + entity + " e", Long.class)
+                .getSingleResult();
+    }
+
+    private static final String[] ENTITIES = {
+            "Customer", "Product", "CustomerOrder", "OrderItem", "Payment",
+            "Review", "Category",
+            "Department", "Employee", "Skill", "Project", "ProjectAssignment",
+            "Salary", "LeaveRequest", "OfficeLocation",
+            "Article", "Author", "Tag", "Comment", "Media",
+            "ContentSettings", "ContentCategory",
+            "Account", "FinancialTransaction", "Currency", "ExchangeRate",
+            "Budget", "BudgetLine", "Invoice", "InvoiceLine",
+            "Warehouse", "StockItem", "Bin", "Supplier",
+            "PurchaseOrder", "PurchaseOrderLine",
+            "StockTransfer", "StockTransferLine",
+            "Shipment", "ShipmentItem", "Carrier", "Route", "DeliveryZone",
+            "TrackingEvent", "PackageDimension", "FreightRate",
+            "DeliveryAttempt", "ReturnRequest", "ReturnItem", "ShippingLabel",
+            "Campaign", "CampaignChannel", "Promotion", "Coupon",
+            "CouponUsage", "NewsletterSubscription", "AdPlacement",
+            "ClickTracking", "AbTest", "AbTestVariant",
+            "LandingPage", "LeadScore",
+            "Ticket", "TicketComment", "TicketCategory", "KnowledgeArticle",
+            "SlaPolicy", "SlaViolation", "ChatSession", "ChatMessage",
+            "FaqEntry", "SupportAgent", "EscalationRule", "SatisfactionSurvey",
+            "Contact", "ContactGroup", "Opportunity", "OpportunityStage",
+            "Activity", "ActivityType", "Note", "Pipeline",
+            "Deal", "DealProduct", "CrmCampaign", "Interaction",
+            "PageView", "EventLog", "UserSession", "Funnel", "FunnelStep",
+            "Metric", "Dashboard", "Widget", "Report", "ReportSchedule",
+            "DataExport"
+    };
 }

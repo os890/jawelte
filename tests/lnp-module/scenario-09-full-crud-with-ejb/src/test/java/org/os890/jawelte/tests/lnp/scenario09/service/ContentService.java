@@ -21,7 +21,10 @@ import jakarta.persistence.EntityManager;
 
 import org.os890.jawelte.tests.lnp.scenario09.entity.content.Article;
 
-/** Content domain service — {@code @Stateless} EJB. */
+/**
+ * Content domain service — {@code @Stateless} EJB. Method names
+ * mirror scenario-01's content test methods.
+ */
 @Stateless
 public class ContentService {
 
@@ -32,9 +35,22 @@ public class ContentService {
     public ContentService() {
     }
 
-    /** Touch every Article — read-only query. */
-    public void listArticles() {
-        em.createQuery("SELECT a FROM Article a", Article.class)
+    /** SELECT a FROM Article a WHERE a.author.id = :id. */
+    public void queryArticlesByAuthor(Long authorId) {
+        em.createQuery(
+                "SELECT a FROM Article a WHERE a.author.id = :id",
+                Article.class)
+                .setParameter("id", authorId)
+                .getResultList();
+    }
+
+    /** SELECT DISTINCT a FROM Article a JOIN a.tags t WHERE t.name = :tag. */
+    public void queryArticlesWithTags(String tagName) {
+        em.createQuery(
+                "SELECT DISTINCT a FROM Article a JOIN a.tags t "
+                        + "WHERE t.name = :tag",
+                Article.class)
+                .setParameter("tag", tagName)
                 .getResultList();
     }
 

@@ -21,7 +21,10 @@ import jakarta.persistence.EntityManager;
 
 import org.os890.jawelte.tests.lnp.scenario09.entity.inventory.StockItem;
 
-/** Inventory domain service — {@code @Stateless} EJB. */
+/**
+ * Inventory domain service — {@code @Stateless} EJB. Method names
+ * mirror scenario-01's inventory test methods.
+ */
 @Stateless
 public class InventoryService {
 
@@ -32,16 +35,26 @@ public class InventoryService {
     public InventoryService() {
     }
 
-    /** Touch every StockItem — read-only query. */
-    public void listStock() {
-        em.createQuery("SELECT s FROM StockItem s", StockItem.class)
+    /** SELECT si FROM StockItem si WHERE si.warehouse.id = :id. */
+    public void queryStockByWarehouse(Long warehouseId) {
+        em.createQuery(
+                "SELECT si FROM StockItem si WHERE si.warehouse.id = :id",
+                StockItem.class)
+                .setParameter("id", warehouseId)
                 .getResultList();
     }
 
-    /** Increase stock item N's quantity by {@code amount}. */
-    public void addToQuantity(Long stockId, int amount) {
+    /** SELECT SUM(si.quantity) FROM StockItem si. */
+    public void totalStockQuantity() {
+        em.createQuery(
+                "SELECT SUM(si.quantity) FROM StockItem si", Long.class)
+                .getSingleResult();
+    }
+
+    /** Add {@code delta} to stock item N's quantity. */
+    public void updateStockQuantity(Long stockId, int delta) {
         StockItem si = em.find(StockItem.class, stockId);
-        si.setQuantity(si.getQuantity() + amount);
+        si.setQuantity(si.getQuantity() + delta);
         em.flush();
     }
 }

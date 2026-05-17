@@ -18,8 +18,6 @@ package org.os890.jawelte.tests.lnp.scenario09;
 import java.math.BigDecimal;
 
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import jakarta.transaction.Transactional;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
@@ -27,34 +25,35 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
-import org.os890.jawelte.tests.lnp.scenario09.entity.content.Article;
-import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.Customer;
-import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.CustomerOrder;
-import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.OrderItem;
-import org.os890.jawelte.tests.lnp.scenario09.entity.ecommerce.Product;
-import org.os890.jawelte.tests.lnp.scenario09.entity.finance.Account;
-import org.os890.jawelte.tests.lnp.scenario09.entity.hr.Department;
-import org.os890.jawelte.tests.lnp.scenario09.entity.hr.Employee;
-import org.os890.jawelte.tests.lnp.scenario09.entity.inventory.StockItem;
+import org.os890.jawelte.tests.lnp.scenario09.service.ContentService;
+import org.os890.jawelte.tests.lnp.scenario09.service.EcommerceService;
+import org.os890.jawelte.tests.lnp.scenario09.service.FinanceService;
+import org.os890.jawelte.tests.lnp.scenario09.service.HrService;
+import org.os890.jawelte.tests.lnp.scenario09.service.InventoryService;
 
 /**
- * Mirrors scenario-01-full-crud's 21 CRUD methods, but seeds the
- * fixture via db-testdata-module's {@code @TestControl(testData=...)}
- * (dbIn/*.xml) and asserts via {@code DbDiff} against
- * dbExpected/*.xml. The test method bodies perform the same
- * mutations but never run JPQL assertions — the dbExpected phase
- * handles verification automatically after the method's transaction
- * commits.
+ * Mirrors scenario-01-full-crud's 21 CRUD methods, but routes every
+ * persistence call through a per-domain {@code @Stateless} EJB
+ * service (under jawelte's ejb-module) instead of hitting an injected
+ * {@code EntityManager} directly. The dbIn/dbExpected seed-and-diff
+ * envelope from db-testdata-module verifies state automatically after
+ * each method's transaction commits, so test bodies stay free of
+ * JPQL assertions and consist of a single delegate call into the EJB.
+ *
+ * <p>The LNP signal this scenario contributes: the per-class overhead
+ * of injecting and invoking EJB-managed services (plus the implicit
+ * {@code @Transactional} interceptor jawelte's ejb-module applies on
+ * {@code @Stateless} beans) compared to direct {@code EntityManager}
+ * access in scenario-02.
  *
  * <p>testData layout — every {@code @TestControl} folder is a
  * self-contained pair carrying both {@code dbIn/full.xml} (the
- * input fixture, optional by db-testdata-module's contract but
- * always present here) and {@code dbExpected/full.xml} (the
- * mandatory verification snapshot):
+ * input fixture) and {@code dbExpected/full.xml} (the verification
+ * snapshot):
  * <ul>
  *   <li>{@code lnp-full-crud/seed/} — full ~1000-row fixture;
  *       {@code dbExpected} mirrors {@code dbIn} (DB unchanged),
- *       referenced by the 14 read-only methods.</li>
+ *       referenced by the read-only methods.</li>
  *   <li>{@code lnp-full-crud/method-NN-<name>/} — same seed in
  *       {@code dbIn/}, post-mutation snapshot in
  *       {@code dbExpected/}, referenced by the matching mutation
@@ -65,7 +64,19 @@ import org.os890.jawelte.tests.lnp.scenario09.entity.inventory.StockItem;
 public abstract class AbstractFullCrudEjbScenarioTest {
 
     @Inject
-    private EntityManager em;
+    private EcommerceService ecommerce;
+
+    @Inject
+    private HrService hr;
+
+    @Inject
+    private ContentService content;
+
+    @Inject
+    private FinanceService finance;
+
+    @Inject
+    private InventoryService inventory;
 
     /** Default constructor required by JUnit/CDI. */
     protected AbstractFullCrudEjbScenarioTest() {
@@ -73,252 +84,185 @@ public abstract class AbstractFullCrudEjbScenarioTest {
 
     // ==================== E-COMMERCE ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(1)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query all customers")
+    @DisplayName("Query all customers via EJB")
     public void queryAllCustomers() {
-        // No-op: dbExpected verifies the seed remained unchanged.
+        ecommerce.queryAllCustomers();
     }
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(2)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query products by status")
+    @DisplayName("Query products by status via EJB")
     public void queryProductsByStatus() {
-        // No-op.
+        ecommerce.queryProductsByStatus();
     }
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(3)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query orders with items (join fetch)")
+    @DisplayName("Query orders with items via EJB")
     public void queryOrdersWithItems() {
-        // No-op.
+        ecommerce.queryOrdersWithItems();
     }
 
-    /** Mutation: updates customer 1's email. */
     @Test
     @Order(4)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/method-04-update-customer-email")
-    @DisplayName("Update customer email")
+    @DisplayName("Update customer email via EJB")
     public void updateCustomerEmail() {
-        Customer c = em.find(Customer.class, 1L);
-        c.setEmail("updated@test.com");
-        em.flush();
+        ecommerce.updateCustomerEmail(1L, "updated@test.com");
     }
 
-    /**
-     * Mutation: deletes order 1 (cascade removes its items) plus the
-     * matching payment row.
-     */
     @Test
     @Order(5)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/method-05-delete-order-cascade")
-    @DisplayName("Delete an order (cascade deletes items)")
+    @DisplayName("Delete an order (cascade) via EJB")
     public void deleteOrderCascade() {
-        Long orderId = 1L;
-        CustomerOrder o = em.find(CustomerOrder.class, orderId);
-        em.createQuery("DELETE FROM Payment p WHERE p.order.id = :oid")
-                .setParameter("oid", orderId).executeUpdate();
-        em.remove(o);
-        em.flush();
+        ecommerce.deleteOrderCascade(1L);
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(6)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Average product price")
+    @DisplayName("Average product price via EJB")
     public void averageProductPrice() {
-        // No-op.
+        ecommerce.averageProductPrice();
     }
 
-    /** Mutation: adds one OrderItem to order 2. */
     @Test
     @Order(7)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/method-07-add-item-to-order")
-    @DisplayName("Add item to existing order")
+    @DisplayName("Add item to existing order via EJB")
     public void addItemToOrder() {
-        Long orderId = 2L;
-        CustomerOrder o = em.find(CustomerOrder.class, orderId);
-        Product prod = em.find(Product.class, 1L);
-        OrderItem item = new OrderItem();
-        item.setOrder(o);
-        item.setProduct(prod);
-        item.setQuantity(5);
-        item.setUnitPrice(prod.getPrice());
-        em.persist(item);
-        o.getItems().add(item);
-        em.flush();
+        ecommerce.addItemToOrder(2L, 1L, 5);
     }
 
     // ==================== HR ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(10)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query employees by department")
+    @DisplayName("Query employees by department via EJB")
     public void queryEmployeesByDepartment() {
-        // No-op.
+        hr.queryEmployeesByDepartment(1L);
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(11)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Count employees per department")
+    @DisplayName("Count employees per department via EJB")
     public void countEmployeesPerDepartment() {
-        // No-op.
+        hr.countEmployeesPerDepartment();
     }
 
-    /** Mutation: re-assigns employee 1 to the last department. */
     @Test
     @Order(12)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/method-12-update-employee-department")
-    @DisplayName("Update employee department")
+    @DisplayName("Update employee department via EJB")
     public void updateEmployeeDepartment() {
-        Employee emp = em.find(Employee.class, 1L);
-        Department lastDept = em.find(Department.class, 10L);
-        emp.setDepartment(lastDept);
-        em.flush();
+        hr.updateEmployeeDepartment(1L, 10L);
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(13)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Average salary across all employees")
+    @DisplayName("Average salary across all employees via EJB")
     public void averageSalary() {
-        // No-op.
+        hr.averageSalary();
     }
 
     // ==================== CONTENT ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(20)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query articles by author")
+    @DisplayName("Query articles by author via EJB")
     public void queryArticlesByAuthor() {
-        // No-op.
+        content.queryArticlesByAuthor(1L);
     }
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(21)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query articles with tags (join)")
+    @DisplayName("Query articles with tags via EJB")
     public void queryArticlesWithTags() {
-        // No-op.
+        content.queryArticlesWithTags("Tag-0");
     }
 
-    /** Mutation: replaces article 1's body. */
     @Test
     @Order(22)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/method-22-update-article-body")
-    @DisplayName("Update article body")
+    @DisplayName("Update article body via EJB")
     public void updateArticleBody() {
-        Article art = em.find(Article.class, 1L);
-        art.setBody("Updated body content for testing.");
-        em.flush();
+        content.updateArticleBody(1L, "Updated body content for testing.");
     }
 
     // ==================== FINANCE ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(30)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query transactions by account")
+    @DisplayName("Query transactions by account via EJB")
     public void queryTransactionsByAccount() {
-        // No-op.
+        finance.queryTransactionsByAccount(1L);
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(31)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Sum account balances")
+    @DisplayName("Sum account balances via EJB")
     public void sumAccountBalances() {
-        // No-op.
+        finance.sumAccountBalances();
     }
 
-    /** Mutation: increases account 1's balance by 500. */
     @Test
     @Order(32)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/method-32-update-account-balance")
-    @DisplayName("Update account balance")
+    @DisplayName("Update account balance via EJB")
     public void updateAccountBalance() {
-        Account acc = em.find(Account.class, 1L);
-        acc.setBalance(acc.getBalance().add(new BigDecimal("500")));
-        em.flush();
+        finance.updateAccountBalance(1L, new BigDecimal("500"));
     }
 
     // ==================== INVENTORY ====================
 
-    /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(40)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query stock by warehouse")
+    @DisplayName("Query stock by warehouse via EJB")
     public void queryStockByWarehouse() {
-        // No-op.
+        inventory.queryStockByWarehouse(1L);
     }
 
-    /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(41)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Total stock across all warehouses")
+    @DisplayName("Total stock across all warehouses via EJB")
     public void totalStockQuantity() {
-        // No-op.
+        inventory.totalStockQuantity();
     }
 
-    /** Mutation: bumps stock item 1's quantity by 50. */
     @Test
     @Order(42)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/method-42-update-stock-quantity")
-    @DisplayName("Update stock quantity")
+    @DisplayName("Update stock quantity via EJB")
     public void updateStockQuantity() {
-        StockItem si = em.find(StockItem.class, 1L);
-        si.setQuantity(si.getQuantity() + 50);
-        em.flush();
+        inventory.updateStockQuantity(1L, 50);
     }
 
     // ==================== CROSS-DOMAIN ====================
 
-    /** Read-only check — verified by dbExpected = seed. */
     @Test
     @Order(50)
-    @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Cross-domain: count all entity tables have data")
+    @DisplayName("Cross-domain: touch every EJB service")
     public void allTablesPopulated() {
-        // No-op.
+        ecommerce.queryAllCustomers();
+        hr.countEmployeesPerDepartment();
+        content.queryArticlesByAuthor(1L);
+        finance.sumAccountBalances();
+        inventory.totalStockQuantity();
     }
 }

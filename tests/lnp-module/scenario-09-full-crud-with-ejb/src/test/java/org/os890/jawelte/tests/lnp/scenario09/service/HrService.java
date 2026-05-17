@@ -22,7 +22,10 @@ import jakarta.persistence.EntityManager;
 import org.os890.jawelte.tests.lnp.scenario09.entity.hr.Department;
 import org.os890.jawelte.tests.lnp.scenario09.entity.hr.Employee;
 
-/** HR domain service — {@code @Stateless} EJB. */
+/**
+ * HR domain service — {@code @Stateless} EJB. Method names mirror
+ * scenario-01's HR test methods.
+ */
 @Stateless
 public class HrService {
 
@@ -33,16 +36,22 @@ public class HrService {
     public HrService() {
     }
 
-    /** Touch every Employee — read-only query. */
-    public void listEmployees() {
-        em.createQuery("SELECT e FROM Employee e", Employee.class)
+    /** SELECT e FROM Employee e WHERE e.department.id = :id. */
+    public void queryEmployeesByDepartment(Long deptId) {
+        em.createQuery(
+                "SELECT e FROM Employee e WHERE e.department.id = :d",
+                Employee.class)
+                .setParameter("d", deptId)
                 .getResultList();
     }
 
-    /** Aggregate query — count Employees. */
-    public long countEmployees() {
-        return em.createQuery("SELECT COUNT(e) FROM Employee e", Long.class)
-                .getSingleResult();
+    /** SELECT e.department.name, COUNT(e) FROM Employee e GROUP BY ... */
+    public void countEmployeesPerDepartment() {
+        em.createQuery(
+                "SELECT e.department.name, COUNT(e) FROM Employee e "
+                        + "GROUP BY e.department.name",
+                Object[].class)
+                .getResultList();
     }
 
     /** Re-assign employee N to a different department. */
@@ -51,5 +60,12 @@ public class HrService {
         Department dept = em.find(Department.class, deptId);
         emp.setDepartment(dept);
         em.flush();
+    }
+
+    /** SELECT AVG(s.amount) FROM Salary s. */
+    public void averageSalary() {
+        em.createQuery(
+                "SELECT AVG(s.amount) FROM Salary s", Double.class)
+                .getSingleResult();
     }
 }

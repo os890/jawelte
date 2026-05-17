@@ -18,7 +18,6 @@ package org.os890.jawelte.tests.lnp.scenario08;
 import java.math.BigDecimal;
 
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -77,17 +76,6 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     private AccountRepository accounts;
     @Inject
     private StockItemRepository stock;
-    /**
-     * EntityManager escape hatch — used only by deleteOrderCascade
-     * to run a JPQL bulk-DELETE on the dependent Payment row before
-     * removing its CustomerOrder. Spring Data's @Modifying derived
-     * deletes don't propagate through the testcontrol observer's
-     * transaction boundary cleanly under jawelte; doing the bulk
-     * delete via em.createQuery + flush keeps the cascade-driven
-     * test method matching scenario-02's semantics.
-     */
-    @Inject
-    private EntityManager em;
 
     /** Default constructor required by JUnit/CDI. */
     protected AbstractFullCrudSpringDataScenarioTest() {
@@ -139,12 +127,8 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-05-delete-order-cascade")
     @DisplayName("Delete an order via Spring Data")
     public void deleteOrderCascade() {
-        CustomerOrder o = orders.findById(1L).orElseThrow();
-        em.createQuery("DELETE FROM Payment p WHERE p.order.id = :oid")
-                .setParameter("oid", 1L)
-                .executeUpdate();
-        orders.delete(o);
-        em.flush();
+        payments.deleteByOrderId(1L);
+        orders.deleteById(1L);
     }
 
     @Test

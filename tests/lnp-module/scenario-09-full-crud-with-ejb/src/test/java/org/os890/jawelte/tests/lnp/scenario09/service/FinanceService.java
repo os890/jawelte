@@ -22,8 +22,12 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 
 import org.os890.jawelte.tests.lnp.scenario09.entity.finance.Account;
+import org.os890.jawelte.tests.lnp.scenario09.entity.finance.FinancialTransaction;
 
-/** Finance domain service — {@code @Stateless} EJB. */
+/**
+ * Finance domain service — {@code @Stateless} EJB. Method names
+ * mirror scenario-01's finance test methods.
+ */
 @Stateless
 public class FinanceService {
 
@@ -34,16 +38,26 @@ public class FinanceService {
     public FinanceService() {
     }
 
-    /** Touch every Account — read-only query. */
-    public void listAccounts() {
-        em.createQuery("SELECT a FROM Account a", Account.class)
+    /** SELECT t FROM FinancialTransaction t WHERE t.account.id = :id. */
+    public void queryTransactionsByAccount(Long accountId) {
+        em.createQuery(
+                "SELECT t FROM FinancialTransaction t WHERE t.account.id = :id",
+                FinancialTransaction.class)
+                .setParameter("id", accountId)
                 .getResultList();
     }
 
-    /** Add {@code amount} to account N's balance. */
-    public void addToBalance(Long accountId, BigDecimal amount) {
+    /** SELECT SUM(a.balance) FROM Account a. */
+    public void sumAccountBalances() {
+        em.createQuery(
+                "SELECT SUM(a.balance) FROM Account a", BigDecimal.class)
+                .getSingleResult();
+    }
+
+    /** Add {@code delta} to account N's balance. */
+    public void updateAccountBalance(Long accountId, BigDecimal delta) {
         Account acc = em.find(Account.class, accountId);
-        acc.setBalance(acc.getBalance().add(amount));
+        acc.setBalance(acc.getBalance().add(delta));
         em.flush();
     }
 }
