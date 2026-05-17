@@ -42,6 +42,8 @@ SCENARIO_KINDS = [
     ("FullCrudRestDbUnitScenario",  "scenario-05 - db-unit + REST"),
     ("FullCrudRoundtripScenario",   "scenario-06 - REST roundtrip"),
     ("FullCrudGatlingScenario",     "scenario-07 - Gatling client"),
+    ("FullCrudSpringDataScenario",  "scenario-08 - Spring Data"),
+    ("FullCrudEjbScenario",         "scenario-09 - EJB services"),
 ]
 
 PHASE_PATTERN = re.compile(
@@ -63,6 +65,8 @@ SUMMARY_TAG_TO_LABEL = {
     "db-unit + REST": "scenario-05 - db-unit + REST",
     "roundtrip": "scenario-06 - REST roundtrip",
     "gatling": "scenario-07 - Gatling client",
+    "spring-data": "scenario-08 - Spring Data",
+    "ejb": "scenario-09 - EJB services",
 }
 # Per-row line: `<ClassName> <methods> <total> <median> <heapStart> <heapEnd> <heapDelta>`
 # heap fields use the JVM's default locale (German `,`); we normalise
@@ -509,9 +513,20 @@ def _svg_line_chart(runtime_lines, runtime_colour):
     all_values = [v for _, values in runtime_lines for v in values]
     if not all_values:
         return ""
-    min_y = min(all_values)
-    max_y = max(all_values)
-    if max_y == min_y:
+    # Anchor the y-axis at 0 (or below, if a sample is negative)
+    # rather than auto-fitting to the data range. With post-GC heap
+    # sitting in a tight band (e.g. 37–38 MB across 100 classes) an
+    # auto-fit min would stretch a ~1 MB drift across the whole
+    # plot and visually fake a steep climb. Zero-anchoring keeps the
+    # plot honest about absolute heap values — a 1 MB drift on a
+    # 0–40 MB axis stays visibly flat.
+    sample_max = max(all_values)
+    sample_min = min(all_values)
+    min_y = min(0.0, sample_min)
+    # Add 10 % headroom above the peak so the line doesn't touch the
+    # top edge.
+    max_y = sample_max * 1.1 if sample_max > 0 else 1.0
+    if max_y <= min_y:
         max_y = min_y + 1.0
 
     def x_of(idx):

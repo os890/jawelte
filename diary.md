@@ -5284,3 +5284,15 @@ Adds a seventh LNP scenario that pairs the same server stack as scenario-06 (Cus
 `PerformanceExtension` prints the `(gatling)` tag; `lnp-report.py` learned the matching prefix (`FullCrudGatlingScenario`) and tag mapping so the new scenario gets its own row in every report section.
 
 Smoke test on OWB: assertions green, ~8s per class for the first one (Gatling JIT warmup dominates). Full sweep timing will land when the user runs verify-all.sh lnp next.
+
+## 2026-05-17 — lnp scenarios 08 (Spring Data) + 09 (EJB) and heap chart axis anchored at zero
+
+Two more LNP variants on the scenario-02 baseline:
+
+* **scenario-08 — full-crud-spring-data**. Same 21 CRUD methods, same dbIn / dbExpected seed envelope, but every persistence call goes through Spring Data `JpaRepository` interfaces auto-discovered by jawelte's spring-data-module CDI extension. One repository per entity domain (Customer / Product / CustomerOrder / OrderItem / Department / Employee / Article / Account / StockItem / Payment); the abstract test base @Injects them all and replaces every `em.find / em.persist / em.remove` call with the equivalent `findById / save / delete`. The Payment bulk-delete in `deleteOrderCascade` uses an injected `EntityManager` escape hatch — Spring Data's `@Modifying` derived deletes don't propagate cleanly through testcontrol's transaction observer in jawelte's setup.
+
+* **scenario-09 — full-crud-with-ejb**. Same shape, but the persistence logic is encapsulated in five per-domain `@Stateless` EJB services (`EcommerceService`, `HrService`, `ContentService`, `FinanceService`, `InventoryService`). The test methods inject the services and just call them; the EJBs hold the `EntityManager` and do the same work scenario-02's test bodies do directly. ejb-module's stereotype recogniser maps `@Stateless` to a CDI scope + applies the implicit `@Transactional` interceptor.
+
+Both green at 21/21 per class and 2101/2101 across the full 100-class sweep on OWB. Each carries its own `PerformanceExtension` tag (`spring-data` / `ejb`); `lnp-report.py` learned the new `FullCrudSpringDataScenario` / `FullCrudEjbScenario` prefixes.
+
+**Heap chart axis anchored at zero.** The user observed that the LNP report's heap-end history charts looked like a steep climb even though jvisualvm showed the heap staying flat. Root cause: `_svg_line_chart` was auto-fitting the y-axis from `min(values)` to `max(values)`. With the GC-hint probe sitting in a 37–38 MB band post-GC, a ~1 MB total drift across 100 classes ended up stretched across the whole plot. Fix: pin the y-axis to `min(0, sampleMin)` and `sampleMax * 1.1` — a 1 MB drift on a 0–40 MB axis stays visibly flat, which is what jvisualvm shows.

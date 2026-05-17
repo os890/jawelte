@@ -41,6 +41,8 @@
         <module>scenario-05-full-crud-rest-with-dbunit</module>
         <module>scenario-06-full-crud-roundtrip</module>
         <module>scenario-07-full-crud-with-gatling</module>
+        <module>scenario-08-full-crud-spring-data</module>
+        <module>scenario-09-full-crud-with-ejb</module>
     </modules>
 
     <dependencies>

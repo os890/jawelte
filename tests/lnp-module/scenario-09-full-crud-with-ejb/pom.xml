@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests-lnp-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-lnp-module-scenario-09-full-crud-with-ejb</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte tests/lnp-module scenario 09: full-crud-with-ejb</name>
+    <description>Mirrors scenario-02's 21 CRUD methods but encapsulates every persistence call in a per-domain @Stateless EJB service routed through jawelte's ejb-module. The dbIn/dbExpected seed-and-diff envelope is unchanged; the LNP signal is the per-class overhead of injecting and invoking EJB-managed services compared to direct EntityManager access in scenario-02.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-testcontrol-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-testcontrol-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-testdata-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            ejb-module: jakarta.ejb stereotype recogniser + the
+            implicit @Transactional interceptor jawelte applies on
+            @Stateless / @Stateful / @Singleton beans, plus the
+            jakarta.ejb-api contract our service classes annotate
+            against.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-ejb-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-ejb-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!--
+            jakarta.ejb-api is dep-managed as `provided`, which is
+            not on the test classpath. Drop the scope here so the
+            @Stateless annotations our service classes carry link
+            at test compile and run time.
+        -->
+        <dependency>
+            <groupId>jakarta.ejb</groupId>
+            <artifactId>jakarta.ejb-api</artifactId>
+        </dependency>
+    </dependencies>
+</project>
