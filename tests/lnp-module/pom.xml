@@ -36,6 +36,7 @@
     <modules>
         <module>scenario-01-full-crud</module>
         <module>scenario-02-full-crud-dbunit</module>
+        <module>scenario-03-full-crud-dbunit-with-all-modules</module>
     </modules>
 
     <dependencies>

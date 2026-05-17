@@ -5110,3 +5110,11 @@ The 15 % overhead bundles: FlatXmlDataSet parse of the seed XML, DBUnit `CleanIn
 Caveat: `PerformanceExtension` wraps the `@Test` method body, not `@TestControl`'s seed/verify observers. Scenario-02's mutations are tiny inline mutations (e.g. `em.find().setEmail()`) and the query-only methods are no-ops, so the captured per-method median sits at 0 ms — the seed/diff cost surfaces only in the per-class total. Apples-to-apples comparison is on total, not median. A future refinement could move the timing instrumentation up a layer (around `BeforeEachCallback` order) to also account for testcontrol observers.
 
 Branch `30-load-and-performance-test-module-lnp-module` ready for review. Commit prefix updated from `WORKING` (smoke-tested) to `WORKING` confirmed at full-sweep scale.
+
+## 2026-05-17 — TICKET-030 part 3: scenario-03 (db-unit + every framework module on classpath)
+
+Cloned scenario-02 into `tests/lnp-module/scenario-03-full-crud-dbunit-with-all-modules/`, renamed packages `scenario02 → scenario03`, classes `FullCrudDbUnit* → FullCrudAllModules*`, persistence-unit `lnpFullCrudDbUnitPU → lnpFullCrudAllModulesPU`, summary-table title `(db-unit) → (db-unit + all modules)`. Test code is byte-equivalent to scenario-02 — same 21 mirror methods, same seed/dbExpected XMLs, same `@TestControl` flow.
+
+Difference is pom-only: every framework module's api + impl jar joins the test classpath, plus `jawelte-spring-data-module` and the runtime deps the scenario already needed (jpa-module, cdi-module, scope-module, testcontrol-module, db-testdata-module stay). Added: jta + ejb + jaxrs + wiremock + batch + content-diff + spring-data — 13 additional artifacts. Purpose: isolate the cost of merely *having* the framework modules on the classpath even though only the JPA + db-unit code path is exercised.
+
+Smoke-tested `FullCrudAllModulesScenario01Test` under OWB: 21/21 green, total 1800 ms for the cold class. Full sweep next.
