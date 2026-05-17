@@ -38,6 +38,7 @@
         <module>scenario-02-full-crud-dbunit</module>
         <module>scenario-03-full-crud-dbunit-with-all-modules</module>
         <module>scenario-04-full-crud-with-jta</module>
+        <module>scenario-05-full-crud-rest-with-dbunit</module>
     </modules>
 
     <dependencies>
