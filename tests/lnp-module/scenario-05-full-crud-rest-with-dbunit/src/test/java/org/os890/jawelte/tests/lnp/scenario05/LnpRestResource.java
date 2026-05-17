@@ -19,6 +19,8 @@ import java.math.BigDecimal;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.json.Json;
+import jakarta.json.JsonArrayBuilder;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.DELETE;
@@ -78,9 +80,14 @@ public class LnpRestResource {
     @Path("/customers")
     @Transactional
     public String queryAllCustomers() {
-        em.createQuery("SELECT COUNT(c) FROM Customer c", Long.class)
-                .getSingleResult();
-        return OK;
+        JsonArrayBuilder arr = Json.createArrayBuilder();
+        em.createQuery("SELECT c FROM Customer c ORDER BY c.id", Customer.class)
+                .getResultList()
+                .forEach(c -> arr.add(Json.createObjectBuilder()
+                        .add("id", c.getId())
+                        .add("name", c.getName())
+                        .add("email", c.getEmail())));
+        return arr.build().toString();
     }
 
     /** Read-only query — verified by dbExpected = seed. */

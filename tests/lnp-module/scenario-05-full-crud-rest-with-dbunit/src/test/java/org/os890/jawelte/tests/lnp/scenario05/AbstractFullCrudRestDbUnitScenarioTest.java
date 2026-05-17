@@ -76,7 +76,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query all customers via REST")
     public void queryAllCustomers() {
-        get("/lnp/customers");
+        getJson("/lnp/customers", "lnp-full-crud/expected-responses/queryAllCustomers.json");
     }
 
     /** Read-only query — verified by dbExpected = seed. */
@@ -287,8 +287,42 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
         invokeAndAssertOk("DELETE", pathAndQuery, null);
     }
 
+    /**
+     * GET the URL and compare the JSON response against the expected
+     * payload loaded from {@code classpathResource}. The endpoint is
+     * expected to return realistic entity-shaped JSON (large enough
+     * that inline {@code expectedContent} would be unreadable), and
+     * {@link ResponseDiff} drives the structural diff.
+     *
+     * @param pathAndQuery     URL path + query (e.g.
+     *                         {@code "/lnp/customers"})
+     * @param classpathResource classpath path of the expected JSON
+     *                         file (e.g.
+     *                         {@code "lnp-full-crud/expected-responses/queryAllCustomers.json"})
+     */
+    private void getJson(String pathAndQuery, String classpathResource) {
+        invokeAndAssertExpected("GET", pathAndQuery, null, classpathResource);
+    }
+
     private void invokeAndAssertOk(String method, String pathAndQuery,
                                     String body) {
+        invokeJson(method, pathAndQuery, body, response ->
+                ResponseDiff.forJson(response)
+                        .expectedContent("{\"ok\":true}")
+                        .assertEquals());
+    }
+
+    private void invokeAndAssertExpected(String method, String pathAndQuery,
+                                          String body,
+                                          String classpathResource) {
+        invokeJson(method, pathAndQuery, body, response ->
+                ResponseDiff.forJson(response)
+                        .expected(classpathResource)
+                        .assertEquals());
+    }
+
+    private void invokeJson(String method, String pathAndQuery, String body,
+                             java.util.function.Consumer<Response> assertion) {
         String url = testUrl.get() + pathAndQuery;
         try (Client client = ClientBuilder.newClient()) {
             Invocation.Builder request = client.target(url)
@@ -298,9 +332,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
                     : request.method(method,
                             Entity.entity(body, MediaType.APPLICATION_JSON));
             try (Response r = response) {
-                ResponseDiff.forJson(r)
-                        .expectedContent("{\"ok\":true}")
-                        .assertEquals();
+                assertion.accept(r);
             }
         }
     }
