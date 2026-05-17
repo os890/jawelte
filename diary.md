@@ -5190,3 +5190,18 @@ Added a fifth LNP scenario that exercises the same 21-method CRUD shape as scena
 Scaffolded the module by copying scenario-02 verbatim (entities, testdata XML, junit-platform.properties, beans.xml, microprofile-config.properties) and renaming `scenario02 → scenario05` plus `FullCrudDbUnit → FullCrudRestDbUnit`. Persistence unit name changed to `lnpFullCrudRestDbUnitPU` so it can't collide with scenario-02. CXF is the default JAX-RS runtime (`-Pcxf`, on by default); `-Presteasy` is also declared for the matrix.
 
 Smoke-tested green: 1051 tests on OWB (~60s), 1051 tests on Weld (~54s). No regressions in 01-04.
+
+## 2026-05-17 — testdata folders made self-contained pairs (db-unit scenarios 02, 03, 05)
+
+The user pointed out that each `@TestControl(testData = ...)` folder should be a self-contained dbIn (optional) + dbExpected (mandatory) pair. The previous layout was split — `seed/` only had `dbIn/`; `query-only/` and the seven `method-NN-*/` folders only had `dbExpected/`. The two-entry `@TestControl` annotations papered over the gap because `TestDataHandler` silently skips missing sub-folders.
+
+Restructured to one folder per test method, each carrying both halves:
+
+* Read-only methods (14) → single entry `lnp-full-crud/seed`: `seed/dbIn/full.xml` = full ~1000-row fixture, `seed/dbExpected/full.xml` mirrors it (DB unchanged after a read-only method).
+* Mutation methods (7) → single entry `lnp-full-crud/method-NN-<name>`: `dbIn/full.xml` is the full seed, `dbExpected/full.xml` is the post-mutation snapshot.
+
+Deleted the obsolete `query-only/` folder; updated `AbstractFullCrudDbUnitScenarioTest`, `AbstractFullCrudAllModulesScenarioTest`, and `AbstractFullCrudRestDbUnitScenarioTest` so each method's `@TestControl` now uses a single-string `testData` value pointing at a self-contained pair. Adjusted the docblocks accordingly.
+
+Why this matters beyond aesthetics: with `seed/dbExpected` present and the old `{seed, method-NN}` two-entry pattern, the verify phase would have asserted *both* dbExpected snapshots (seed = unchanged AND method-NN = post-mutation), and the seed assertion would have failed against the mutated DB. Collapsing to a single entry per method makes each diff self-consistent.
+
+Smoke-tested green on OWB and Weld for scenarios 02, 03, and 05 — 1051 tests per scenario per runtime.

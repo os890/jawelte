@@ -46,16 +46,19 @@ import org.os890.jawelte.tests.lnp.scenario02.entity.inventory.StockItem;
  * handles verification automatically after the method's transaction
  * commits.
  *
- * <p>testData layout:
+ * <p>testData layout — every {@code @TestControl} folder is a
+ * self-contained pair carrying both {@code dbIn/full.xml} (the
+ * input fixture, optional by db-testdata-module's contract but
+ * always present here) and {@code dbExpected/full.xml} (the
+ * mandatory verification snapshot):
  * <ul>
- *   <li>{@code lnp-full-crud/seed/dbIn/full.xml} — full ~1000-row
- *       fixture, loaded by every test method.</li>
- *   <li>{@code lnp-full-crud/query-only/dbExpected/full.xml} —
- *       identical to the seed; referenced by the 14 query-only
- *       methods that do not mutate the database.</li>
- *   <li>{@code lnp-full-crud/method-NN-<name>/dbExpected/full.xml}
- *       — full post-mutation state for one of the 7 mutation
- *       methods.</li>
+ *   <li>{@code lnp-full-crud/seed/} — full ~1000-row fixture;
+ *       {@code dbExpected} mirrors {@code dbIn} (DB unchanged),
+ *       referenced by the 14 read-only methods.</li>
+ *   <li>{@code lnp-full-crud/method-NN-<name>/} — same seed in
+ *       {@code dbIn/}, post-mutation snapshot in
+ *       {@code dbExpected/}, referenced by the matching mutation
+ *       method.</li>
  * </ul>
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -74,7 +77,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(1)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query all customers")
     public void queryAllCustomers() {
         // No-op: dbExpected verifies the seed remained unchanged.
@@ -84,7 +87,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(2)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query products by status")
     public void queryProductsByStatus() {
         // No-op.
@@ -94,7 +97,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(3)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query orders with items (join fetch)")
     public void queryOrdersWithItems() {
         // No-op.
@@ -104,8 +107,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(4)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-04-update-customer-email"})
+    @TestControl(testData = "lnp-full-crud/method-04-update-customer-email")
     @DisplayName("Update customer email")
     public void updateCustomerEmail() {
         Customer c = em.find(Customer.class, 1L);
@@ -120,8 +122,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(5)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-05-delete-order-cascade"})
+    @TestControl(testData = "lnp-full-crud/method-05-delete-order-cascade")
     @DisplayName("Delete an order (cascade deletes items)")
     public void deleteOrderCascade() {
         Long orderId = 1L;
@@ -136,7 +137,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(6)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average product price")
     public void averageProductPrice() {
         // No-op.
@@ -146,8 +147,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(7)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-07-add-item-to-order"})
+    @TestControl(testData = "lnp-full-crud/method-07-add-item-to-order")
     @DisplayName("Add item to existing order")
     public void addItemToOrder() {
         Long orderId = 2L;
@@ -169,7 +169,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(10)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query employees by department")
     public void queryEmployeesByDepartment() {
         // No-op.
@@ -179,7 +179,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(11)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Count employees per department")
     public void countEmployeesPerDepartment() {
         // No-op.
@@ -189,8 +189,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(12)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-12-update-employee-department"})
+    @TestControl(testData = "lnp-full-crud/method-12-update-employee-department")
     @DisplayName("Update employee department")
     public void updateEmployeeDepartment() {
         Employee emp = em.find(Employee.class, 1L);
@@ -203,7 +202,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(13)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average salary across all employees")
     public void averageSalary() {
         // No-op.
@@ -215,7 +214,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(20)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles by author")
     public void queryArticlesByAuthor() {
         // No-op.
@@ -225,7 +224,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(21)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles with tags (join)")
     public void queryArticlesWithTags() {
         // No-op.
@@ -235,8 +234,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(22)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-22-update-article-body"})
+    @TestControl(testData = "lnp-full-crud/method-22-update-article-body")
     @DisplayName("Update article body")
     public void updateArticleBody() {
         Article art = em.find(Article.class, 1L);
@@ -250,7 +248,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(30)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query transactions by account")
     public void queryTransactionsByAccount() {
         // No-op.
@@ -260,7 +258,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(31)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Sum account balances")
     public void sumAccountBalances() {
         // No-op.
@@ -270,8 +268,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(32)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-32-update-account-balance"})
+    @TestControl(testData = "lnp-full-crud/method-32-update-account-balance")
     @DisplayName("Update account balance")
     public void updateAccountBalance() {
         Account acc = em.find(Account.class, 1L);
@@ -285,7 +282,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(40)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query stock by warehouse")
     public void queryStockByWarehouse() {
         // No-op.
@@ -295,7 +292,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(41)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Total stock across all warehouses")
     public void totalStockQuantity() {
         // No-op.
@@ -305,8 +302,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(42)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-42-update-stock-quantity"})
+    @TestControl(testData = "lnp-full-crud/method-42-update-stock-quantity")
     @DisplayName("Update stock quantity")
     public void updateStockQuantity() {
         StockItem si = em.find(StockItem.class, 1L);
@@ -320,7 +316,7 @@ public abstract class AbstractFullCrudDbUnitScenarioTest {
     @Test
     @Order(50)
     @Transactional
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Cross-domain: count all entity tables have data")
     public void allTablesPopulated() {
         // No-op.

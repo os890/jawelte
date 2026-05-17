@@ -73,7 +73,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(1)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query all customers via REST")
     public void queryAllCustomers() {
         get("/lnp/customers");
@@ -82,7 +82,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(2)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query products by status via REST")
     public void queryProductsByStatus() {
         get("/lnp/products/by-status?status=ACTIVE");
@@ -91,7 +91,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(3)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query orders with items via REST")
     public void queryOrdersWithItems() {
         get("/lnp/orders/with-items");
@@ -100,8 +100,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Mutation: updates customer 1's email via REST. */
     @Test
     @Order(4)
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-04-update-customer-email"})
+    @TestControl(testData = "lnp-full-crud/method-04-update-customer-email")
     @DisplayName("Update customer email via REST")
     public void updateCustomerEmail() {
         put("/lnp/customers/1/email?value=updated@test.com");
@@ -110,8 +109,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Mutation: deletes order 1 (cascade removes its items) via REST. */
     @Test
     @Order(5)
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-05-delete-order-cascade"})
+    @TestControl(testData = "lnp-full-crud/method-05-delete-order-cascade")
     @DisplayName("Delete an order (cascade) via REST")
     public void deleteOrderCascade() {
         delete("/lnp/orders/1");
@@ -120,7 +118,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(6)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average product price via REST")
     public void averageProductPrice() {
         get("/lnp/products/avg-price");
@@ -129,8 +127,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Mutation: adds one OrderItem to order 2 via REST. */
     @Test
     @Order(7)
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-07-add-item-to-order"})
+    @TestControl(testData = "lnp-full-crud/method-07-add-item-to-order")
     @DisplayName("Add item to existing order via REST")
     public void addItemToOrder() {
         post("/lnp/orders/2/items?productId=1&quantity=5");
@@ -141,7 +138,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(10)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query employees by department via REST")
     public void queryEmployeesByDepartment() {
         get("/lnp/employees/by-department?dept=1");
@@ -150,7 +147,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(11)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Count employees per department via REST")
     public void countEmployeesPerDepartment() {
         get("/lnp/employees/count-by-department");
@@ -159,8 +156,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Mutation: re-assigns employee 1 to dept 10 via REST. */
     @Test
     @Order(12)
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-12-update-employee-department"})
+    @TestControl(testData = "lnp-full-crud/method-12-update-employee-department")
     @DisplayName("Update employee department via REST")
     public void updateEmployeeDepartment() {
         put("/lnp/employees/1/department/10");
@@ -169,7 +165,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(13)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average salary via REST")
     public void averageSalary() {
         get("/lnp/employees/avg-salary");
@@ -180,7 +176,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(20)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles by author via REST")
     public void queryArticlesByAuthor() {
         get("/lnp/articles/by-author?author=1");
@@ -189,7 +185,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(21)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles with tags via REST")
     public void queryArticlesWithTags() {
         get("/lnp/articles/with-tags");
@@ -198,8 +194,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Mutation: replaces article 1's body via REST. */
     @Test
     @Order(22)
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-22-update-article-body"})
+    @TestControl(testData = "lnp-full-crud/method-22-update-article-body")
     @DisplayName("Update article body via REST")
     public void updateArticleBody() {
         put("/lnp/articles/1/body?text=Updated+body+content+for+testing.");
@@ -210,7 +205,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(30)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query transactions by account via REST")
     public void queryTransactionsByAccount() {
         get("/lnp/transactions/by-account?account=1");
@@ -219,7 +214,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(31)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Sum account balances via REST")
     public void sumAccountBalances() {
         get("/lnp/accounts/sum-balance");
@@ -228,8 +223,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Mutation: bumps account 1's balance by 500 via REST. */
     @Test
     @Order(32)
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-32-update-account-balance"})
+    @TestControl(testData = "lnp-full-crud/method-32-update-account-balance")
     @DisplayName("Update account balance via REST")
     public void updateAccountBalance() {
         put("/lnp/accounts/1/balance/add?amount=500");
@@ -240,7 +234,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only query — verified by dbExpected = seed. */
     @Test
     @Order(40)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query stock by warehouse via REST")
     public void queryStockByWarehouse() {
         get("/lnp/stock/by-warehouse?warehouse=1");
@@ -249,7 +243,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only aggregate — verified by dbExpected = seed. */
     @Test
     @Order(41)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Total stock quantity via REST")
     public void totalStockQuantity() {
         get("/lnp/stock/total");
@@ -258,8 +252,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Mutation: bumps stock item 1's quantity by 50 via REST. */
     @Test
     @Order(42)
-    @TestControl(testData = {"lnp-full-crud/seed",
-            "lnp-full-crud/method-42-update-stock-quantity"})
+    @TestControl(testData = "lnp-full-crud/method-42-update-stock-quantity")
     @DisplayName("Update stock quantity via REST")
     public void updateStockQuantity() {
         put("/lnp/stock/1/quantity/add?amount=50");
@@ -270,7 +263,7 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     /** Read-only check — verified by dbExpected = seed. */
     @Test
     @Order(50)
-    @TestControl(testData = {"lnp-full-crud/seed", "lnp-full-crud/query-only"})
+    @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Cross-domain populated check via REST")
     public void allTablesPopulated() {
         get("/lnp/tables/populated");
