@@ -5555,3 +5555,11 @@ Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
 ```
 
 Coverage: 2 / 56 cdi-module scenarios mirrored and green under @QuarkusTest.
+
+## 2026-05-18 — TICKET-015 Phase B4: scenario-12 GREEN (satisfied IPs not mocked)
+
+No BuildStep changes needed. `Scenario12Test` has `@Inject EmailService` where `DefaultEmailService` is an `@ApplicationScoped` implementor of `EmailService` on the test classpath. The existing `getAllKnownImplementors` check sees DefaultEmailService and skips mock registration; Quarkus resolves the IP to the real bean; the test asserts `emailService.send(...)` returns the real `"real:..."` prefix.
+
+Coverage: 3 / 56 cdi-module scenarios green under @QuarkusTest (01, 02, 12).
+
+Status: PAUSING for user review at this checkpoint. The infrastructure is proven (Quarkus 3.35.3 boots, jawelte-quarkus extension recognised, BuildStep + MockBeanCreator pipeline working). Subsequent scenarios will surface new cases: parameterized generics (Provider<>/Instance<>), qualifiers (@Named, custom), explicit @TestBean alternatives, static-field @TestBeans, scope-module-driven scope assignment, whitelist mode, framework-allowlist override, etc. Each is a discrete extension to JaweltesQuarkusProcessor.
