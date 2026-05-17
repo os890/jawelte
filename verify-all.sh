@@ -168,9 +168,30 @@ if [ "$LNP_MODE" = true ]; then
     # aggregated summary via FinalSummaryTest. Coverage aggregation is
     # skipped on purpose - perf runs are not coverage runs and the
     # huge per-method volume would skew the coverage exec data.
+    GATLING_SRC="$REPO_ROOT/tests/lnp-module/scenario-07-full-crud-with-gatling/target/gatling"
+
+    # Snapshot scenario-07's HTML Gatling reports per constellation
+    # so the four runtime/provider combinations stay side-by-side
+    # under the LNP report dir instead of clobbering each other.
+    snapshot_gatling() {
+        local constellation=$1
+        local dst="$LNP_REPORT_DIR/gatling/$constellation"
+        if [ ! -d "$GATLING_SRC" ]; then
+            return
+        fi
+        rm -rf "$dst"
+        mkdir -p "$dst"
+        cp -R "$GATLING_SRC/." "$dst/"
+        # Drop the old snapshot's class folders inside the live tree
+        # so the NEXT constellation's run sees a clean slate instead
+        # of accumulating sims from prior phases.
+        rm -rf "$GATLING_SRC"
+    }
+
     for cdi in owb weld; do
         run "tests/lnp-module [$cdi,lnp]" \
             "$REPO_ROOT/tests/lnp-module" -P "$cdi,lnp" verify
+        snapshot_gatling "$cdi-cxf"
     done
 
     # JAX-RS scenarios under RESTEasy. The cxf profile is
@@ -188,6 +209,7 @@ if [ "$LNP_MODE" = true ]; then
                 "$REPO_ROOT/tests/lnp-module/$scen" \
                 -P "$cdi,lnp,-cxf,resteasy" verify
         done
+        snapshot_gatling "$cdi-resteasy"
     done
 elif [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------

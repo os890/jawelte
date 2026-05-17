@@ -55,15 +55,20 @@ public abstract class AbstractFullCrudGatlingScenarioTest {
         // directly.
         System.setProperty("gatling.baseUrl", testUrl.get());
 
-        // Gatling 3.13 exposes only Scala-callable signatures on
+        // Gatling 3.x exposes only Scala-callable signatures on
         // io.gatling.app.Gatling; the Java-friendly entry is the
         // companion object's fromArgs(String[]) method. Using CLI-
         // style args keeps us off Scala collection APIs entirely.
+        // Each numbered subclass writes into its own results
+        // sub-folder so the HTML report per class doesn't clobber
+        // any sibling's. verify-all.sh snapshots the whole
+        // target/gatling/ tree into target/lnp-report/gatling/<cdi>-<jaxrs>/
+        // after each LNP phase so the four runtime / provider
+        // constellations stay side-by-side.
         String[] args = {
                 "--simulation", CustomerCrudSimulation.class.getName(),
                 "--results-folder",
-                "target/gatling/" + getClass().getSimpleName(),
-                "--no-reports"
+                "target/gatling/" + getClass().getSimpleName()
         };
         int exitCode = Gatling$.MODULE$.fromArgs(args);
 
