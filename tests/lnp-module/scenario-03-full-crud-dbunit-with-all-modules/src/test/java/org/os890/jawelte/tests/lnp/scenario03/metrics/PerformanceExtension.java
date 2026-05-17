@@ -143,6 +143,17 @@ public class PerformanceExtension
     }
 
     private static long heapUsedBytes() {
+        // Hint a GC + brief settle so the reading reflects retained
+        // memory rather than transient garbage. Under OWB the raw
+        // used-bytes reading drifts upward 2-3x faster than under Weld
+        // simply because more short-lived allocations accumulate
+        // between Full GCs; this hint normalises the two runtimes.
+        System.gc();
+        try {
+            Thread.sleep(20);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
         MemoryUsage heap = ManagementFactory.getMemoryMXBean()
                 .getHeapMemoryUsage();
         return heap.getUsed();

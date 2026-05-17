@@ -5205,3 +5205,13 @@ Deleted the obsolete `query-only/` folder; updated `AbstractFullCrudDbUnitScenar
 Why this matters beyond aesthetics: with `seed/dbExpected` present and the old `{seed, method-NN}` two-entry pattern, the verify phase would have asserted *both* dbExpected snapshots (seed = unchanged AND method-NN = post-mutation), and the seed assertion would have failed against the mutated DB. Collapsing to a single entry per method makes each diff self-consistent.
 
 Smoke-tested green on OWB and Weld for scenarios 02, 03, and 05 — 1051 tests per scenario per runtime.
+
+## 2026-05-17 — PerformanceExtension forces a GC before heap reading; Hibernate WARNs silenced
+
+Two small follow-ups after the LNP report showed OWB heap-end values 2-3× Weld's at steady state:
+
+1. **GC hint before each heap measurement** — `PerformanceExtension.heapUsedBytes()` now calls `System.gc()` and waits 20 ms before reading `MemoryMXBean.getHeapMemoryUsage().getUsed()`. The previous reading included transient garbage; OWB allocates more short-lived objects between Full GCs than Weld, which made it look like OWB was retaining memory. Post-GC the two runtimes report ~equal heap (0.96–1.03× ratio across all five scenarios). Applied to all five `metrics/PerformanceExtension.java` copies.
+
+2. **Removed two explicit Hibernate property settings that triggered HHH WARN logs** — `JtaPersistencePropertyResolver` no longer sets `hibernate.transaction.coordinator_class=jta` (Hibernate auto-derives it from `hibernate.transaction.jta.platform`, and the explicit setting logged HHH000193 "Overriding hibernate.transaction.coordinator_class is dangerous"). `JpaCdiExtension` no longer sets `hibernate.dialect=org.hibernate.dialect.H2Dialect` either (modern Hibernate detects the dialect from the JDBC URL, and the explicit setting logged HHH90000025). Zero HHH WARN lines in the verify-all.sh lnp output now.
+
+verify-all.sh lnp re-run after both changes: green across all five scenarios on OWB + Weld, 11m 44s total, report at `target/lnp-report/index.html`.

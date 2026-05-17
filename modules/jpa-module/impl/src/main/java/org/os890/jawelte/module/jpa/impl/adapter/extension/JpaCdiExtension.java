@@ -451,11 +451,12 @@ public class JpaCdiExtension implements Extension {
         properties.put("jakarta.persistence.jdbc.password", "");
         properties.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
         properties.put("jakarta.persistence.schema-generation.database.action", "drop-and-create");
-        // Define the dialect explicitly so Hibernate's bootstrap does
-        // not need to open a probe Connection to determine it from
-        // JDBC metadata — under JTA the data source is XA-only and
-        // Hibernate's metadata-probe path doesn't always reach it.
-        properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+        // hibernate.dialect is intentionally NOT set: modern Hibernate
+        // detects the H2 dialect from the JDBC URL and warns
+        // (HHH90000025) when the property is supplied explicitly.
+        // jta-module sets jakarta.persistence.transactionType=JTA
+        // separately; the dialect probe works on the underlying
+        // connection even when the wrapper is XA.
 
         // Persistence-property prefix walk goes through the active
         // ConfigResolver so a consumer-supplied resolver controls every
