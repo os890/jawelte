@@ -31,6 +31,7 @@ import org.os890.jawelte.tests.lnp.scenario08.entity.ecommerce.Customer;
 import org.os890.jawelte.tests.lnp.scenario08.entity.ecommerce.CustomerOrder;
 import org.os890.jawelte.tests.lnp.scenario08.entity.ecommerce.OrderItem;
 import org.os890.jawelte.tests.lnp.scenario08.entity.ecommerce.Product;
+import org.os890.jawelte.tests.lnp.scenario08.entity.ecommerce.ProductStatus;
 import org.os890.jawelte.tests.lnp.scenario08.entity.finance.Account;
 import org.os890.jawelte.tests.lnp.scenario08.entity.hr.Department;
 import org.os890.jawelte.tests.lnp.scenario08.entity.hr.Employee;
@@ -41,17 +42,25 @@ import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.Custom
 import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.CustomerRepository;
 import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.DepartmentRepository;
 import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.EmployeeRepository;
+import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.FinancialTransactionRepository;
 import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.OrderItemRepository;
 import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.PaymentRepository;
 import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.ProductRepository;
+import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.SalaryRepository;
 import org.os890.jawelte.tests.lnp.scenario08.repository.CrudRepositories.StockItemRepository;
 
 /**
- * Mirrors scenario-02's 21 CRUD methods but every persistence call
- * goes through Spring Data {@link org.springframework.data.jpa.repository.JpaRepository}
- * interfaces auto-discovered by spring-data-module's CDI extension —
- * no direct {@code EntityManager} access. The dbIn / dbExpected
- * seed-and-diff envelope is unchanged.
+ * Mirrors scenario-01-full-crud's 21 CRUD methods, but every
+ * persistence call goes through a Spring Data
+ * {@link org.springframework.data.jpa.repository.JpaRepository} —
+ * auto-discovered by spring-data-module's CDI extension — instead of
+ * hitting an injected {@code EntityManager} directly. Every read-only
+ * body is a single delegate call into the matching repository: derived
+ * queries (e.g. {@code findByStatus}, {@code findByDepartmentId}) and
+ * explicit {@code @Query} aggregates / joins (e.g.
+ * {@code averagePrice}, {@code findAllWithItems},
+ * {@code countPerDepartment}) keep the test class free of in-line JPQL.
+ * The dbIn / dbExpected seed-and-diff envelope is unchanged.
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public abstract class AbstractFullCrudSpringDataScenarioTest {
@@ -71,9 +80,13 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @Inject
     private EmployeeRepository employees;
     @Inject
+    private SalaryRepository salaries;
+    @Inject
     private ArticleRepository articles;
     @Inject
     private AccountRepository accounts;
+    @Inject
+    private FinancialTransactionRepository transactions;
     @Inject
     private StockItemRepository stock;
 
@@ -96,9 +109,9 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @Order(2)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Query products via Spring Data")
+    @DisplayName("Query products by status via Spring Data")
     public void queryProductsByStatus() {
-        products.findAll();
+        products.findByStatus(ProductStatus.ACTIVE);
     }
 
     @Test
@@ -107,7 +120,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query orders with items via Spring Data")
     public void queryOrdersWithItems() {
-        orders.findAll();
+        orders.findAllWithItems();
     }
 
     @Test
@@ -137,7 +150,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average product price via Spring Data")
     public void averageProductPrice() {
-        products.findAll();
+        products.averagePrice();
     }
 
     @Test
@@ -166,7 +179,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query employees by department via Spring Data")
     public void queryEmployeesByDepartment() {
-        employees.findAll();
+        employees.findByDepartmentId(1L);
     }
 
     @Test
@@ -175,7 +188,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Count employees per department via Spring Data")
     public void countEmployeesPerDepartment() {
-        employees.count();
+        employees.countPerDepartment();
     }
 
     @Test
@@ -196,7 +209,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average salary via Spring Data")
     public void averageSalary() {
-        employees.findAll();
+        salaries.averageAmount();
     }
 
     // ==================== CONTENT ====================
@@ -207,7 +220,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles by author via Spring Data")
     public void queryArticlesByAuthor() {
-        articles.findAll();
+        articles.findByAuthorId(1L);
     }
 
     @Test
@@ -216,7 +229,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles with tags via Spring Data")
     public void queryArticlesWithTags() {
-        articles.findAll();
+        articles.findByTagName("Tag-0");
     }
 
     @Test
@@ -238,7 +251,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query transactions by account via Spring Data")
     public void queryTransactionsByAccount() {
-        accounts.findAll();
+        transactions.findByAccountId(1L);
     }
 
     @Test
@@ -247,7 +260,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Sum account balances via Spring Data")
     public void sumAccountBalances() {
-        accounts.findAll();
+        accounts.sumBalances();
     }
 
     @Test
@@ -269,7 +282,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query stock by warehouse via Spring Data")
     public void queryStockByWarehouse() {
-        stock.findAll();
+        stock.findByWarehouseId(1L);
     }
 
     @Test
@@ -278,7 +291,7 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Total stock quantity via Spring Data")
     public void totalStockQuantity() {
-        stock.findAll();
+        stock.totalQuantity();
     }
 
     @Test
@@ -298,8 +311,19 @@ public abstract class AbstractFullCrudSpringDataScenarioTest {
     @Order(50)
     @Transactional
     @TestControl(testData = "lnp-full-crud/seed")
-    @DisplayName("Cross-domain populated check via Spring Data")
+    @DisplayName("Cross-domain: touch every Spring Data repository")
     public void allTablesPopulated() {
         customers.count();
+        products.count();
+        orders.count();
+        orderItems.count();
+        payments.count();
+        departments.count();
+        employees.count();
+        salaries.count();
+        articles.count();
+        accounts.count();
+        transactions.count();
+        stock.count();
     }
 }
