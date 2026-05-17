@@ -110,13 +110,22 @@ def parse(log_path):
         for line in fp:
             phase_match = PHASE_PATTERN.match(line)
             if phase_match:
-                profiles = phase_match.group(2)
-                if "owb" in profiles:
-                    runtime_now = "OWB"
-                elif "weld" in profiles:
-                    runtime_now = "Weld"
+                tokens = {t.strip() for t in phase_match.group(2).split(",")}
+                if "owb" in tokens:
+                    cdi = "OWB"
+                elif "weld" in tokens:
+                    cdi = "Weld"
                 else:
-                    runtime_now = profiles
+                    cdi = phase_match.group(2)
+                # cxf is activeByDefault in scenarios 05-07. When the
+                # phase tag carries neither cxf nor resteasy (the
+                # `[<cdi>,lnp]` aggregator phase), treat it as CXF
+                # because that's what activated.
+                if "resteasy" in tokens:
+                    jaxrs = "RESTEasy"
+                else:
+                    jaxrs = "CXF"
+                runtime_now = f"{cdi} ({jaxrs})"
                 continue
             banner_match = BANNER_PATTERN.search(line)
             if banner_match:
@@ -190,8 +199,16 @@ def aggregates(samples):
 
 def render(totals, medians, heaps, methods, heap_end_series,
            banner, log_path, out_path):
+    # Constellation order: every CDI runtime crossed with every
+    # JAX-RS provider. Scenarios 01-04 only contribute to the CXF
+    # columns; 05-07 contribute to all four. We filter the list to
+    # the constellations that actually produced data so empty
+    # axes never render.
     runtimes_present = [
-        r for r in ("OWB", "Weld") if r in totals]
+        r for r in (
+            "OWB (CXF)", "OWB (RESTEasy)",
+            "Weld (CXF)", "Weld (RESTEasy)")
+        if r in totals]
     scenario_order = [label for _, label in SCENARIO_KINDS]
 
     rows_html = []
@@ -238,6 +255,11 @@ thead th {{ background: #f5f5f5; }}
 .delta-pos {{ color: #b06000; }}
 .delta-neg {{ color: #1f7a1f; }}
 .meta {{ color: #666; font-size: 0.85rem; }}
+.heap-chart-row {{ display: flex; flex-wrap: wrap; gap: 1rem;
+                   margin-bottom: 1.2rem; }}
+.heap-chart {{ flex: 0 1 auto; }}
+.heap-chart h4 {{ margin: 0 0 0.3rem 0; font-size: 0.9rem;
+                  color: #444; font-weight: 600; }}
 </style>
 </head>
 <body>
@@ -298,34 +320,37 @@ def _row_html(label, per_runtime):
 
 
 def _per_method_html(medians, methods, runtimes_present, scenario_order):
+    # One row per (scenario, constellation) so CXF and RESTEasy runs
+    # stay separated. Scenarios that only ran under CXF still show
+    # one row per CDI runtime.
     rows = []
     for label in scenario_order:
-        pooled_medians = []
-        pooled_method_counts = []
         for runtime in runtimes_present:
-            pooled_medians.extend(medians[runtime].get(label, []))
-            pooled_method_counts.extend(methods[runtime].get(label, []))
-        if not pooled_medians:
-            continue
-        n = len(pooled_medians)
-        avg_med = sum(pooled_medians) / n
-        sorted_med = sorted(pooled_medians)
-        med_of_med = sorted_med[n // 2]
-        avg_methods = (sum(pooled_method_counts) / len(pooled_method_counts)
-                       if pooled_method_counts else 0)
-        rows.append(
-            f'<tr><td class="scenario">{html.escape(label)}</td>'
-            f'<td>{n}</td>'
-            f'<td>{avg_methods:.0f}</td>'
-            f'<td>{avg_med:.1f}</td>'
-            f'<td>{med_of_med}</td>'
-            f'<td>{sorted_med[0]}</td>'
-            f'<td>{sorted_med[-1]}</td></tr>')
+            samples = medians[runtime].get(label, [])
+            method_counts = methods[runtime].get(label, [])
+            if not samples:
+                continue
+            n = len(samples)
+            avg_med = sum(samples) / n
+            sorted_med = sorted(samples)
+            med_of_med = sorted_med[n // 2]
+            avg_methods = (sum(method_counts) / len(method_counts)
+                           if method_counts else 0)
+            rows.append(
+                f'<tr><td class="scenario">{html.escape(label)}</td>'
+                f'<td>{html.escape(runtime)}</td>'
+                f'<td>{n}</td>'
+                f'<td>{avg_methods:.0f}</td>'
+                f'<td>{avg_med:.1f}</td>'
+                f'<td>{med_of_med}</td>'
+                f'<td>{sorted_med[0]}</td>'
+                f'<td>{sorted_med[-1]}</td></tr>')
     if not rows:
         return "<p>no data</p>"
     return (
         '<table><thead><tr>'
-        '<th>scenario</th><th>classes</th><th>@Test methods / class</th>'
+        '<th>scenario</th><th>constellation</th><th>classes</th>'
+        '<th>@Test methods / class</th>'
         '<th>avg median ms</th><th>median of medians ms</th>'
         '<th>min ms</th><th>max ms</th>'
         '</tr></thead><tbody>'
@@ -333,30 +358,33 @@ def _per_method_html(medians, methods, runtimes_present, scenario_order):
 
 
 def _heap_html(heaps, runtimes_present, scenario_order):
+    # One row per (scenario, constellation) — match the per-method
+    # table so CXF and RESTEasy heap profiles can be read directly
+    # without pooling.
     rows = []
     for label in scenario_order:
-        pooled = []
         for runtime in runtimes_present:
-            pooled.extend(heaps[runtime].get(label, []))
-        if not pooled:
-            continue
-        n = len(pooled)
-        avg_h = sum(pooled) / n
-        sorted_h = sorted(pooled)
-        median_h = sorted_h[n // 2]
-        sign = "+" if avg_h > 0 else ""
-        rows.append(
-            f'<tr><td class="scenario">{html.escape(label)}</td>'
-            f'<td>{n}</td>'
-            f'<td>{sign}{avg_h:.1f}</td>'
-            f'<td>{median_h:+.1f}</td>'
-            f'<td>{sorted_h[0]:+.1f}</td>'
-            f'<td>{sorted_h[-1]:+.1f}</td></tr>')
+            samples = heaps[runtime].get(label, [])
+            if not samples:
+                continue
+            n = len(samples)
+            avg_h = sum(samples) / n
+            sorted_h = sorted(samples)
+            median_h = sorted_h[n // 2]
+            sign = "+" if avg_h > 0 else ""
+            rows.append(
+                f'<tr><td class="scenario">{html.escape(label)}</td>'
+                f'<td>{html.escape(runtime)}</td>'
+                f'<td>{n}</td>'
+                f'<td>{sign}{avg_h:.1f}</td>'
+                f'<td>{median_h:+.1f}</td>'
+                f'<td>{sorted_h[0]:+.1f}</td>'
+                f'<td>{sorted_h[-1]:+.1f}</td></tr>')
     if not rows:
         return "<p>no data</p>"
     return (
         '<table><thead><tr>'
-        '<th>scenario</th><th>classes</th>'
+        '<th>scenario</th><th>constellation</th><th>classes</th>'
         '<th>avg delta MB</th><th>median delta MB</th>'
         '<th>min delta MB</th><th>max delta MB</th>'
         '</tr></thead><tbody>'
@@ -440,18 +468,32 @@ def _delta_html(data, runtimes_present, scenario_order):
 
 def _heap_chart_html(series, runtimes_present, scenario_order):
     blocks = []
-    runtime_colour = {"OWB": "#1f6fb4", "Weld": "#c97a2b"}
+    runtime_colour = {
+        "OWB (CXF)": "#1f6fb4",
+        "OWB (RESTEasy)": "#2aa198",
+        "Weld (CXF)": "#c97a2b",
+        "Weld (RESTEasy)": "#dc322f",
+    }
     for label in scenario_order:
-        runtime_lines = []
+        # Render one chart per (scenario, constellation) — each chart
+        # plots a single line so CXF and RESTEasy runs stay visually
+        # separated instead of overlapping on a shared y-axis.
+        per_constellation = []
         for runtime in runtimes_present:
             values = series[runtime].get(label, [])
             if values:
-                runtime_lines.append((runtime, values))
-        if not runtime_lines:
+                per_constellation.append(
+                    '<div class="heap-chart">'
+                    f'<h4>{html.escape(runtime)}</h4>'
+                    + _svg_line_chart([(runtime, values)], runtime_colour)
+                    + '</div>')
+        if not per_constellation:
             continue
         blocks.append(
             f'<h3>{html.escape(label)}</h3>'
-            + _svg_line_chart(runtime_lines, runtime_colour))
+            '<div class="heap-chart-row">'
+            + "".join(per_constellation)
+            + '</div>')
     if not blocks:
         return "<p>no data</p>"
     return "".join(blocks)
