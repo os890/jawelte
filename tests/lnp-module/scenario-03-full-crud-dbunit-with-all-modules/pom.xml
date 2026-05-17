@@ -74,18 +74,34 @@
         </dependency>
 
         <!--
-            jta-module is intentionally NOT pulled in. Its
-            AutoSelectTransactionManagerProvider activates as soon as
-            a JTA detail-impl (geronimo / Atomikos / Narayana) appears
-            on the classpath, which then takes precedence over
-            jpa-module's RESOURCE_LOCAL @Transactional interceptor and
-            breaks every @TestControl seed (the seed expects a
-            RESOURCE_LOCAL EM that jpa-module exposes; with JTA in the
-            picture the EM stays inactive). The scenario covers the
-            "all modules on classpath" overhead for everything that
-            can coexist with RESOURCE_LOCAL JPA - a JTA variant would
-            need its own persistence-unit + XML fixtures.
+            jta-module joins the classpath like every other framework
+            module. AutoSelectTransactionManagerProvider activates as
+            soon as a JTA detail-impl appears, which is incompatible
+            with a RESOURCE_LOCAL persistence unit, so this scenario
+            runs against transaction-type="JTA" (see persistence.xml)
+            with the geronimo + narayana detail-impl pair that
+            scenario-04 already uses.
         -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jta-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jta-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.geronimo.components</groupId>
+            <artifactId>geronimo-transaction</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jboss.narayana.jta</groupId>
+            <artifactId>narayana-jta</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-ejb-module-api</artifactId>
