@@ -5215,3 +5215,24 @@ Two small follow-ups after the LNP report showed OWB heap-end values 2-3× Weld'
 2. **Removed two explicit Hibernate property settings that triggered HHH WARN logs** — `JtaPersistencePropertyResolver` no longer sets `hibernate.transaction.coordinator_class=jta` (Hibernate auto-derives it from `hibernate.transaction.jta.platform`, and the explicit setting logged HHH000193 "Overriding hibernate.transaction.coordinator_class is dangerous"). `JpaCdiExtension` no longer sets `hibernate.dialect=org.hibernate.dialect.H2Dialect` either (modern Hibernate detects the dialect from the JDBC URL, and the explicit setting logged HHH90000025). Zero HHH WARN lines in the verify-all.sh lnp output now.
 
 verify-all.sh lnp re-run after both changes: green across all five scenarios on OWB + Weld, 11m 44s total, report at `target/lnp-report/index.html`.
+
+## 2026-05-17 — Event-driven primary path in `DefaultPersistenceUnitConnectionResolver`
+
+Refactored the JTA fallback in jpa-module's connection resolver so the primary path uses standard CDI `Instance.select(...).get()` instead of the `BeanManager` + `Context.get(bean, cc)` dance.
+
+**The trick that makes it work:** the seed/diff observer calls `connectionFor(...)` *before* any user code has touched the `@Inject EntityManager`, so the `@TransactionScoped` capture bean is initially empty. To get the underlying contextual instance to materialize (and the produceWith lambda — and the event — to fire), the resolver now calls `entityManagerInstance.get().isOpen()` on the CDI client proxy. That harmless probe forces Weld/OWB to create the contextual instance, which fires `EntityManagerCreatedEvent`, which the `JtaEntityManagerCapture` observer consumes by storing the raw EM under the PU name. The resolver then reads that raw EM out of the capture bean and unwraps it to `org.hibernate.Session` — safe because the EM in the capture is the real `SessionImpl`, not a proxy.
+
+**New classes (jpa-module/impl/adapter/connection):**
+
+* `EntityManagerCreatedEvent` — simple record carrying `(String persistenceUnitName, EntityManager entityManager)`.
+* `JtaEntityManagerCapture` — `@TransactionScoped` CDI bean observing the event; provides `forPersistenceUnit(String)` returning `Optional<EntityManager>`.
+
+**JpaCdiExtension change:** the JTA-mode synthetic EM bean's `produceWith` lambda now fires `EntityManagerCreatedEvent` immediately after `factory.createEntityManager()`. The fire is best-effort (try/catch swallows runtime exceptions) so the resolver's `BeanManager.Context` fallback still works if anything goes sideways.
+
+**Resolver shape:**
+
+* `TransactionScopedEmHolder.peek(...)` — unchanged RESOURCE_LOCAL fast path.
+* `lookupViaCapture(...)` — primary JTA path. `CDI.select(EM, @Named).get().isOpen()` materialises the EM (which fires the event); then `CDI.select(JtaEntityManagerCapture.class).get().forPersistenceUnit(...)` returns the raw EM.
+* `lookupViaContext(...)` — fallback. Direct `BeanManager.getBeans(...)` + `Context.get(bean, cc)` from the previous design, kept for robustness when the capture bean isn't discovered or the event got swallowed.
+
+Probed both runtimes during development: with the primary path armed, `JtaEntityManagerCapture.forPersistenceUnit(...).isPresent()` returns `true` on both OWB and Weld for scenario-67. Probe stripped before commit.
