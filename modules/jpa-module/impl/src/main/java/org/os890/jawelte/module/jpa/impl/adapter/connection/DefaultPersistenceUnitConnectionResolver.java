@@ -15,12 +15,16 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.connection;
 
+import java.lang.annotation.Annotation;
 import java.sql.Connection;
 import java.util.Set;
 
 import jakarta.annotation.Priority;
-import jakarta.enterprise.inject.Instance;
+import jakarta.enterprise.context.spi.Context;
+import jakarta.enterprise.context.spi.CreationalContext;
 import jakarta.enterprise.inject.literal.NamedLiteral;
+import jakarta.enterprise.inject.spi.Bean;
+import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.EntityManager;
 
@@ -79,27 +83,43 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
         return session.doReturningWork(connection -> connection);
     }
 
+    @SuppressWarnings("unchecked")
     private static EntityManager lookupCdiEntityManager(String persistenceUnitName) {
         try {
-            CDI<Object> cdi = CDI.current();
+            BeanManager beanManager = CDI.current().getBeanManager();
             // jpa-module's JpaCdiExtension registers EntityManager
             // beans qualified with @Named(puName) in the multi-PU case
             // and @Default in the single-PU case. Try @Named first;
             // if it's not satisfied (single PU), fall back to @Default.
-            Instance<EntityManager> named =
-                    cdi.select(EntityManager.class, NamedLiteral.of(persistenceUnitName));
-            if (named.isResolvable()) {
-                return named.get();
+            Bean<?> bean = beanManager.resolve(
+                    beanManager.getBeans(EntityManager.class, NamedLiteral.of(persistenceUnitName)));
+            if (bean == null) {
+                bean = beanManager.resolve(beanManager.getBeans(EntityManager.class));
             }
-            Instance<EntityManager> defaulted = cdi.select(EntityManager.class);
-            if (defaulted.isResolvable()) {
-                return defaulted.get();
+            if (bean == null) {
+                return null;
             }
+            // Fetch the *contextual instance* via the Context directly
+            // rather than via CDI.select(...).get() (which would hand
+            // back a client proxy). Hibernate's SessionImpl.unwrap(
+            // Session.class) returns {@code this}, and Weld's client
+            // proxy method handler converts that "return self" into the
+            // proxy itself — making the downstream cast to Session fail
+            // with ClassCastException. The bypass keeps the resolver
+            // working under JTA + Weld.
+            Bean<EntityManager> emBean = (Bean<EntityManager>) bean;
+            Class<? extends Annotation> scope = emBean.getScope();
+            Context context = beanManager.getContext(scope);
+            CreationalContext<EntityManager> creationalContext =
+                    beanManager.createCreationalContext(emBean);
+            return context.get(emBean, creationalContext);
         } catch (IllegalStateException notRunning) {
-            // CDI container not started on this thread; nothing to fall
+            // CDI container not started on this thread, or no active
+            // context for the bean's scope (e.g. outside a JTA
+            // transaction for a @TransactionScoped EM). Nothing to fall
             // back to.
+            return null;
         }
-        return null;
     }
 
     @Override

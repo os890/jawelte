@@ -5153,3 +5153,27 @@ Fix in `DefaultPersistenceUnitConnectionResolver`: keep the holder as the primar
 `CDI.current().select(EntityManager.class)` for single-PU (the `@Default` qualifier `JpaCdiExtension` registers when `singlePersistenceUnit=true`). Only when all three paths fail do we surface the original `IllegalStateException`. The CDI lookup returns the JTA-scoped EM bean Hibernate already drives, so seed and verify code see the same uncommitted state.
 
 Reproducer green. No regressions in the RESOURCE_LOCAL hot path (the holder still answers first).
+
+## 2026-05-17 — `EntityManager.unwrap(Session.class)` returns Weld client proxy: bypass via Context.get()
+
+The first @TestControl+JTA fix passed scenario-67 on OWB but blew up across all 50 classes of lnp-module scenario-03 on Weld with:
+
+```
+ClassCastException: WeldClientProxy cannot be cast to org.hibernate.Session
+    at DefaultPersistenceUnitConnectionResolver.connectionFor(line 78)
+```
+
+Line 78 is `Session session = entityManager.unwrap(Session.class)`. Hibernate's SessionImpl returns `this` from `unwrap(Session.class)` — and Weld's client proxy method handler has a "preserve proxy identity" shortcut: when the underlying contextual instance returns *itself*, the handler returns the *proxy* (`self`) instead, to keep proxy equality semantics. That converted the unwrap result into the Weld proxy, which is not a `Session`.
+
+Fix: get the contextual instance from `Context.get(bean, cc)` directly, bypassing the client proxy:
+
+```java
+Bean<?> bean = beanManager.resolve(beanManager.getBeans(EntityManager.class, NamedLiteral.of(puName)));
+if (bean == null) bean = beanManager.resolve(beanManager.getBeans(EntityManager.class));
+Context context = beanManager.getContext(bean.getScope());
+return context.get((Bean<EntityManager>) bean, beanManager.createCreationalContext((Bean<EntityManager>) bean));
+```
+
+`context.get(bean, cc)` returns the actual SessionImpl (lazily creating it if not already in the JTA-tx context). `em.unwrap(Session.class)` on the real impl returns `this`, the cast succeeds, the rest of the resolver path stays unchanged. RESOURCE_LOCAL fast path (holder.peek) is unaffected.
+
+Verified: scenario-67 reproducer green on OWB + Weld; lnp-module scenario-03 green on Weld (1051 tests, ~81s).
