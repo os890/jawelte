@@ -5118,3 +5118,24 @@ Cloned scenario-02 into `tests/lnp-module/scenario-03-full-crud-dbunit-with-all-
 Difference is pom-only: every framework module's api + impl jar joins the test classpath, plus `jawelte-spring-data-module` and the runtime deps the scenario already needed (jpa-module, cdi-module, scope-module, testcontrol-module, db-testdata-module stay). Added: jta + ejb + jaxrs + wiremock + batch + content-diff + spring-data — 13 additional artifacts. Purpose: isolate the cost of merely *having* the framework modules on the classpath even though only the JPA + db-unit code path is exercised.
 
 Smoke-tested `FullCrudAllModulesScenario01Test` under OWB: 21/21 green, total 1800 ms for the cold class. Full sweep next.
+
+## 2026-05-17 — TICKET-030 final sweep with three scenarios
+
+`bash verify-all.sh lnp` → `LNP PASS GREEN — 3 phase(s) — total 16m 45s`. 300 perf lines (100 per scenario), 6 summary tables (3 scenarios × 2 runtimes).
+
+**Three-way comparison** (warm-class averages, both runtimes pooled, n=99 per side):
+
+| scenario | cold class | avg (all) | avg (warm) | p50 |
+|---|---|---|---|---|
+| scenario-01 (programmatic) | 2713 ms | 773 ms | 753 ms | 714 ms |
+| scenario-02 (db-unit, minimal modules) | 1857 ms | 887 ms | 877 ms | 854 ms |
+| scenario-03 (db-unit + all framework modules) | 1859 ms | 922 ms | 913 ms | 893 ms |
+
+**Deltas:**
+- db-unit pipeline cost (scenario-02 − scenario-01): **+124 ms / class (+16.5 %)** — XML parse, DBUnit CleanInsert, IDENTITY advance, DbDiff.
+- Pure classpath-bloat cost (scenario-03 − scenario-02): **+36 ms / class (+4.1 %)** — every framework api+impl jar on classpath, CDI extensions scanned, ServiceLoader probed; not a single feature actually exercised beyond JPA + db-unit.
+- Combined overhead (scenario-03 − scenario-01): **+160 ms / class (+21.2 %)**.
+
+Surprise: scenario-01's cold class is the slowest of the three (2713 ms vs 1857 / 1859 ms). The programmatic populator does ~1000 `em.persist` calls in the warmup-phase populator which triggers Hibernate JIT in a way that the DBUnit CleanInsert path doesn't.
+
+Module-classpath overhead is **stable at ~4 %** across the runs - low but non-zero. No CDI extension currently breaks the JPA + db-unit flow simply by being present, with one documented exception (jta-module, see commit `2d9da85`).
