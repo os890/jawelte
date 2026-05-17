@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-tests-quarkus-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (tests/quarkus-module aggregator and parent)</name>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte under @QuarkusTest. Mirrors tests/cdi-module's scenarios one-to-one (same scenario numbers); each scenario is a small Quarkus app whose test class carries @QuarkusTest + @EnableTestBeans. Gated by the -Pquarkus profile.</description>
+
+    <modules>
+        <module>scenario-01-interface-auto-mock</module>
+    </modules>
+
+    <dependencies>
+        <!--
+            jawelte-core-api + jawelte-core-impl are needed by every
+            scenario (DelegatingJUnitExtension auto-skip path detects
+            @QuarkusTest and cedes container ownership to Quarkus).
+            jawelte-quarkus-module-runtime carries the Quarkus-flavour
+            TestBeanContainerPort + ServiceLoader registration; the
+            -deployment artifact ships the @BuildStep methods that
+            Quarkus discovers at build time.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-quarkus-module-runtime</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-quarkus-module-deployment</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Quarkus brings its own jakarta APIs transitively through
+            quarkus-arc. quarkus-junit5 wires @QuarkusTest into JUnit.
+        -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit</artifactId>
+            <scope>test</scope>
+            <exclusions>
+                <!--
+                    Quarkus 3.x is jakarta-native; the javax.* artifacts
+                    that quarkus-junit transitively drags through Maven
+                    Resolver (Plexus DI inside Maven 3.9) are legacy
+                    baggage that conflicts with the project's
+                    BannedDependencies rule. Pruned here; if Maven
+                    Resolver actually needs them at runtime, the
+                    failure will surface at test time and we'll
+                    re-evaluate.
+                -->
+                <exclusion>
+                    <groupId>javax.inject</groupId>
+                    <artifactId>javax.inject</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>javax.annotation</groupId>
+                    <artifactId>javax.annotation-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!--
+                    quarkus-maven-plugin builds the Quarkus app's
+                    augmentation that @QuarkusTest needs to bootstrap
+                    ArC at test time. Configured here so per-scenario
+                    poms inherit the wiring without repeating it.
+                -->
+                <plugin>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-maven-plugin</artifactId>
+                    <version>${quarkus.version}</version>
+                    <extensions>true</extensions>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>build</goal>
+                                <goal>generate-code</goal>
+                                <goal>generate-code-tests</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

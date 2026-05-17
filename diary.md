@@ -5498,3 +5498,17 @@ Both runtime + deployment poms now configure `maven-javadoc-plugin` (`javadoc-ja
 - JaCoCo: skipped (no test execution data; expected — no tests yet)
 
 Next: scaffold `tests/quarkus-module/scenario-01-*` as the first @QuarkusTest smoke target.
+
+## 2026-05-18 — TICKET-015 Phase B1: tests/quarkus-module scaffold; scenario-01 boots Quarkus
+
+Wired `tests/quarkus-module` into the tests aggregator and stood up `scenario-01-interface-auto-mock` as a Quarkus app. Same assertion shape as `tests/cdi-module/scenario-01-...`, but the test class carries `@QuarkusTest @EnableTestBeans` so Quarkus owns the CDI lifecycle.
+
+Key plumbing:
+- `tests/quarkus-module/pom.xml` — aggregator + parent for Quarkus scenarios. Pulls jawelte-core-{api,impl}, jawelte-cdi-module-api, jawelte-quarkus-module-{runtime,deployment}, io.quarkus:quarkus-arc, io.quarkus:quarkus-junit. `quarkus-maven-plugin` wired via pluginManagement so per-scenario poms inherit the Quarkus app build without re-declaring.
+- `tests/quarkus-module/scenario-01-interface-auto-mock/{pom.xml,src/test/java/.../Scenario01Test.java,AuditService.java,src/main/resources/application.properties}`.
+- Quarkus 3.31+ renamed `quarkus-junit5` → `quarkus-junit`; using the new artifactId.
+- Per the user's direction, javax.* transitives (`javax.inject:javax.inject`, `javax.annotation:javax.annotation-api`) are excluded from `quarkus-junit` to satisfy the project-wide BannedDependencies rule. Test run confirms Maven Resolver / Quarkus boot without them — they were stale baggage, not active deps.
+
+Test status: scenario-01 currently fails as expected — `jakarta.enterprise.inject.UnsatisfiedResolutionException: Unsatisfied dependency for type AuditService` at `ArcProcessor#validate`. That's the exact gap the next slice fills: the JaweltesQuarkusProcessor `BeanRegistrar` BuildStep that synthesizes Mockito-backed beans for unsatisfied interface IPs on `@EnableTestBeans` test classes.
+
+Next: implement the auto-mock BuildStep in `quarkus-module/deployment` + MockBeanCreator runtime, iterate until scenario-01 green.
