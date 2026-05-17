@@ -26,8 +26,8 @@ import org.os890.jawelte.tests.lnp.scenario04.metrics.PerformanceExtension;
  * per JVM so bootstrap and class-load costs amplify into a
  * measurable signal.
  */
-@EnableTestBeans
 @ExtendWith(PerformanceExtension.class)
+@EnableTestBeans
 public class FullCrudJtaScenario19Test extends AbstractFullCrudJtaScenarioTest {
 
     /** Default constructor for JUnit / CDI. */

@@ -27,9 +27,9 @@ import org.os890.jawelte.tests.lnp.scenario03.metrics.PerformanceExtension;
  * is amplified into a measurable signal that lines up next to
  * scenario-01's programmatic baseline.
  */
+@ExtendWith(PerformanceExtension.class)
 @EnableTestBeans
 @PersistenceConfig(persistenceUnitName = "lnpFullCrudAllModulesPU")
-@ExtendWith(PerformanceExtension.class)
 public class FullCrudAllModulesScenario44Test extends AbstractFullCrudAllModulesScenarioTest {
 
     /** Default constructor for JUnit / CDI. */
