@@ -5453,3 +5453,24 @@ scope so both `.class` literals (narayana + geronimo) resolve under
 every `jta-*` profile the script sweeps. Pre-existing scenario-56 bug —
 not a TICKET-016 regression — surfaced now because the wider sweep
 finally exercised the failing combo.
+
+## 2026-05-18 — TICKET-015 scaffold: quarkus-module aggregator + runtime + deployment
+
+Started Quarkus / ArC support across core and all modules (issue #32, branch `32-quarkus-arc-support-across-core-and-all-modules`).
+
+Strategy locked: tests carry `@QuarkusTest`; Quarkus owns the CDI container lifecycle (no `Arc.initialize` in jawelte code); jawelte fills only the jawelte-specific gaps via per-module Quarkus extensions (deployment + runtime artifact pairs). `ejb-module` and `jaxrs-module` get no Quarkus sibling — Quarkus's native `@Stateless` / `@Singleton` and resteasy-reactive cover them. `jpa-module` and `jta-module` siblings shrink to keep only jawelte-specific SPI bridges; EMF / UserTransaction bootstrap delegates to Quarkus's hibernate-orm / narayana-jta.
+
+Quarkus 3.35.3 BOM pinned in root pom's `<dependencyManagement>`.
+
+New modules (poms only, no Java source yet):
+- `modules/quarkus-module` — packaging=pom aggregator listing `runtime`, `deployment`.
+- `modules/quarkus-module/runtime` — jar; deps: jawelte-core-api, jawelte-cdi-module-api, jakarta.enterprise.cdi-api, jakarta.annotation-api, microprofile-config-api, io.quarkus:quarkus-arc.
+- `modules/quarkus-module/deployment` — jar; deps: jawelte-quarkus-module-runtime, io.quarkus:quarkus-arc-deployment, io.quarkus:quarkus-core-deployment.
+
+Root pom: added `<quarkus.version>3.35.3</quarkus.version>`, the `io.quarkus:quarkus-bom:${quarkus.version}` BOM import, and internal `jawelte-quarkus-module-runtime` / `jawelte-quarkus-module-deployment` cross-references in `<dependencyManagement>`.
+
+`modules/pom.xml`: appended `<module>quarkus-module</module>` to the aggregator list.
+
+Full reactor `./mvnw validate` green (3.35.3 BOM resolves cleanly from Maven Central; Enforcer / Checkstyle pass on every existing and new module).
+
+Next: scaffold the build-step processor (`JaweltesQuarkusProcessor`) + runtime adapter (`QuarkusTestBeanContainer`), wire the first `tests/quarkus-module/scenario-01-*` mirror, and verify it boots under `@QuarkusTest`.

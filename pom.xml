@@ -99,6 +99,7 @@
         <batchee.version>2.0.0</batchee.version>
         <jberet.version>3.1.0.Final</jberet.version>
         <spring.data.jpa.version>4.0.5</spring.data.jpa.version>
+        <quarkus.version>3.35.3</quarkus.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -127,6 +128,22 @@
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
                 <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!--
+                BOM import: pins every io.quarkus:* artifact to
+                ${quarkus.version}. Used by modules/quarkus-module
+                (the Quarkus-flavour TestBeanContainerPort adapter)
+                and by per-module impl-quarkus siblings that ship
+                Quarkus extensions (deployment + runtime artifact
+                pairs).
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -389,6 +406,18 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-spring-data-module</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal quarkus-module cross-references (Quarkus extension: runtime + deployment) -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-quarkus-module-runtime</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-quarkus-module-deployment</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
