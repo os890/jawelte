@@ -172,6 +172,22 @@ if [ "$LNP_MODE" = true ]; then
         run "tests/lnp-module [$cdi,lnp]" \
             "$REPO_ROOT/tests/lnp-module" -P "$cdi,lnp" verify
     done
+
+    # JAX-RS scenarios under RESTEasy. The cxf profile is
+    # activeByDefault on scenarios 05 and 06, so the sweep above only
+    # exercises CXF. Repeat just those two scenarios with `-Presteasy`
+    # (and `-P-cxf` to deactivate the default) so the LNP report can
+    # compare CXF vs RESTEasy overhead per CDI runtime. Scenarios
+    # 01-04 carry no JAX-RS code, so re-running them under resteasy
+    # would be wasted wall time — keep the matrix narrow.
+    for cdi in owb weld; do
+        for scen in scenario-05-full-crud-rest-with-dbunit \
+                    scenario-06-full-crud-roundtrip; do
+            run "tests/lnp-module/$scen [$cdi,resteasy,lnp]" \
+                "$REPO_ROOT/tests/lnp-module/$scen" \
+                -P "$cdi,lnp,-cxf,resteasy" verify
+        done
+    done
 elif [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------
     # Find every tests/<module>/pom.xml that declares a wip profile.
