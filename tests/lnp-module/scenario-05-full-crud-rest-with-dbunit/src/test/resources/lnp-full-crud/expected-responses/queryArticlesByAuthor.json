@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "title": "Article-0",
+    "authorId": 1
+  },
+  {
+    "id": 21,
+    "title": "Article-20",
+    "authorId": 1
+  },
+  {
+    "id": 41,
+    "title": "Article-40",
+    "authorId": 1
+  },
+  {
+    "id": 61,
+    "title": "Article-60",
+    "authorId": 1
+  },
+  {
+    "id": 81,
+    "title": "Article-80",
+    "authorId": 1
+  }
+]

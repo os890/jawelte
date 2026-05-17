@@ -25,6 +25,9 @@ next_task.md
 .DS_Store
 .claude
 
+# Python bytecode cache from helper scripts (lnp-report.py etc.)
+__pycache__
+
 # Error files directory
 errors
 

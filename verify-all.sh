@@ -16,21 +16,31 @@
 #
 # Verification driver for the jawelte project.
 #
-# Two modes:
+# Three modes:
 #
 #   bash verify-all.sh
 #     Full matrix — install full reactor, then sweep every test
 #     module under every applicable {owb, weld} × {jta-*} profile,
 #     then aggregate coverage. Use before finishing a topic.
+#     LNP scenarios are NOT run in this mode (they are skipTests-by-
+#     default and require -P lnp to execute).
 #
 #   bash verify-all.sh wip
 #     Iteration mode — install full reactor, then run only those
 #     test modules whose pom.xml declares a `<id>wip</id>` profile,
 #     activating that profile. Lets the in-flight topic's scenarios
 #     run fast without sweeping everything. Skips the coverage
-#     aggregation phase.
+#     aggregation phase. LNP scenarios are NOT run in this mode.
 #
-# Both modes fail fast: any single phase's non-zero exit aborts
+#   bash verify-all.sh lnp
+#     Load-and-performance mode — install full reactor, then sweep
+#     ONLY tests/lnp-module under the {owb, weld} × lnp profile
+#     combinations. Surefire produces a per-class timing/heap table
+#     in System.out plus a final aggregated summary. Skips the
+#     coverage aggregation phase. None of the normal correctness
+#     test modules run in this mode.
+#
+# All three modes fail fast: any single phase's non-zero exit aborts
 # the script (the `set -euo pipefail` envelope plus an explicit
 # FAIL banner from the `run` helper).
 
@@ -48,14 +58,18 @@ MVN="$REPO_ROOT/mvnw"
 MVN_ARGS=(-B -ntp -T 1)
 
 WIP_MODE=false
+LNP_MODE=false
 case "${1:-}" in
     "")
         ;;
     wip|--wip)
         WIP_MODE=true
         ;;
+    lnp|--lnp)
+        LNP_MODE=true
+        ;;
     *)
-        echo "Usage: $(basename "$0") [wip]" >&2
+        echo "Usage: $(basename "$0") [wip|lnp]" >&2
         exit 2
         ;;
 esac
@@ -63,22 +77,45 @@ esac
 start_epoch=$(date +%s)
 phase=0
 
+# LNP-mode-only: capture every phase's stdout into a log file we can
+# parse for the html overview at the end. Truncated at script start
+# so each run starts clean. In non-LNP modes LNP_LOG stays empty and
+# run() falls through its default no-tee path.
+LNP_REPORT_DIR="$REPO_ROOT/target/lnp-report"
+LNP_LOG=""
+if [ "$LNP_MODE" = true ]; then
+    mkdir -p "$LNP_REPORT_DIR"
+    LNP_LOG="$LNP_REPORT_DIR/run.log"
+    : > "$LNP_LOG"
+fi
+
 run() {
     local label="$1"; shift
     local dir="$1"; shift
     phase=$((phase + 1))
     local phase_start
     phase_start=$(date +%s)
-    echo
-    echo "=================================================================="
-    printf "  Phase %02d: %s\n" "$phase" "$label"
-    echo "  in:   $dir"
-    echo "  args: $*"
-    echo "=================================================================="
-    if ! ( cd "$dir" && "$MVN" "${MVN_ARGS[@]}" "$@" ); then
-        echo
-        echo ">>> FAILED at phase $phase: $label" >&2
-        exit 1
+    local banner
+    banner=$(printf '\n==================================================================\n  Phase %02d: %s\n  in:   %s\n  args: %s\n==================================================================' "$phase" "$label" "$dir" "$*")
+    echo "$banner"
+    [ -n "$LNP_LOG" ] && echo "$banner" >> "$LNP_LOG"
+    # In LNP mode tee maven's stdout into LNP_LOG so the html report
+    # at the end has the full set of [perf] lines + phase banners
+    # without depending on the caller's external redirect.
+    # `pipefail` is already on, so a non-zero from mvn surfaces through
+    # the pipe.
+    if [ -n "$LNP_LOG" ]; then
+        if ! ( cd "$dir" && "$MVN" "${MVN_ARGS[@]}" "$@" | tee -a "$LNP_LOG" ); then
+            echo
+            echo ">>> FAILED at phase $phase: $label" >&2
+            exit 1
+        fi
+    else
+        if ! ( cd "$dir" && "$MVN" "${MVN_ARGS[@]}" "$@" ); then
+            echo
+            echo ">>> FAILED at phase $phase: $label" >&2
+            exit 1
+        fi
     fi
     local phase_elapsed=$(( $(date +%s) - phase_start ))
     printf "  ok (%ds)\n" "$phase_elapsed"
@@ -98,15 +135,83 @@ run() {
 # from there ensures the test scenarios and the JaCoCo aggregate
 # report get built; a normal `mvn clean install` from the repo
 # root only builds core + modules (the framework code), so the
-# regular developer build stays fast. No `-DskipTests` here —
-# no `-P` is active in this phase, so the test scenarios skip
-# their runtime-gated surefire runs by themselves; the explicit
-# CDI / JTA per-profile sweeps in the later phases are where the
-# tests actually execute.
-run "clean install full reactor" \
-    "$REPO_ROOT/verify-all" clean install
+# regular developer build stays fast.
+#
+# Default / wip modes: no `-DskipTests` — no `-P` is active in this
+# phase, so the test scenarios skip their runtime-gated surefire
+# runs by themselves; the explicit CDI / JTA per-profile sweeps in
+# the later phases are where the tests actually execute. Other
+# scenarios (non-profile-gated ones) DO run during Phase 1, which
+# is the intended cross-cutting smoke pass for default + wip modes.
+#
+# LNP mode: `-DskipTests` — `lnp` is supposed to exercise ONLY the
+# lnp-module scenarios, so running every other module's surefire
+# during Phase 1 wastes minutes and conflates LNP timing with
+# unrelated test-suite work. Skipping tests here still installs
+# every artifact the LNP sweeps need; the LNP scenarios run in
+# Phase 2+ with the explicit -P lnp profile.
+if [ "$LNP_MODE" = true ]; then
+    run "clean install full reactor [skipTests]" \
+        "$REPO_ROOT/verify-all" -DskipTests clean install
+else
+    run "clean install full reactor" \
+        "$REPO_ROOT/verify-all" clean install
+fi
 
-if [ "$WIP_MODE" = true ]; then
+if [ "$LNP_MODE" = true ]; then
+    # --- lnp mode ----------------------------------------------------
+    # Load-and-performance sweep. Surefire is skipTests=true in the
+    # lnp-module aggregator's base build config; activating -P lnp
+    # flips it back on. Combined with -P owb / -P weld this picks a
+    # CDI runtime AND turns on the perf execution. Each lnp scenario
+    # produces a per-class table via PerformanceExtension and a final
+    # aggregated summary via FinalSummaryTest. Coverage aggregation is
+    # skipped on purpose - perf runs are not coverage runs and the
+    # huge per-method volume would skew the coverage exec data.
+    GATLING_SRC="$REPO_ROOT/tests/lnp-module/scenario-07-full-crud-with-gatling/target/gatling"
+
+    # Snapshot scenario-07's HTML Gatling reports per constellation
+    # so the four runtime/provider combinations stay side-by-side
+    # under the LNP report dir instead of clobbering each other.
+    snapshot_gatling() {
+        local constellation=$1
+        local dst="$LNP_REPORT_DIR/gatling/$constellation"
+        if [ ! -d "$GATLING_SRC" ]; then
+            return
+        fi
+        rm -rf "$dst"
+        mkdir -p "$dst"
+        cp -R "$GATLING_SRC/." "$dst/"
+        # Drop the old snapshot's class folders inside the live tree
+        # so the NEXT constellation's run sees a clean slate instead
+        # of accumulating sims from prior phases.
+        rm -rf "$GATLING_SRC"
+    }
+
+    for cdi in owb weld; do
+        run "tests/lnp-module [$cdi,lnp]" \
+            "$REPO_ROOT/tests/lnp-module" -P "$cdi,lnp" verify
+        snapshot_gatling "$cdi-cxf"
+    done
+
+    # JAX-RS scenarios under RESTEasy. The cxf profile is
+    # activeByDefault on scenarios 05 and 06, so the sweep above only
+    # exercises CXF. Repeat just those two scenarios with `-Presteasy`
+    # (and `-P-cxf` to deactivate the default) so the LNP report can
+    # compare CXF vs RESTEasy overhead per CDI runtime. Scenarios
+    # 01-04 carry no JAX-RS code, so re-running them under resteasy
+    # would be wasted wall time — keep the matrix narrow.
+    for cdi in owb weld; do
+        for scen in scenario-05-full-crud-rest-with-dbunit \
+                    scenario-06-full-crud-roundtrip \
+                    scenario-07-full-crud-with-gatling; do
+            run "tests/lnp-module/$scen [$cdi,resteasy,lnp]" \
+                "$REPO_ROOT/tests/lnp-module/$scen" \
+                -P "$cdi,lnp,-cxf,resteasy" verify
+        done
+        snapshot_gatling "$cdi-resteasy"
+    done
+elif [ "$WIP_MODE" = true ]; then
     # --- wip mode ----------------------------------------------------
     # Find every tests/<module>/pom.xml that declares a wip profile.
     # Each ticket-in-flight adds the profile to the relevant test
@@ -200,7 +305,10 @@ fi
 total_elapsed=$(( $(date +%s) - start_epoch ))
 echo
 echo "=================================================================="
-if [ "$WIP_MODE" = true ]; then
+if [ "$LNP_MODE" = true ]; then
+    printf "  LNP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
+           "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+elif [ "$WIP_MODE" = true ]; then
     printf "  WIP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
 else
@@ -208,3 +316,18 @@ else
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
 fi
 echo "=================================================================="
+
+# LNP mode: append the final banner to the captured log so the html
+# report renders the green/fail banner, then render the html overview.
+if [ "$LNP_MODE" = true ] && [ -n "$LNP_LOG" ]; then
+    printf '\n  LNP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n' \
+        "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))" \
+        >> "$LNP_LOG"
+    LNP_HTML="$LNP_REPORT_DIR/index.html"
+    python3 "$REPO_ROOT/lnp-report.py" "$LNP_LOG" "$LNP_HTML" \
+        || echo "WARN: lnp-report.py failed; see $LNP_LOG" >&2
+    if [ -f "$LNP_HTML" ]; then
+        echo
+        echo "LNP overview written to file://$LNP_HTML"
+    fi
+fi

@@ -15,10 +15,18 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.connection;
 
+import java.lang.annotation.Annotation;
 import java.sql.Connection;
 import java.util.Set;
 
 import jakarta.annotation.Priority;
+import jakarta.enterprise.context.spi.Context;
+import jakarta.enterprise.context.spi.CreationalContext;
+import jakarta.enterprise.inject.Instance;
+import jakarta.enterprise.inject.literal.NamedLiteral;
+import jakarta.enterprise.inject.spi.Bean;
+import jakarta.enterprise.inject.spi.BeanManager;
+import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.EntityManager;
 
 import org.hibernate.Session;
@@ -52,6 +60,15 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
     public Connection connectionFor(String persistenceUnitName) {
         EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
         if (entityManager == null) {
+            // Under JTA, jta-module's strategy never populates the
+            // holder (the JTA platform owns the EM <-> transaction
+            // enlistment), so fall back to the CDI bean jpa-module
+            // registered for the PU. Resolving through CDI lazily
+            // creates / fetches the JTA-scoped EntityManager bean,
+            // which is the one Hibernate already drives.
+            entityManager = lookupCdiEntityManager(persistenceUnitName);
+        }
+        if (entityManager == null) {
             throw new IllegalStateException(
                     "No active EntityManager for persistence unit '" + persistenceUnitName
                             + "'. Was the call made outside a @Transactional or "
@@ -65,6 +82,107 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
         // transaction.
         Session session = entityManager.unwrap(Session.class);
         return session.doReturningWork(connection -> connection);
+    }
+
+    private static EntityManager lookupCdiEntityManager(String persistenceUnitName) {
+        try {
+            BeanManager beanManager = CDI.current().getBeanManager();
+            // Primary path — event-driven capture.
+            //
+            // 1. Look up the synthetic EM bean via CDI.select(...).get().
+            //    That returns a CDI client proxy of the @TransactionScoped
+            //    EM bean.
+            // 2. Touch a harmless method on the proxy (isOpen()) to
+            //    force the contextual instance to materialize. That
+            //    runs jpa-module's produceWith lambda, which fires
+            //    EntityManagerCreatedEvent.
+            // 3. The @TransactionScoped JtaEntityManagerCapture
+            //    observer consumes that event and stores the RAW
+            //    EntityManager (not a proxy) under the PU name.
+            // 4. Read the raw EM back from the capture bean.
+            //
+            // The raw EM is what the connection-resolver caller wants:
+            // em.unwrap(Session.class) on a real SessionImpl returns
+            // the real Session, side-stepping Weld's client-proxy
+            // shortcut on unwrap-returns-this.
+            EntityManager captured = lookupViaCapture(persistenceUnitName);
+            if (captured != null) {
+                return captured;
+            }
+            // Fallback path — direct contextual-instance lookup via
+            // BeanManager.Context. Reached when the capture bean is
+            // absent (older jpa-module-impl on the classpath, the
+            // event got swallowed, etc.). Goes to the synthetic
+            // bean's Context directly so we still avoid the proxy hop.
+            return lookupViaContext(beanManager, persistenceUnitName);
+        } catch (IllegalStateException notRunning) {
+            // CDI container not started on this thread. Nothing to
+            // fall back to.
+            return null;
+        }
+    }
+
+    private static EntityManager lookupViaCapture(String persistenceUnitName) {
+        try {
+            // Resolve the synthetic EM bean's proxy and force its
+            // contextual instance to materialize. Multi-PU beans are
+            // qualified with @Named(puName); single-PU beans with
+            // @Default. Try @Named first, fall back to @Default.
+            Instance<EntityManager> emInstance =
+                    CDI.current().select(EntityManager.class,
+                            NamedLiteral.of(persistenceUnitName));
+            if (emInstance.isUnsatisfied()) {
+                emInstance = CDI.current().select(EntityManager.class);
+            }
+            if (emInstance.isUnsatisfied()) {
+                return null;
+            }
+            // Trigger produceWith on the @TransactionScoped EM bean
+            // by calling any method on its proxy. isOpen() is a
+            // side-effect-free probe that always exists on
+            // EntityManager. The call wakes the proxy, the proxy
+            // creates the contextual instance via produceWith, and
+            // jpa-module's lambda fires EntityManagerCreatedEvent.
+            emInstance.get().isOpen();
+            // Read the raw (non-proxied) EM the
+            // JtaEntityManagerCapture observer just stored.
+            Instance<JtaEntityManagerCapture> captureInstance =
+                    CDI.current().select(JtaEntityManagerCapture.class);
+            if (!captureInstance.isResolvable()) {
+                return null;
+            }
+            return captureInstance.get()
+                    .forPersistenceUnit(persistenceUnitName)
+                    .orElse(null);
+        } catch (RuntimeException unavailable) {
+            // No active @TransactionScoped context (called outside a
+            // JTA tx), capture bean not on the classpath, event
+            // delivery failed, etc. — let the caller try the
+            // fallback path.
+            return null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static EntityManager lookupViaContext(BeanManager beanManager, String persistenceUnitName) {
+        // jpa-module's JpaCdiExtension registers EntityManager beans
+        // qualified with @Named(puName) in the multi-PU case and
+        // @Default in the single-PU case. Try @Named first; if it's
+        // not satisfied (single PU), fall back to @Default.
+        Bean<?> bean = beanManager.resolve(
+                beanManager.getBeans(EntityManager.class, NamedLiteral.of(persistenceUnitName)));
+        if (bean == null) {
+            bean = beanManager.resolve(beanManager.getBeans(EntityManager.class));
+        }
+        if (bean == null) {
+            return null;
+        }
+        Bean<EntityManager> emBean = (Bean<EntityManager>) bean;
+        Class<? extends Annotation> scope = emBean.getScope();
+        Context context = beanManager.getContext(scope);
+        CreationalContext<EntityManager> creationalContext =
+                beanManager.createCreationalContext(emBean);
+        return context.get(emBean, creationalContext);
     }
 
     @Override

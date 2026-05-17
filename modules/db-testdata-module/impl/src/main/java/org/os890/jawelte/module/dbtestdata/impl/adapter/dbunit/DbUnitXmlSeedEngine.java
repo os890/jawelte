@@ -17,9 +17,14 @@ package org.os890.jawelte.module.dbtestdata.impl.adapter.dbunit;
 
 import java.io.StringReader;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Base64;
 import java.util.EnumMap;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -105,9 +110,103 @@ public class DbUnitXmlSeedEngine implements DbSeedEngine {
             IDatabaseConnection dbunitConnection = new DatabaseConnection(connection);
             applyVendorDataTypeFactory(dbunitConnection, connection);
             operation.execute(dbunitConnection, dataset);
+            advanceIdentityCountersPastSeededIds(connection, dataset);
         } catch (Exception executionFailure) {
             throw new RuntimeException(executionFailure.getMessage(), executionFailure);
         }
+    }
+
+    /**
+     * After DbUnit inserts rows with explicit IDs, advance each
+     * auto-increment / IDENTITY column's counter so the next
+     * caller-issued INSERT (typically via JPA) gets a value past the
+     * highest seeded row.
+     *
+     * <p>Without this step, H2 in its default (non-LEGACY) mode keeps
+     * the IDENTITY counter at its initial value when explicit IDs are
+     * inserted; the very next {@code INSERT} that omits the ID column
+     * then auto-assigns {@code 1}, collides with the row seeded under
+     * {@code ID=1}, and the operation fails with a primary-key
+     * violation. This is the LNP scenario-02
+     * {@code addItemToOrder} failure shape; see scenario-66 for the
+     * isolated reproducer.
+     *
+     * <p>Currently emits the H2-specific {@code ALTER TABLE ... ALTER
+     * COLUMN ... RESTART WITH} statement; other vendors are detected
+     * by {@link DatabaseMetaData#getDatabaseProductName()} and skipped
+     * with no error (their IDENTITY counters typically auto-advance
+     * on explicit INSERT, which is why the LNP-style pattern works on
+     * them out of the box). Adding a vendor adapter follows the same
+     * port shape as {@link DataTypeFactoryResolver}.
+     *
+     * @param connection the JDBC connection just used for the seed
+     * @param dataset    the DbUnit dataset that was inserted - its
+     *                   table names determine which counters need
+     *                   advancing
+     * @throws SQLException if introspection or the RESTART statement
+     *                      itself fails
+     */
+    private static void advanceIdentityCountersPastSeededIds(
+            Connection connection, IDataSet dataset) throws Exception {
+        DatabaseMetaData metaData = connection.getMetaData();
+        String productName = metaData.getDatabaseProductName();
+        if (!"H2".equalsIgnoreCase(productName)) {
+            return;
+        }
+        String[] tableNames = dataset.getTableNames();
+        for (String tableName : tableNames) {
+            for (String idColumn : findAutoIncrementColumns(metaData, tableName)) {
+                Long maxValue = readMaxValue(connection, tableName, idColumn);
+                if (maxValue == null) {
+                    continue;
+                }
+                restartIdentity(connection, tableName, idColumn, maxValue + 1L);
+            }
+        }
+    }
+
+    private static java.util.List<String> findAutoIncrementColumns(
+            DatabaseMetaData metaData, String tableName) throws SQLException {
+        java.util.List<String> columns = new java.util.ArrayList<>();
+        try (ResultSet rs = metaData.getColumns(null, null, tableName, null)) {
+            while (rs.next()) {
+                String isAutoIncrement = rs.getString("IS_AUTOINCREMENT");
+                if ("YES".equalsIgnoreCase(isAutoIncrement)) {
+                    columns.add(rs.getString("COLUMN_NAME"));
+                }
+            }
+        }
+        return columns;
+    }
+
+    private static Long readMaxValue(
+            Connection connection, String table, String column) throws SQLException {
+        String quotedTable = quoteIdentifier(table);
+        String quotedColumn = quoteIdentifier(column);
+        try (Statement statement = connection.createStatement();
+                ResultSet result = statement.executeQuery(
+                        "SELECT MAX(" + quotedColumn + ") FROM " + quotedTable)) {
+            if (!result.next()) {
+                return null;
+            }
+            long max = result.getLong(1);
+            return result.wasNull() ? null : max;
+        }
+    }
+
+    private static void restartIdentity(
+            Connection connection, String table, String column, long nextValue)
+            throws SQLException {
+        String alter = "ALTER TABLE " + quoteIdentifier(table)
+                + " ALTER COLUMN " + quoteIdentifier(column)
+                + " RESTART WITH " + nextValue;
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(alter);
+        }
+    }
+
+    private static String quoteIdentifier(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"").toUpperCase(Locale.ROOT) + "\"";
     }
 
     private static void applyVendorDataTypeFactory(

@@ -5052,3 +5052,270 @@ updated the package declaration in the class and the FQN in
 `META-INF/services/org.junit.platform.launcher.LauncherSessionListener`.
 Smoke-tested again with tests/core/scenario-01 — banner still
 prints once before the first test class, test green.
+
+## 2026-05-17 — TICKET-030 load-and-performance scenario (lnp-module, untested first pass)
+
+Issue #30 / branch `30-load-and-performance-test-module-lnp-module`. Goal: a load-and-performance test sweep gated behind `bash verify-all.sh lnp` so the normal full-matrix run is untouched.
+
+Added:
+- `tests/lnp-module/` aggregator with `<id>owb</id>` / `<id>weld</id>` / `<id>lnp</id>` profiles. Surefire is `skipTests=true` in the base build config; `-Plnp` flips it back to false. None of the three default modes (no-args, `wip`) ever execute the LNP scenarios.
+- `tests/lnp-module/scenario-01-full-crud/`: 50-entity domain across ecommerce, hr, content, finance, inventory, logistics, marketing, support, crm, analytics (109 entity files). `TestDataPopulator` seeds ~1000 rows per run, split into one helper per domain so each helper stays under the MethodLength=200 limit. `AbstractFullCrudScenarioTest` holds the CRUD `@Test` methods; 50 thin `FullCrudScenarioNNTest` subclasses extend it so each per-JVM run amplifies CDI bootstrap and class-load costs across ~50 separate scenario classes.
+- `metrics/PerformanceExtension` (Jupiter extension) captures per-method wall time and per-class heap delta. `metrics/FinalSummaryTest` is pinned with `@Order(MAX_VALUE)` via `junit-platform.properties` ClassOrderer so the aggregated table prints after the last subclass.
+- `verify-all.sh`: third mode `lnp` sweeps `tests/lnp-module` with `-Powb,lnp` and `-Pweld,lnp`. Skips coverage aggregation (perf runs are not coverage runs).
+
+Cross-cutting: RAT clean, Checkstyle clean (Indentation + ImportOrder + UnusedImports + LeftCurly + VisibilityModifier all pass after a post-port cleanup pass). Tests not yet run; commit is `UNTESTED` until the first `bash verify-all.sh lnp` pass goes green.
+
+## 2026-05-17 — TICKET-030 verify-all.sh lnp green
+
+First full `bash verify-all.sh lnp` pass came back green. Three phases, 12m 24s wall time.
+
+Numbers from the two summary tables (one per runtime, 50 scenario classes each, 21 `@Test` methods per class, ~1000-row dataset re-populated per test method):
+
+- **OWB**: first scenario (cold JIT + EMF bootstrap) 2786 ms total / 71 ms median; steady-state 700-820 ms total / 27-32 ms median. Heap-delta swings from -296 MB to +161 MB across classes (GC timing variance, not a real leak).
+- **Weld**: first scenario 2984 ms / 79 ms median; steady-state 700-840 ms / 28-34 ms median. Heap-delta much tighter: most classes within ±5 MB, occasional -100 MB GC.
+
+OWB and Weld are within ~5 % of each other on per-method median. Heap behaviour is the bigger difference: Weld releases more aggressively between classes; OWB accumulates and then GCs in larger steps.
+
+Phase 1 (full reactor `clean install`) runs every non-LNP scenario's tests by inheritance — that's where most of the 12 min went. Possible future optimisation: pass `-DskipTests` in Phase 1 when in `lnp` mode, since the LNP sweep doesn't need the other modules' tests to be green to start.
+
+Commit prefix flipped from `UNTESTED` to `WORKING`.
+
+## 2026-05-17 — TICKET-030 part 2: db-unit mirror scenario + IDENTITY-advance fix
+
+Built `tests/lnp-module/scenario-02-full-crud-dbunit/` to put `@TestControl(testData=…)` -driven seed + diff next to scenario-01's programmatic baseline. Hit five distinct friction points along the way, each addressed without leaking into scenario-01:
+
+1. **FK cycle DEPARTMENT ↔ EMPLOYEE.** DBUnit's `DatabaseSequenceFilter` cannot emit a topologically ordered dataset for cyclic schemas. Dropped `Department.manager` from scenario-02 only — none of the 21 mirror methods reference that field.
+2. **Clock determinism.** The /tmp generator (`/tmp/GenerateLnpDbExpected.java`) re-populates the DB between exports; `LocalDateTime.now()` captured slightly different sub-millisecond values per run, so seed and dbExpected XMLs didn't match. Pinned to `LocalDate.of(2026, 5, 17)` / `LocalDateTime.of(2026, 5, 17, 12, 0, 0)` in the /tmp populator only.
+3. **Row order across `SELECT *`.** H2 may pick the unique-index scan for tables that have `@Column(unique=…)`, so a `SELECT * FROM TAG` returns alphabetical-by-name order while a `SELECT * FROM CUSTOMER` returns PK order; `DbDiff.assertEquals` is positional by default. Set the existing `org.os890.jawelte.module.dbtestdata.api.DbDiff.unordered-tables` MP Config key in scenario-02's `microprofile-config.properties` to the full list of fixture tables — switches the diff into multiset matching for those tables only.
+4. **What looked like a "phantom row".** `compareUnordered` reports `MISSING_ROW` whenever no actual row matches an expected row's cell values, even when row *counts* match. The earlier `ORDERITEM[200]: missing row` was actually a value mismatch, not a parser over-count. `tests/db-testdata-module/scenario-65-self-consistent-multi-table-diff` documents the working multi-table case as a positive regression test.
+5. **IDENTITY counter not advanced after DbSeed.cleanInsert().** New: `tests/db-testdata-module/scenario-66-clean-insert-advances-identity-counter` reproduces — seed 5 rows with explicit IDs 1-5 into an H2 IDENTITY column (default mode, not LEGACY), then `INSERT INTO … (qty) VALUES (60)` collides on `ID=1`. H2 default mode does not auto-advance the counter on explicit INSERT, which is the LNP `addItemToOrder` failure shape. **Module fix**: `DbUnitXmlSeedEngine.advanceIdentityCountersPastSeededIds` walks each table in the dataset after `operation.execute(...)`, picks up `IS_AUTOINCREMENT=YES` columns via `DatabaseMetaData.getColumns(...)`, runs `SELECT MAX(col)`, and issues `ALTER TABLE … ALTER COLUMN … RESTART WITH (max+1)`. Vendor-gated on H2; other DBs are no-ops (they auto-advance on explicit INSERT, so they don't need the help). ~80 LOC, internal helper only, no new public API. All 66 db-testdata-module scenarios still green (64 pre-existing + the 2 new).
+
+Scenario-02 deliverables: 50 numbered `FullCrudDbUnitScenarioNNTest` subclasses, shared `AbstractFullCrudDbUnitScenarioTest` with the 21 mirror methods (7 mutations + 14 query-only), seed XML at `lnp-full-crud/seed/dbIn/full.xml`, common `lnp-full-crud/query-only/dbExpected/full.xml` for the unchanged-state methods, 7 per-mutation `lnp-full-crud/method-NN-<name>/dbExpected/full.xml` — all generated by the one-shot `/tmp/GenerateLnpDbExpected.java` (not committed). Module deps for scenario-02 are inline in its pom (testcontrol + db-testdata + scope), so scope-module's CDI extension does not leak into scenario-01's baseline timings.
+
+Single-class smoke (`FullCrudDbUnitScenario01Test`, 21 methods) green under OWB. Full `verify-all.sh lnp` sweep next.
+
+## 2026-05-17 — TICKET-030 full sweep green
+
+`bash verify-all.sh lnp` → `LNP PASS GREEN — 3 phase(s) — total 13m 50s`. Four summary tables printed (programmatic / db-unit × OWB / Weld); 200 perf lines captured. No regressions in the 64 pre-existing db-testdata-module scenarios.
+
+**With-vs-without-db-unit comparison** (averaged across 100 class runs per side, both runtimes pooled):
+
+| Side | n  | avg total ms/class | per-class delta |
+|---   |--- |---                 |---              |
+| programmatic (scenario-01) | 100 | 767 ms | baseline |
+| db-unit       (scenario-02) | 100 | 883 ms | +116 ms (+15 %) |
+
+The 15 % overhead bundles: FlatXmlDataSet parse of the seed XML, DBUnit `CleanInsert` itself, the new IDENTITY-counter advance step, and `DbDiff.assertEquals` on the dbExpected XML. Spread across 21 methods, that's ~5.5 ms per method.
+
+Caveat: `PerformanceExtension` wraps the `@Test` method body, not `@TestControl`'s seed/verify observers. Scenario-02's mutations are tiny inline mutations (e.g. `em.find().setEmail()`) and the query-only methods are no-ops, so the captured per-method median sits at 0 ms — the seed/diff cost surfaces only in the per-class total. Apples-to-apples comparison is on total, not median. A future refinement could move the timing instrumentation up a layer (around `BeforeEachCallback` order) to also account for testcontrol observers.
+
+Branch `30-load-and-performance-test-module-lnp-module` ready for review. Commit prefix updated from `WORKING` (smoke-tested) to `WORKING` confirmed at full-sweep scale.
+
+## 2026-05-17 — TICKET-030 part 3: scenario-03 (db-unit + every framework module on classpath)
+
+Cloned scenario-02 into `tests/lnp-module/scenario-03-full-crud-dbunit-with-all-modules/`, renamed packages `scenario02 → scenario03`, classes `FullCrudDbUnit* → FullCrudAllModules*`, persistence-unit `lnpFullCrudDbUnitPU → lnpFullCrudAllModulesPU`, summary-table title `(db-unit) → (db-unit + all modules)`. Test code is byte-equivalent to scenario-02 — same 21 mirror methods, same seed/dbExpected XMLs, same `@TestControl` flow.
+
+Difference is pom-only: every framework module's api + impl jar joins the test classpath, plus `jawelte-spring-data-module` and the runtime deps the scenario already needed (jpa-module, cdi-module, scope-module, testcontrol-module, db-testdata-module stay). Added: jta + ejb + jaxrs + wiremock + batch + content-diff + spring-data — 13 additional artifacts. Purpose: isolate the cost of merely *having* the framework modules on the classpath even though only the JPA + db-unit code path is exercised.
+
+Smoke-tested `FullCrudAllModulesScenario01Test` under OWB: 21/21 green, total 1800 ms for the cold class. Full sweep next.
+
+## 2026-05-17 — TICKET-030 final sweep with three scenarios
+
+`bash verify-all.sh lnp` → `LNP PASS GREEN — 3 phase(s) — total 16m 45s`. 300 perf lines (100 per scenario), 6 summary tables (3 scenarios × 2 runtimes).
+
+**Three-way comparison** (warm-class averages, both runtimes pooled, n=99 per side):
+
+| scenario | cold class | avg (all) | avg (warm) | p50 |
+|---|---|---|---|---|
+| scenario-01 (programmatic) | 2713 ms | 773 ms | 753 ms | 714 ms |
+| scenario-02 (db-unit, minimal modules) | 1857 ms | 887 ms | 877 ms | 854 ms |
+| scenario-03 (db-unit + all framework modules) | 1859 ms | 922 ms | 913 ms | 893 ms |
+
+**Deltas:**
+- db-unit pipeline cost (scenario-02 − scenario-01): **+124 ms / class (+16.5 %)** — XML parse, DBUnit CleanInsert, IDENTITY advance, DbDiff.
+- Pure classpath-bloat cost (scenario-03 − scenario-02): **+36 ms / class (+4.1 %)** — every framework api+impl jar on classpath, CDI extensions scanned, ServiceLoader probed; not a single feature actually exercised beyond JPA + db-unit.
+- Combined overhead (scenario-03 − scenario-01): **+160 ms / class (+21.2 %)**.
+
+Surprise: scenario-01's cold class is the slowest of the three (2713 ms vs 1857 / 1859 ms). The programmatic populator does ~1000 `em.persist` calls in the warmup-phase populator which triggers Hibernate JIT in a way that the DBUnit CleanInsert path doesn't.
+
+Module-classpath overhead is **stable at ~4 %** across the runs - low but non-zero. No CDI extension currently breaks the JPA + db-unit flow simply by being present, with one documented exception (jta-module, see commit `2d9da85`).
+
+## 2026-05-17 — `DbSeed.forPersistenceUnit()` works under JTA (scenario-67 + jpa-module fix)
+
+When scenario-03 (lnp-module) was forced to drag jta-module onto the classpath ("we said 03 should use all of our modules as test dependency"), its persistence unit flipped to `transaction-type="JTA"` and the `DbSeed` seed step started failing with *No active EntityManager for persistence unit ...* — even inside a `@Transactional` method.
+
+Root cause: `DefaultPersistenceUnitConnectionResolver.connectionFor(...)` consulted only jpa-module's `TransactionScopedEmHolder`, which only `DefaultResourceLocalTransactionStrategy` populates. `JtaTransactionStrategy` deliberately never touches the holder (per its javadoc — the JTA platform owns the EM lifecycle), so the resolver had nowhere to find the active EM in JTA mode.
+
+Captured the bug as `tests/db-testdata-module/scenario-67-for-pu-resolves-em-under-jta` first — a minimal `@PersistenceConfig` test that bootstraps jpa-module + jta-module + narayana + geronimo + xbean-naming and calls `DbSeed.forPersistenceUnit().datasetContent(...).cleanInsert().execute()` from a `@Transactional` method. Reproducer fails with the exact "No active EntityManager…" error.
+
+Fix in `DefaultPersistenceUnitConnectionResolver`: keep the holder as the primary path (RESOURCE_LOCAL fast path, no CDI traversal), but on miss, fall back to a CDI lookup —
+`CDI.current().select(EntityManager.class, NamedLiteral.of(persistenceUnitName))` for multi-PU,
+`CDI.current().select(EntityManager.class)` for single-PU (the `@Default` qualifier `JpaCdiExtension` registers when `singlePersistenceUnit=true`). Only when all three paths fail do we surface the original `IllegalStateException`. The CDI lookup returns the JTA-scoped EM bean Hibernate already drives, so seed and verify code see the same uncommitted state.
+
+Reproducer green. No regressions in the RESOURCE_LOCAL hot path (the holder still answers first).
+
+## 2026-05-17 — `EntityManager.unwrap(Session.class)` returns Weld client proxy: bypass via Context.get()
+
+The first @TestControl+JTA fix passed scenario-67 on OWB but blew up across all 50 classes of lnp-module scenario-03 on Weld with:
+
+```
+ClassCastException: WeldClientProxy cannot be cast to org.hibernate.Session
+    at DefaultPersistenceUnitConnectionResolver.connectionFor(line 78)
+```
+
+Line 78 is `Session session = entityManager.unwrap(Session.class)`. Hibernate's SessionImpl returns `this` from `unwrap(Session.class)` — and Weld's client proxy method handler has a "preserve proxy identity" shortcut: when the underlying contextual instance returns *itself*, the handler returns the *proxy* (`self`) instead, to keep proxy equality semantics. That converted the unwrap result into the Weld proxy, which is not a `Session`.
+
+Fix: get the contextual instance from `Context.get(bean, cc)` directly, bypassing the client proxy:
+
+```java
+Bean<?> bean = beanManager.resolve(beanManager.getBeans(EntityManager.class, NamedLiteral.of(puName)));
+if (bean == null) bean = beanManager.resolve(beanManager.getBeans(EntityManager.class));
+Context context = beanManager.getContext(bean.getScope());
+return context.get((Bean<EntityManager>) bean, beanManager.createCreationalContext((Bean<EntityManager>) bean));
+```
+
+`context.get(bean, cc)` returns the actual SessionImpl (lazily creating it if not already in the JTA-tx context). `em.unwrap(Session.class)` on the real impl returns `this`, the cast succeeds, the rest of the resolver path stays unchanged. RESOURCE_LOCAL fast path (holder.peek) is unaffected.
+
+Verified: scenario-67 reproducer green on OWB + Weld; lnp-module scenario-03 green on Weld (1051 tests, ~81s).
+
+## 2026-05-17 — lnp-module scenario-05: full CRUD via REST + db-unit + ResponseDiff
+
+Added a fifth LNP scenario that exercises the same 21-method CRUD shape as scenario-02 but routes every operation through a JAX-RS endpoint hosted by jaxrs-module's embedded SeBootstrap server, so the run combines as many jawelte features as one scenario can:
+
+* **testcontrol + db-testdata-module** — `@TestControl(testData=...)` still seeds `dbIn/` before each method and verifies `dbExpected/` afterwards (the test-method tx boundary is the diff trigger; we don't need `@Transactional` on the test methods themselves).
+* **jaxrs-module** — each numbered subclass is annotated `@EnableJaxRs(restResources = LnpRestResource.class)`. `LnpRestResource` carries 21 endpoints (GET/PUT/POST/DELETE) with `@Transactional`, executing the same JPQL the scenario-02 base ran inline but inside the server's request-scoped transaction.
+* **jaxrs ↔ content-diff bridge** — every test method asserts the HTTP response via `ResponseDiff.forJson(r).expectedContent("{\"ok\":true}").assertEquals()`, so the JSON diff path is on every call. Responses are intentionally a deterministic `{"ok":true}` String so the assertion is content-engine-driven, not body-shape-driven.
+* **PerformanceExtension + the lnp report** — `PerformanceExtension.printFinalSummary` got a unique tag (`db-unit + REST`), and `lnp-report.py` learned the matching prefix (`FullCrudRestDbUnitScenario`) and tag mapping so the new scenario gets its own row in every report section.
+
+Scaffolded the module by copying scenario-02 verbatim (entities, testdata XML, junit-platform.properties, beans.xml, microprofile-config.properties) and renaming `scenario02 → scenario05` plus `FullCrudDbUnit → FullCrudRestDbUnit`. Persistence unit name changed to `lnpFullCrudRestDbUnitPU` so it can't collide with scenario-02. CXF is the default JAX-RS runtime (`-Pcxf`, on by default); `-Presteasy` is also declared for the matrix.
+
+Smoke-tested green: 1051 tests on OWB (~60s), 1051 tests on Weld (~54s). No regressions in 01-04.
+
+## 2026-05-17 — testdata folders made self-contained pairs (db-unit scenarios 02, 03, 05)
+
+The user pointed out that each `@TestControl(testData = ...)` folder should be a self-contained dbIn (optional) + dbExpected (mandatory) pair. The previous layout was split — `seed/` only had `dbIn/`; `query-only/` and the seven `method-NN-*/` folders only had `dbExpected/`. The two-entry `@TestControl` annotations papered over the gap because `TestDataHandler` silently skips missing sub-folders.
+
+Restructured to one folder per test method, each carrying both halves:
+
+* Read-only methods (14) → single entry `lnp-full-crud/seed`: `seed/dbIn/full.xml` = full ~1000-row fixture, `seed/dbExpected/full.xml` mirrors it (DB unchanged after a read-only method).
+* Mutation methods (7) → single entry `lnp-full-crud/method-NN-<name>`: `dbIn/full.xml` is the full seed, `dbExpected/full.xml` is the post-mutation snapshot.
+
+Deleted the obsolete `query-only/` folder; updated `AbstractFullCrudDbUnitScenarioTest`, `AbstractFullCrudAllModulesScenarioTest`, and `AbstractFullCrudRestDbUnitScenarioTest` so each method's `@TestControl` now uses a single-string `testData` value pointing at a self-contained pair. Adjusted the docblocks accordingly.
+
+Why this matters beyond aesthetics: with `seed/dbExpected` present and the old `{seed, method-NN}` two-entry pattern, the verify phase would have asserted *both* dbExpected snapshots (seed = unchanged AND method-NN = post-mutation), and the seed assertion would have failed against the mutated DB. Collapsing to a single entry per method makes each diff self-consistent.
+
+Smoke-tested green on OWB and Weld for scenarios 02, 03, and 05 — 1051 tests per scenario per runtime.
+
+## 2026-05-17 — PerformanceExtension forces a GC before heap reading; Hibernate WARNs silenced
+
+Two small follow-ups after the LNP report showed OWB heap-end values 2-3× Weld's at steady state:
+
+1. **GC hint before each heap measurement** — `PerformanceExtension.heapUsedBytes()` now calls `System.gc()` and waits 20 ms before reading `MemoryMXBean.getHeapMemoryUsage().getUsed()`. The previous reading included transient garbage; OWB allocates more short-lived objects between Full GCs than Weld, which made it look like OWB was retaining memory. Post-GC the two runtimes report ~equal heap (0.96–1.03× ratio across all five scenarios). Applied to all five `metrics/PerformanceExtension.java` copies.
+
+2. **Removed two explicit Hibernate property settings that triggered HHH WARN logs** — `JtaPersistencePropertyResolver` no longer sets `hibernate.transaction.coordinator_class=jta` (Hibernate auto-derives it from `hibernate.transaction.jta.platform`, and the explicit setting logged HHH000193 "Overriding hibernate.transaction.coordinator_class is dangerous"). `JpaCdiExtension` no longer sets `hibernate.dialect=org.hibernate.dialect.H2Dialect` either (modern Hibernate detects the dialect from the JDBC URL, and the explicit setting logged HHH90000025). Zero HHH WARN lines in the verify-all.sh lnp output now.
+
+verify-all.sh lnp re-run after both changes: green across all five scenarios on OWB + Weld, 11m 44s total, report at `target/lnp-report/index.html`.
+
+## 2026-05-17 — Event-driven primary path in `DefaultPersistenceUnitConnectionResolver`
+
+Refactored the JTA fallback in jpa-module's connection resolver so the primary path uses standard CDI `Instance.select(...).get()` instead of the `BeanManager` + `Context.get(bean, cc)` dance.
+
+**The trick that makes it work:** the seed/diff observer calls `connectionFor(...)` *before* any user code has touched the `@Inject EntityManager`, so the `@TransactionScoped` capture bean is initially empty. To get the underlying contextual instance to materialize (and the produceWith lambda — and the event — to fire), the resolver now calls `entityManagerInstance.get().isOpen()` on the CDI client proxy. That harmless probe forces Weld/OWB to create the contextual instance, which fires `EntityManagerCreatedEvent`, which the `JtaEntityManagerCapture` observer consumes by storing the raw EM under the PU name. The resolver then reads that raw EM out of the capture bean and unwraps it to `org.hibernate.Session` — safe because the EM in the capture is the real `SessionImpl`, not a proxy.
+
+**New classes (jpa-module/impl/adapter/connection):**
+
+* `EntityManagerCreatedEvent` — simple record carrying `(String persistenceUnitName, EntityManager entityManager)`.
+* `JtaEntityManagerCapture` — `@TransactionScoped` CDI bean observing the event; provides `forPersistenceUnit(String)` returning `Optional<EntityManager>`.
+
+**JpaCdiExtension change:** the JTA-mode synthetic EM bean's `produceWith` lambda now fires `EntityManagerCreatedEvent` immediately after `factory.createEntityManager()`. The fire is best-effort (try/catch swallows runtime exceptions) so the resolver's `BeanManager.Context` fallback still works if anything goes sideways.
+
+**Resolver shape:**
+
+* `TransactionScopedEmHolder.peek(...)` — unchanged RESOURCE_LOCAL fast path.
+* `lookupViaCapture(...)` — primary JTA path. `CDI.select(EM, @Named).get().isOpen()` materialises the EM (which fires the event); then `CDI.select(JtaEntityManagerCapture.class).get().forPersistenceUnit(...)` returns the raw EM.
+* `lookupViaContext(...)` — fallback. Direct `BeanManager.getBeans(...)` + `Context.get(bean, cc)` from the previous design, kept for robustness when the capture bean isn't discovered or the event got swallowed.
+
+Probed both runtimes during development: with the primary path armed, `JtaEntityManagerCapture.forPersistenceUnit(...).isPresent()` returns `true` on both OWB and Weld for scenario-67. Probe stripped before commit.
+
+## 2026-05-17 — lnp scenario-05 endpoints return entity-shaped JSON; assertions hit on-disk expected files
+
+Following the request to return real entities (not `{"ok":true}`) and assert via JSON-diff against on-disk fixtures (inline strings were too large), the LnpRestResource was rewritten so each of the 21 endpoints builds entity-shaped JSON via JSON-P (jakarta.json + Parsson, no JAX-RS provider registration involved — the resource returns a `String` that CXF sends through as `application/json`):
+
+* **Reads (14)** return lists/aggregates with id + key fields: customers (id, name, email), products by status, orders with item counts, employees by department, count-per-department, articles, transactions, stock by warehouse, sums and averages.
+* **Mutations (7)** return the updated row: customer with new email, the deleted order's id+customerId, the new order item, the re-assigned employee, the article with new body, the account with new balance, the stock item with new quantity.
+
+The abstract test base learned `getJson/putJson/postJson/deleteJson(url, classpathResource)` helpers that call `ContentDiff.forJson(actual).expected(classpathResource).assertEquals()` and additionally dump the actual response to `target/responses/<methodName>.json` for fast iteration when the expected fixture drifts (copy from `target/` to `src/test/resources/lnp-full-crud/expected-responses/` and re-run).
+
+21 expected JSON files now live under `src/test/resources/lnp-full-crud/expected-responses/`. Sizes range from 2 chars (`queryProductsByStatus`: empty array because Product.status isn't set in the seed) to 6kB (`queryAllCustomers`: all 100 customers). Smoke: 1051/1051 tests green per runtime on scenario-05.
+
+## 2026-05-17 — jaxrs scenario-20 and lnp scenario-06: full CRUD roundtrip in one test method
+
+Two new scenarios cover the "drive every CRUD verb from inside a single test method" use-case.
+
+**jaxrs-module scenario-20** — a focused feature test. `Scenario20ItemResource` keeps a `ConcurrentHashMap` of `{id → name}` and exposes GET/GET-one/POST/PUT/DELETE. The test method walks: list (empty) → POST Alpha → POST Beta → list (both visible) → PUT id=1 → GET id=1 (confirm) → DELETE id=1 → list (only Beta). Every response is asserted via `ResponseDiff.forJson(r).expectedContent(...)` (the payloads are tiny enough that inline strings stay readable). No JPA, no DB, no transactions — just CDI + jaxrs across multiple verbs.
+
+**lnp-module scenario-06** — the LNP comparison counterpart. Standalone `Customer(id,name,email)` entity, RESOURCE_LOCAL `lnpFullCrudRoundtripPU`, db-unit seed of 5 customers. `CustomerResource` carries the same five CRUD verbs but JPA-backed; the abstract test base drives the same 7-step roundtrip per test method. Each step asserts via `ContentDiff.forJson(actual).expected("lnp-roundtrip/expected-responses/0N-step.json").assertEquals()`. Because the roundtrip is net-zero (POST + DELETE cancel out, other steps are reads), `dbExpected` mirrors `dbIn` — db-testdata-module confirms the DB lands back at the original 5 rows. 50 numbered subclasses amplify the per-class signal for the LNP report; `PerformanceExtension` prints the `(roundtrip)` tag, and `lnp-report.py` learned the matching `FullCrudRoundtripScenario` prefix.
+
+Both scenarios green on OWB and Weld with the CXF JAX-RS provider.
+
+## 2026-05-17 — jaxrs CXF Bus shutdown closes the per-class thread leak
+
+Profiling scenario-06 in jvisualvm showed the JVM thread count climbing past 300 across the 50 classes of one LNP run — `SeBootstrap.Instance.stop()` was leaving CXF's default `Bus`, its work-queue manager, and the Jetty `QueuedThreadPool` alive between test classes. Reproduced with a `ManagementFactory.getThreadMXBean().getThreadCount()` probe in `PerformanceExtension.afterAll`: thread count went 21 → 466 across the 50-class sweep, growing by roughly nine threads per class boot.
+
+Fix in `JaxRsLifecycleAdapter.stopServerQuietly`: after `instance.stop()`, reflectively look up `org.apache.cxf.BusFactory.getDefaultBus(false)`, call `Bus.shutdown(true)`, and reset the default reference. Reflection-gated so the call is a silent no-op on the RESTEasy profile (no CXF on the classpath).
+
+Result: thread count stays flat (9–10 on OWB, 18–19 on Weld) for the full 50-class sweep across every scenario × runtime combination — net growth of zero across all six LNP scenarios. As a side effect, the per-class heap delta in scenario-06 dropped from ~8.8 MB to ~2.3 MB (less retained state from the now-released worker threads). All six scenarios still green end-to-end.
+
+Probe (`threads=N`) added to every scenario's `PerformanceExtension.afterAll` log so future regressions show up immediately in the LNP report's raw log.
+
+## 2026-05-17 — lnp scenario-07: Gatling as the client driver
+
+Adds a seventh LNP scenario that pairs the same server stack as scenario-06 (Customer entity + `CustomerResource` over `@EnableJaxRs`) with Gatling 3.15 as the *client* side. Each test method calls `Gatling$.MODULE$.fromArgs(...)` to run a `CustomerCrudSimulation` that injects **10 virtual users**, each walking the 5-step CRUD roundtrip (list → POST → read → DELETE → list); about 50 HTTP calls per class × 50 numbered subclasses × 2 CDI runtimes = ~5000 Gatling-driven requests per LNP sweep. Gatling's own global assertions (no failed requests, max response time < 1s) decide pass/fail; the JUnit method translates the non-zero exit code into a test failure.
+
+**Gotchas hit and fixed along the way:**
+
+* Gatling 3.x has no `GatlingPropertiesBuilder` on Java's surface; the Java-callable entry point is the Scala companion `io.gatling.app.Gatling$.MODULE$.fromArgs(String[])`. CLI-style args keep us off Scala collection APIs.
+* `gatling-app` pulls `javax.jms` transitively via `gatling-jms`, which the project's enforcer rule bans. Excluded the JMS dep — we don't use Gatling's JMS DSL.
+* On JDK 25, Gatling's `StringInternals` reflectively accesses `java.lang.String` internals and needs `--add-opens=java.base/java.lang=ALL-UNNAMED`. Added per-scenario via surefire `argLine` with `@{argLine}` so JaCoCo's prepare-agent setting is preserved.
+* HTML report generation per class would eat tens of megabytes; passing `--no-reports` keeps disk usage flat.
+
+`verify-all.sh` now also runs scenario-07 in the RESTEasy axis alongside scenarios 05 and 06.
+
+`PerformanceExtension` prints the `(gatling)` tag; `lnp-report.py` learned the matching prefix (`FullCrudGatlingScenario`) and tag mapping so the new scenario gets its own row in every report section.
+
+Smoke test on OWB: assertions green, ~8s per class for the first one (Gatling JIT warmup dominates). Full sweep timing will land when the user runs verify-all.sh lnp next.
+
+## 2026-05-17 — lnp scenarios 08 (Spring Data) + 09 (EJB) and heap chart axis anchored at zero
+
+Two more LNP variants on the scenario-02 baseline:
+
+* **scenario-08 — full-crud-spring-data**. Same 21 CRUD methods, same dbIn / dbExpected seed envelope, but every persistence call goes through Spring Data `JpaRepository` interfaces auto-discovered by jawelte's spring-data-module CDI extension. One repository per entity domain (Customer / Product / CustomerOrder / OrderItem / Department / Employee / Article / Account / StockItem / Payment); the abstract test base @Injects them all and replaces every `em.find / em.persist / em.remove` call with the equivalent `findById / save / delete`. The Payment bulk-delete in `deleteOrderCascade` uses an injected `EntityManager` escape hatch — Spring Data's `@Modifying` derived deletes don't propagate cleanly through testcontrol's transaction observer in jawelte's setup.
+
+* **scenario-09 — full-crud-with-ejb**. Same shape, but the persistence logic is encapsulated in five per-domain `@Stateless` EJB services (`EcommerceService`, `HrService`, `ContentService`, `FinanceService`, `InventoryService`). The test methods inject the services and just call them; the EJBs hold the `EntityManager` and do the same work scenario-02's test bodies do directly. ejb-module's stereotype recogniser maps `@Stateless` to a CDI scope + applies the implicit `@Transactional` interceptor.
+
+Both green at 21/21 per class and 2101/2101 across the full 100-class sweep on OWB. Each carries its own `PerformanceExtension` tag (`spring-data` / `ejb`); `lnp-report.py` learned the new `FullCrudSpringDataScenario` / `FullCrudEjbScenario` prefixes.
+
+**Heap chart axis anchored at zero.** The user observed that the LNP report's heap-end history charts looked like a steep climb even though jvisualvm showed the heap staying flat. Root cause: `_svg_line_chart` was auto-fitting the y-axis from `min(values)` to `max(values)`. With the GC-hint probe sitting in a 37–38 MB band post-GC, a ~1 MB total drift across 100 classes ended up stretched across the whole plot. Fix: pin the y-axis to `min(0, sampleMin)` and `sampleMax * 1.1` — a 1 MB drift on a 0–40 MB axis stays visibly flat, which is what jvisualvm shows.
+
+## 2026-05-17 — LNP scenarios 02/03/08/09: align test bodies with each scenario's stated intent
+
+Per-scenario audit (asked: "do the other LNP scenarios have similar issues?") surfaced four misalignments between each scenario's declared purpose and what its abstract test actually did:
+
+- **scenario-09 (full-crud-with-ejb)**: Javadoc says "encapsulate every persistence call in a per-domain `@Stateless` EJB service". Reality: the abstract test injected `EntityManager em` directly, used `em.find`/`em.flush` for mutations, and the 14 read-only methods had `// No-op.` bodies — the `EcommerceService`/`HrService`/`ContentService`/`FinanceService`/`InventoryService` beans existed but were never injected anywhere. Fix: extended each service with method names that mirror scenario-01's CRUD test names 1-on-1 (added `averageProductPrice`, `averageSalary`, `sumAccountBalances`, `totalStockQuantity`, `countEmployeesPerDepartment`, `queryTransactionsByAccount`, etc.; renamed `listCustomers→queryAllCustomers`, `addItem→addItemToOrder`, etc.); rewrote `AbstractFullCrudEjbScenarioTest` to drop the EM injection, inject all 5 services, and reduce every test body to a single delegate call into the EJB. The `@Transactional` annotations on test methods were also dropped — the EJB's implicit `REQUIRED` interceptor (via `TransactionalLiteral` in ejb-module) now owns transaction management end-to-end, which is the actual differentiator this scenario is supposed to show vs scenario-02.
+- **scenario-02 (full-crud-dbunit)**: Javadoc says "mirrors scenario-01-full-crud's 21 CRUD methods" but the 14 read-only methods had `// No-op.` bodies — only the dbExpected diff envelope cost was being measured, not the JPQL work the names suggested. Fix: copied each read-only JPQL from scenario-01's `AbstractFullCrudScenarioTest`, stripped the in-test asserts (per the Javadoc rule "test method bodies perform the same … but never run JPQL assertions"), and converted the cross-domain `allTablesPopulated` from no-op into a `count(entity)` loop over a static 95-entry `ENTITIES[]` array.
+- **scenario-03 (full-crud-dbunit-with-all-modules)**: Identical no-op problem to scenario-02 (it's deliberately a sibling that just adds every module to the classpath). Fix: `sed`-derived from scenario-02 with the package and abstract-class name swapped.
+- **scenario-08 (full-crud-spring-data)**: Javadoc says "every persistence call goes through Spring Data `JpaRepository` — no direct `EntityManager` access". Reality: `deleteOrderCascade` had an `em.createQuery(DELETE Payment)` + `em.flush()` escape hatch. `PaymentRepository` already had `@Modifying(flushAutomatically=true, clearAutomatically=true) @Query("DELETE FROM Payment p WHERE p.order.id = :orderId") void deleteByOrderId(Long)` declared but unused. Fix: collapsed `deleteOrderCascade` to `payments.deleteByOrderId(1L); orders.deleteById(1L);`, dropped the `@Inject EntityManager em` field and the long apologetic Javadoc explaining the bleed-through, and removed the now-unused `jakarta.persistence.EntityManager` import.
+
+Scenarios 01/04/05/06/07 were verified aligned and left untouched. The change leaves the dbExpected snapshots, persistence units, and metrics tooling unchanged — only test method bodies and the scenario-09 service contracts moved.
+
+## 2026-05-17 — scenario-08 PaymentRepository.deleteByOrderId needs @Param
+
+verify-all.sh's Weld phase ran the prior UNTESTED commit and surfaced an IllegalStateException at scenario-08's deleteOrderCascade: "For queries with named parameters you need to provide names for method parameters". Root cause: the JVM doesn't retain method-parameter names at runtime unless javac is run with `-parameters`, so Spring Data can't bind `:orderId` to the `Long orderId` argument. The previous PR's "EM escape hatch" rationale ("@Modifying doesn't propagate cleanly") was actually a misdiagnosis of this same missing-`@Param` problem. Fix: added `import org.springframework.data.repository.query.Param;` and annotated the parameter as `@Param("orderId") Long orderId`. Locally re-ran `mvn -P weld,lnp test` on scenarios 08 and 09 — both BUILD SUCCESS with 2101 tests each, 0 failures, 0 errors.
+
+## 2026-05-17 — scenario-08 read-only bodies aligned with their test names
+
+Continuation of the per-scenario audit: while reviewing the @Param fix on scenario-08 I noticed every read-only test method was bound to a generic `findAll()` / `count()` regardless of what its name said — `queryProductsByStatus()` called `products.findAll()` with no status filter, `averageProductPrice()` called `findAll()` instead of an `AVG`, `queryTransactionsByAccount()` ran `accounts.findAll()` on the wrong entity entirely, etc. Same shape as the pre-fix scenario-09 misalignment.
+
+Fix: extended `CrudRepositories` with derived queries (`findByStatus`, `findByDepartmentId`, `findByAuthorId`, `findByWarehouseId`, `findByAccountId`) and `@Query` aggregates / joins (`averagePrice`, `findAllWithItems`, `countPerDepartment`, `findByTagName`, `averageAmount`, `sumBalances`, `totalQuantity`). Added two new repositories (`SalaryRepository`, `FinancialTransactionRepository`) so the salary aggregate and the by-account transactions read hit the right tables. Every `:name` placeholder in a `@Query` is paired with `@Param("name")` for the same reflection reason that broke `deleteByOrderId` earlier today.
+
+Rewrote `AbstractFullCrudSpringDataScenarioTest` so each read-only body is a single delegate call into the matching repo; `allTablesPopulated` now calls `count()` on every one of the 12 repositories instead of just `customers.count()`. Locally re-ran scenario-08 under both `-P weld,lnp test` and `-P owb,lnp test` — 2101 tests / 0 errors / BUILD SUCCESS in both.

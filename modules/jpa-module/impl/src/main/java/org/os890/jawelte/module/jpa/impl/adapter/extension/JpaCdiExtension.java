@@ -63,6 +63,7 @@ import org.os890.jawelte.module.jpa.api.port.CdiTransactionalSupportProvider;
 import org.os890.jawelte.module.jpa.api.port.EntityScanner;
 import org.os890.jawelte.module.jpa.api.port.PersistencePropertyResolver;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
+import org.os890.jawelte.module.jpa.impl.adapter.connection.EntityManagerCreatedEvent;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.EntityManagerProxy;
@@ -328,7 +329,27 @@ public class JpaCdiExtension implements Extension {
                                 // begin / commit here).
                                 TestContext.loadService(TransactionStrategy.class)
                                         .bindLifecycleEventsToCurrentTransaction();
-                                return factory.createEntityManager();
+                                EntityManager createdEm = factory.createEntityManager();
+                                // Announce the raw EM to the
+                                // @TransactionScoped JtaEntityManagerCapture
+                                // observer so the connection resolver can
+                                // look it up by PU name without going
+                                // through a CDI client proxy. Best-effort:
+                                // if the event fails to fire for any
+                                // reason the resolver's fallback path
+                                // (BeanManager + Context.get) still works.
+                                try {
+                                    jakarta.enterprise.inject.spi.CDI.current()
+                                            .getBeanManager()
+                                            .getEvent()
+                                            .fire(new EntityManagerCreatedEvent(
+                                                    persistenceUnitName, createdEm));
+                                } catch (RuntimeException ignored) {
+                                    // Container not ready, no observer, or
+                                    // similar — swallow; the resolver still
+                                    // works via the BeanManager fallback.
+                                }
+                                return createdEm;
                             })
                             .destroyWith((em, ctx) -> em.close());
                 } else {
@@ -451,11 +472,12 @@ public class JpaCdiExtension implements Extension {
         properties.put("jakarta.persistence.jdbc.password", "");
         properties.put("jakarta.persistence.jdbc.driver", "org.h2.Driver");
         properties.put("jakarta.persistence.schema-generation.database.action", "drop-and-create");
-        // Define the dialect explicitly so Hibernate's bootstrap does
-        // not need to open a probe Connection to determine it from
-        // JDBC metadata — under JTA the data source is XA-only and
-        // Hibernate's metadata-probe path doesn't always reach it.
-        properties.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+        // hibernate.dialect is intentionally NOT set: modern Hibernate
+        // detects the H2 dialect from the JDBC URL and warns
+        // (HHH90000025) when the property is supplied explicitly.
+        // jta-module sets jakarta.persistence.transactionType=JTA
+        // separately; the dialect probe works on the underlying
+        // connection even when the wrapper is XA.
 
         // Persistence-property prefix walk goes through the active
         // ConfigResolver so a consumer-supplied resolver controls every

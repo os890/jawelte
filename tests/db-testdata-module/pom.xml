@@ -100,6 +100,9 @@
         <module>scenario-62-label-fk-mismatch</module>
         <module>scenario-63-label-chain-three-tables</module>
         <module>scenario-64-for-persistence-unit-annotation-resolves</module>
+        <module>scenario-65-self-consistent-multi-table-diff</module>
+        <module>scenario-66-clean-insert-advances-identity-counter</module>
+        <module>scenario-67-for-pu-resolves-em-under-jta</module>
     </modules>
 
     <dependencies>

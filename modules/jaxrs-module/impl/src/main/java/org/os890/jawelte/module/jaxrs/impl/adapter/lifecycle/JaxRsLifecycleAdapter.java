@@ -283,6 +283,38 @@ public class JaxRsLifecycleAdapter implements TestModuleLifecyclePort {
         } catch (ExecutionException | TimeoutException | RuntimeException stopFailure) {
             LOGGER.log(Logger.Level.WARNING, "Failed to stop JAX-RS server", stopFailure);
         }
+        // SeBootstrap.Instance.stop() asks the provider to stop the
+        // listening server, but on Apache CXF + Jetty that leaves the
+        // default Bus (and its workqueue manager + Jetty engine
+        // factory) alive — the QueuedThreadPool keeps idle worker
+        // threads pinned for ~60s, and when 50+ test classes boot a
+        // fresh server in a row the thread count climbs into the
+        // hundreds. Reflectively shut the default Bus down so the
+        // next test class boots from clean state. No-op when CXF
+        // isn't on the classpath (e.g. -Presteasy).
+        shutdownCxfBusIfPresent();
+    }
+
+    private static void shutdownCxfBusIfPresent() {
+        try {
+            Class<?> busFactory = Class.forName("org.apache.cxf.BusFactory");
+            Class<?> busType = Class.forName("org.apache.cxf.Bus");
+            Object bus = busFactory.getMethod("getDefaultBus", boolean.class)
+                    .invoke(null, false);
+            if (bus != null) {
+                busType.getMethod("shutdown", boolean.class).invoke(bus, true);
+            }
+            // Drop the default reference so the next class boots a
+            // fresh Bus; setDefaultBus(null) is idempotent.
+            busFactory.getMethod("setDefaultBus", busType)
+                    .invoke(null, new Object[] {null});
+        } catch (ClassNotFoundException notCxf) {
+            // RESTEasy / Undertow / any non-CXF provider — nothing to do.
+        } catch (ReflectiveOperationException reflectionFailure) {
+            LOGGER.log(Logger.Level.WARNING,
+                    "Failed to shut down CXF Bus reflectively",
+                    reflectionFailure);
+        }
     }
 
     /**

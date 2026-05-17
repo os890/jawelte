@@ -215,3 +215,9 @@ follow-up options (cheapest first):
 
 Defer until a consumer asks. Add a scenario at the same time so
 the contract is locked in.
+
+## @DisableAutoMock annotation + MP Config equivalent
+
+- Add a `@DisableAutoMock` annotation (cdi-module/api) that switches off cdi-module's auto-mock layer for the annotated test class or injection point, so consumers can opt out without going through the existing exclude-package config list.
+- Provide a general MicroProfile Config option (e.g. `org.os890.jawelte.module.cdi.auto-mock.disabled=true`) that disables auto-mocking JVM-wide. Useful for scenarios that already declare every dependency via `@TestBean` and want the cleanest container possible.
+- Both must compose with the existing `DefaultExcludedPackageFilter` / `framework-exclude-packages` infrastructure — annotation/config wins over the prefix list.

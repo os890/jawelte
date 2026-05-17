@@ -143,12 +143,11 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
                             + persistenceUnitName + "' — no explicit transactionType was configured");
         }
         properties.put("jakarta.persistence.transactionType", "JTA");
-        // hibernate.transaction.coordinator_class=jta is optional —
-        // Hibernate auto-detects the coordinator from the configured
-        // JtaPlatform below. Set explicitly here for an unambiguous
-        // bootstrap log and to make the intent visible to anyone
-        // dumping the EMF property bag.
-        properties.put("hibernate.transaction.coordinator_class", "jta");
+        // hibernate.transaction.coordinator_class is intentionally NOT
+        // set: Hibernate auto-derives the coordinator from the
+        // jta.platform set below, and setting it explicitly logs
+        // HHH000193 ("Overriding hibernate.transaction.coordinator_class
+        // is dangerous"). We just point at the JtaPlatform.
         properties.put("hibernate.transaction.jta.platform", StandaloneJtaPlatform.class.getName());
         // DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION is the
         // JPA-recommended mode for JTA: the connection is acquired on
