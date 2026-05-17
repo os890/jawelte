@@ -5540,3 +5540,18 @@ Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
 Coverage so far is one cdi-module scenario out of 56. The remaining scenarios exercise concrete-class auto-mock, parameterized generics, qualifiers, `@TestBean(bean=...)` alternatives, `@TestBean` static fields, scope module wiring, etc. — each will surface its own BuildStep work.
 
 Next: pause for review (per the user's "I'll review at the end"), or continue with scenario-02-concrete-class-auto-mock as the next stress test for the BuildStep.
+
+## 2026-05-18 — TICKET-015 Phase B3: scenario-02 GREEN (concrete-class auto-mock)
+
+Extended the `autoMockUnsatisfiedInterfaces` build-step to also cover unannotated concrete classes. For an `@Inject` IP whose target is a `ClassInfo` that's not an interface, auto-mock applies only when the class has no class-level annotations (heuristic: any annotation likely means the class is a managed bean already, which Quarkus resolves itself). For interfaces the existing `getAllKnownImplementors` check stays.
+
+Mirror scenario at `tests/quarkus-module/scenario-02-concrete-class-auto-mock/` follows the cdi-module pattern: `NotificationSender` concrete class with no annotations, `@Inject` field on a `@QuarkusTest @EnableTestBeans` test class, assertion that the mock's `send("a","b")` returns null.
+
+Test output:
+```
+Quarkus 3.35.3 started
+Installed features: [cdi, jawelte-quarkus]
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+```
+
+Coverage: 2 / 56 cdi-module scenarios mirrored and green under @QuarkusTest.

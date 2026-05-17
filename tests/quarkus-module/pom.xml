@@ -35,6 +35,7 @@
 
     <modules>
         <module>scenario-01-interface-auto-mock</module>
+        <module>scenario-02-concrete-class-auto-mock</module>
     </modules>
 
     <dependencies>

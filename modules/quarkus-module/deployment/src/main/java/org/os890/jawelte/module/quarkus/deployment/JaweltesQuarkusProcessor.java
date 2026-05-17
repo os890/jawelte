@@ -116,12 +116,19 @@ public class JaweltesQuarkusProcessor {
                     if (target == null) {
                         continue;
                     }
-                    if (!Modifier.isInterface(target.flags())) {
-                        continue;
-                    }
-                    Collection<ClassInfo> impls = index.getAllKnownImplementors(fieldTypeName);
-                    if (!impls.isEmpty()) {
-                        continue;
+                    if (Modifier.isInterface(target.flags())) {
+                        Collection<ClassInfo> impls = index.getAllKnownImplementors(fieldTypeName);
+                        if (!impls.isEmpty()) {
+                            continue;
+                        }
+                    } else {
+                        if (!target.declaredAnnotations().isEmpty()) {
+                            // Concrete class with class-level annotations is
+                            // likely a managed bean — let Quarkus resolve it.
+                            // Auto-mock applies only to fully unmanaged
+                            // concrete classes.
+                            continue;
+                        }
                     }
                     syntheticBeans.produce(
                             SyntheticBeanBuildItem.configure(fieldTypeName)
