@@ -5474,3 +5474,27 @@ Root pom: added `<quarkus.version>3.35.3</quarkus.version>`, the `io.quarkus:qua
 Full reactor `./mvnw validate` green (3.35.3 BOM resolves cleanly from Maven Central; Enforcer / Checkstyle pass on every existing and new module).
 
 Next: scaffold the build-step processor (`JaweltesQuarkusProcessor`) + runtime adapter (`QuarkusTestBeanContainer`), wire the first `tests/quarkus-module/scenario-01-*` mirror, and verify it boots under `@QuarkusTest`.
+
+## 2026-05-18 — TICKET-015 Phase A: quarkus-module skeleton classes + extension metadata
+
+Built on the previous scaffold commit.
+
+Runtime (`modules/quarkus-module/runtime`):
+- `QuarkusTestBeanContainer` — `TestBeanContainerPort` impl. All five methods are no-ops for now. Under `@QuarkusTest` jawelte's `DelegatingJUnitExtension` auto-skip means `beforeAll` / `afterAll` aren't even called; the per-test-method scope activation in `beforeEach` / `afterEach` is the next slice.
+- `META-INF/quarkus-extension.yaml` — Quarkus extension metadata (name, description, keywords, `status: experimental`).
+- `META-INF/quarkus-extension.properties` — points to the deployment artifact GAV (`org.os890.jawelte:jawelte-quarkus-module-deployment:0.1.0-SNAPSHOT`).
+- `META-INF/services/org.os890.jawelte.core.api.port.TestBeanContainerPort` — registers `QuarkusTestBeanContainer`. Apache 2.0 header as `#` comment lines (ServiceLoader spec ignores them).
+
+Deployment (`modules/quarkus-module/deployment`):
+- `JaweltesQuarkusProcessor` — single `@BuildStep feature()` returning `FeatureBuildItem("jawelte-quarkus")` so Quarkus's build pipeline recognises the extension. The @TestBean discovery / auto-mock synthesis @BuildStep methods land in follow-up commits.
+
+Both runtime + deployment poms now configure `maven-javadoc-plugin` (`javadoc-jar` execution at `verify`), mirroring `cdi-module/impl`.
+
+`./mvnw -f modules/quarkus-module/pom.xml verify` green:
+- Enforcer (DependencyConvergence + BannedDependencies) clean
+- Checkstyle: 0 violations across both modules
+- RAT: 5 approved licenses (runtime — includes the META-INF resources) + 2 approved (deployment)
+- Javadoc: both modules produce a javadoc jar
+- JaCoCo: skipped (no test execution data; expected — no tests yet)
+
+Next: scaffold `tests/quarkus-module/scenario-01-*` as the first @QuarkusTest smoke target.
