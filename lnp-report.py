@@ -45,7 +45,7 @@ SCENARIO_KINDS = [
 ]
 
 PHASE_PATTERN = re.compile(
-    r"^  Phase\s+(\d+):\s+tests/lnp-module\s+\[([^]]+)\]")
+    r"^  Phase\s+(\d+):\s+tests/lnp-module(?:/\S+)?\s+\[([^]]+)\]")
 PERF_PATTERN = re.compile(
     r"^\[perf\]\s+(\S+)\s+methods=(\d+)\s+total=(\d+)ms"
     r"\s+median=(\d+)ms\s+heap-delta=([+-]?[\d,\.]+)MB")
