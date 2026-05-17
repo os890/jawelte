@@ -5257,3 +5257,13 @@ Two new scenarios cover the "drive every CRUD verb from inside a single test met
 **lnp-module scenario-06** — the LNP comparison counterpart. Standalone `Customer(id,name,email)` entity, RESOURCE_LOCAL `lnpFullCrudRoundtripPU`, db-unit seed of 5 customers. `CustomerResource` carries the same five CRUD verbs but JPA-backed; the abstract test base drives the same 7-step roundtrip per test method. Each step asserts via `ContentDiff.forJson(actual).expected("lnp-roundtrip/expected-responses/0N-step.json").assertEquals()`. Because the roundtrip is net-zero (POST + DELETE cancel out, other steps are reads), `dbExpected` mirrors `dbIn` — db-testdata-module confirms the DB lands back at the original 5 rows. 50 numbered subclasses amplify the per-class signal for the LNP report; `PerformanceExtension` prints the `(roundtrip)` tag, and `lnp-report.py` learned the matching `FullCrudRoundtripScenario` prefix.
 
 Both scenarios green on OWB and Weld with the CXF JAX-RS provider.
+
+## 2026-05-17 — jaxrs CXF Bus shutdown closes the per-class thread leak
+
+Profiling scenario-06 in jvisualvm showed the JVM thread count climbing past 300 across the 50 classes of one LNP run — `SeBootstrap.Instance.stop()` was leaving CXF's default `Bus`, its work-queue manager, and the Jetty `QueuedThreadPool` alive between test classes. Reproduced with a `ManagementFactory.getThreadMXBean().getThreadCount()` probe in `PerformanceExtension.afterAll`: thread count went 21 → 466 across the 50-class sweep, growing by roughly nine threads per class boot.
+
+Fix in `JaxRsLifecycleAdapter.stopServerQuietly`: after `instance.stop()`, reflectively look up `org.apache.cxf.BusFactory.getDefaultBus(false)`, call `Bus.shutdown(true)`, and reset the default reference. Reflection-gated so the call is a silent no-op on the RESTEasy profile (no CXF on the classpath).
+
+Result: thread count stays flat (9–10 on OWB, 18–19 on Weld) for the full 50-class sweep across every scenario × runtime combination — net growth of zero across all six LNP scenarios. As a side effect, the per-class heap delta in scenario-06 dropped from ~8.8 MB to ~2.3 MB (less retained state from the now-released worker threads). All six scenarios still green end-to-end.
+
+Probe (`threads=N`) added to every scenario's `PerformanceExtension.afterAll` log so future regressions show up immediately in the LNP report's raw log.

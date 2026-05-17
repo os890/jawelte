@@ -97,9 +97,10 @@ public class PerformanceExtension
         CLASS_RESULTS.add(result);
 
         System.out.printf(
-                "[perf] %s  methods=%d  total=%dms  median=%dms  heap-delta=%+.1fMB%n",
+                "[perf] %s  methods=%d  total=%dms  median=%dms  heap-delta=%+.1fMB  threads=%d%n",
                 className, methodCount, totalMs, medianMs,
-                heapDelta / (1024.0 * 1024.0));
+                heapDelta / (1024.0 * 1024.0),
+                ManagementFactory.getThreadMXBean().getThreadCount());
     }
 
     /**
