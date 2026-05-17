@@ -35,10 +35,11 @@ from pathlib import Path
 
 
 SCENARIO_KINDS = [
-    ("FullCrudScenario",          "scenario-01 - programmatic"),
-    ("FullCrudDbUnitScenario",    "scenario-02 - db-unit"),
-    ("FullCrudAllModulesScenario", "scenario-03 - db-unit + all framework modules"),
-    ("FullCrudJtaScenario",       "scenario-04 - programmatic + JTA"),
+    ("FullCrudScenario",            "scenario-01 - programmatic"),
+    ("FullCrudDbUnitScenario",      "scenario-02 - db-unit"),
+    ("FullCrudAllModulesScenario",  "scenario-03 - db-unit + all framework modules"),
+    ("FullCrudJtaScenario",         "scenario-04 - programmatic + JTA"),
+    ("FullCrudRestDbUnitScenario",  "scenario-05 - db-unit + REST"),
 ]
 
 PHASE_PATTERN = re.compile(
@@ -57,6 +58,7 @@ SUMMARY_TAG_TO_LABEL = {
     "db-unit": "scenario-02 - db-unit",
     "db-unit + all modules": "scenario-03 - db-unit + all framework modules",
     "jpa + jta": "scenario-04 - programmatic + JTA",
+    "db-unit + REST": "scenario-05 - db-unit + REST",
 }
 # Per-row line: `<ClassName> <methods> <total> <median> <heapStart> <heapEnd> <heapDelta>`
 # heap fields use the JVM's default locale (German `,`); we normalise

@@ -119,7 +119,7 @@ public class PerformanceExtension
                 "Heap-Start MB", "Heap-End MB", "Heap-Delta MB");
 
         System.out.println();
-        System.out.println("=== LNP Performance Summary (db-unit) ===");
+        System.out.println("=== LNP Performance Summary (db-unit + REST) ===");
         System.out.println(header);
         System.out.println("-".repeat(header.length()));
 

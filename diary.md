@@ -5177,3 +5177,16 @@ return context.get((Bean<EntityManager>) bean, beanManager.createCreationalConte
 `context.get(bean, cc)` returns the actual SessionImpl (lazily creating it if not already in the JTA-tx context). `em.unwrap(Session.class)` on the real impl returns `this`, the cast succeeds, the rest of the resolver path stays unchanged. RESOURCE_LOCAL fast path (holder.peek) is unaffected.
 
 Verified: scenario-67 reproducer green on OWB + Weld; lnp-module scenario-03 green on Weld (1051 tests, ~81s).
+
+## 2026-05-17 — lnp-module scenario-05: full CRUD via REST + db-unit + ResponseDiff
+
+Added a fifth LNP scenario that exercises the same 21-method CRUD shape as scenario-02 but routes every operation through a JAX-RS endpoint hosted by jaxrs-module's embedded SeBootstrap server, so the run combines as many jawelte features as one scenario can:
+
+* **testcontrol + db-testdata-module** — `@TestControl(testData=...)` still seeds `dbIn/` before each method and verifies `dbExpected/` afterwards (the test-method tx boundary is the diff trigger; we don't need `@Transactional` on the test methods themselves).
+* **jaxrs-module** — each numbered subclass is annotated `@EnableJaxRs(restResources = LnpRestResource.class)`. `LnpRestResource` carries 21 endpoints (GET/PUT/POST/DELETE) with `@Transactional`, executing the same JPQL the scenario-02 base ran inline but inside the server's request-scoped transaction.
+* **jaxrs ↔ content-diff bridge** — every test method asserts the HTTP response via `ResponseDiff.forJson(r).expectedContent("{\"ok\":true}").assertEquals()`, so the JSON diff path is on every call. Responses are intentionally a deterministic `{"ok":true}` String so the assertion is content-engine-driven, not body-shape-driven.
+* **PerformanceExtension + the lnp report** — `PerformanceExtension.printFinalSummary` got a unique tag (`db-unit + REST`), and `lnp-report.py` learned the matching prefix (`FullCrudRestDbUnitScenario`) and tag mapping so the new scenario gets its own row in every report section.
+
+Scaffolded the module by copying scenario-02 verbatim (entities, testdata XML, junit-platform.properties, beans.xml, microprofile-config.properties) and renaming `scenario02 → scenario05` plus `FullCrudDbUnit → FullCrudRestDbUnit`. Persistence unit name changed to `lnpFullCrudRestDbUnitPU` so it can't collide with scenario-02. CXF is the default JAX-RS runtime (`-Pcxf`, on by default); `-Presteasy` is also declared for the matrix.
+
+Smoke-tested green: 1051 tests on OWB (~60s), 1051 tests on Weld (~54s). No regressions in 01-04.
