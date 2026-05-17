@@ -73,5 +73,22 @@
             <artifactId>xbean-naming</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            Under Weld, cdi-module's auto-mock layer evaluates more
+            of the bean graph than under OWB and ends up asking
+            MockitoMockFactory for a mock of one of narayana's
+            internal CDI beans. Without mockito-core on the classpath
+            that path throws NoClassDefFoundError at AfterBeanDiscovery
+            and every scenario-04 subclass fails @BeforeAll. scenario-01
+            doesn't trip this because narayana isn't there to begin
+            with. Pinning the dep here is the smallest fix and keeps
+            scenario-04 reflecting "jpa-module + jta-module's natural
+            test classpath".
+        -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
