@@ -27,19 +27,20 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-tests-lnp-module-scenario-02-full-crud-dbunit</artifactId>
+    <artifactId>jawelte-tests-lnp-module-scenario-03-full-crud-dbunit-with-all-modules</artifactId>
     <packaging>jar</packaging>
 
-    <name>jawelte tests/lnp-module scenario 02: full-crud-dbunit</name>
-    <description>Mirrors scenario-01-full-crud's 21 CRUD methods but seeds via db-testdata-module's @TestControl(testData=...) (dbIn/*.xml) and verifies via DbDiff against dbExpected/*.xml. Runs in the same lnp profile sweep so the per-class summary table shows scenario-01 (programmatic) and scenario-02 (db-unit) lines next to each other.</description>
+    <name>jawelte tests/lnp-module scenario 03: full-crud-dbunit-with-all-modules</name>
+    <description>Identical to scenario-02 (db-unit seed + diff over the 21 mirror CRUD methods, 50x amplified) but adds every jawelte api + impl jar onto the test classpath. Surfaces any unexpected overhead - CDI bootstrap, ServiceLoader scans, JaCoCo instrumentation, classpath cost - introduced by simply having the framework modules present even when their features are not exercised.</description>
 
     <dependencies>
         <!--
-            scenario-02-only additions on top of the aggregator's
-            base dep set: scope-module + testcontrol-module bring
-            the @TestControl observer and its dbExpected verify
-            phase; db-testdata-module supplies the DbSeed / DbDiff
-            entry points that @TestControl delegates to.
+            Scenario-02's own additions stay (scope, testcontrol,
+            db-testdata) plus every other framework api + impl jar so
+            the test JVM boots the FULL framework even though only the
+            db-unit + JPA path is exercised. core-api/impl, cdi-api/impl,
+            jpa-api/impl already come in transitively from the lnp-module
+            aggregator.
         -->
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -69,6 +70,110 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-db-testdata-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            jta-module is intentionally NOT pulled in. Its
+            AutoSelectTransactionManagerProvider activates as soon as
+            a JTA detail-impl (geronimo / Atomikos / Narayana) appears
+            on the classpath, which then takes precedence over
+            jpa-module's RESOURCE_LOCAL @Transactional interceptor and
+            breaks every @TestControl seed (the seed expects a
+            RESOURCE_LOCAL EM that jpa-module exposes; with JTA in the
+            picture the EM stays inactive). The scenario covers the
+            "all modules on classpath" overhead for everything that
+            can coexist with RESOURCE_LOCAL JPA - a JTA variant would
+            need its own persistence-unit + XML fixtures.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-ejb-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-ejb-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-wiremock-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-wiremock-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-batch-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-batch-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-content-diff-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-content-diff-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-spring-data-module</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Jakarta API jars the framework modules need at class-load
+            time. Without them the impl jars' CDI extensions raise
+            NoClassDefFoundError at ServiceLoader scan. We do NOT pull
+            in runtime providers (RESTEasy, BatchEE, ...) - the goal
+            is to measure overhead from the framework being present,
+            not to fully bootstrap every subsystem.
+        -->
+        <dependency>
+            <groupId>jakarta.ws.rs</groupId>
+            <artifactId>jakarta.ws.rs-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.ejb</groupId>
+            <artifactId>jakarta.ejb-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.batch</groupId>
+            <artifactId>jakarta.batch-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-naming</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-jpa</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
