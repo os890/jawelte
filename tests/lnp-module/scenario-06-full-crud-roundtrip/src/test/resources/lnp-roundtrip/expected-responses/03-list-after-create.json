@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "name": "Customer-1",
+    "email": "customer1@test.com"
+  },
+  {
+    "id": 2,
+    "name": "Customer-2",
+    "email": "customer2@test.com"
+  },
+  {
+    "id": 3,
+    "name": "Customer-3",
+    "email": "customer3@test.com"
+  },
+  {
+    "id": 4,
+    "name": "Customer-4",
+    "email": "customer4@test.com"
+  },
+  {
+    "id": 5,
+    "name": "Customer-5",
+    "email": "customer5@test.com"
+  },
+  {
+    "id": 6,
+    "name": "Customer-6",
+    "email": "customer6@test.com"
+  }
+]

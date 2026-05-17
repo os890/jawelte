@@ -40,6 +40,7 @@ SCENARIO_KINDS = [
     ("FullCrudAllModulesScenario",  "scenario-03 - db-unit + all framework modules"),
     ("FullCrudJtaScenario",         "scenario-04 - programmatic + JTA"),
     ("FullCrudRestDbUnitScenario",  "scenario-05 - db-unit + REST"),
+    ("FullCrudRoundtripScenario",   "scenario-06 - REST roundtrip"),
 ]
 
 PHASE_PATTERN = re.compile(
@@ -59,6 +60,7 @@ SUMMARY_TAG_TO_LABEL = {
     "db-unit + all modules": "scenario-03 - db-unit + all framework modules",
     "jpa + jta": "scenario-04 - programmatic + JTA",
     "db-unit + REST": "scenario-05 - db-unit + REST",
+    "roundtrip": "scenario-06 - REST roundtrip",
 }
 # Per-row line: `<ClassName> <methods> <total> <median> <heapStart> <heapEnd> <heapDelta>`
 # heap fields use the JVM's default locale (German `,`); we normalise

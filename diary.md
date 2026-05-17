@@ -5247,3 +5247,13 @@ Following the request to return real entities (not `{"ok":true}`) and assert via
 The abstract test base learned `getJson/putJson/postJson/deleteJson(url, classpathResource)` helpers that call `ContentDiff.forJson(actual).expected(classpathResource).assertEquals()` and additionally dump the actual response to `target/responses/<methodName>.json` for fast iteration when the expected fixture drifts (copy from `target/` to `src/test/resources/lnp-full-crud/expected-responses/` and re-run).
 
 21 expected JSON files now live under `src/test/resources/lnp-full-crud/expected-responses/`. Sizes range from 2 chars (`queryProductsByStatus`: empty array because Product.status isn't set in the seed) to 6kB (`queryAllCustomers`: all 100 customers). Smoke: 1051/1051 tests green per runtime on scenario-05.
+
+## 2026-05-17 — jaxrs scenario-20 and lnp scenario-06: full CRUD roundtrip in one test method
+
+Two new scenarios cover the "drive every CRUD verb from inside a single test method" use-case.
+
+**jaxrs-module scenario-20** — a focused feature test. `Scenario20ItemResource` keeps a `ConcurrentHashMap` of `{id → name}` and exposes GET/GET-one/POST/PUT/DELETE. The test method walks: list (empty) → POST Alpha → POST Beta → list (both visible) → PUT id=1 → GET id=1 (confirm) → DELETE id=1 → list (only Beta). Every response is asserted via `ResponseDiff.forJson(r).expectedContent(...)` (the payloads are tiny enough that inline strings stay readable). No JPA, no DB, no transactions — just CDI + jaxrs across multiple verbs.
+
+**lnp-module scenario-06** — the LNP comparison counterpart. Standalone `Customer(id,name,email)` entity, RESOURCE_LOCAL `lnpFullCrudRoundtripPU`, db-unit seed of 5 customers. `CustomerResource` carries the same five CRUD verbs but JPA-backed; the abstract test base drives the same 7-step roundtrip per test method. Each step asserts via `ContentDiff.forJson(actual).expected("lnp-roundtrip/expected-responses/0N-step.json").assertEquals()`. Because the roundtrip is net-zero (POST + DELETE cancel out, other steps are reads), `dbExpected` mirrors `dbIn` — db-testdata-module confirms the DB lands back at the original 5 rows. 50 numbered subclasses amplify the per-class signal for the LNP report; `PerformanceExtension` prints the `(roundtrip)` tag, and `lnp-report.py` learned the matching `FullCrudRoundtripScenario` prefix.
+
+Both scenarios green on OWB and Weld with the CXF JAX-RS provider.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<dataset>
+  <CUSTOMER ID="1" NAME="Customer-1" EMAIL="customer1@test.com"/>
+  <CUSTOMER ID="2" NAME="Customer-2" EMAIL="customer2@test.com"/>
+  <CUSTOMER ID="3" NAME="Customer-3" EMAIL="customer3@test.com"/>
+  <CUSTOMER ID="4" NAME="Customer-4" EMAIL="customer4@test.com"/>
+  <CUSTOMER ID="5" NAME="Customer-5" EMAIL="customer5@test.com"/>
+</dataset>
