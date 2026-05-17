@@ -5236,3 +5236,14 @@ Refactored the JTA fallback in jpa-module's connection resolver so the primary p
 * `lookupViaContext(...)` — fallback. Direct `BeanManager.getBeans(...)` + `Context.get(bean, cc)` from the previous design, kept for robustness when the capture bean isn't discovered or the event got swallowed.
 
 Probed both runtimes during development: with the primary path armed, `JtaEntityManagerCapture.forPersistenceUnit(...).isPresent()` returns `true` on both OWB and Weld for scenario-67. Probe stripped before commit.
+
+## 2026-05-17 — lnp scenario-05 endpoints return entity-shaped JSON; assertions hit on-disk expected files
+
+Following the request to return real entities (not `{"ok":true}`) and assert via JSON-diff against on-disk fixtures (inline strings were too large), the LnpRestResource was rewritten so each of the 21 endpoints builds entity-shaped JSON via JSON-P (jakarta.json + Parsson, no JAX-RS provider registration involved — the resource returns a `String` that CXF sends through as `application/json`):
+
+* **Reads (14)** return lists/aggregates with id + key fields: customers (id, name, email), products by status, orders with item counts, employees by department, count-per-department, articles, transactions, stock by warehouse, sums and averages.
+* **Mutations (7)** return the updated row: customer with new email, the deleted order's id+customerId, the new order item, the re-assigned employee, the article with new body, the account with new balance, the stock item with new quantity.
+
+The abstract test base learned `getJson/putJson/postJson/deleteJson(url, classpathResource)` helpers that call `ContentDiff.forJson(actual).expected(classpathResource).assertEquals()` and additionally dump the actual response to `target/responses/<methodName>.json` for fast iteration when the expected fixture drifts (copy from `target/` to `src/test/resources/lnp-full-crud/expected-responses/` and re-run).
+
+21 expected JSON files now live under `src/test/resources/lnp-full-crud/expected-responses/`. Sizes range from 2 chars (`queryProductsByStatus`: empty array because Product.status isn't set in the seed) to 6kB (`queryAllCustomers`: all 100 customers). Smoke: 1051/1051 tests green per runtime on scenario-05.

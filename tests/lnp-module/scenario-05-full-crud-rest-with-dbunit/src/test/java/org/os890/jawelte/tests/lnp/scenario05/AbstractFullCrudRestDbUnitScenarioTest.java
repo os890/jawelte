@@ -28,7 +28,7 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
-import org.os890.jawelte.module.jaxrs.api.ResponseDiff;
+import org.os890.jawelte.module.contentdiff.api.ContentDiff;
 import org.os890.jawelte.module.jaxrs.api.TestUrl;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
@@ -85,7 +85,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query products by status via REST")
     public void queryProductsByStatus() {
-        get("/lnp/products/by-status?status=ACTIVE");
+        getJson("/lnp/products/by-status?status=ACTIVE",
+                "lnp-full-crud/expected-responses/queryProductsByStatus.json");
     }
 
     /** Read-only query — verified by dbExpected = seed. */
@@ -94,7 +95,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query orders with items via REST")
     public void queryOrdersWithItems() {
-        get("/lnp/orders/with-items");
+        getJson("/lnp/orders/with-items",
+                "lnp-full-crud/expected-responses/queryOrdersWithItems.json");
     }
 
     /** Mutation: updates customer 1's email via REST. */
@@ -103,7 +105,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-04-update-customer-email")
     @DisplayName("Update customer email via REST")
     public void updateCustomerEmail() {
-        put("/lnp/customers/1/email?value=updated@test.com");
+        putJson("/lnp/customers/1/email?value=updated@test.com",
+                "lnp-full-crud/expected-responses/updateCustomerEmail.json");
     }
 
     /** Mutation: deletes order 1 (cascade removes its items) via REST. */
@@ -112,7 +115,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-05-delete-order-cascade")
     @DisplayName("Delete an order (cascade) via REST")
     public void deleteOrderCascade() {
-        delete("/lnp/orders/1");
+        deleteJson("/lnp/orders/1",
+                "lnp-full-crud/expected-responses/deleteOrderCascade.json");
     }
 
     /** Read-only aggregate — verified by dbExpected = seed. */
@@ -121,7 +125,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average product price via REST")
     public void averageProductPrice() {
-        get("/lnp/products/avg-price");
+        getJson("/lnp/products/avg-price",
+                "lnp-full-crud/expected-responses/averageProductPrice.json");
     }
 
     /** Mutation: adds one OrderItem to order 2 via REST. */
@@ -130,7 +135,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-07-add-item-to-order")
     @DisplayName("Add item to existing order via REST")
     public void addItemToOrder() {
-        post("/lnp/orders/2/items?productId=1&quantity=5");
+        postJson("/lnp/orders/2/items?productId=1&quantity=5",
+                "lnp-full-crud/expected-responses/addItemToOrder.json");
     }
 
     // ==================== HR ====================
@@ -141,7 +147,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query employees by department via REST")
     public void queryEmployeesByDepartment() {
-        get("/lnp/employees/by-department?dept=1");
+        getJson("/lnp/employees/by-department?dept=1",
+                "lnp-full-crud/expected-responses/queryEmployeesByDepartment.json");
     }
 
     /** Read-only aggregate — verified by dbExpected = seed. */
@@ -150,7 +157,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Count employees per department via REST")
     public void countEmployeesPerDepartment() {
-        get("/lnp/employees/count-by-department");
+        getJson("/lnp/employees/count-by-department",
+                "lnp-full-crud/expected-responses/countEmployeesPerDepartment.json");
     }
 
     /** Mutation: re-assigns employee 1 to dept 10 via REST. */
@@ -159,7 +167,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-12-update-employee-department")
     @DisplayName("Update employee department via REST")
     public void updateEmployeeDepartment() {
-        put("/lnp/employees/1/department/10");
+        putJson("/lnp/employees/1/department/10",
+                "lnp-full-crud/expected-responses/updateEmployeeDepartment.json");
     }
 
     /** Read-only aggregate — verified by dbExpected = seed. */
@@ -168,7 +177,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Average salary via REST")
     public void averageSalary() {
-        get("/lnp/employees/avg-salary");
+        getJson("/lnp/employees/avg-salary",
+                "lnp-full-crud/expected-responses/averageSalary.json");
     }
 
     // ==================== CONTENT ====================
@@ -179,7 +189,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles by author via REST")
     public void queryArticlesByAuthor() {
-        get("/lnp/articles/by-author?author=1");
+        getJson("/lnp/articles/by-author?author=1",
+                "lnp-full-crud/expected-responses/queryArticlesByAuthor.json");
     }
 
     /** Read-only query — verified by dbExpected = seed. */
@@ -188,7 +199,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query articles with tags via REST")
     public void queryArticlesWithTags() {
-        get("/lnp/articles/with-tags");
+        getJson("/lnp/articles/with-tags",
+                "lnp-full-crud/expected-responses/queryArticlesWithTags.json");
     }
 
     /** Mutation: replaces article 1's body via REST. */
@@ -197,7 +209,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-22-update-article-body")
     @DisplayName("Update article body via REST")
     public void updateArticleBody() {
-        put("/lnp/articles/1/body?text=Updated+body+content+for+testing.");
+        putJson("/lnp/articles/1/body?text=Updated+body+content+for+testing.",
+                "lnp-full-crud/expected-responses/updateArticleBody.json");
     }
 
     // ==================== FINANCE ====================
@@ -208,7 +221,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query transactions by account via REST")
     public void queryTransactionsByAccount() {
-        get("/lnp/transactions/by-account?account=1");
+        getJson("/lnp/transactions/by-account?account=1",
+                "lnp-full-crud/expected-responses/queryTransactionsByAccount.json");
     }
 
     /** Read-only aggregate — verified by dbExpected = seed. */
@@ -217,7 +231,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Sum account balances via REST")
     public void sumAccountBalances() {
-        get("/lnp/accounts/sum-balance");
+        getJson("/lnp/accounts/sum-balance",
+                "lnp-full-crud/expected-responses/sumAccountBalances.json");
     }
 
     /** Mutation: bumps account 1's balance by 500 via REST. */
@@ -226,7 +241,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-32-update-account-balance")
     @DisplayName("Update account balance via REST")
     public void updateAccountBalance() {
-        put("/lnp/accounts/1/balance/add?amount=500");
+        putJson("/lnp/accounts/1/balance/add?amount=500",
+                "lnp-full-crud/expected-responses/updateAccountBalance.json");
     }
 
     // ==================== INVENTORY ====================
@@ -237,7 +253,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Query stock by warehouse via REST")
     public void queryStockByWarehouse() {
-        get("/lnp/stock/by-warehouse?warehouse=1");
+        getJson("/lnp/stock/by-warehouse?warehouse=1",
+                "lnp-full-crud/expected-responses/queryStockByWarehouse.json");
     }
 
     /** Read-only aggregate — verified by dbExpected = seed. */
@@ -246,7 +263,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Total stock quantity via REST")
     public void totalStockQuantity() {
-        get("/lnp/stock/total");
+        getJson("/lnp/stock/total",
+                "lnp-full-crud/expected-responses/totalStockQuantity.json");
     }
 
     /** Mutation: bumps stock item 1's quantity by 50 via REST. */
@@ -255,7 +273,8 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/method-42-update-stock-quantity")
     @DisplayName("Update stock quantity via REST")
     public void updateStockQuantity() {
-        put("/lnp/stock/1/quantity/add?amount=50");
+        putJson("/lnp/stock/1/quantity/add?amount=50",
+                "lnp-full-crud/expected-responses/updateStockQuantity.json");
     }
 
     // ==================== CROSS-DOMAIN ====================
@@ -266,59 +285,64 @@ public abstract class AbstractFullCrudRestDbUnitScenarioTest {
     @TestControl(testData = "lnp-full-crud/seed")
     @DisplayName("Cross-domain populated check via REST")
     public void allTablesPopulated() {
-        get("/lnp/tables/populated");
+        getJson("/lnp/tables/populated",
+                "lnp-full-crud/expected-responses/allTablesPopulated.json");
     }
 
     // ==================== HTTP helpers ====================
+    //
+    // Every helper triggers the endpoint and compares the JSON
+    // response against an expected file under
+    // src/test/resources/lnp-full-crud/expected-responses/. The
+    // actual response is also dumped to target/responses/ for fast
+    // iteration when the expected fixture drifts (see dumpActual
+    // below — copy that file over to the resources directory and
+    // re-run).
 
-    private void get(String pathAndQuery) {
-        invokeAndAssertOk("GET", pathAndQuery, null);
-    }
-
-    private void put(String pathAndQuery) {
-        invokeAndAssertOk("PUT", pathAndQuery, "");
-    }
-
-    private void post(String pathAndQuery) {
-        invokeAndAssertOk("POST", pathAndQuery, "");
-    }
-
-    private void delete(String pathAndQuery) {
-        invokeAndAssertOk("DELETE", pathAndQuery, null);
-    }
-
-    /**
-     * GET the URL and compare the JSON response against the expected
-     * payload loaded from {@code classpathResource}. The endpoint is
-     * expected to return realistic entity-shaped JSON (large enough
-     * that inline {@code expectedContent} would be unreadable), and
-     * {@link ResponseDiff} drives the structural diff.
-     *
-     * @param pathAndQuery     URL path + query (e.g.
-     *                         {@code "/lnp/customers"})
-     * @param classpathResource classpath path of the expected JSON
-     *                         file (e.g.
-     *                         {@code "lnp-full-crud/expected-responses/queryAllCustomers.json"})
-     */
     private void getJson(String pathAndQuery, String classpathResource) {
         invokeAndAssertExpected("GET", pathAndQuery, null, classpathResource);
     }
 
-    private void invokeAndAssertOk(String method, String pathAndQuery,
-                                    String body) {
-        invokeJson(method, pathAndQuery, body, response ->
-                ResponseDiff.forJson(response)
-                        .expectedContent("{\"ok\":true}")
-                        .assertEquals());
+    private void putJson(String pathAndQuery, String classpathResource) {
+        invokeAndAssertExpected("PUT", pathAndQuery, "", classpathResource);
+    }
+
+    private void postJson(String pathAndQuery, String classpathResource) {
+        invokeAndAssertExpected("POST", pathAndQuery, "", classpathResource);
+    }
+
+    private void deleteJson(String pathAndQuery, String classpathResource) {
+        invokeAndAssertExpected("DELETE", pathAndQuery, null, classpathResource);
     }
 
     private void invokeAndAssertExpected(String method, String pathAndQuery,
                                           String body,
                                           String classpathResource) {
-        invokeJson(method, pathAndQuery, body, response ->
-                ResponseDiff.forJson(response)
-                        .expected(classpathResource)
-                        .assertEquals());
+        // Dump the actual response body to target/responses/<methodName>.json
+        // alongside running the diff. The disk dump is unconditional —
+        // when the expected file is missing or out of date the dump on
+        // disk can be promoted to the expected file directly, avoiding
+        // brittle scraping of the surefire-reports XML.
+        invokeJson(method, pathAndQuery, body, response -> {
+            String actual = response.readEntity(String.class);
+            dumpActual(classpathResource, actual);
+            ContentDiff.forJson(actual)
+                    .expected(classpathResource)
+                    .assertEquals();
+        });
+    }
+
+    private static void dumpActual(String classpathResource, String body) {
+        java.nio.file.Path target = java.nio.file.Path.of(
+                "target", "responses",
+                classpathResource.substring(classpathResource.lastIndexOf('/') + 1));
+        try {
+            java.nio.file.Files.createDirectories(target.getParent());
+            java.nio.file.Files.writeString(target, body);
+        } catch (java.io.IOException ignored) {
+            // Best-effort capture for dev convenience; never let it
+            // mask the underlying assertion result.
+        }
     }
 
     private void invokeJson(String method, String pathAndQuery, String body,
