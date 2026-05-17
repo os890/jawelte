@@ -5512,3 +5512,31 @@ Key plumbing:
 Test status: scenario-01 currently fails as expected — `jakarta.enterprise.inject.UnsatisfiedResolutionException: Unsatisfied dependency for type AuditService` at `ArcProcessor#validate`. That's the exact gap the next slice fills: the JaweltesQuarkusProcessor `BeanRegistrar` BuildStep that synthesizes Mockito-backed beans for unsatisfied interface IPs on `@EnableTestBeans` test classes.
 
 Next: implement the auto-mock BuildStep in `quarkus-module/deployment` + MockBeanCreator runtime, iterate until scenario-01 green.
+
+## 2026-05-18 — TICKET-015 Phase B2: scenario-01 GREEN under @QuarkusTest
+
+First end-to-end pass: the cdi-module scenario-01-interface-auto-mock test passes against Quarkus 3.35.3's ArC, with the same assertion shape (interface IP injected as Mockito mock; unstubbed call returns null).
+
+Build-time machinery (`modules/quarkus-module/deployment/JaweltesQuarkusProcessor`):
+- `@BuildStep autoMockUnsatisfiedInterfaces(CombinedIndexBuildItem, BuildProducer<SyntheticBeanBuildItem>)` walks every `@EnableTestBeans` annotated class in the Jandex index, climbs the superclass chain, finds `@Inject` fields whose declared type is an interface with no implementor, and produces one `SyntheticBeanBuildItem` per such interface — `.scope(Singleton.class).creator(MockBeanCreator.class).param("typeName", fqn).unremovable()`.
+
+Runtime (`modules/quarkus-module/runtime/MockBeanCreator`):
+- Implements `io.quarkus.arc.BeanCreator<Object>`. Reads the `typeName` param, loads the class via the TCCL, returns `Mockito.mock(type)` per activation. Mirrors `cdi-module/impl`'s `MockitoMockFactory` default; a pluggable `MockFactory` SPI under Quarkus is deferred to a follow-up commit.
+
+Fixes that landed during the green sweep:
+- `quarkus-extension-processor` annotation processor registered on the deployment module (`<annotationProcessorPaths>` on maven-compiler-plugin). Without it Quarkus never scans the deployment jar's `@BuildStep` methods and the synthetic beans never appear in the BeanDeployment.
+- `.types(...)` accepts `Type` not `DotName`; switched to passing the Jandex `Type`.
+- `.scope(...)` accepts `Class<? extends Annotation>` or `ScopeInfo`; switched to `Singleton.class`.
+- Javadoc cross-module `{@link}` from runtime → deployment removed (runtime can't see deployment classes; deployment depends on runtime, not vice versa).
+
+Test output (excerpt):
+```
+Quarkus 3.35.3 started in 0.813s.
+Profile test activated.
+Installed features: [cdi, jawelte-quarkus]
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+```
+
+Coverage so far is one cdi-module scenario out of 56. The remaining scenarios exercise concrete-class auto-mock, parameterized generics, qualifiers, `@TestBean(bean=...)` alternatives, `@TestBean` static fields, scope module wiring, etc. — each will surface its own BuildStep work.
+
+Next: pause for review (per the user's "I'll review at the end"), or continue with scenario-02-concrete-class-auto-mock as the next stress test for the BuildStep.

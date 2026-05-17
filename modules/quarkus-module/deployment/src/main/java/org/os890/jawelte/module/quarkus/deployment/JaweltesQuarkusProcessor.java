@@ -15,7 +15,26 @@
  */
 package org.os890.jawelte.module.quarkus.deployment;
 
+import java.lang.reflect.Modifier;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+import jakarta.inject.Singleton;
+
+import org.jboss.jandex.AnnotationInstance;
+import org.jboss.jandex.AnnotationTarget;
+import org.jboss.jandex.ClassInfo;
+import org.jboss.jandex.DotName;
+import org.jboss.jandex.FieldInfo;
+import org.jboss.jandex.IndexView;
+import org.jboss.jandex.Type;
+import org.os890.jawelte.module.quarkus.runtime.MockBeanCreator;
+
+import io.quarkus.arc.deployment.SyntheticBeanBuildItem;
+import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
 
 /**
@@ -28,15 +47,19 @@ import io.quarkus.deployment.builditem.FeatureBuildItem;
  * transformations that add {@code @Priority} plus a fallback
  * {@code @Singleton} to selected alternatives.
  *
- * <p>For now the processor exposes only the {@link #feature()}
- * build-step so Quarkus's build pipeline recognises the extension and
- * surfaces it in {@code quarkus:list-extensions}. The build-time
- * machinery for {@code @TestBean} discovery and auto-mock synthesis
- * lands in follow-up commits.
+ * <p>The first iteration covers the scenario-01 case: an
+ * {@code @EnableTestBeans} test class with an {@code @Inject} field
+ * typed by an interface that has no implementor in the Jandex index.
+ * Each such interface gets a {@code SyntheticBeanBuildItem} backed by
+ * {@link MockBeanCreator}; the runtime creator returns a fresh Mockito
+ * mock per bean activation.
  */
 public class JaweltesQuarkusProcessor {
 
     private static final String FEATURE = "jawelte-quarkus";
+    private static final DotName INJECT = DotName.createSimple("jakarta.inject.Inject");
+    private static final DotName ENABLE_TEST_BEANS =
+            DotName.createSimple("org.os890.jawelte.core.api.EnableTestBeans");
 
     /** Default constructor used by the Quarkus build framework. */
     public JaweltesQuarkusProcessor() {
@@ -51,5 +74,70 @@ public class JaweltesQuarkusProcessor {
     @BuildStep
     FeatureBuildItem feature() {
         return new FeatureBuildItem(FEATURE);
+    }
+
+    /**
+     * Scans every {@code @EnableTestBeans}-annotated class in the
+     * Jandex index, walks its {@code @Inject} fields, and registers a
+     * synthetic Mockito-backed bean for every field whose declared
+     * type is an interface with no known implementor. Mirrors the
+     * portion of cdi-module's {@code TestBeansCdiExtension} that
+     * synthesises auto-mock beans at {@code AfterBeanDiscovery} time.
+     *
+     * @param indexItem      the combined index produced by Quarkus's
+     *                       core processor; carries every class on
+     *                       the build classpath
+     * @param syntheticBeans build-item producer for the synthetic
+     *                       mock beans this step contributes
+     */
+    @BuildStep
+    void autoMockUnsatisfiedInterfaces(
+            CombinedIndexBuildItem indexItem,
+            BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
+        IndexView index = indexItem.getIndex();
+        Set<DotName> alreadyHandled = new LinkedHashSet<>();
+        for (AnnotationInstance enableAnnotation : index.getAnnotations(ENABLE_TEST_BEANS)) {
+            if (enableAnnotation.target().kind() != AnnotationTarget.Kind.CLASS) {
+                continue;
+            }
+            ClassInfo testClass = enableAnnotation.target().asClass();
+            ClassInfo current = testClass;
+            while (current != null && !current.name().equals(DotName.OBJECT_NAME)) {
+                for (FieldInfo field : current.fields()) {
+                    if (field.annotation(INJECT) == null) {
+                        continue;
+                    }
+                    Type fieldType = field.type();
+                    DotName fieldTypeName = fieldType.name();
+                    if (!alreadyHandled.add(fieldTypeName)) {
+                        continue;
+                    }
+                    ClassInfo target = index.getClassByName(fieldTypeName);
+                    if (target == null) {
+                        continue;
+                    }
+                    if (!Modifier.isInterface(target.flags())) {
+                        continue;
+                    }
+                    Collection<ClassInfo> impls = index.getAllKnownImplementors(fieldTypeName);
+                    if (!impls.isEmpty()) {
+                        continue;
+                    }
+                    syntheticBeans.produce(
+                            SyntheticBeanBuildItem.configure(fieldTypeName)
+                                    .types(fieldType)
+                                    .scope(Singleton.class)
+                                    .creator(MockBeanCreator.class)
+                                    .param(MockBeanCreator.TYPE_NAME_PARAM, fieldTypeName.toString())
+                                    .unremovable()
+                                    .done());
+                }
+                DotName superName = current.superName();
+                if (superName == null) {
+                    break;
+                }
+                current = index.getClassByName(superName);
+            }
+        }
     }
 }

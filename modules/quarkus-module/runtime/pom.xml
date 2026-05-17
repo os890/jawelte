@@ -71,6 +71,17 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
         </dependency>
+
+        <!--
+            The runtime MockBeanCreator delegates to Mockito directly
+            (mirrors cdi-module/impl's MockitoMockFactory). compile
+            scope so the runtime jar carries Mockito transitively the
+            same way cdi-module/impl does.
+        -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

@@ -63,6 +63,26 @@
 
     <build>
         <plugins>
+            <!--
+                quarkus-extension-processor is an annotation processor
+                that scans @BuildStep methods and generates the
+                build-steps metadata Quarkus needs to discover this
+                extension at app build time. Without it Quarkus never
+                invokes JaweltesQuarkusProcessor.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.quarkus</groupId>
+                            <artifactId>quarkus-extension-processor</artifactId>
+                            <version>${quarkus.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
