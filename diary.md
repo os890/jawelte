@@ -5267,3 +5267,20 @@ Fix in `JaxRsLifecycleAdapter.stopServerQuietly`: after `instance.stop()`, refle
 Result: thread count stays flat (9–10 on OWB, 18–19 on Weld) for the full 50-class sweep across every scenario × runtime combination — net growth of zero across all six LNP scenarios. As a side effect, the per-class heap delta in scenario-06 dropped from ~8.8 MB to ~2.3 MB (less retained state from the now-released worker threads). All six scenarios still green end-to-end.
 
 Probe (`threads=N`) added to every scenario's `PerformanceExtension.afterAll` log so future regressions show up immediately in the LNP report's raw log.
+
+## 2026-05-17 — lnp scenario-07: Gatling as the client driver
+
+Adds a seventh LNP scenario that pairs the same server stack as scenario-06 (Customer entity + `CustomerResource` over `@EnableJaxRs`) with Gatling 3.15 as the *client* side. Each test method calls `Gatling$.MODULE$.fromArgs(...)` to run a `CustomerCrudSimulation` that injects **10 virtual users**, each walking the 5-step CRUD roundtrip (list → POST → read → DELETE → list); about 50 HTTP calls per class × 50 numbered subclasses × 2 CDI runtimes = ~5000 Gatling-driven requests per LNP sweep. Gatling's own global assertions (no failed requests, max response time < 1s) decide pass/fail; the JUnit method translates the non-zero exit code into a test failure.
+
+**Gotchas hit and fixed along the way:**
+
+* Gatling 3.x has no `GatlingPropertiesBuilder` on Java's surface; the Java-callable entry point is the Scala companion `io.gatling.app.Gatling$.MODULE$.fromArgs(String[])`. CLI-style args keep us off Scala collection APIs.
+* `gatling-app` pulls `javax.jms` transitively via `gatling-jms`, which the project's enforcer rule bans. Excluded the JMS dep — we don't use Gatling's JMS DSL.
+* On JDK 25, Gatling's `StringInternals` reflectively accesses `java.lang.String` internals and needs `--add-opens=java.base/java.lang=ALL-UNNAMED`. Added per-scenario via surefire `argLine` with `@{argLine}` so JaCoCo's prepare-agent setting is preserved.
+* HTML report generation per class would eat tens of megabytes; passing `--no-reports` keeps disk usage flat.
+
+`verify-all.sh` now also runs scenario-07 in the RESTEasy axis alongside scenarios 05 and 06.
+
+`PerformanceExtension` prints the `(gatling)` tag; `lnp-report.py` learned the matching prefix (`FullCrudGatlingScenario`) and tag mapping so the new scenario gets its own row in every report section.
+
+Smoke test on OWB: assertions green, ~8s per class for the first one (Gatling JIT warmup dominates). Full sweep timing will land when the user runs verify-all.sh lnp next.

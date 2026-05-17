@@ -182,7 +182,8 @@ if [ "$LNP_MODE" = true ]; then
     # would be wasted wall time — keep the matrix narrow.
     for cdi in owb weld; do
         for scen in scenario-05-full-crud-rest-with-dbunit \
-                    scenario-06-full-crud-roundtrip; do
+                    scenario-06-full-crud-roundtrip \
+                    scenario-07-full-crud-with-gatling; do
             run "tests/lnp-module/$scen [$cdi,resteasy,lnp]" \
                 "$REPO_ROOT/tests/lnp-module/$scen" \
                 -P "$cdi,lnp,-cxf,resteasy" verify

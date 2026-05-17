@@ -40,6 +40,7 @@
         <module>scenario-04-full-crud-with-jta</module>
         <module>scenario-05-full-crud-rest-with-dbunit</module>
         <module>scenario-06-full-crud-roundtrip</module>
+        <module>scenario-07-full-crud-with-gatling</module>
     </modules>
 
     <dependencies>
