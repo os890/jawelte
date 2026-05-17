@@ -28,6 +28,7 @@ import org.os890.jawelte.tests.lnp.scenario08.entity.inventory.StockItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * Aggregator for the per-entity Spring Data repositories used by
@@ -84,12 +85,18 @@ public abstract class CrudRepositories {
      */
     public interface PaymentRepository extends JpaRepository<Payment, Long> {
         /**
-         * Delete every payment row attached to the given order.
+         * Delete every payment row attached to the given order. The
+         * explicit {@code @Param} binding is required because Java's
+         * default class-file format doesn't retain method-parameter
+         * names, so Spring Data can't reflectively resolve
+         * {@code :orderId} → {@code Long orderId} without it (compile
+         * would otherwise need {@code -parameters}, which the rest of
+         * the build doesn't enable).
          *
          * @param orderId the foreign-key id
          */
         @Modifying(flushAutomatically = true, clearAutomatically = true)
         @Query("DELETE FROM Payment p WHERE p.order.id = :orderId")
-        void deleteByOrderId(Long orderId);
+        void deleteByOrderId(@Param("orderId") Long orderId);
     }
 }
