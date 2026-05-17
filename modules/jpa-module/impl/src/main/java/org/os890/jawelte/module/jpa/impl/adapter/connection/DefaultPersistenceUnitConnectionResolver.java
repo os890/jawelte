@@ -19,6 +19,9 @@ import java.sql.Connection;
 import java.util.Set;
 
 import jakarta.annotation.Priority;
+import jakarta.enterprise.inject.Instance;
+import jakarta.enterprise.inject.literal.NamedLiteral;
+import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.EntityManager;
 
 import org.hibernate.Session;
@@ -52,6 +55,15 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
     public Connection connectionFor(String persistenceUnitName) {
         EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
         if (entityManager == null) {
+            // Under JTA, jta-module's strategy never populates the
+            // holder (the JTA platform owns the EM <-> transaction
+            // enlistment), so fall back to the CDI bean jpa-module
+            // registered for the PU. Resolving through CDI lazily
+            // creates / fetches the JTA-scoped EntityManager bean,
+            // which is the one Hibernate already drives.
+            entityManager = lookupCdiEntityManager(persistenceUnitName);
+        }
+        if (entityManager == null) {
             throw new IllegalStateException(
                     "No active EntityManager for persistence unit '" + persistenceUnitName
                             + "'. Was the call made outside a @Transactional or "
@@ -65,6 +77,29 @@ public class DefaultPersistenceUnitConnectionResolver implements PersistenceUnit
         // transaction.
         Session session = entityManager.unwrap(Session.class);
         return session.doReturningWork(connection -> connection);
+    }
+
+    private static EntityManager lookupCdiEntityManager(String persistenceUnitName) {
+        try {
+            CDI<Object> cdi = CDI.current();
+            // jpa-module's JpaCdiExtension registers EntityManager
+            // beans qualified with @Named(puName) in the multi-PU case
+            // and @Default in the single-PU case. Try @Named first;
+            // if it's not satisfied (single PU), fall back to @Default.
+            Instance<EntityManager> named =
+                    cdi.select(EntityManager.class, NamedLiteral.of(persistenceUnitName));
+            if (named.isResolvable()) {
+                return named.get();
+            }
+            Instance<EntityManager> defaulted = cdi.select(EntityManager.class);
+            if (defaulted.isResolvable()) {
+                return defaulted.get();
+            }
+        } catch (IllegalStateException notRunning) {
+            // CDI container not started on this thread; nothing to fall
+            // back to.
+        }
+        return null;
     }
 
     @Override

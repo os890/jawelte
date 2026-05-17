@@ -5139,3 +5139,17 @@ Smoke-tested `FullCrudAllModulesScenario01Test` under OWB: 21/21 green, total 18
 Surprise: scenario-01's cold class is the slowest of the three (2713 ms vs 1857 / 1859 ms). The programmatic populator does ~1000 `em.persist` calls in the warmup-phase populator which triggers Hibernate JIT in a way that the DBUnit CleanInsert path doesn't.
 
 Module-classpath overhead is **stable at ~4 %** across the runs - low but non-zero. No CDI extension currently breaks the JPA + db-unit flow simply by being present, with one documented exception (jta-module, see commit `2d9da85`).
+
+## 2026-05-17 — `DbSeed.forPersistenceUnit()` works under JTA (scenario-67 + jpa-module fix)
+
+When scenario-03 (lnp-module) was forced to drag jta-module onto the classpath ("we said 03 should use all of our modules as test dependency"), its persistence unit flipped to `transaction-type="JTA"` and the `DbSeed` seed step started failing with *No active EntityManager for persistence unit ...* — even inside a `@Transactional` method.
+
+Root cause: `DefaultPersistenceUnitConnectionResolver.connectionFor(...)` consulted only jpa-module's `TransactionScopedEmHolder`, which only `DefaultResourceLocalTransactionStrategy` populates. `JtaTransactionStrategy` deliberately never touches the holder (per its javadoc — the JTA platform owns the EM lifecycle), so the resolver had nowhere to find the active EM in JTA mode.
+
+Captured the bug as `tests/db-testdata-module/scenario-67-for-pu-resolves-em-under-jta` first — a minimal `@PersistenceConfig` test that bootstraps jpa-module + jta-module + narayana + geronimo + xbean-naming and calls `DbSeed.forPersistenceUnit().datasetContent(...).cleanInsert().execute()` from a `@Transactional` method. Reproducer fails with the exact "No active EntityManager…" error.
+
+Fix in `DefaultPersistenceUnitConnectionResolver`: keep the holder as the primary path (RESOURCE_LOCAL fast path, no CDI traversal), but on miss, fall back to a CDI lookup —
+`CDI.current().select(EntityManager.class, NamedLiteral.of(persistenceUnitName))` for multi-PU,
+`CDI.current().select(EntityManager.class)` for single-PU (the `@Default` qualifier `JpaCdiExtension` registers when `singlePersistenceUnit=true`). Only when all three paths fail do we surface the original `IllegalStateException`. The CDI lookup returns the JTA-scoped EM bean Hibernate already drives, so seed and verify code see the same uncommitted state.
+
+Reproducer green. No regressions in the RESOURCE_LOCAL hot path (the holder still answers first).
