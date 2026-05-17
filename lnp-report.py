@@ -471,32 +471,49 @@ def _delta_html(data, runtimes_present, scenario_order):
 
 
 def _heap_chart_html(series, runtimes_present, scenario_order):
+    # Group constellations by JAX-RS provider so OWB and Weld can
+    # share a chart when they ran the same provider, but CXF and
+    # RESTEasy stay on separate charts.
     blocks = []
     runtime_colour = {
         "OWB (CXF)": "#1f6fb4",
-        "OWB (RESTEasy)": "#2aa198",
+        "OWB (RESTEasy)": "#1f6fb4",
         "Weld (CXF)": "#c97a2b",
-        "Weld (RESTEasy)": "#dc322f",
+        "Weld (RESTEasy)": "#c97a2b",
     }
+    # Discover ordered provider groups out of runtimes_present so a
+    # future "Quarkus" axis would land in its own column without code
+    # changes. The legend label inside the chart drops the provider
+    # part because the chart header already names it.
+    providers = []
+    for runtime in runtimes_present:
+        provider = runtime.split("(", 1)[1].rstrip(")") if "(" in runtime else "default"
+        if provider not in providers:
+            providers.append(provider)
     for label in scenario_order:
-        # Render one chart per (scenario, constellation) — each chart
-        # plots a single line so CXF and RESTEasy runs stay visually
-        # separated instead of overlapping on a shared y-axis.
-        per_constellation = []
-        for runtime in runtimes_present:
-            values = series[runtime].get(label, [])
-            if values:
-                per_constellation.append(
-                    '<div class="heap-chart">'
-                    f'<h4>{html.escape(runtime)}</h4>'
-                    + _svg_line_chart([(runtime, values)], runtime_colour)
-                    + '</div>')
-        if not per_constellation:
+        per_provider = []
+        for provider in providers:
+            cdi_lines = []
+            for runtime in runtimes_present:
+                if not runtime.endswith(f"({provider})"):
+                    continue
+                values = series[runtime].get(label, [])
+                if not values:
+                    continue
+                cdi_lines.append((runtime, values))
+            if not cdi_lines:
+                continue
+            per_provider.append(
+                '<div class="heap-chart">'
+                f'<h4>{html.escape(provider)}</h4>'
+                + _svg_line_chart(cdi_lines, runtime_colour)
+                + '</div>')
+        if not per_provider:
             continue
         blocks.append(
             f'<h3>{html.escape(label)}</h3>'
             '<div class="heap-chart-row">'
-            + "".join(per_constellation)
+            + "".join(per_provider)
             + '</div>')
     if not blocks:
         return "<p>no data</p>"
@@ -581,18 +598,22 @@ def _svg_line_chart(runtime_lines, runtime_colour):
         parts.append(
             f'<polyline fill="none" stroke="{colour}" '
             f'stroke-width="1.4" points="{points}"/>')
-    # Legend at the right.
+    # Legend at the right. The chart header already names the
+    # JAX-RS provider, so the legend strips the provider half of
+    # the constellation label and shows just the CDI runtime
+    # ("OWB" / "Weld").
     legend_x = padding_left + plot_w + 16
     legend_y = padding_top
     for runtime, _ in runtime_lines:
         colour = runtime_colour.get(runtime, "#444")
+        short = re.sub(r"\s*\([^)]+\)\s*$", "", runtime)
         parts.append(
             f'<line x1="{legend_x}" y1="{legend_y + 5}" '
             f'x2="{legend_x + 16}" y2="{legend_y + 5}" '
             f'stroke="{colour}" stroke-width="2"/>')
         parts.append(
             f'<text x="{legend_x + 20}" y="{legend_y + 9}" '
-            f'font-size="11" fill="#333">{html.escape(runtime)}</text>')
+            f'font-size="11" fill="#333">{html.escape(short)}</text>')
         legend_y += 16
     parts.append('</svg>')
     return "".join(parts)
