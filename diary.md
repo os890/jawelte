@@ -5344,3 +5344,17 @@ Outstanding failures (each needs targeted work):
 - 55: DeltaSpike `@PartialBeanBinding` skip — the build-time guard didn't keep up with the new IP path.
 
 Next steps: investigate per-failure, fix incrementally, then push.
+
+## 2026-05-18 — TICKET-016 Phase B: TestContext lifetime extension (41/56 green)
+
+Per the user's direction, the `TestContext` ThreadLocal now stays alive past `DelegatingJUnitExtension.beforeAll`. The factory bridge closes the bootstrap window after handing JUnit the test instance.
+
+- `DelegatingJUnitExtension.beforeAll`: removed the `testContext.reset()` from the finally block.
+- `DelegatingJUnitExtension.afterAll`: calls `testContext.reset()` at the end as a safety net (idempotent).
+- `DelegatingJUnitTestInstanceFactory.createTestInstance`: after producing the instance, calls `TestContext.get().reset()` (catching `IllegalStateException` for non-jawelte test classes).
+
+User-visible effect:
+- `@EnableTestBeans(manageContainer=false)` test classes can now boot their own `SeContainer` inside `@BeforeAll` — `TestBeansCdiExtension`'s `BeforeBeanDiscovery` observer sees the active `TestContext` and registers the test class as `@Dependent`. CDI then produces the test instance via the factory bridge with all the standard jawelte mock / `@TestBean` machinery wired in. Scenario-32 passes again under the new model.
+- `TestContext.get()` inside a `@Test` body still throws (the factory bridge resets just before returning the instance), matching scenario 40's invariant.
+
+Coverage: 41 / 56 cdi-module scenarios green on `-Powb`. Remaining 15 cluster into generic/JDK/Provider/Instance unwrap (03, 21, 24, 25, 53), `@TestBean` validation-error exception path (27, 28, 29), test-class field-injection assertion (30), framework allowlist (38), `TestContext`-lifecycle scenarios with assertions tied to the old bootstrap-window timing (41, 42, 44, 45), and DeltaSpike `@PartialBeanBinding` skip (55).

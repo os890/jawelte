@@ -22,6 +22,7 @@ import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestInstanceFactory;
 import org.junit.jupiter.api.extension.TestInstanceFactoryContext;
 import org.junit.jupiter.api.extension.TestInstantiationException;
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
 
 /**
@@ -63,23 +64,38 @@ public class DelegatingJUnitTestInstanceFactory implements TestInstanceFactory {
             ExtensionContext extensionContext) {
         Class<?> testClass = factoryContext.getTestClass();
         TestInstanceFactoryPort port = loadPort();
+        Object instance;
         try {
             if (port != null) {
-                Object instance = port.createInstance(testClass);
-                if (instance == null) {
-                    throw new TestInstantiationException(
-                            "TestInstanceFactoryPort " + port.getClass().getName()
-                                    + " returned null for " + testClass.getName());
-                }
-                return instance;
+                Object portInstance = port.createInstance(testClass);
+                instance = portInstance != null ? portInstance : reflectiveInstance(testClass);
+            } else {
+                instance = reflectiveInstance(testClass);
             }
-            return testClass.getDeclaredConstructor().newInstance();
         } catch (TestInstantiationException tie) {
             throw tie;
         } catch (Exception e) {
             throw new TestInstantiationException(
                     "Could not create a test instance for " + testClass.getName(), e);
         }
+        // TICKET-016 bootstrap-window close. DelegatingJUnitExtension.beforeAll
+        // no longer resets the TestContext, so the user's @BeforeAll (or any
+        // CDI-extension-driven discovery triggered during it) can still see
+        // an active context. Once the test instance is in hand, the window
+        // is closed: TestContext.get() throws inside the test body, matching
+        // the long-standing "no TestContext outside bootstrap" invariant.
+        try {
+            TestContext.get().reset();
+        } catch (IllegalStateException noActiveContext) {
+            // Test class didn't go through jawelte's beforeAll (e.g. a
+            // standalone JUnit test without @EnableTestBeans). Nothing to
+            // reset.
+        }
+        return instance;
+    }
+
+    private static Object reflectiveInstance(Class<?> testClass) throws Exception {
+        return testClass.getDeclaredConstructor().newInstance();
     }
 
     private static TestInstanceFactoryPort loadPort() {

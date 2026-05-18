@@ -104,23 +104,21 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
         TestBeanContainerPort containerPort = ServiceLoaderCache.resolveContainerPort();
         List<TestModuleLifecyclePort> lifecyclePorts = ServiceLoaderCache.resolveLifecyclePorts();
 
-        try {
-            if (manageContainer) {
-                containerPort.beforeAll(testContext);
-            }
-            for (TestModuleLifecyclePort port : lifecyclePorts) {
-                port.beforeAll(testContext);
-                completed.add(port);
-            }
-        } finally {
-            // Clears the per-thread ThreadLocal that TestContextImpl's
-            // (Class<?>) constructor set when this beforeAll started, so
-            // TestContext.get() throws outside the bootstrap window. Runs
-            // unconditionally - even if a port's beforeAll or a
-            // ContainerStarted observer threw - per the TICKET-003
-            // addendum's lifecycle contract.
-            testContext.reset();
+        if (manageContainer) {
+            containerPort.beforeAll(testContext);
         }
+        for (TestModuleLifecyclePort port : lifecyclePorts) {
+            port.beforeAll(testContext);
+            completed.add(port);
+        }
+        // TICKET-016: the TestContext ThreadLocal now lives until
+        // DelegatingJUnitTestInstanceFactory has finished creating
+        // the JUnit test instance (which may go through CDI and
+        // therefore needs the active TestContext to be visible to
+        // TestBeansCdiExtension). The factory calls reset() once the
+        // instance is in hand. If the factory isn't invoked (e.g. the
+        // test class isn't created through the JUnit auto-detected
+        // factory bridge), afterAll resets as a safety net.
     }
 
     @Override
@@ -199,6 +197,14 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
                 collected.add(t);
             }
         }
+
+        // TICKET-016 safety net: clear the TestContext ThreadLocal in
+        // case DelegatingJUnitTestInstanceFactory didn't (the factory
+        // might be skipped under @QuarkusTest or for any test class
+        // that doesn't carry @EnableTestBeans). The instance's
+        // reset() is idempotent — does nothing if the slot is already
+        // empty.
+        testContext.reset();
 
         rethrowAggregated(collected);
     }
