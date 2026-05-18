@@ -1003,6 +1003,17 @@
                                     <excludes>
                                         <exclude>javax.*:*</exclude>
                                     </excludes>
+                                    <!--
+                                        Quarkus's test-junit5 pulls maven-resolver
+                                        transitives that bring legacy javax.inject /
+                                        javax.annotation-api as build/test-tool deps.
+                                        Whitelist them so the ban still keeps them
+                                        out of compile/runtime.
+                                    -->
+                                    <includes>
+                                        <include>javax.inject:javax.inject:*:*:test</include>
+                                        <include>javax.annotation:javax.annotation-api:*:*:test</include>
+                                    </includes>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

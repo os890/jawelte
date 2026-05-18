@@ -324,6 +324,12 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         if (container == null) {
             return;
         }
+        if (!ownsContainer(testContext)) {
+            // External driver (e.g. @QuarkusTest) owns the test
+            // instance lifecycle and field injection. Skip our own
+            // reflective inject pass — it would double-inject.
+            return;
+        }
         injectFields(testInstance, testInstance.getClass(), container);
     }
 
@@ -333,10 +339,29 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         if (container == null) {
             return;
         }
+        if (!ownsContainer(testContext)) {
+            // External driver activates / manages the request context;
+            // skip our activation so we don't conflict with it.
+            return;
+        }
         RequestContextController controller =
                 container.select(RequestContextController.class).get();
         controller.activate();
         testContext.bindMetadata(CdiRequestController.class, new CdiRequestController(controller));
+    }
+
+    /**
+     * Whether jawelte bootstrapped the active ArC container. {@code true}
+     * iff {@link #beforeAll(TestContext)} ran (signalled by the
+     * {@code CdiOldTccl} metadata it binds). When an external driver
+     * such as {@code @QuarkusTest} is on the test class,
+     * {@code manageContainer} is forced to {@code false}, our
+     * {@code beforeAll} is skipped, and no {@code CdiOldTccl} is bound
+     * — the other lifecycle methods then no-op so the external
+     * driver's container lifecycle stays untouched.
+     */
+    private static boolean ownsContainer(TestContext testContext) {
+        return testContext.getMetadata(CdiOldTccl.class).isPresent();
     }
 
     @Override

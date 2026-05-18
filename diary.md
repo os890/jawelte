@@ -6348,3 +6348,47 @@ behavior, not regressions:
   active. Real fix would extend our interceptor to inspect the
   `@Transactional.value()` and suspend/resume; out of scope for
   this round.
+
+---
+## 2026-05-18 — branch quarkus-full-poc: first scenario green under @QuarkusTest
+
+Branched off `quarkus-poc` so the standalone-ArC work stays preserved
+while we explore "full Quarkus" — `@EnableTestBeans` user-facing API
+stays, but the impl side bootstraps the container through Quarkus's
+own test extension instead of our `BeanProcessor`-as-library
+pipeline.
+
+Proof-of-life: `tests/cdi-module/scenario-31-test-class-not-cdi-bean`
+now boots under `@EnableTestBeans @QuarkusTest`. Changes:
+
+- **`tests/cdi-module/scenario-31-test-class-not-cdi-bean/pom.xml`**:
+  added `io.quarkus:quarkus-bom` (scoped) + `quarkus-junit5` +
+  `quarkus-arc` test deps.
+- **`Scenario31Test.java`**: added `@QuarkusTest` next to
+  `@EnableTestBeans`.
+- **Root `pom.xml`**: whitelisted `javax.inject` /
+  `javax.annotation-api` at test scope in the `bannedDependencies`
+  rule — Quarkus's `quarkus-test-common` pulls Maven Resolver
+  transitively, which still carries the legacy javax-named artefacts
+  as build-tool deps. The runtime-classpath ban remains.
+- **`CdiTestBeanContainer`**: `postProcessTestInstance` and
+  `beforeEach` now short-circuit when an external driver
+  (`@QuarkusTest`) owns the container — detected via the
+  `CdiOldTccl` metadata our `beforeAll` would normally bind. Quarkus
+  drives field injection and request-context activation itself; our
+  hooks staying quiet avoids double-injecting and the bogus
+  `RequestContextController` lookup that fired against Quarkus's
+  container.
+
+The existing `DelegatingJUnitExtension.readManageContainer` already
+detected `@QuarkusTest` and set `manageContainer=false`, so our
+`BeanProcessor`-driven bootstrap stays out of the way once
+`@QuarkusTest` is present. The matching short-circuits on
+`postProcessTestInstance` / `beforeEach` close the gap for the
+non-`beforeAll` callbacks.
+
+Next: pick a scenario that needs `@TestBean` and figure out how
+jawelte's test-only features (auto-mock, `@TestClassScoped`, …)
+plug into Quarkus's build-time pipeline — the answer probably routes
+through CDI 4.0's `BuildCompatibleExtension` (ArC supports it) or a
+Quarkus extension's `@BuildStep`s.
