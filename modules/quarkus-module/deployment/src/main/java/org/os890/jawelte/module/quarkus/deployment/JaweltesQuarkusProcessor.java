@@ -21,7 +21,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import jakarta.inject.Singleton;
 
 import org.jboss.jandex.AnnotationInstance;
 import org.jboss.jandex.AnnotationTarget;
@@ -427,9 +426,20 @@ public class JaweltesQuarkusProcessor {
                 }
             }
         }
+        // Scope matches cdi-module's auto-mock contract:
+        //   - JDK / framework types → Dependent (one mock per
+        //     injection point because the bean is qualifier-typed
+        //     and we don't want shared mutable state across
+        //     unrelated injection sites)
+        //   - User types (non-JDK / framework) → RequestScoped (per-
+        //     request lifecycle is the safest auto-mock scope and
+        //     matches cdi-module's scenario-23 expectation)
+        Class<? extends java.lang.annotation.Annotation> beanScope =
+                isJdkOrFrameworkType ? jakarta.enterprise.context.Dependent.class
+                                     : jakarta.enterprise.context.RequestScoped.class;
         var configurator = SyntheticBeanBuildItem.configure(name)
                 .types(candidate)
-                .scope(Singleton.class)
+                .scope(beanScope)
                 .creator(MockBeanCreator.class)
                 .param(MockBeanCreator.TYPE_NAME_PARAM, name.toString())
                 .unremovable();
