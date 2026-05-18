@@ -56,7 +56,7 @@
         <!-- <module>scenario-20-test-class-isolation</module> -->
         <!-- <module>scenario-21-qualified-jdk-type</module> -->
         <module>scenario-22-same-simple-name</module>
-        <!-- <module>scenario-23-auto-mock-request-scoped</module> -->
+        <module>scenario-23-auto-mock-request-scoped</module>
         <module>scenario-24-provider-unwrap</module>
         <module>scenario-25-instance-unwrap</module>
         <!-- <module>scenario-26-typed-narrowed</module> -->
