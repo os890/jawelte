@@ -19,7 +19,6 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -32,9 +31,10 @@ import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
-import org.junit.jupiter.api.extension.InvocationInterceptor;
-import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
+import org.junit.jupiter.api.extension.TestInstanceFactory;
+import org.junit.jupiter.api.extension.TestInstanceFactoryContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
+import org.junit.jupiter.api.extension.TestInstantiationException;
 import org.os890.jawelte.core.api.port.TestBeansExtension;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
@@ -112,7 +112,7 @@ public @interface EnableTestBeans {
                        TestInstancePostProcessor,
                        AfterEachCallback,
                        AfterAllCallback,
-                       InvocationInterceptor {
+                       TestInstanceFactory {
 
         private TestBeansExtension delegate;
 
@@ -152,90 +152,58 @@ public @interface EnableTestBeans {
         }
 
         @Override
-        public <T> T interceptTestClassConstructor(
-                Invocation<T> invocation,
-                ReflectiveInvocationContext<Constructor<T>> invocationContext,
-                ExtensionContext extensionContext) throws Throwable {
-            Class<?> testClass = invocationContext.getExecutable().getDeclaringClass();
-            Namespace namespace = Namespace.create(TestContext.class);
-            TestContext storedContext = extensionContext.getStore(namespace)
-                    .get(TestContext.class, TestContext.class);
+        public Object createTestInstance(
+                TestInstanceFactoryContext factoryContext,
+                ExtensionContext extensionContext) {
+            Class<?> testClass = factoryContext.getTestClass();
+            TestInstanceFactoryPort port = resolveTestInstancePort();
             try {
-                // Priority-aware port lookup: a runtime integration
-                // module (e.g. quarkus-module) ships a higher-@Priority
-                // no-op port that returns null so this interceptor
-                // calls invocation.proceed() — letting JUnit chain
-                // through to the next InvocationInterceptor (under
-                // {@code @QuarkusTest} that is Quarkus's own
-                // {@code QuarkusTestExtension.interceptTestClassConstructor}
-                // which produces the ArC-managed test instance).
-                // Done inline via {@code ServiceLoader} + {@code @Priority}
-                // sorting — calling {@code TestContext.loadService(...)}
-                // here would force every test classpath to ship an MP
-                // Config implementation just to discover the priority
-                // resolver, which the bare {@code core/api} +
-                // {@code core/impl} test classpaths in {@code tests/core}
-                // do not all do.
-                TestInstanceFactoryPort port = resolveTestInstancePort();
                 if (port != null) {
                     Object portInstance = port.createInstance(testClass);
                     if (portInstance != null) {
-                        // Mark the invocation as handled — JUnit's
-                        // interceptor chain requires either
-                        // proceed() or skip(); returning a custom
-                        // value alone trips
-                        // "Chain of InvocationInterceptors never
-                        // called invocation".
-                        invocation.skip();
-                        @SuppressWarnings("unchecked")
-                        T cast = (T) portInstance;
-                        return cast;
+                        return portInstance;
                     }
                 }
-                // Port absent or returned null: hand off to the next
-                // interceptor in the chain. If no other interceptor
-                // takes the call, JUnit invokes the constructor
-                // reflectively for an unmanaged instance.
-                return invocation.proceed();
+                var constructor = testClass.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                return constructor.newInstance();
+            } catch (TestInstantiationException tie) {
+                throw tie;
+            } catch (Exception e) {
+                throw new TestInstantiationException(
+                        "Could not create a test instance for " + testClass.getName(), e);
             } finally {
                 // Close the bootstrap window for TestContext.get(): the
-                // interceptor chain has produced the instance, so
-                // consumers inside the test body must not see an active
-                // TestContext. Pulled from the JUnit Store (populated
-                // by DelegatingJUnitExtension.beforeAll) rather than
-                // via TestContext.get() because the latter routes
-                // through MP Config — and not every test classpath in
-                // the project ships an MP Config implementation.
+                // factory has produced the instance, so consumers inside
+                // the test body must not see an active TestContext.
+                // Pulled from the JUnit Store (populated by
+                // DelegatingJUnitExtension.beforeAll) rather than via
+                // TestContext.get() because the latter routes through MP
+                // Config — and not every test classpath in the project
+                // ships an MP Config implementation.
+                Namespace namespace = Namespace.create(TestContext.class);
+                TestContext storedContext = extensionContext.getStore(namespace)
+                        .get(TestContext.class, TestContext.class);
                 if (storedContext != null) {
                     storedContext.reset();
                 }
             }
         }
 
-        /**
-         * Enumerate {@link TestInstanceFactoryPort} providers via
-         * {@code ServiceLoader} and pick the one with the lowest
-         * {@code @jakarta.annotation.Priority} value (CDI convention —
-         * lower is higher-priority). Providers without {@code @Priority}
-         * sort to {@link Integer#MAX_VALUE} (i.e. last). Returns
-         * {@code null} when no provider is on the classpath.
-         */
         private static TestInstanceFactoryPort resolveTestInstancePort() {
-            List<TestInstanceFactoryPort> providers = new ArrayList<>();
-            for (TestInstanceFactoryPort provider : ServiceLoader.load(TestInstanceFactoryPort.class)) {
-                providers.add(provider);
-            }
-            if (providers.isEmpty()) {
+            Iterator<TestInstanceFactoryPort> iterator =
+                    ServiceLoader.load(TestInstanceFactoryPort.class).iterator();
+            if (!iterator.hasNext()) {
                 return null;
             }
-            providers.sort((a, b) -> Integer.compare(priorityOf(a), priorityOf(b)));
-            return providers.get(0);
-        }
-
-        private static int priorityOf(Object provider) {
-            jakarta.annotation.Priority annotation =
-                    provider.getClass().getAnnotation(jakarta.annotation.Priority.class);
-            return annotation != null ? annotation.value() : Integer.MAX_VALUE;
+            TestInstanceFactoryPort port = iterator.next();
+            if (iterator.hasNext()) {
+                throw new IllegalStateException(
+                        "Multiple TestInstanceFactoryPort implementations found; "
+                                + "the SPI is single-impl. First: " + port.getClass().getName()
+                                + ", next: " + iterator.next().getClass().getName());
+            }
+            return port;
         }
 
         private synchronized TestBeansExtension delegate() {

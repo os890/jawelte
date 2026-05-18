@@ -5784,3 +5784,32 @@ sort (lowest value wins, providers without `@Priority` sort last).
 Same selection semantics as `DefaultServicePriorityResolver` but with
 no MP Config dependency, so `Proxy` stays usable on bare
 `core/api + core/impl` test classpaths.
+
+## 2026-05-18 — TICKET-015 status checkpoint
+
+Pivoted to plain `TestInstanceFactory` (reverted the
+`InvocationInterceptor` switch) after discovering that Quarkus's
+`QuarkusTestExtension` does not implement `TestInstanceFactory` —
+so the JUnit "two factories" conflict I was worried about doesn't
+exist in this Quarkus version. The pre-existing 22 quarkus scenarios
+ALREADY worked under `TestInstanceFactory` on main by going through
+cdi-module's port adapter (`CDI.current().select(testClass).get()`),
+which under @QuarkusTest selects from Quarkus's ArC container. So the
+InvocationInterceptor switch was unnecessary complexity and got
+reverted.
+
+Added: Provider<X> / Instance<X> wrapper-unwrap in
+`JaweltesQuarkusProcessor` for scenarios 24, 25 (and likely more)
+under quarkus-module.
+
+Open regression: `tests/wiremock-module/scenario-04-multi-endpoint-fixed-ports`
+now fails on this branch with an `AmbiguousResolutionException` for
+`WireMockServer @PaymentApi` — two synthetic beans get registered
+(one with [PaymentApi, Any], one with [Default, PaymentApi, Any]).
+On main the same scenario passes. The diff between main and HEAD
+that affects the cdi-module / wiremock-module / scope-module path
+is empty (verified with `git diff main..HEAD -- modules/`); the only
+diffs are quarkus-module additions and core/api's Proxy (which I've
+reverted to byte-identical to main, verified with `diff -u`). Yet
+the test still regresses. I could not root-cause this in the
+time available; flagging for review.

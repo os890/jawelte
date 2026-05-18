@@ -87,6 +87,10 @@ public class JaweltesQuarkusProcessor {
     };
     private static final int TEST_BEAN_PRIORITY = Integer.MAX_VALUE;
 
+    private static final Set<DotName> WRAPPER_TYPES = Set.of(
+            DotName.createSimple("jakarta.inject.Provider"),
+            DotName.createSimple("jakarta.enterprise.inject.Instance"));
+
     /** Default constructor used by the Quarkus build framework. */
     public JaweltesQuarkusProcessor() {
     }
@@ -344,6 +348,25 @@ public class JaweltesQuarkusProcessor {
         return String.join(";", parts);
     }
 
+    /**
+     * If {@code candidate} is a parameterized {@code Provider<X>} or
+     * {@code Instance<X>}, return the inner type argument {@code X};
+     * otherwise return {@code candidate} unchanged.
+     */
+    private static Type unwrapWrapperType(Type candidate) {
+        if (candidate.kind() != Type.Kind.PARAMETERIZED_TYPE) {
+            return candidate;
+        }
+        if (!WRAPPER_TYPES.contains(candidate.name())) {
+            return candidate;
+        }
+        var arguments = candidate.asParameterizedType().arguments();
+        if (arguments.isEmpty()) {
+            return candidate;
+        }
+        return arguments.get(0);
+    }
+
     private static boolean isMemberNonbinding(ClassInfo qualifierType, String memberName) {
         for (MethodInfo method : qualifierType.methods()) {
             if (method.name().equals(memberName) && method.hasDeclaredAnnotation(NONBINDING)) {
@@ -359,6 +382,13 @@ public class JaweltesQuarkusProcessor {
             IndexView index,
             Set<String> alreadyHandled,
             BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
+        // Unwrap jakarta.inject.Provider<X> and
+        // jakarta.enterprise.inject.Instance<X> — the IP's actual
+        // bean type is the inner type argument, not the wrapper. CDI
+        // resolves Provider/Instance to the underlying bean at
+        // injection time; for auto-mock registration we need to
+        // synthesise a mock for the inner type, not for the wrapper.
+        candidate = unwrapWrapperType(candidate);
         DotName name = candidate.name();
         String qualifierKey = qualifierFingerprint(qualifiers, index);
         String dedupKey = name.toString() + "##" + qualifierKey;
