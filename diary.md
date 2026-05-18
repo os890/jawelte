@@ -5703,3 +5703,42 @@ existing `IndexView` through the two callsites
 scenario-07 passes. 6 other newly-mirrored scenarios (21, 23, 24, 25,
 26, 30, 53) still fail with different root causes — to be tackled
 next.
+
+## 2026-05-18 — TICKET-015: full quarkus-module scenario mirror (25/56 green)
+
+Mirrored every cdi-module scenario that was missing — 26 new
+`tests/quarkus-module/scenario-XX-*` modules, mechanical mirror of the
+cdi-module versions with `@QuarkusTest` added on the test class and
+the test package renamed to `tests.quarkus.scenarioXX`. The full
+quarkus-module reactor now ranges 01-56 matching cdi-module.
+
+Run state: 25 SUCCESS, 31 FAILURE. The 25 currently-green scenarios
+cover the bread-and-butter auto-mock + @TestBean paths.
+
+Failure categories observed (rough bucketing — needs per-scenario
+investigation):
+
+- **ArcAnnotationLiteral generation**: 21, 53 — `XxxLiteral_ArcAnnotationLiteral`
+  not generated for qualifier annotations used via a test-local
+  `AnnotationLiteral<X>` subclass. Quarkus may need an explicit
+  AnnotationLiteralProcessorBuildItem registration in
+  quarkus-module/deployment.
+- **Test-class metadata lookup**: 39 — `expected: Scenario39Test but
+  was: null`. TestContext.getTestClass() returning null somewhere on
+  the bootstrap path.
+- **Stereotype / `@ConfigBean`-style beans not registered**: 47, 48,
+  49 — `UnsatisfiedResolutionException` for AppConfig types that
+  scope-module / cdi-module's stereotype handling auto-registers via
+  CDI Extension but quarkus-module/deployment doesn't yet pick up.
+- **Auto-mock variations failing fast (<100ms)**: 14, 15, 18, 19, 20,
+  27, 28, 29, 36, 37, 40, 43, 55 — most likely class-scan / @BuildStep
+  gaps; need per-scenario surefire-report inspection.
+- **Auto-mock variations failing in CDI deployment**: 23, 24, 25, 26,
+  30, 32, 38, 41, 42, 44, 46, 51 — Quarkus's ArC build-validation
+  surfaces deployment errors that cdi-module/impl handles via its
+  portable Extension callbacks.
+
+Next step: pick a category, look at one representative scenario,
+extract / add the missing build-step in quarkus-module/deployment,
+move to the next. The 25-green floor lets each category fix land as
+a discrete WORKING commit.
