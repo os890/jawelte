@@ -64,34 +64,33 @@ public class DelegatingJUnitTestInstanceFactory implements TestInstanceFactory {
             ExtensionContext extensionContext) {
         Class<?> testClass = factoryContext.getTestClass();
         TestInstanceFactoryPort port = loadPort();
-        Object instance;
         try {
             if (port != null) {
                 Object portInstance = port.createInstance(testClass);
-                instance = portInstance != null ? portInstance : reflectiveInstance(testClass);
-            } else {
-                instance = reflectiveInstance(testClass);
+                return portInstance != null ? portInstance : reflectiveInstance(testClass);
             }
+            return reflectiveInstance(testClass);
         } catch (TestInstantiationException tie) {
             throw tie;
         } catch (Exception e) {
             throw new TestInstantiationException(
                     "Could not create a test instance for " + testClass.getName(), e);
+        } finally {
+            // TICKET-016 bootstrap-window close. DelegatingJUnitExtension.beforeAll
+            // no longer resets the TestContext, so the user's @BeforeAll (or any
+            // CDI-extension-driven discovery triggered during it) can still see
+            // an active context. Once we return — successfully or via exception —
+            // the window is closed so TestContext.get() throws inside the test
+            // body, matching the long-standing "no TestContext outside bootstrap"
+            // invariant.
+            try {
+                TestContext.get().reset();
+            } catch (IllegalStateException noActiveContext) {
+                // Test class didn't go through jawelte's beforeAll (e.g. a
+                // standalone JUnit test without @EnableTestBeans). Nothing to
+                // reset.
+            }
         }
-        // TICKET-016 bootstrap-window close. DelegatingJUnitExtension.beforeAll
-        // no longer resets the TestContext, so the user's @BeforeAll (or any
-        // CDI-extension-driven discovery triggered during it) can still see
-        // an active context. Once the test instance is in hand, the window
-        // is closed: TestContext.get() throws inside the test body, matching
-        // the long-standing "no TestContext outside bootstrap" invariant.
-        try {
-            TestContext.get().reset();
-        } catch (IllegalStateException noActiveContext) {
-            // Test class didn't go through jawelte's beforeAll (e.g. a
-            // standalone JUnit test without @EnableTestBeans). Nothing to
-            // reset.
-        }
-        return instance;
     }
 
     private static Object reflectiveInstance(Class<?> testClass) throws Exception {
