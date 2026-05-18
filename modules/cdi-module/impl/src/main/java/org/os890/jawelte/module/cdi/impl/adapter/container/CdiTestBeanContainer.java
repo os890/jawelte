@@ -38,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
+import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.context.control.RequestContextController;
 import jakarta.inject.Singleton;
@@ -65,6 +66,7 @@ import io.quarkus.arc.Arc;
 import io.quarkus.arc.ArcContainer;
 import io.quarkus.arc.ArcInitConfig;
 import io.quarkus.arc.ComponentsProvider;
+import io.quarkus.arc.processor.AlternativePriorities;
 import io.quarkus.arc.processor.BeanArchives;
 import io.quarkus.arc.processor.BeanConfigurator;
 import io.quarkus.arc.processor.BeanDeployment;
@@ -223,13 +225,48 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 Annotation[] qArr = qualifiers.isEmpty()
                         ? new Annotation[] {jakarta.enterprise.inject.Default.Literal.INSTANCE}
                         : qualifiers.toArray(new Annotation[0]);
-                Object value = container.instance(field.getType(), qArr).get();
+                Object value = resolveInjectionValue(container, field, qArr);
                 field.set(testInstance, value);
             } catch (ReflectiveOperationException | RuntimeException e) {
                 throw new IllegalStateException(
                         "Failed to inject field " + clazz.getName() + "." + field.getName(), e);
             }
         }
+    }
+
+    /**
+     * Resolve the value to assign to a single {@code @Inject} field.
+     * Provider/Instance/List wrapper fields are unwrapped: ArC's
+     * built-in wrapper machinery serves the wrapped bean, but we
+     * have to hand the field an instance of the wrapper, not the
+     * wrapped value. Plain fields fall back to a raw-type lookup.
+     */
+    private static Object resolveInjectionValue(
+            ArcContainer container, Field field, Annotation[] qArr) {
+        Class<?> fieldType = field.getType();
+        if (fieldType == jakarta.enterprise.inject.Instance.class
+                || fieldType == jakarta.inject.Provider.class) {
+            Class<?> inner = extractFirstTypeArgument(field);
+            return container.beanManager().createInstance().select(inner, qArr);
+        }
+        return container.instance(fieldType, qArr).get();
+    }
+
+    private static Class<?> extractFirstTypeArgument(Field field) {
+        java.lang.reflect.Type generic = field.getGenericType();
+        if (generic instanceof java.lang.reflect.ParameterizedType pt) {
+            java.lang.reflect.Type[] args = pt.getActualTypeArguments();
+            if (args.length >= 1) {
+                java.lang.reflect.Type arg = args[0];
+                if (arg instanceof Class<?> c) {
+                    return c;
+                }
+                if (arg instanceof java.lang.reflect.ParameterizedType inner) {
+                    return (Class<?>) inner.getRawType();
+                }
+            }
+        }
+        return Object.class;
     }
 
     // ----- ArC build + boot ----------------------------------------------
@@ -270,31 +307,47 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             // discovery mode skips the test class — and skipping it
             // means its @Inject fields are never collected as
             // injection points, so the auto-mock BeanRegistrar can't
-            // see them. @Singleton is the cheapest scope that keeps
-            // the test class as one instance per ArC session.
+            // see them. @Dependent is the natural choice for a test
+            // class: one instance per @Inject site (CDI default for
+            // managed beans without an explicit scope).
             DotName testClassDotName = DotName.createSimple(testClass.getName());
             builder.addAnnotationTransformation(
                     AnnotationTransformation.forClasses()
                             .whenClass(c -> c.name().equals(testClassDotName))
                             .transform(ctx -> {
                                 if (!hasScope(ctx)) {
-                                    ctx.add(AnnotationInstance.builder(DotNames.SINGLETON).build());
+                                    ctx.add(AnnotationInstance.builder(DEPENDENT).build());
                                 }
                             }));
 
+            // For classes named in @TestBean(bean=...): if the class
+            // is already @Alternative, add @Dependent so it qualifies
+            // as a managed bean under CDI's annotated discovery
+            // (@Alternative alone is not a bean-defining annotation
+            // per CDI 4.0 §3.1.1). Non-@Alternative classes
+            // (scenario-35) are not transformed — ArC will silently
+            // ignore them. Priorities are assigned via
+            // AlternativePriorities below, so we do not touch the
+            // existing @Priority either.
             if (!altDotNames.isEmpty()) {
                 builder.addAnnotationTransformation(
                         AnnotationTransformation.forClasses()
-                                .whenClass(c -> altDotNames.contains(c.name()))
+                                .whenClass(c -> altDotNames.contains(c.name())
+                                        && c.hasAnnotation(DotNames.ALTERNATIVE))
                                 .transform(ctx -> {
-                                    if (!ctx.hasAnnotation(DotNames.PRIORITY)) {
-                                        ctx.add(AnnotationInstance.builder(DotNames.PRIORITY)
-                                                .add("value", Integer.MAX_VALUE).build());
-                                    }
                                     if (!hasScope(ctx)) {
-                                        ctx.add(AnnotationInstance.builder(DotNames.SINGLETON).build());
+                                        ctx.add(AnnotationInstance.builder(DEPENDENT).build());
                                     }
                                 }));
+                AlternativePriorities altPriorities = (target, stereotypes) -> {
+                    if (target.kind() != org.jboss.jandex.AnnotationTarget.Kind.CLASS) {
+                        return null;
+                    }
+                    return altDotNames.contains(target.asClass().name())
+                            ? Integer.MAX_VALUE
+                            : null;
+                };
+                builder.setAlternativePriorities(altPriorities);
             }
 
             if (!selectedAlternatives.isEmpty() && !limitToTestBeans) {
@@ -392,10 +445,12 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         for (Annotation ann : annotations) {
             Class<? extends Annotation> annType = ann.annotationType();
             if (ann instanceof TestBean tb) {
+                validateTestBeanShape(tb);
                 addClassIfNotVoid(tb.bean(), selected);
                 addClassIfNotVoid(tb.beanProducer(), selected);
             } else if (ann instanceof TestBeans tbs) {
                 for (TestBean tb : tbs.value()) {
+                    validateTestBeanShape(tb);
                     addClassIfNotVoid(tb.bean(), selected);
                     addClassIfNotVoid(tb.beanProducer(), selected);
                 }
@@ -406,6 +461,13 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 visited.add(annType);
                 collectTestBeans(annType.getAnnotations(), selected, visited);
             }
+        }
+    }
+
+    private static void validateTestBeanShape(TestBean tb) {
+        if (tb.bean() != void.class && tb.beanProducer() != void.class) {
+            throw new IllegalStateException(
+                    "@TestBean must set bean OR beanProducer, not both");
         }
     }
 
@@ -427,6 +489,20 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 throw new IllegalStateException(
                         "@TestBean field must be static: "
                                 + testClass.getName() + "." + field.getName());
+            }
+            field.setAccessible(true);
+            Object currentValue;
+            try {
+                currentValue = field.get(null);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(
+                        "Failed to read @TestBean field "
+                                + testClass.getName() + "." + field.getName(), e);
+            }
+            if (currentValue == null) {
+                throw new IllegalStateException(
+                        "@TestBean static field "
+                                + testClass.getName() + "." + field.getName() + " is null");
             }
             Set<Annotation> qualifiers = new LinkedHashSet<>();
             for (Annotation ann : field.getAnnotations()) {
@@ -705,54 +781,87 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             Set<String> registeredMockKeys = new HashSet<>();
             for (InjectionPointInfo ip : registrationContext.getInjectionPoints()) {
                 BuiltinBean builtin = BuiltinBean.resolve(ip);
-                if (builtin != null && builtin != BuiltinBean.INSTANCE
-                        && builtin != BuiltinBean.LIST) {
+                if (builtin != null
+                        && builtin != BuiltinBean.INSTANCE) {
+                    // BeanManager / Event / InjectionPoint / @All List
+                    // / etc. are served by ArC's own built-ins. Only
+                    // Provider/Instance (BuiltinBean.INSTANCE) needs
+                    // an auto-mock for the wrapped target type — and
+                    // ArC has already unwrapped Provider/Instance for
+                    // us, so ip.getRequiredType() returns the wrapped
+                    // type directly.
                     continue;
                 }
-                Type requiredType = ip.getRequiredType();
+                Type effectiveType = ip.getRequiredType();
                 Set<AnnotationInstance> requiredQualifiers = ip.getRequiredQualifiers();
-                if (isBuiltInType(requiredType, requiredQualifiers)) {
+
+                if (isBuiltInType(effectiveType, requiredQualifiers)) {
                     continue;
                 }
-                if (inlineFieldTypes.contains(requiredType.name())) {
+                if (inlineFieldTypes.contains(effectiveType.name())) {
                     continue;
                 }
-                if (isSatisfied(requiredType, requiredQualifiers, beans)) {
+                if (isSatisfied(effectiveType, requiredQualifiers, beans)) {
                     continue;
                 }
-                String mockKey = buildMockKey(requiredType, requiredQualifiers, nonbindingMembers);
+                String mockKey = buildMockKey(effectiveType, requiredQualifiers, nonbindingMembers);
                 if (!registeredMockKeys.add(mockKey)) {
                     continue;
                 }
                 Set<AnnotationInstance> cleanedQualifiers =
                         stripNonbindingValues(requiredQualifiers, nonbindingMembers);
-                ClassInfo implClass = index.getClassByName(requiredType.name());
+                String typeName = effectiveType.name().toString();
+                Class<? extends Annotation> scope = isJdkType(typeName)
+                        ? Dependent.class
+                        : RequestScoped.class;
+
+                // Add BOTH the parameterized type AND the raw type
+                // as bean types. The parameterized one satisfies the
+                // build-time IP resolution; the raw one allows raw
+                // reflection lookups (container.instance(Class, ...))
+                // to find the bean at runtime.
+                List<Type> beanTypes = new ArrayList<>();
+                beanTypes.add(effectiveType);
+                if (effectiveType.kind() == Type.Kind.PARAMETERIZED_TYPE) {
+                    beanTypes.add(ClassType.create(effectiveType.name()));
+                }
+
+                ClassInfo implClass = index.getClassByName(effectiveType.name());
+                BeanConfigurator<Object> configurator;
                 if (implClass == null) {
-                    String typeName = requiredType.name().toString();
                     if (!typeName.startsWith("java.")) {
                         continue;
                     }
-                    registrationContext.configure(requiredType.name())
+                    configurator = registrationContext.configure(effectiveType.name())
                             .identifier(mockKey)
-                            .scope(Singleton.class)
-                            .addType(requiredType)
-                            .qualifiers(cleanedQualifiers.toArray(new AnnotationInstance[0]))
+                            .scope(scope)
                             .creator(MockBeanCreator.class)
-                            .param("implementationClassName", typeName)
-                            .defaultBean()
-                            .done();
-                    continue;
+                            .param("implementationClassName", typeName);
+                } else {
+                    configurator = registrationContext.configure(effectiveType.name())
+                            .identifier(mockKey)
+                            .scope(scope)
+                            .creator(MockBeanCreator.class)
+                            .param("implementationClass", implClass);
                 }
-                registrationContext.configure(requiredType.name())
-                        .identifier(mockKey)
-                        .scope(Singleton.class)
-                        .addType(requiredType)
-                        .qualifiers(cleanedQualifiers.toArray(new AnnotationInstance[0]))
-                        .creator(MockBeanCreator.class)
-                        .param("implementationClass", implClass)
-                        .defaultBean()
-                        .done();
+                if (cleanedQualifiers.isEmpty()) {
+                    configurator.addQualifier(
+                            AnnotationInstance.builder(DotNames.DEFAULT).build());
+                } else {
+                    for (AnnotationInstance q : cleanedQualifiers) {
+                        configurator.addQualifier(q);
+                    }
+                }
+                for (Type t : beanTypes) {
+                    configurator.addType(t);
+                }
+                configurator.done();
             }
+        }
+
+        private static boolean isJdkType(String typeName) {
+            return typeName.startsWith("java.") || typeName.startsWith("jakarta.")
+                    || typeName.startsWith("javax.");
         }
 
         private static String buildMockKey(

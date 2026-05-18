@@ -5972,3 +5972,44 @@ fix should be small.
 Next: chase the 24 failures one category at a time. After they
 stabilise we'll have a clear picture of which slices of the
 BeanRegistrar logic the future "non-Quarkus" path would also need.
+
+---
+## 2026-05-18 — quarkus-poc: auto-mock, scope, validation fixes (12 failures left)
+
+Started session at 32/56 green on `quarkus-poc`; pushed to 44/56 green by tightening
+the auto-mock layer in `CdiTestBeanContainer`:
+
+- **IP scanner**: `BuiltinBean.INSTANCE` IPs come from ArC already unwrapped (the
+  required type IS the inner `X`, not `Provider<X>` / `Instance<X>`). Removed the
+  redundant wrapper-type unwrap; just let `ip.getRequiredType()` flow through.
+- **Auto-mock scope**: switched from forcing `@Singleton` everywhere to
+  `@Dependent` for JDK types and `@RequestScoped` for user types — matches
+  scenarios 21 (`@Dependent` for `List<String>`) and 23 (`@RequestScoped` for
+  `AuditService`).
+- **Bean type registration**: register BOTH parameterized AND raw type as bean
+  types so parameterized IPs resolve at build time and raw
+  `container.instance(Class)` lookups succeed at runtime.
+- **Removed `.defaultBean()`** from auto-mock registration — it was preventing
+  ArC from seeing the synthetic beans for `Provider<X>` / `Instance<X>` IPs.
+  Switched qualifier wiring to `addQualifier(...)` (consistent with the inline
+  field path).
+- **Field injection**: `Provider`/`Instance` fields now resolve via
+  `BeanManager.createInstance().select(inner, qualifiers)` so the wrapper's
+  generic type drives the lookup instead of a raw class lookup.
+- **Test-class scope**: switched the annotation-transformation default from
+  `@Singleton` to `@Dependent`, matching scenario 31's expectation.
+- **`@TestBean` validation**: detect null static-field values
+  (`@TestBean Greeting GREETING = null` ⇒ "is null" error) and
+  bean+beanProducer combined (`@TestBean(bean=…, beanProducer=…)` ⇒ "not both"
+  error) during `beforeAll`.
+- **Selected-alternative activation**: replaced the AnnotationTransformation
+  `@Priority` hack with `BeanProcessor.setAlternativePriorities(...)` and added
+  a separate transformer that adds `@Dependent` *only* when the
+  `@TestBean(bean=…)` target is already `@Alternative` (per scenario 35,
+  registering a non-`@Alternative` class must stay a silent no-op; per
+  scenario 34, the activated alternative must keep its default `@Dependent`
+  scope).
+
+Green now: 03, 21, 23, 24, 25, 28, 29, 30, 31, 34, 35 plus the previously-passing
+33-scenario block. Still failing (12): 32, 39, 40, 41, 42, 43, 46, 47, 48, 49,
+55, 56.
