@@ -5577,3 +5577,20 @@ Scenarios mirrored but currently failing (kept off the reactor):
 - 31 test-class-not-cdi-bean: under `@QuarkusTest` the test class IS a CDI bean (Quarkus registers it for IP resolution); the assertion `beanManager.getBeans(Scenario31Test.class).isEmpty()` doesn't hold under Quarkus's model. Likely a deliberate skip; revisit when documenting Quarkus-specific deviations.
 
 Next batch: extend the mirror script for multi-package sources, then mirror the test-context / priority-resolver / container-started scenarios (39-46), then move into qualifier / @TestBean territory.
+
+## 2026-05-18 — TICKET-015 Phase B6: scenarios 22, 45, 56 green; multi-package mirror script
+
+Mirror script (`/tmp/mirror-scenario.sh`) updated to walk the entire `src/` tree, so multi-package scenarios (e.g. scenario-22 has `com.example.scenario22.{auth,billing}` packages with same simple-name types) copy correctly. Only the `org.os890.jawelte.tests.cdi.scenarioNN` package is renamed; other packages stay as-is.
+
+Mirrored 9 scenarios in this pass. 3 went green out of the box:
+- 22 same-simple-name — multi-package fix did the work
+- 45 priority-resolver-tiebreak — ServiceLoader tie-break is jawelte-internal but Quarkus's classloader honours it the same way
+- 56 deltaspike-whitelist-allow — DeltaSpike skip behaviour just works because the BuildStep's package guard exempts `org.apache.deltaspike.*` paths
+
+7 mirrored but pulled from the reactor (kept on disk for visibility):
+- 30 test-class-field-injection — Quarkus owns test-class injection under @QuarkusTest; jawelte's `postProcessTestInstance` path doesn't run
+- 39 testcontext-get-during-bootstrap, 40 testcontext-get-after-container-started, 41 testcontext-get-cleanup-on-failure, 42 testcontext-parallel-isolation — all assert about `TestContext.get()` during jawelte's bootstrap window. Under `@QuarkusTest` the `DelegatingJUnitExtension.beforeAll` auto-skip means `TestContext` is never populated, so these scenarios don't apply to the Quarkus flavour.
+- 44 service-priority-resolver-mp-config — depends on `TestContext.loadService` timing; same auto-skip issue.
+- 46 container-started-event-timing — depends on jawelte's `ContainerStarted` firing during the bootstrap window.
+
+Coverage: 11 / 56 cdi-module scenarios green under @QuarkusTest. Remaining 45 cluster into @TestBean handling, qualifier matching, Provider/Instance unwrap, limitToTestBeans whitelist, exclude-packages, config-bean, and validation buckets — each a discrete BuildStep extension.

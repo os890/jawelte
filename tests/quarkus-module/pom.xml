@@ -42,7 +42,27 @@
         <module>scenario-10-producer-method-parameter</module>
         <module>scenario-11-observer-method-parameter</module>
         <module>scenario-12-satisfied-not-mocked</module>
+        <module>scenario-22-same-simple-name</module>
+        <module>scenario-45-priority-resolver-tiebreak</module>
+        <module>scenario-56-deltaspike-whitelist-allow</module>
     </modules>
+    <!--
+        Pending mirrors kept on disk but excluded from the reactor. The
+        failures cluster into two groups:
+          1. Quarkus owns the container lifecycle under @QuarkusTest, so
+             jawelte's DelegatingJUnitExtension.beforeAll auto-skip
+             never populates TestContext. Scenarios that assert about
+             TestContext during jawelte's bootstrap window therefore
+             don't apply under -Pquarkus: 39, 40, 41, 42, 46. Also
+             scenario 30 (test-class field injection — Quarkus handles
+             it) and 31 (test-class-not-CDI-bean — Quarkus registers
+             the test class as a bean).
+          2. Scenarios that exercise additional BuildStep features the
+             processor doesn't yet implement: 44 (custom
+             ServicePriorityResolver via MP Config — TestContext lookup
+             timing), plus everything in the qualifier / @TestBean /
+             whitelist / exclude-packages buckets.
+    -->
 
     <dependencies>
         <!--
