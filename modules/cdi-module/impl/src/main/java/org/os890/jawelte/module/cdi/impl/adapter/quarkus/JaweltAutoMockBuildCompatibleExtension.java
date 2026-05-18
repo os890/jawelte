@@ -162,7 +162,16 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     private static Set<String> qualifierFqnSet(java.util.Collection<AnnotationInfo> qualifiers) {
         Set<String> names = new TreeSet<>();
         for (AnnotationInfo qualifier : qualifiers) {
-            names.add(qualifier.name());
+            String name = qualifier.name();
+            // Skip @Default and @Any: CDI implicitly adds them to
+            // every bean's qualifier set, while injection points
+            // only carry the qualifiers the user wrote. Normalising
+            // both sides by dropping these two lets a bean with
+            // [Default, Any] still match an IP with [Default].
+            if (isBuiltInQualifier(name)) {
+                continue;
+            }
+            names.add(name);
         }
         return names;
     }

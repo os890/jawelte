@@ -68,22 +68,47 @@ public abstract class TestScopeCurrentStores {
     }
 
     /**
-     * The most-recently-published method-scope store, or
-     * {@code null} when no boot has run yet in this JVM.
+     * The most-recently-published method-scope store. When called
+     * before any {@link #set(TestMethodScopeStore, TestClassScopeStore)}
+     * — which is the case under {@code @QuarkusTest}, where no
+     * contributor binds the stores up front — a fresh store is
+     * allocated lazily so the matching {@code ContextCreator} can
+     * still build a working {@code TestMethodScopedContext}.
      *
-     * @return the current store, or {@code null}
+     * @return the current store; never {@code null}
      */
-    public static TestMethodScopeStore methodStore() {
+    public static synchronized TestMethodScopeStore methodStore() {
+        if (methodStore == null) {
+            methodStore = new TestMethodScopeStore();
+        }
         return methodStore;
     }
 
     /**
-     * The most-recently-published class-scope store, or
-     * {@code null} when no boot has run yet in this JVM.
+     * The most-recently-published class-scope store. When called
+     * before any {@link #set(TestMethodScopeStore, TestClassScopeStore)}
+     * — which is the case under {@code @QuarkusTest}, where no
+     * contributor binds the stores up front — a fresh store is
+     * allocated lazily so the matching {@code ContextCreator} can
+     * still build a working {@code TestClassScopedContext}.
      *
-     * @return the current store, or {@code null}
+     * @return the current store; never {@code null}
      */
-    public static TestClassScopeStore classStore() {
+    public static synchronized TestClassScopeStore classStore() {
+        if (classStore == null) {
+            classStore = new TestClassScopeStore();
+        }
         return classStore;
+    }
+
+    /**
+     * Reset both store slots — used by integrations that drive the
+     * per-test-class lifecycle externally and want a clean handoff
+     * to the next class. The default scope-lifecycle adapter calls
+     * this in its {@code afterAll}.
+     */
+    public static synchronized void reset() {
+        methodStore = null;
+        classStore = null;
     }
 }

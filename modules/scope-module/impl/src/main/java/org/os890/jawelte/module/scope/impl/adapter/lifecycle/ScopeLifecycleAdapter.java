@@ -23,6 +23,7 @@ import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.scope.api.TestMethodScoped;
 import org.os890.jawelte.module.scope.impl.adapter.context.TestClassScopeStore;
 import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopeStore;
+import org.os890.jawelte.module.scope.impl.adapter.context.TestScopeCurrentStores;
 
 import io.quarkus.arc.Arc;
 import io.quarkus.arc.ArcContainer;
@@ -78,8 +79,7 @@ public class ScopeLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void beforeEach(TestContext testContext) {
-        TestMethodScopeStore methodStore = testContext.getMetadata(TestMethodScopeStore.class)
-                .orElse(null);
+        TestMethodScopeStore methodStore = resolveMethodStore(testContext);
         if (methodStore == null) {
             return;
         }
@@ -89,14 +89,36 @@ public class ScopeLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void afterEach(TestContext testContext) {
-        testContext.getMetadata(TestMethodScopeStore.class)
-                .ifPresent(TestMethodScopeStore::destroyAll);
+        TestMethodScopeStore methodStore = resolveMethodStore(testContext);
+        if (methodStore != null) {
+            methodStore.destroyAll();
+        }
     }
 
     @Override
     public void afterAll(TestContext testContext) {
-        testContext.getMetadata(TestClassScopeStore.class)
-                .ifPresent(TestClassScopeStore::destroyAll);
+        TestClassScopeStore classStore = resolveClassStore(testContext);
+        if (classStore != null) {
+            classStore.destroyAll();
+        }
+        TestScopeCurrentStores.reset();
+    }
+
+    /**
+     * Pull the method-scope store from {@link TestContext} metadata
+     * (set by the standalone-ArC contributor) first; fall back to
+     * the {@link TestScopeCurrentStores} static slot, which the
+     * {@code ContextCreator} lazy-initialises under
+     * {@code @QuarkusTest} (where no contributor runs).
+     */
+    private static TestMethodScopeStore resolveMethodStore(TestContext testContext) {
+        return testContext.getMetadata(TestMethodScopeStore.class)
+                .orElseGet(TestScopeCurrentStores::methodStore);
+    }
+
+    private static TestClassScopeStore resolveClassStore(TestContext testContext) {
+        return testContext.getMetadata(TestClassScopeStore.class)
+                .orElseGet(TestScopeCurrentStores::classStore);
     }
 
     private static void fireBeforeScopeStarted(Class<? extends java.lang.annotation.Annotation> scope) {
