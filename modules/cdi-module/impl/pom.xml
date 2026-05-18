@@ -31,15 +31,28 @@
     <packaging>jar</packaging>
 
     <name>jawelte (cdi-module/impl)</name>
-    <description>CDI SE adapter for jawelte. Hosts the CdiTestBeanContainer (TestBeanContainerPort impl), the TestBeansCdiExtension (CDI Extension), the default filter implementations, and the helper utilities.</description>
+    <description>ArC-based adapter for jawelte. Drives Quarkus's ArC container lifecycle from a regular JUnit extension by invoking io.quarkus.arc.processor.BeanProcessor as a library at test time. Hosts CdiTestBeanContainer (TestBeanContainerPort impl), the bean creators (Mockito-backed mocks, @TestBean inline fields), and the default filter implementations.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM scoped to cdi-module/impl. Imported here
+                rather than in the root pom because the BOM overrides
+                smallrye-config / jackson / commons-io / etc. versions —
+                propagating those to non-CDI modules would break
+                unrelated dependencies.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
-        <!--
-            All scopes inherited from jawelte-parent's <dependencyManagement>.
-            cdi-module/impl explicitly does NOT compile-depend on core/impl;
-            SPI lookups go through TestContext.loadService(...) per the
-            TICKET-003 addendum.
-        -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-cdi-module-api</artifactId>
@@ -61,35 +74,27 @@
             <groupId>org.eclipse.microprofile.config</groupId>
             <artifactId>microprofile-config-api</artifactId>
         </dependency>
+
+        <!--
+            ArC build-time bean processor exposed as a library. Used at
+            test runtime to programmatically register synthetic mock
+            beans, apply @TestBean alternatives, and build the ArC
+            deployment.
+        -->
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
         </dependency>
     </dependencies>
-
-    <profiles>
-        <profile>
-            <id>owb</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>org.apache.openwebbeans</groupId>
-                    <artifactId>openwebbeans-se</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>weld</id>
-            <dependencies>
-                <dependency>
-                    <groupId>org.jboss.weld.se</groupId>
-                    <artifactId>weld-se-shaded</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
 
     <build>
         <plugins>

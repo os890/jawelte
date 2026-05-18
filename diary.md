@@ -5936,3 +5936,39 @@ State: **30/56 quarkus scenarios green**. Lower than the 34 in the
 build-step approach, but the new architecture is dramatically smaller
 and the remaining failures are concentrated in distinct categories.
 Backup: local branch `ticket-015-buildstep-approach-backup`.
+
+## 2026-05-18 — quarkus-poc branch: cdi-module/impl rewritten to ArC
+
+Cut over `cdi-module/impl` from the OpenWebBeans / Weld SE-container
+adapters to use Quarkus's ArC directly via
+`io.quarkus.arc.processor.BeanProcessor` (POC pattern). This is a
+clean POC branch — no port abstraction for "which CDI runtime", no
+@Priority duality, no quarkus-module sibling. ArC is THE container.
+
+Changes on this branch:
+
+- Removed: SeContainerCdiContainerPort, TestBeansCdiExtension,
+  CdiTestInstanceFactoryPortAdapter, MockitoMockFactory,
+  InjectFieldsHelper, SyntheticBeanUtil, TestBeanScanner,
+  DefaultWhitelistFilter (the OWB/Weld extension surface)
+- Rewrote: CdiTestBeanContainer (was the lifecycle coordinator) to
+  bootstrap ArC at beforeAll via BeanProcessor + a BeanRegistrar
+  that registers Mockito-backed mocks for unsatisfied IPs, applies
+  @TestBean alternatives, handles @Nonbinding-aware dedup, etc. Same
+  pattern as the previous quarkus-module sibling but now living in
+  cdi-module/impl.
+- Removed: modules/quarkus-module/ + tests/quarkus-module/ entirely —
+  cdi-module IS Quarkus on this branch.
+- Removed: -Powb / -Pweld profiles from cdi-module/impl/pom.xml and
+  tests/cdi-module/pom.xml.
+
+Current state: **32/56 tests/cdi-module scenarios green** out of the
+box, 24 failing. The failures cluster into the same categories
+we've been hitting (auto-mock variations, @TestBean error paths,
+stereotype handling, TestContext lifecycle assertions, DeltaSpike
+skip rule). With everything now in ONE class on a clean branch, each
+fix should be small.
+
+Next: chase the 24 failures one category at a time. After they
+stabilise we'll have a clear picture of which slices of the
+BeanRegistrar logic the future "non-Quarkus" path would also need.

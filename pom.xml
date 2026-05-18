@@ -418,13 +418,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- Internal quarkus-module cross-references (Quarkus extension: runtime + deployment) -->
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>jawelte-quarkus-module</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
             <!--
                 Jackson supplies the JSON tree + parser-level line-number
                 tracking that content-diff-module/impl's JsonDiffEngine

@@ -48,6 +48,5 @@
         <module>batch-module</module>
         <module>spring-data-module</module>
         <module>lnp-module</module>
-        <module>quarkus-module</module>
     </modules>
 </project>
