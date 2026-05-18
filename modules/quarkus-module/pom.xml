@@ -28,26 +28,21 @@
     </parent>
 
     <artifactId>jawelte-quarkus-module</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
 
-    <name>jawelte (quarkus-module aggregator)</name>
-    <description>Quarkus-flavour TestBeanContainerPort adapter. Replaces cdi-module under @QuarkusTest: Quarkus owns the CDI container lifecycle; this module supplies only the build-time and runtime glue for jawelte's @EnableTestBeans / @TestBean / auto-mock surface. Ships as a Quarkus extension — a runtime artifact (jawelte-quarkus-module-runtime) plus a deployment artifact (jawelte-quarkus-module-deployment).</description>
-
-    <modules>
-        <module>runtime</module>
-        <module>deployment</module>
-    </modules>
+    <name>jawelte (quarkus-module)</name>
+    <description>Quarkus / ArC adapter for jawelte. Drives the ArC container lifecycle from a regular JUnit extension by calling io.quarkus.arc.processor.BeanProcessor as a library at test time (the same code path Quarkus's own QuarkusComponentTest uses). Tests do NOT need @QuarkusTest — applying @EnableTestBeans is enough. No Quarkus build-time extension (no @BuildStep / quarkus-extension.yaml / runtime+deployment artifact pair) — everything is plain code in this single jar.</description>
 
     <dependencyManagement>
         <dependencies>
             <!--
-                Quarkus BOM scoped to the quarkus-module subtree only.
-                Imported here (not in the root pom) because the BOM
-                overrides smallrye-config / jackson / commons-io / etc.
-                versions; letting those overrides propagate to non-
-                Quarkus modules breaks bean discovery in OWB / Weld
-                (concretely surfaced as scenario-04 ambiguity in
-                wiremock-module).
+                Quarkus BOM scoped to this module only. Imported here
+                rather than in the root pom because the BOM overrides
+                smallrye-config / jackson / commons-io / etc. versions
+                across the whole reactor — propagating those to
+                non-Quarkus modules breaks bean discovery in OWB / Weld
+                (concretely surfaced previously as wiremock-module
+                scenario-04 ambiguity).
             -->
             <dependency>
                 <groupId>io.quarkus</groupId>
@@ -58,4 +53,54 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+        </dependency>
+
+        <!--
+            ArC's build-time bean processor exposed as a library. Used
+            at TEST RUNTIME (not build time) to programmatically
+            register synthetic mock beans, apply @TestBean
+            alternatives, and build the ArC deployment. Same path
+            Quarkus's own QuarkusComponentTest uses internally.
+        -->
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc</artifactId>
+        </dependency>
+
+        <!--
+            Mockito creates the actual mock instances inside
+            MockBeanCreator. Marked provided so consumers explicitly
+            opt in via their own test classpath, mirroring
+            cdi-module/impl's stance on Mockito.
+        -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
 </project>

@@ -28,9 +28,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 @EnableTestBeans(manageContainer = false)
 class Scenario32Test {
 

@@ -5889,3 +5889,50 @@ on disk for follow-up:
 
 Pre-Quarkus regressions: **none open** (wiremock-04 fixed,
 tests/core/scenario-01 fixed earlier this session).
+
+## 2026-05-18 — TICKET-015: pivot to POC's BeanProcessor-as-library approach
+
+After hitting the wall on the build-step-per-feature approach (each
+new auto-mock variation needed a new @BuildStep, and the Quarkus
+extension model's classloader rules kept biting), pivoted to the
+approach the user's earlier POC used: drive the ArC container
+lifecycle from a regular JUnit extension by invoking
+`io.quarkus.arc.processor.BeanProcessor` as a library at test time.
+
+Key consequence: tests no longer need @QuarkusTest — applying
+@EnableTestBeans is enough.
+
+Architecture:
+- `modules/quarkus-module/` (single jar — no more runtime+deployment
+  split, no Quarkus extension metadata, no @BuildStep methods)
+- `QuarkusTestBeanContainer implements TestBeanContainerPort` —
+  beforeAll builds an ArC deployment via BeanProcessor + a
+  BeanRegistrar that registers Mockito-backed mocks for unsatisfied
+  IPs, applies @TestBean alternatives, handles @Nonbinding-aware
+  dedup, and calls `Arc.initialize(...)`. afterAll calls
+  `Arc.shutdown()`. beforeEach / afterEach activate / deactivate the
+  RequestContextController. postProcessTestInstance injects @Inject
+  fields onto the (constructor-built) test instance via
+  `container.instance(...)`.
+- A custom `ArcTestClassLoader` exposes the generated
+  `ComponentsProvider` service file so `Arc.initialize` finds it.
+- An AnnotationTransformation adds @Singleton to the test class
+  itself so its IPs are visible to the BeanRegistrar.
+- NO TestInstanceFactoryPort impl in quarkus-module (the POC pattern
+  doesn't need one — postProcessTestInstance handles field injection
+  on the JUnit-constructed instance). The previous backup branch
+  still has the redundant adapter for reference.
+- @Priority(100) on QuarkusTestBeanContainer so it wins over any
+  ambient cdi-module TestBeanContainerPort impl that may share a
+  classpath.
+
+Removed: tests/quarkus-module exclusions of 38, 43 (the
+cdi-module-internal imports issue no longer applies — the same code
+path handles everything). Removed: @QuarkusTest from every test
+class in tests/quarkus-module (55 files). Removed: the
+runtime+deployment split (modules/quarkus-module is now a single jar).
+
+State: **30/56 quarkus scenarios green**. Lower than the 34 in the
+build-step approach, but the new architecture is dramatically smaller
+and the remaining failures are concentrated in distinct categories.
+Backup: local branch `ticket-015-buildstep-approach-backup`.

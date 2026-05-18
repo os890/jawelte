@@ -31,7 +31,7 @@
     <packaging>pom</packaging>
 
     <name>jawelte (tests/quarkus-module aggregator and parent)</name>
-    <description>Aggregator AND parent for the per-scenario test modules covering jawelte under @QuarkusTest. Mirrors tests/cdi-module's scenarios one-to-one (same scenario numbers); each scenario is a small Quarkus app whose test class carries @QuarkusTest + @EnableTestBeans. Gated by the -Pquarkus profile.</description>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte under the ArC runtime. Mirrors tests/cdi-module's scenarios one-to-one (same scenario numbers); each scenario carries @EnableTestBeans on the test class. No @QuarkusTest — jawelte's quarkus-module bootstraps ArC programmatically via BeanProcessor from a regular JUnit extension.</description>
 
     <modules>
         <module>scenario-01-interface-auto-mock</module>
@@ -48,78 +48,58 @@
         <module>scenario-12-satisfied-not-mocked</module>
         <module>scenario-13-testbean-bean</module>
         <module>scenario-14-testbean-bean-producer</module>
-        <!-- <module>scenario-15-testbean-static-field</module> -->
+        <module>scenario-15-testbean-static-field</module>
         <module>scenario-16-testbean-repeatable</module>
         <module>scenario-17-testbean-meta-annotation</module>
-        <!-- <module>scenario-18-whitelist-mode</module> -->
+        <module>scenario-18-whitelist-mode</module>
         <module>scenario-19-exclude-packages</module>
-        <!-- <module>scenario-20-test-class-isolation</module> -->
-        <!-- <module>scenario-21-qualified-jdk-type</module> -->
+        <module>scenario-20-test-class-isolation</module>
+        <module>scenario-21-qualified-jdk-type</module>
         <module>scenario-22-same-simple-name</module>
         <module>scenario-23-auto-mock-request-scoped</module>
         <module>scenario-24-provider-unwrap</module>
         <module>scenario-25-instance-unwrap</module>
-        <!-- <module>scenario-26-typed-narrowed</module> -->
-        <!-- <module>scenario-27-testbean-instance-field-error</module> -->
-        <!-- <module>scenario-28-testbean-null-field-error</module> -->
-        <!-- <module>scenario-29-testbean-bean-and-producer-error</module> -->
+        <module>scenario-26-typed-narrowed</module>
+        <module>scenario-27-testbean-instance-field-error</module>
+        <module>scenario-28-testbean-null-field-error</module>
+        <module>scenario-29-testbean-bean-and-producer-error</module>
         <module>scenario-30-test-class-field-injection</module>
         <module>scenario-31-test-class-not-cdi-bean</module>
-        <!-- <module>scenario-32-manage-container-false</module> -->
+        <module>scenario-32-manage-container-false</module>
         <module>scenario-33-before-scope-veto</module>
         <module>scenario-34-alternative-without-scope</module>
         <module>scenario-35-testbean-not-alternative</module>
         <module>scenario-36-custom-excluded-package-filter</module>
         <module>scenario-37-testbean-overrides-exclude</module>
-        <!-- 38, 43 skipped: import FrameworkAllowlist from cdi-module/impl;
-             not applicable under Quarkus's build-time classpath scan. -->
-        <!-- <module>scenario-38-framework-allowlist-override</module> -->
-        <!-- <module>scenario-39-testcontext-get-during-bootstrap</module> -->
-        <!-- <module>scenario-40-testcontext-get-after-container-started</module> -->
+        <module>scenario-38-framework-allowlist-override</module>
+        <module>scenario-39-testcontext-get-during-bootstrap</module>
+        <module>scenario-40-testcontext-get-after-container-started</module>
         <module>scenario-41-testcontext-get-cleanup-on-failure</module>
-        <!-- <module>scenario-42-testcontext-parallel-isolation</module> -->
-        <!-- <module>scenario-43-custom-whitelist-filter</module> -->
-        <!-- <module>scenario-44-service-priority-resolver-mp-config</module> -->
+        <module>scenario-42-testcontext-parallel-isolation</module>
+        <module>scenario-43-custom-whitelist-filter</module>
+        <module>scenario-44-service-priority-resolver-mp-config</module>
         <module>scenario-45-priority-resolver-tiebreak</module>
-        <!-- <module>scenario-46-container-started-event-timing</module> -->
-        <!-- <module>scenario-47-config-bean-stereotype-scope</module> -->
-        <!-- <module>scenario-48-config-resolver-injectable</module> -->
-        <!-- <module>scenario-49-config-resolver-alternative</module> -->
+        <module>scenario-46-container-started-event-timing</module>
+        <module>scenario-47-config-bean-stereotype-scope</module>
+        <module>scenario-48-config-resolver-injectable</module>
+        <module>scenario-49-config-resolver-alternative</module>
         <module>scenario-50-multi-alternative-same-type</module>
-        <!-- <module>scenario-51-stereotype-with-qualifier</module> -->
+        <module>scenario-51-stereotype-with-qualifier</module>
         <module>scenario-52-typed-narrowed-with-testbean</module>
-        <!-- <module>scenario-53-multi-qualifier-jdk-type</module> -->
+        <module>scenario-53-multi-qualifier-jdk-type</module>
         <module>scenario-54-binding-qualifier-member</module>
-        <!-- <module>scenario-55-deltaspike-partial-bean-binding-skip</module> -->
+        <module>scenario-55-deltaspike-partial-bean-binding-skip</module>
         <module>scenario-56-deltaspike-whitelist-allow</module>
     </modules>
-    <!--
-        Pending mirrors kept on disk but excluded from the reactor. The
-        failures cluster into two groups:
-          1. Quarkus owns the container lifecycle under @QuarkusTest, so
-             jawelte's DelegatingJUnitExtension.beforeAll auto-skip
-             never populates TestContext. Scenarios that assert about
-             TestContext during jawelte's bootstrap window therefore
-             don't apply under -Pquarkus: 39, 40, 41, 42, 46. Also
-             scenario 30 (test-class field injection — Quarkus handles
-             it) and 31 (test-class-not-CDI-bean — Quarkus registers
-             the test class as a bean).
-          2. Scenarios that exercise additional BuildStep features the
-             processor doesn't yet implement: 44 (custom
-             ServicePriorityResolver via MP Config — TestContext lookup
-             timing), plus everything in the qualifier / @TestBean /
-             whitelist / exclude-packages buckets.
-    -->
 
     <dependencyManagement>
         <dependencies>
             <!--
-                Quarkus BOM, scoped to the tests/quarkus-module subtree
-                only. NOT inherited from the root pom because Quarkus
-                BOM overrides smallrye-config / jackson / commons-io /
-                etc. versions and propagating those to non-Quarkus
-                modules breaks bean discovery in OWB / Weld (concretely
-                surfaced as scenario-04 ambiguity in wiremock-module).
+                Quarkus BOM scoped to this subtree only. NOT inherited
+                from the root pom because the BOM overrides
+                smallrye-config / jackson / commons-io / etc. versions
+                and propagating those to non-Quarkus modules breaks
+                bean discovery in OWB / Weld.
             -->
             <dependency>
                 <groupId>io.quarkus</groupId>
@@ -132,15 +112,6 @@
     </dependencyManagement>
 
     <dependencies>
-        <!--
-            jawelte-core-api + jawelte-core-impl are needed by every
-            scenario (DelegatingJUnitExtension auto-skip path detects
-            @QuarkusTest and cedes container ownership to Quarkus).
-            jawelte-quarkus-module-runtime carries the Quarkus-flavour
-            TestBeanContainerPort + ServiceLoader registration; the
-            -deployment artifact ships the @BuildStep methods that
-            Quarkus discovers at build time.
-        -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
@@ -158,61 +129,19 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-quarkus-module-runtime</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-quarkus-module-deployment</artifactId>
+            <artifactId>jawelte-quarkus-module</artifactId>
             <scope>test</scope>
         </dependency>
 
         <!--
             Several scenarios programmatically launch JUnit Jupiter via
-            EngineTestKit to assert how the framework handles
-            @TestBean misuse, throwing test-class events, parallel
-            isolation, etc. junit-platform-testkit ships the
-            EngineTestKit API.
+            EngineTestKit (@TestBean misuse error paths, parallel
+            isolation, etc.).
         -->
         <dependency>
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-testkit</artifactId>
             <scope>test</scope>
-        </dependency>
-
-        <!--
-            Quarkus brings its own jakarta APIs transitively through
-            quarkus-arc. quarkus-junit5 wires @QuarkusTest into JUnit.
-        -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-arc</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit</artifactId>
-            <scope>test</scope>
-            <exclusions>
-                <!--
-                    Quarkus 3.x is jakarta-native; the javax.* artifacts
-                    that quarkus-junit transitively drags through Maven
-                    Resolver (Plexus DI inside Maven 3.9) are legacy
-                    baggage that conflicts with the project's
-                    BannedDependencies rule. Pruned here; if Maven
-                    Resolver actually needs them at runtime, the
-                    failure will surface at test time and we'll
-                    re-evaluate.
-                -->
-                <exclusion>
-                    <groupId>javax.inject</groupId>
-                    <artifactId>javax.inject</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>javax.annotation</groupId>
-                    <artifactId>javax.annotation-api</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
         <dependency>
@@ -225,49 +154,13 @@
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
         </dependency>
     </dependencies>
-
-    <build>
-        <pluginManagement>
-            <plugins>
-                <!--
-                    quarkus-maven-plugin builds the Quarkus app's
-                    augmentation that @QuarkusTest needs to bootstrap
-                    ArC at test time. Configured here so per-scenario
-                    poms inherit the wiring without repeating it.
-                -->
-                <plugin>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-maven-plugin</artifactId>
-                    <version>${quarkus.version}</version>
-                    <extensions>true</extensions>
-                    <executions>
-                        <execution>
-                            <goals>
-                                <goal>build</goal>
-                                <goal>generate-code</goal>
-                                <goal>generate-code-tests</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-            </plugins>
-        </pluginManagement>
-        <plugins>
-            <plugin>
-                <groupId>io.quarkus</groupId>
-                <artifactId>quarkus-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
 </project>

@@ -22,9 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.port.TestContext;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 @EnableTestBeans
 class Scenario40Test {
 

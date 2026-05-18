@@ -29,9 +29,6 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.TestBean;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 @EnableTestBeans
 @TestBean(bean = StubEmailService.class)
 class Scenario34Test {

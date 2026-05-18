@@ -28,9 +28,6 @@ import com.example.scenario18.EmailService;
 import com.example.scenario18.StubEmailService;
 import com.example.scenario18.UserService;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 @EnableTestBeans(limitToTestBeans = true)
 @TestBean(bean = StubEmailService.class)
 class Scenario18Test {

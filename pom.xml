@@ -421,12 +421,7 @@
             <!-- Internal quarkus-module cross-references (Quarkus extension: runtime + deployment) -->
             <dependency>
                 <groupId>${project.groupId}</groupId>
-                <artifactId>jawelte-quarkus-module-runtime</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>jawelte-quarkus-module-deployment</artifactId>
+                <artifactId>jawelte-quarkus-module</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

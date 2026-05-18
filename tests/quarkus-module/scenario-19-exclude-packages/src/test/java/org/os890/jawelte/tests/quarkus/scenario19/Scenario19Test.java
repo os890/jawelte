@@ -25,9 +25,6 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 
 import com.example.domain.DomainService;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 @EnableTestBeans
 class Scenario19Test {
 

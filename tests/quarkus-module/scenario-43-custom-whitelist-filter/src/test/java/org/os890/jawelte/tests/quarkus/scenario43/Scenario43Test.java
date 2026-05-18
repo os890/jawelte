@@ -25,9 +25,6 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 
 import com.example.scenario43.AllowedService;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 @EnableTestBeans(limitToTestBeans = true)
 class Scenario43Test {
 

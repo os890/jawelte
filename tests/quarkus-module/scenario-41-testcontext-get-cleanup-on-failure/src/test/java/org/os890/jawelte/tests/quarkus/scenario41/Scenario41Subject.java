@@ -18,9 +18,6 @@ package org.os890.jawelte.tests.quarkus.scenario41;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 @EnableTestBeans
 public class Scenario41Subject {
 
