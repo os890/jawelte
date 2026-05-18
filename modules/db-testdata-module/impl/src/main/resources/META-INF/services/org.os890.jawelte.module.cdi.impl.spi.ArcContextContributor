@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Captures @PersistenceConfig.persistenceUnitName from the active test
-# class during BeforeBeanDiscovery (the bootstrap window where
-# TestContext.get() still resolves). The default
-# PersistenceUnitNameSupplier CDI bean retrieves the captured value
-# via BeanManager.getExtension(...) in its
-# @Initialized(ApplicationScoped.class) observer.
-org.os890.jawelte.module.dbtestdata.impl.adapter.extension.AnnotationDrivenPersistenceUnitExtension
+# db-testdata-module's ArC build-time contributor. Captures
+# @PersistenceConfig.persistenceUnitName from the active test class
+# into CapturedPersistenceUnitNameHolder before BeanProcessor.process()
+# runs, so the DefaultPersistenceUnitNameSupplier CDI bean can read
+# it without going through BeanManager.getExtension(...) (which ArC
+# does not support).
+
+org.os890.jawelte.module.dbtestdata.impl.adapter.contributor.DbTestDataArcContextContributor

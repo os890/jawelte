@@ -6252,3 +6252,40 @@ batch-module had two ArC-only-related gaps:
 
 Score: cdi 56/56, scope 31/31, jpa 64/64, jaxrs 17/17, content-diff 41/41,
 lnp 9/9, **batch 15/15** — all green under ArC-only on `quarkus-poc`.
+
+---
+## 2026-05-18 — quarkus-poc: db-testdata-module 68/69
+
+db-testdata-module had one portable CDI Extension —
+`AnnotationDrivenPersistenceUnitExtension` — that captured
+`@PersistenceConfig.persistenceUnitName` from the active test class
+during `BeforeBeanDiscovery` and stored it on the extension instance,
+which the default `PersistenceUnitNameSupplier` then read back via
+`BeanManager.getExtension(...)`. ArC's `BeanManager.getExtension`
+throws `UnsupportedOperationException`.
+
+Replaced with the same contributor / static-holder pattern scope-module
+uses:
+
+- New `CapturedPersistenceUnitNameHolder` (static slot).
+- New `DbTestDataArcContextContributor` (`ArcContextContributor` SPI):
+  reads `@PersistenceConfig` from the test class and writes the
+  captured name to the holder before `BeanProcessor.process()`.
+- `DefaultPersistenceUnitNameSupplier.get()` now returns
+  `CapturedPersistenceUnitNameHolder.get()` directly — no
+  `@Initialized(ApplicationScoped.class)` observer, no
+  `BeanManager.getExtension(...)`.
+- Deleted `AnnotationDrivenPersistenceUnitExtension.java` and the
+  legacy `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  registration.
+- `db-testdata-module/impl/pom.xml`: pinned `quarkus-bom` locally and
+  added a compile-dep on `cdi-module-impl` for the SPI.
+- `tests/db-testdata-module/pom.xml` plus five scenario poms (36, 36a,
+  37, 64, 67): dropped the `-Powb` / `-Pweld` profile blocks.
+
+Score: cdi 56/56, scope 31/31, jpa 64/64, jaxrs 17/17, content-diff
+41/41, lnp 9/9, batch 15/15, **db-testdata 68/69**. The one remaining
+failure (scenario 67) sits on jta-module's still-unported
+`JtaCdiExtension` — its `AfterBeanDiscovery.addBean(...)` call against
+the portable-extension bridge proxy NPEs (proxy returns null for the
+configurator). Will be fixed when jta-module gets the ArC rewrite.

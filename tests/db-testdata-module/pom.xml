@@ -211,15 +211,11 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <profile>
-            <id>owb</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-        </profile>
-        <profile>
-            <id>weld</id>
-        </profile>
-    </profiles>
+    <!--
+        cdi-module/impl now bootstraps Quarkus ArC at test time and
+        ships its own SeContainerInitializer SPI; the -Powb / -Pweld
+        empty profile shells that used to vary which Jakarta SE CDI
+        runtime scenarios saw are no longer needed.
+    -->
+
 </project>

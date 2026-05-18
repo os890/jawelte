@@ -16,30 +16,30 @@
 package org.os890.jawelte.module.dbtestdata.impl.adapter.persistence;
 
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.context.Initialized;
-import jakarta.enterprise.event.Observes;
-import jakarta.enterprise.inject.spi.BeanManager;
 
 import org.os890.jawelte.module.dbtestdata.api.port.PersistenceUnitNameSupplier;
-import org.os890.jawelte.module.dbtestdata.impl.adapter.extension.AnnotationDrivenPersistenceUnitExtension;
 
 /**
  * Default {@link PersistenceUnitNameSupplier}: an
- * {@code @ApplicationScoped} CDI bean populated from
- * {@link AnnotationDrivenPersistenceUnitExtension}'s captured value
- * during the {@code @Initialized(ApplicationScoped.class)} observer.
- * The bean serves as the per-CDI-container cache for the
- * persistence-unit-name read out of the test class's
- * {@code @PersistenceConfig} annotation.
+ * {@code @ApplicationScoped} CDI bean whose {@link #get()} delegates
+ * to {@link CapturedPersistenceUnitNameHolder}. The holder is
+ * populated by {@code DbTestDataArcContextContributor} during
+ * cdi-module's {@code beforeAll}, before {@code BeanProcessor.process()}
+ * runs.
  *
  * <p>Consumers can replace this default by providing their own
  * {@code @Alternative @Priority(N)} bean of type
  * {@link PersistenceUnitNameSupplier}.
+ *
+ * <p>The previous OWB / Weld path captured the value on a CDI
+ * Extension instance and read it back via
+ * {@code BeanManager.getExtension(...)}. ArC does not support
+ * {@code BeanManager.getExtension(...)} (it throws
+ * {@code UnsupportedOperationException}), so the value flow is now:
+ * contributor → static holder → bean.
  */
 @ApplicationScoped
 public class DefaultPersistenceUnitNameSupplier implements PersistenceUnitNameSupplier {
-
-    private String name = "";
 
     /** No-arg constructor required by the CDI normal-scope proxy. */
     public DefaultPersistenceUnitNameSupplier() {
@@ -47,16 +47,6 @@ public class DefaultPersistenceUnitNameSupplier implements PersistenceUnitNameSu
 
     @Override
     public String get() {
-        return name;
-    }
-
-    void onApplicationInitialized(
-            @Observes @Initialized(ApplicationScoped.class) Object event,
-            BeanManager beanManager) {
-        AnnotationDrivenPersistenceUnitExtension extension =
-                beanManager.getExtension(AnnotationDrivenPersistenceUnitExtension.class);
-        if (extension != null) {
-            this.name = extension.capturedName();
-        }
+        return CapturedPersistenceUnitNameHolder.get();
     }
 }

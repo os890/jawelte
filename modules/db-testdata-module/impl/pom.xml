@@ -31,7 +31,21 @@
     <packaging>jar</packaging>
 
     <name>jawelte (db-testdata-module/impl)</name>
-    <description>Built-in DbUnit XML engines (DbUnitXmlSeedEngine, DbUnitXmlDiffEngine) and the JakartaELInterpolator default. The seed engine maps SeedMode -&gt; DatabaseOperation; the diff engine emits a typed List&lt;DbDifference&gt; per cell mismatch / missing row / extra row, with 1-based expected-line numbers from a custom SAX pass over the expected XML. ELInterpolator runs Jakarta EL with values + beans + functions; missing variables / methods surface as RuntimeException at evaluation time, never at registration.</description>
+    <description>ArC-native db-testdata bundle. Hosts the built-in DbUnit XML engines (DbUnitXmlSeedEngine, DbUnitXmlDiffEngine), the JakartaELInterpolator default, and the DbTestDataArcContextContributor that captures @PersistenceConfig.persistenceUnitName from the active test class into the per-test static slot the default PersistenceUnitNameSupplier reads.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Quarkus BOM scoped to db-testdata-module/impl (same
+                 isolation strategy as cdi / scope / jpa). -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -41,6 +55,13 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+        <!-- db-testdata-module/impl ships an ArcContextContributor that
+             plugs into cdi-module/impl's SPI; the dep transitively
+             pulls in quarkus-arc-processor / quarkus-arc. -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
         </dependency>
 
         <!--
