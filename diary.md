@@ -5439,3 +5439,17 @@ end-of-run banner so the reminder is visible right where someone would
 naturally call a ticket "done". Motivated by the recently-discovered
 jta-09 regression that slipped through because the offending commit
 was verified with `verify-all.sh lnp` only.
+
+## 2026-05-18 — scenario-56 pom: pin geronimo-transaction at test scope
+
+`verify-all.sh` (full mode) flagged scenario-56's
+`geronimoTransactionTypesAreExcludedFromAutoMock` with a
+`NoClassDefFoundError` for `TransactionManagerImpl` under the
+`[owb,jta-narayana]` profile combination. The parent profile
+`jta-narayana` only puts narayana-jta on the classpath, but the test
+references geronimo's `TransactionManagerImpl.class` directly. Mirrored
+scenario-54's per-scenario pattern: pin `geronimo-transaction` at test
+scope so both `.class` literals (narayana + geronimo) resolve under
+every `jta-*` profile the script sweeps. Pre-existing scenario-56 bug —
+not a TICKET-016 regression — surfaced now because the wider sweep
+finally exercised the failing combo.
