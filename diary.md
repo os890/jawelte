@@ -5839,3 +5839,26 @@ pom's `<dependencyManagement>`. Re-imported it in:
 
 so the override list is now confined to the Quarkus subtree only.
 wiremock-04 passes again on the branch.
+
+## 2026-05-18 — Proxy back to InvocationInterceptor (BOM-scope fix exposed the need)
+
+After scoping the Quarkus BOM to subtree only (which fixed wiremock-04),
+Quarkus scenarios under @QuarkusTest started failing with
+`RuntimeException: Could not find method ... on test class`. Root
+cause: with TestInstanceFactory on Proxy, JUnit calls Proxy's
+createTestInstance and skips constructor invocation. Quarkus's own
+`QuarkusTestExtension.beforeEach` then can't find the test method in
+its tracked context because Quarkus expects to have controlled the
+test instance via `interceptTestClassConstructor`, and that
+interceptor never fired.
+
+Switched Proxy back to `InvocationInterceptor.interceptTestClassConstructor`.
+Under @QuarkusTest, port returns the @QuarkusTest-managed CDI bean,
+Quarkus's own interceptor in the chain handles its bookkeeping, the
+test method is found. Without @QuarkusTest (cdi-module-only,
+scope-module, etc.), the port path is also fine — `invocation.skip()`
++ return the CDI bean.
+
+Combined state now:
+- wiremock-04 green (pre-Quarkus regression fixed)
+- 33/54 quarkus-module scenarios green (was 22 originals)

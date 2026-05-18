@@ -19,6 +19,7 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -31,10 +32,9 @@ import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
-import org.junit.jupiter.api.extension.TestInstanceFactory;
-import org.junit.jupiter.api.extension.TestInstanceFactoryContext;
+import org.junit.jupiter.api.extension.InvocationInterceptor;
+import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
-import org.junit.jupiter.api.extension.TestInstantiationException;
 import org.os890.jawelte.core.api.port.TestBeansExtension;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
@@ -112,7 +112,7 @@ public @interface EnableTestBeans {
                        TestInstancePostProcessor,
                        AfterEachCallback,
                        AfterAllCallback,
-                       TestInstanceFactory {
+                       InvocationInterceptor {
 
         private TestBeansExtension delegate;
 
@@ -152,38 +152,43 @@ public @interface EnableTestBeans {
         }
 
         @Override
-        public Object createTestInstance(
-                TestInstanceFactoryContext factoryContext,
-                ExtensionContext extensionContext) {
-            Class<?> testClass = factoryContext.getTestClass();
-            TestInstanceFactoryPort port = resolveTestInstancePort();
+        public <T> T interceptTestClassConstructor(
+                Invocation<T> invocation,
+                ReflectiveInvocationContext<Constructor<T>> invocationContext,
+                ExtensionContext extensionContext) throws Throwable {
+            Class<?> testClass = invocationContext.getExecutable().getDeclaringClass();
+            Namespace namespace = Namespace.create(TestContext.class);
+            TestContext storedContext = extensionContext.getStore(namespace)
+                    .get(TestContext.class, TestContext.class);
             try {
+                TestInstanceFactoryPort port = resolveTestInstancePort();
                 if (port != null) {
                     Object portInstance = port.createInstance(testClass);
                     if (portInstance != null) {
-                        return portInstance;
+                        // Mark the invocation as handled — JUnit's
+                        // interceptor chain requires either
+                        // proceed() or skip() and reports
+                        // "Chain of InvocationInterceptors never
+                        // called invocation" otherwise.
+                        invocation.skip();
+                        @SuppressWarnings("unchecked")
+                        T cast = (T) portInstance;
+                        return cast;
                     }
                 }
-                var constructor = testClass.getDeclaredConstructor();
-                constructor.setAccessible(true);
-                return constructor.newInstance();
-            } catch (TestInstantiationException tie) {
-                throw tie;
-            } catch (Exception e) {
-                throw new TestInstantiationException(
-                        "Could not create a test instance for " + testClass.getName(), e);
+                // Port absent or returned null: hand off to the next
+                // interceptor (under {@code @QuarkusTest} that is
+                // Quarkus's own
+                // {@code QuarkusTestExtension.interceptTestClassConstructor})
+                // or, if no other interceptor takes the call, JUnit
+                // invokes the constructor reflectively for an
+                // unmanaged instance.
+                return invocation.proceed();
             } finally {
                 // Close the bootstrap window for TestContext.get(): the
-                // factory has produced the instance, so consumers inside
-                // the test body must not see an active TestContext.
-                // Pulled from the JUnit Store (populated by
-                // DelegatingJUnitExtension.beforeAll) rather than via
-                // TestContext.get() because the latter routes through MP
-                // Config — and not every test classpath in the project
-                // ships an MP Config implementation.
-                Namespace namespace = Namespace.create(TestContext.class);
-                TestContext storedContext = extensionContext.getStore(namespace)
-                        .get(TestContext.class, TestContext.class);
+                // interceptor chain has produced the instance, so
+                // consumers inside the test body must not see an
+                // active TestContext.
                 if (storedContext != null) {
                     storedContext.reset();
                 }
