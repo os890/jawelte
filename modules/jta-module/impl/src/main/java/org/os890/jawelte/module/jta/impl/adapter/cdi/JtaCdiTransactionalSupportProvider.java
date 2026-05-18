@@ -52,17 +52,37 @@ public class JtaCdiTransactionalSupportProvider implements CdiTransactionalSuppo
     private static final String NARAYANA_CDI_EXTENSION_CLASS =
             "com.arjuna.ats.jta.cdi.TransactionExtension";
 
+    /**
+     * Marker class for Quarkus ArC. Narayana's
+     * {@code TransactionalInterceptorBase.getTransactional(...)} probes
+     * for Weld at runtime and throws
+     * {@code ARJUNA016151: Not supported for interception factory with
+     * non-weld CDI implementation} when the interception target is
+     * built by anything else. Under ArC we therefore report
+     * {@code false} from both probes so jpa-module/impl hosts the
+     * {@code @Transactional} interceptor and {@code @TransactionScoped}
+     * context itself, regardless of whether Narayana's uber jar is on
+     * the classpath.
+     */
+    private static final String ARC_MARKER_CLASS = "io.quarkus.arc.Arc";
+
     /** No-arg constructor required by {@link ServiceLoader}. */
     public JtaCdiTransactionalSupportProvider() {
     }
 
     @Override
     public boolean platformProvidesTransactionalInterceptor() {
+        if (classExists(ARC_MARKER_CLASS)) {
+            return false;
+        }
         return classExists(NARAYANA_CDI_EXTENSION_CLASS);
     }
 
     @Override
     public boolean platformProvidesTransactionScopedContext() {
+        if (classExists(ARC_MARKER_CLASS)) {
+            return false;
+        }
         return classExists(NARAYANA_CDI_EXTENSION_CLASS);
     }
 

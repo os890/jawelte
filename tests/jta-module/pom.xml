@@ -204,28 +204,11 @@
     </dependencies>
 
     <profiles>
-        <!-- CDI runtime selection — same shape as tests/jpa-module. -->
-        <profile>
-            <id>owb</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>org.apache.openwebbeans</groupId>
-                    <artifactId>openwebbeans-se</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>weld</id>
-            <dependencies>
-                <dependency>
-                    <groupId>org.jboss.weld.se</groupId>
-                    <artifactId>weld-se-shaded</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
+        <!--
+            CDI runtime selection — the -Powb / -Pweld split is gone;
+            cdi-module/impl boots Quarkus ArC at test time and ships
+            its own SeContainerInitializer SPI.
+        -->
 
         <!--
             JTA implementation selection. Default is jta-geronimo so a

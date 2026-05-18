@@ -31,17 +31,23 @@
     <packaging>jar</packaging>
 
     <name>jawelte (jta-module/impl)</name>
-    <description>Implementation of jawelte's JTA integration. Hosts JtaTransactionStrategy (the @Priority-winning TransactionStrategy impl), the GeronimoPersistencePropertyResolver (active PersistencePropertyResolver), the default TransactionManagerProvider impls (Geronimo, Narayana, Atomikos), the Hibernate StandaloneJtaPlatform, and the XaDataSourceWrapper. Each provider impl uses Class.forName-based isAvailable() to keep no compile-time dep on the JTA jars themselves.</description>
+    <description>ArC-native implementation of jawelte's JTA integration. Hosts JtaArcContextContributor (registers the synthetic Narayana JTAEnvironmentBean and applies vendor-veto ExcludeTypes through ArC's BeanRegistrar / Builder), JtaTransactionStrategy, the default TransactionManagerProvider impls (Geronimo, Narayana, Atomikos), the Hibernate StandaloneJtaPlatform, and the XaDataSourceWrapper.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Quarkus BOM scoped to jta-module/impl (same isolation
+                 strategy as cdi / scope / jpa / db-testdata). -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
-        <!--
-            Compile deps. jta-module/impl compiles against jpa-module/api
-            for the TransactionStrategy and PersistencePropertyResolver
-            ports, and against jta-module/api for TransactionManagerProvider.
-            No compile-time dep on jpa-module/impl — the JTA strategy
-            implements only the TransactionStrategy SPI and lets Hibernate
-            handle EM ↔ JTA-tx enlistment via the configured JtaPlatform.
-        -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-jta-module-api</artifactId>
@@ -53,6 +59,13 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+        <!-- jta-module/impl ships an ArcContextContributor that plugs
+             into cdi-module/impl's SPI; transitively pulls in
+             quarkus-arc-processor / quarkus-arc. -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
         </dependency>
 
         <dependency>

@@ -12,4 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.module.jta.impl.adapter.extension.JtaCdiExtension
+# jta-module's ArC build-time contributor. Pre-bootstraps the active
+# TransactionStrategy, seeds Narayana's static JTAEnvironmentBean
+# singleton, applies vendor-veto ExcludeTypes through the
+# BeanProcessor builder, and registers a synthetic JTAEnvironmentBean
+# CDI bean when delegating to a vendor JTA CDI integration.
+
+org.os890.jawelte.module.jta.impl.adapter.contributor.JtaArcContextContributor
