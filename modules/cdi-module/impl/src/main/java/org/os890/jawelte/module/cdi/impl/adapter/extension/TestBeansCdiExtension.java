@@ -31,8 +31,11 @@ import java.util.Set;
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.context.NormalScope;
 import jakarta.enterprise.context.RequestScoped;
+import jakarta.enterprise.context.spi.CreationalContext;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Alternative;
+import jakarta.enterprise.inject.Any;
+import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Stereotype;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
@@ -43,6 +46,7 @@ import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.BeforeBeanDiscovery;
 import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.InjectionPoint;
+import jakarta.enterprise.inject.spi.InjectionTarget;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.enterprise.inject.spi.ProcessInjectionPoint;
 import jakarta.enterprise.util.Nonbinding;
@@ -163,6 +167,15 @@ public class TestBeansCdiExtension implements Extension {
         for (Class<?> producerType : scanResult.producerTypes()) {
             forceDiscoveryWithDependentFallback(event, producerType);
         }
+        // The test class itself is registered as a synthetic
+        // @Dependent CDI bean at AfterBeanDiscovery time (see
+        // onAfterBeanDiscovery). Doing it that late means it lands
+        // after every auto-mock and every @TestBean alternative,
+        // matching the unmanaged shape the framework used before
+        // TICKET-016 — its @Inject fields don't fire
+        // ProcessInjectionPoint and aren't "seen" by the rest of the
+        // bean archive until the producer runs at
+        // CDI.current().select(testClass).get() time.
     }
 
     void onProcessAnnotatedType(@Observes ProcessAnnotatedType<?> event) {
@@ -235,11 +248,14 @@ public class TestBeansCdiExtension implements Extension {
         if (limitToTestBeans) {
             // Auto-mocking is disabled in whitelist mode. CDI's own
             // deployment validation surfaces unsatisfied IPs.
+            registerTestClassSyntheticBean(event, beanManager);
             return;
         }
 
-        // Collect IPs from the test class itself (not a CDI bean,
-        // therefore no ProcessInjectionPoint events fire for it).
+        // The test class is kept out of CDI's normal bean discovery
+        // (see onBeforeBeanDiscovery). Walk its @Inject fields here so
+        // every unsatisfied IP joins the auto-mock candidate set in
+        // time for the synthetic-bean loop below.
         addTestClassInjectionPoints(beanManager);
 
         // Synthesise mocks for unsatisfied collected IPs. Each
@@ -297,6 +313,16 @@ public class TestBeansCdiExtension implements Extension {
                     () -> mockFactory.create(rawType),
                     AUTO_MOCK_NON_JDK_SCOPE);
         }
+
+        // Finally, register the test class as a synthetic @Dependent
+        // CDI bean. The producer instantiates via CDI's InjectionTarget
+        // mechanism so jawelte's auto-mocks (registered just above) and
+        // any @TestBean alternatives are visible during the test
+        // class's field injection. The factory bridge in core/impl
+        // resolves this synthetic bean via
+        // CDI.current().select(testClass).get() and hands the result
+        // to JUnit.
+        registerTestClassSyntheticBean(event, beanManager);
     }
 
     /**
@@ -308,6 +334,100 @@ public class TestBeansCdiExtension implements Extension {
      */
     Set<IpKey> unsatisfiedCandidateIpsForTests() {
         return new LinkedHashSet<>(unsatisfiedCandidateIps);
+    }
+
+    /**
+     * Register the test class as a {@code @Dependent} synthetic CDI
+     * bean inside {@code AfterBeanDiscovery}. The bean's producer
+     * creates the test instance via CDI's
+     * {@link jakarta.enterprise.inject.spi.InjectionTarget} machinery
+     * — populating the test class's {@code @Inject} fields against
+     * the current bean archive — and the {@code @Dependent} scope
+     * guarantees no normal-scope proxy wraps the result, so private
+     * fields and package-private test classes keep working.
+     *
+     * <p>Registering this late (after every auto-mock and every
+     * explicit {@code @TestBean} alternative is in place) keeps the
+     * test class invisible to CDI's regular bean-discovery pipeline:
+     * its {@code @Inject} fields never fire
+     * {@code ProcessInjectionPoint} events, mirroring the unmanaged
+     * shape jawelte used before TICKET-016. The auto-mock collector
+     * sees those IPs via the explicit
+     * {@link #addTestClassInjectionPoints(BeanManager)} walk above
+     * instead.
+     *
+     * @param event       the {@code AfterBeanDiscovery} event
+     * @param beanManager the active {@link BeanManager}; captured
+     *                    inside the producer to lazily build the
+     *                    {@link jakarta.enterprise.inject.spi.InjectionTarget}
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void registerTestClassSyntheticBean(
+            AfterBeanDiscovery event, BeanManager beanManager) {
+        Class<?> testClass = activeContext.getTestClass();
+        if (hasBeanDefiningAnnotation(testClass)) {
+            // User declared an explicit scope on the test class —
+            // honour it and skip the synthetic registration. CDI's
+            // regular discovery picks up the user-declared bean.
+            return;
+        }
+        // Pre-build an InjectionTarget once to collect the declared
+        // IPs that addInjectionPoints needs at registration time.
+        // The producer below builds a fresh InjectionTarget at runtime
+        // because OWB's InjectionTarget instance is only valid in the
+        // bean-discovery window it was created in; calling
+        // inject(...) on a discovery-time IT during the runtime
+        // producer phase silently no-ops on the field set.
+        AnnotatedType<?> annotatedType = beanManager.createAnnotatedType(testClass);
+        InjectionTarget discoveryInjectionTarget = beanManager
+                .getInjectionTargetFactory(annotatedType)
+                .createInjectionTarget(null);
+        // Declaring the test class's IPs on the synthetic bean lets
+        // CDI's deployment validation surface unsatisfied dependencies
+        // the same way it would for any managed bean — matching the
+        // pre-TICKET-016 behaviour where unsatisfied IPs failed the
+        // container bootstrap.
+        event.addBean()
+                .beanClass(testClass)
+                .scope(Dependent.class)
+                .types(testClass, Object.class)
+                .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
+                .addInjectionPoints(discoveryInjectionTarget.getInjectionPoints())
+                .produceWith(instance -> instantiate(beanManager, testClass));
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object instantiate(BeanManager beanManager, Class<?> testClass) {
+        AnnotatedType<?> annotatedType = beanManager.createAnnotatedType(testClass);
+        InjectionTarget injectionTarget = beanManager
+                .getInjectionTargetFactory(annotatedType)
+                .createInjectionTarget(null);
+        CreationalContext context = beanManager.createCreationalContext(null);
+        Object instance = injectionTarget.produce(context);
+        injectionTarget.inject(instance, context);
+        injectionTarget.postConstruct(instance);
+        return instance;
+    }
+
+    private void addTestClassInjectionPoints(BeanManager beanManager) {
+        Class<?> testClass = activeContext.getTestClass();
+        AnnotatedType<?> testClassType = beanManager.createAnnotatedType(testClass);
+        for (AnnotatedField<?> field : testClassType.getFields()) {
+            if (!field.isAnnotationPresent(Inject.class)) {
+                continue;
+            }
+            Type targetType = unwrapWrapper(field.getBaseType());
+            if (targetType == null) {
+                continue;
+            }
+            Set<Annotation> qualifiers = new LinkedHashSet<>();
+            for (Annotation annotation : field.getAnnotations()) {
+                if (beanManager.isQualifier(annotation.annotationType())) {
+                    qualifiers.add(annotation);
+                }
+            }
+            unsatisfiedCandidateIps.add(new IpKey(targetType, qualifiers));
+        }
     }
 
     private static void forceDiscoveryWithDependentFallback(BeforeBeanDiscovery event, Class<?> target) {
@@ -395,27 +515,6 @@ public class TestBeansCdiExtension implements Extension {
             }
         }
         return false;
-    }
-
-    private void addTestClassInjectionPoints(BeanManager beanManager) {
-        Class<?> testClass = activeContext.getTestClass();
-        AnnotatedType<?> testClassType = beanManager.createAnnotatedType(testClass);
-        for (AnnotatedField<?> field : testClassType.getFields()) {
-            if (!field.isAnnotationPresent(Inject.class)) {
-                continue;
-            }
-            Type targetType = unwrapWrapper(field.getBaseType());
-            if (targetType == null) {
-                continue;
-            }
-            Set<Annotation> qualifiers = new LinkedHashSet<>();
-            for (Annotation annotation : field.getAnnotations()) {
-                if (beanManager.isQualifier(annotation.annotationType())) {
-                    qualifiers.add(annotation);
-                }
-            }
-            unsatisfiedCandidateIps.add(new IpKey(targetType, qualifiers));
-        }
     }
 
     private static boolean isUnsatisfied(

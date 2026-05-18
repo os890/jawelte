@@ -5319,3 +5319,137 @@ Continuation of the per-scenario audit: while reviewing the @Param fix on scenar
 Fix: extended `CrudRepositories` with derived queries (`findByStatus`, `findByDepartmentId`, `findByAuthorId`, `findByWarehouseId`, `findByAccountId`) and `@Query` aggregates / joins (`averagePrice`, `findAllWithItems`, `countPerDepartment`, `findByTagName`, `averageAmount`, `sumBalances`, `totalQuantity`). Added two new repositories (`SalaryRepository`, `FinancialTransactionRepository`) so the salary aggregate and the by-account transactions read hit the right tables. Every `:name` placeholder in a `@Query` is paired with `@Param("name")` for the same reflection reason that broke `deleteByOrderId` earlier today.
 
 Rewrote `AbstractFullCrudSpringDataScenarioTest` so each read-only body is a single delegate call into the matching repo; `allTablesPopulated` now calls `count()` on every one of the 12 repositories instead of just `customers.count()`. Locally re-ran scenario-08 under both `-P weld,lnp test` and `-P owb,lnp test` — 2101 tests / 0 errors / BUILD SUCCESS in both.
+
+## 2026-05-18 — TICKET-016 Phase A: TestInstanceFactory refactor — foundation landed, 40/56 green
+
+Branch `33-refactor-test-instance-via-junit-testinstancefactory-backed-by-a-core-spi`.
+
+Foundation in place:
+- `core/api`: new optional SPI `TestInstanceFactoryPort` (single method `createInstance(Class<?>)`).
+- `core/impl`: `DelegatingJUnitTestInstanceFactory` implements `org.junit.jupiter.api.extension.TestInstanceFactory`. Loads the port via `ServiceLoader`; falls back to reflection (`testClass.getDeclaredConstructor().newInstance()`) when no impl is on the classpath.
+- `cdi-module/impl`: `CdiTestInstanceFactoryPortAdapter` returns `CDI.current().select(testClass).get()` (and returns `null` on `IllegalStateException` / `isUnsatisfied()` so the bridge falls back to reflection — covers the rare cases where the factory runs without an active container).
+- `cdi-module/impl`: `TestBeansCdiExtension` now adds `@Dependent` to the test class during `BeforeBeanDiscovery` (skipped when the class already has a bean-defining annotation). `addTestClassInjectionPoints` deleted — the test class being a CDI bean means `ProcessInjectionPoint` already covers its IPs.
+- `cdi-module/impl`: ships `META-INF/services/org.junit.jupiter.api.extension.Extension` (auto-detect activation for the factory bridge), `META-INF/services/org.os890.jawelte.core.api.port.TestInstanceFactoryPort` (port SPI), and `src/main/resources/junit-platform.properties` setting `junit.jupiter.extensions.autodetection.enabled=true`.
+- `CdiTestBeanContainer.postProcessTestInstance` is now a no-op — CDI's normal bean-instantiation populates the `@Inject` fields when the test instance is a managed bean.
+- `tests/cdi-module/scenario-31-test-class-not-cdi-bean`: assertion flipped to "test class IS a `@Dependent` CDI bean".
+
+Coverage right now: 40 / 56 cdi-module scenarios pass on the `-Powb` default.
+
+Outstanding failures (each needs targeted work):
+- 03, 21, 24, 25, 53: parameterized / JDK / Provider / Instance type-unwrap on the auto-mock path. Now that `ProcessInjectionPoint` fires for test-class IPs with the standard `{@Default, @Any}` qualifier set, the synthetic-bean registration needs to track those qualifiers consistently.
+- 27, 28, 29: `@TestBean` validation errors. The misconfig is detected but the exception path through `EngineTestKit` doesn't surface the expected root-cause message in the new bootstrap order.
+- 30: test-class field injection assertion shape changed because the instance now comes from CDI rather than reflection.
+- 32: `@EnableTestBeans(manageContainer=false)` — per the user's direction we no longer fall back to manual `InjectionTarget` injection. Scenario needs to be revisited: either the test bootstraps the container in a way that lets `TestBeansCdiExtension` see the active `TestContext`, or the scenario gets retired.
+- 38, 41, 42, 44, 45: `TestContext` / `ServicePriorityResolver` lifecycle assertions tied to the old bootstrap order.
+- 55: DeltaSpike `@PartialBeanBinding` skip — the build-time guard didn't keep up with the new IP path.
+
+Next steps: investigate per-failure, fix incrementally, then push.
+
+## 2026-05-18 — TICKET-016 Phase B: TestContext lifetime extension (41/56 green)
+
+Per the user's direction, the `TestContext` ThreadLocal now stays alive past `DelegatingJUnitExtension.beforeAll`. The factory bridge closes the bootstrap window after handing JUnit the test instance.
+
+- `DelegatingJUnitExtension.beforeAll`: removed the `testContext.reset()` from the finally block.
+- `DelegatingJUnitExtension.afterAll`: calls `testContext.reset()` at the end as a safety net (idempotent).
+- `DelegatingJUnitTestInstanceFactory.createTestInstance`: after producing the instance, calls `TestContext.get().reset()` (catching `IllegalStateException` for non-jawelte test classes).
+
+User-visible effect:
+- `@EnableTestBeans(manageContainer=false)` test classes can now boot their own `SeContainer` inside `@BeforeAll` — `TestBeansCdiExtension`'s `BeforeBeanDiscovery` observer sees the active `TestContext` and registers the test class as `@Dependent`. CDI then produces the test instance via the factory bridge with all the standard jawelte mock / `@TestBean` machinery wired in. Scenario-32 passes again under the new model.
+- `TestContext.get()` inside a `@Test` body still throws (the factory bridge resets just before returning the instance), matching scenario 40's invariant.
+
+Coverage: 41 / 56 cdi-module scenarios green on `-Powb`. Remaining 15 cluster into generic/JDK/Provider/Instance unwrap (03, 21, 24, 25, 53), `@TestBean` validation-error exception path (27, 28, 29), test-class field-injection assertion (30), framework allowlist (38), `TestContext`-lifecycle scenarios with assertions tied to the old bootstrap-window timing (41, 42, 44, 45), and DeltaSpike `@PartialBeanBinding` skip (55).
+
+## 2026-05-18 — TICKET-016 Phase C: setAccessible fix for package-private test classes (50/56 green)
+
+`DelegatingJUnitTestInstanceFactory.reflectiveInstance` now calls `setAccessible(true)` on the no-arg constructor before invoking it. Most JUnit test classes are package-private (and per the project's Checkstyle convention, declared without an explicit modifier). The factory bridge lives in a different package so reflection without `setAccessible` couldn't reach them — that was the root cause of the chain of failures across scenarios 27, 28, 29, 38, 41, 42, 44, 45, 55 (each of those is a wrapper that uses `EngineTestKit` to run a `*Subject`; the wrapper itself doesn't carry `@EnableTestBeans` so it goes through the reflection fallback).
+
+Coverage: 50 / 56 cdi-module scenarios green on `-Powb`. Remaining 6 cluster into a single category — generic / JDK / Provider / Instance unwrap on the auto-mock path:
+- 03 parameterized-generic
+- 21 qualified-jdk-type
+- 24 provider-unwrap
+- 25 instance-unwrap
+- 30 test-class-field-injection
+- 53 multi-qualifier-jdk-type
+
+The new `ProcessInjectionPoint` path now sees `{@Default, @Any}` qualifiers for the test class's `@Inject` fields (because the test class is a CDI bean and CDI fills in the defaults), where the old `addTestClassInjectionPoints` walked the field reflectively and only collected explicit qualifiers. The synthetic-bean registration in `SyntheticBeanUtil.registerAutoMockBean` may need to canonicalise that qualifier set (or my BuildStep should pre-filter `@Default` / `@Any` to match the old shape) so CDI's resolution matches the synthetic bean.
+
+## 2026-05-18 — TICKET-016 status: 50/56 green; remaining 6 are all auto-mock-IP edge cases
+
+Added the raw type to `SyntheticBeanUtil.beanTypes(targetType)` when targetType is `ParameterizedType` — harmless for non-parameterized cases, intended to let OWB's raw-type lookup find the synthetic bean. Didn't move the needle on the 6 remaining failures (03/21/24/25/30/53); they share the same shape: test class is now a CDI bean and its `@Inject` IPs go through `ProcessInjectionPoint`; for `Instance<X>` / `Provider<X>` / parameterized targets the synthetic mock is registered (auditProvider.get() works in scenario-30) but a sibling Instance lookup of a different inner type fails at runtime.
+
+Hypothesis to investigate next: the `IpKey` dedup may be collapsing two IPs with different inner types when the outer wrapper differs (Instance vs Provider) — the qualifier set being identical now ({@Default, @Any} from CDI) means only one mock is registered per (targetType, qualifiers) key. Or the issue might be that CDI deployment validation runs `ip.getBean()` for the test class IPs in a way that's subtly different from when the test class wasn't a bean.
+
+Coverage: 50 / 56 cdi-module scenarios green on `-Powb`. Branch `33-refactor-test-instance-via-junit-testinstancefactory-backed-by-a-core-spi`. Foundation is solid; the remaining cluster needs targeted CDI-debug work.
+
+## 2026-05-18 — TICKET-016 Phase D: 56 / 56 green under `-Powb` AND `-Pweld`
+
+Last move: register the test class's `@Inject` IPs on the synthetic bean via `addInjectionPoints(injectionTarget.getInjectionPoints())`. Until that landed, CDI's deployment validation didn't see the test class's IPs (because `addBean` defaults to "no IPs"), so unsatisfied dependencies silently nulled at runtime injection. Scenario 55 (DeltaSpike `@PartialBeanBinding` skip) relies on the bootstrap failing when auto-mock is correctly skipped — declaring the IPs restored that behaviour.
+
+The late-registration approach (test class added as a synthetic `@Dependent` bean inside `AfterBeanDiscovery`, *after* every auto-mock and `@TestBean` alternative is in place) keeps the test class invisible to CDI's regular discovery pipeline — its `@Inject` fields don't fire `ProcessInjectionPoint`, mirroring the unmanaged shape jawelte used before TICKET-016. The auto-mock collector sees those IPs via the restored `addTestClassInjectionPoints` walk.
+
+Final shape:
+- `core/api`: `TestInstanceFactoryPort` (optional SPI)
+- `core/impl`: `DelegatingJUnitTestInstanceFactory` (auto-detected JUnit factory bridge; closes the TestContext bootstrap window after producing the instance)
+- `cdi-module/impl`: `CdiTestInstanceFactoryPortAdapter` calls `CDI.current().select(testClass).get()`
+- `cdi-module/impl`: `TestBeansCdiExtension` keeps `addTestClassInjectionPoints` for IP collection, registers the test class as a synthetic `@Dependent` bean in `AfterBeanDiscovery` with `addInjectionPoints(...)` so deployment validation still catches unsatisfied IPs.
+- `META-INF/services` + `junit-platform.properties` activations
+- `CdiTestBeanContainer.postProcessTestInstance` is a no-op — CDI does the field injection during the synthetic bean's producer
+- scenario-31 assertion flipped to "test class IS a `@Dependent` CDI bean"
+
+Test results: 56 / 56 green on `-Powb`, 56 / 56 green on `-Pweld`. Ready for review.
+
+Next: validate the rest of the test reactor (other modules' scenarios) to make sure the refactor didn't regress anything elsewhere; then push and ask about issue #32 resumption.
+
+## 2026-05-18 — TICKET-016: factory consolidated into EnableTestBeans.Proxy
+
+Moved JUnit `TestInstanceFactory` registration from a separate
+`DelegatingJUnitTestInstanceFactory` class (auto-detected via
+`META-INF/services/org.junit.jupiter.api.extension.Extension` +
+`junit-platform.properties`) into the existing `EnableTestBeans.Proxy`
+inner class. `Proxy` now implements `TestInstanceFactory` alongside its
+existing `BeforeAllCallback` / `BeforeEachCallback` / etc., so the
+factory registers via the same `@ExtendWith(Proxy.class)` meta-annotation
+that already activates the rest of jawelte's JUnit integration. This
+matters because META-INF/services auto-detection does NOT propagate
+through EngineTestKit's nested launcher — scope-15 (PreDestroy on
+`@TestClassScoped`) and scope-22 (no-leakage) were failing under
+EngineTestKit before this consolidation.
+
+Deleted: `core/impl/.../DelegatingJUnitTestInstanceFactory.java`,
+`core/impl/.../META-INF/services/org.junit.jupiter.api.extension.Extension`,
+`core/impl/.../junit-platform.properties`.
+
+`TestBeansCdiExtension`: the producer now builds a fresh `InjectionTarget`
+at runtime instead of reusing the discovery-time one. OWB invalidates the
+discovery-time InjectionTarget outside the bean-discovery window —
+`inject(...)` silently no-ops on the field set. The discovery-time IT is
+still used at registration time to declare the test class's IPs via
+`addInjectionPoints(...)` so CDI deployment validation surfaces
+unsatisfied dependencies.
+
+Verified: cdi-module 56/56 under -Powb AND -Pweld, scope-module 32/32,
+jta-module incl. scenario-09. Full `verify-all.sh` sweep in flight.
+
+## 2026-05-18 — verify-all.sh: lnp-mode summary hints partial coverage
+
+`lnp` mode skips every non-lnp module's tests in Phase 1 (`-DskipTests`)
+and only sweeps `tests/lnp-module` in Phase 2+ — so a green `lnp` run
+does NOT imply the correctness suite is green. Surfacing this in the
+end-of-run banner so the reminder is visible right where someone would
+naturally call a ticket "done". Motivated by the recently-discovered
+jta-09 regression that slipped through because the offending commit
+was verified with `verify-all.sh lnp` only.
+
+## 2026-05-18 — scenario-56 pom: pin geronimo-transaction at test scope
+
+`verify-all.sh` (full mode) flagged scenario-56's
+`geronimoTransactionTypesAreExcludedFromAutoMock` with a
+`NoClassDefFoundError` for `TransactionManagerImpl` under the
+`[owb,jta-narayana]` profile combination. The parent profile
+`jta-narayana` only puts narayana-jta on the classpath, but the test
+references geronimo's `TransactionManagerImpl.class` directly. Mirrored
+scenario-54's per-scenario pattern: pin `geronimo-transaction` at test
+scope so both `.class` literals (narayana + geronimo) resolve under
+every `jta-*` profile the script sweeps. Pre-existing scenario-56 bug —
+not a TICKET-016 regression — surfaced now because the wider sweep
+finally exercised the failing combo.

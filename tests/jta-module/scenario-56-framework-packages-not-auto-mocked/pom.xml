@@ -27,4 +27,24 @@
     <artifactId>jawelte-tests-jta-module-scenario-56-framework-packages-not-auto-mocked</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/jta-module scenario 56: narayana / arjuna / geronimo CDI bean types are NOT registered as cdi-module auto-mock synthetic beans (framework packages must be excluded from auto-mock so consumers do not need mockito-core just because jta-module is on the classpath)</name>
+
+    <!--
+        The test methods reference narayana and geronimo classes via
+        `.class` literals to assert the filter excludes their packages.
+        narayana-jta is brought in by the parent's jta-* profiles, but
+        geronimo-transaction is only present under -P jta-geronimo (the
+        default). Activating -P jta-narayana drops geronimo from the
+        classpath and the geronimo .class literal triggers
+        NoClassDefFoundError at test execution. Pinning the dependency
+        here at test scope mirrors scenario-54's per-scenario pattern
+        so the class reference resolves regardless of which jta-*
+        profile is active.
+    -->
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.geronimo.components</groupId>
+            <artifactId>geronimo-transaction</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
