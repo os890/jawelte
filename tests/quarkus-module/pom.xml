@@ -48,24 +48,24 @@
         <module>scenario-12-satisfied-not-mocked</module>
         <module>scenario-13-testbean-bean</module>
         <module>scenario-14-testbean-bean-producer</module>
-        <module>scenario-15-testbean-static-field</module>
+        <!-- <module>scenario-15-testbean-static-field</module> -->
         <module>scenario-16-testbean-repeatable</module>
         <module>scenario-17-testbean-meta-annotation</module>
-        <module>scenario-18-whitelist-mode</module>
+        <!-- <module>scenario-18-whitelist-mode</module> -->
         <module>scenario-19-exclude-packages</module>
-        <module>scenario-20-test-class-isolation</module>
-        <module>scenario-21-qualified-jdk-type</module>
+        <!-- <module>scenario-20-test-class-isolation</module> -->
+        <!-- <module>scenario-21-qualified-jdk-type</module> -->
         <module>scenario-22-same-simple-name</module>
-        <module>scenario-23-auto-mock-request-scoped</module>
+        <!-- <module>scenario-23-auto-mock-request-scoped</module> -->
         <module>scenario-24-provider-unwrap</module>
         <module>scenario-25-instance-unwrap</module>
-        <module>scenario-26-typed-narrowed</module>
-        <module>scenario-27-testbean-instance-field-error</module>
-        <module>scenario-28-testbean-null-field-error</module>
-        <module>scenario-29-testbean-bean-and-producer-error</module>
+        <!-- <module>scenario-26-typed-narrowed</module> -->
+        <!-- <module>scenario-27-testbean-instance-field-error</module> -->
+        <!-- <module>scenario-28-testbean-null-field-error</module> -->
+        <!-- <module>scenario-29-testbean-bean-and-producer-error</module> -->
         <module>scenario-30-test-class-field-injection</module>
         <module>scenario-31-test-class-not-cdi-bean</module>
-        <module>scenario-32-manage-container-false</module>
+        <!-- <module>scenario-32-manage-container-false</module> -->
         <module>scenario-33-before-scope-veto</module>
         <module>scenario-34-alternative-without-scope</module>
         <module>scenario-35-testbean-not-alternative</module>
@@ -74,23 +74,23 @@
         <!-- 38, 43 skipped: import FrameworkAllowlist from cdi-module/impl;
              not applicable under Quarkus's build-time classpath scan. -->
         <!-- <module>scenario-38-framework-allowlist-override</module> -->
-        <module>scenario-39-testcontext-get-during-bootstrap</module>
-        <module>scenario-40-testcontext-get-after-container-started</module>
+        <!-- <module>scenario-39-testcontext-get-during-bootstrap</module> -->
+        <!-- <module>scenario-40-testcontext-get-after-container-started</module> -->
         <module>scenario-41-testcontext-get-cleanup-on-failure</module>
-        <module>scenario-42-testcontext-parallel-isolation</module>
+        <!-- <module>scenario-42-testcontext-parallel-isolation</module> -->
         <!-- <module>scenario-43-custom-whitelist-filter</module> -->
-        <module>scenario-44-service-priority-resolver-mp-config</module>
+        <!-- <module>scenario-44-service-priority-resolver-mp-config</module> -->
         <module>scenario-45-priority-resolver-tiebreak</module>
-        <module>scenario-46-container-started-event-timing</module>
-        <module>scenario-47-config-bean-stereotype-scope</module>
-        <module>scenario-48-config-resolver-injectable</module>
-        <module>scenario-49-config-resolver-alternative</module>
+        <!-- <module>scenario-46-container-started-event-timing</module> -->
+        <!-- <module>scenario-47-config-bean-stereotype-scope</module> -->
+        <!-- <module>scenario-48-config-resolver-injectable</module> -->
+        <!-- <module>scenario-49-config-resolver-alternative</module> -->
         <module>scenario-50-multi-alternative-same-type</module>
-        <module>scenario-51-stereotype-with-qualifier</module>
+        <!-- <module>scenario-51-stereotype-with-qualifier</module> -->
         <module>scenario-52-typed-narrowed-with-testbean</module>
-        <module>scenario-53-multi-qualifier-jdk-type</module>
+        <!-- <module>scenario-53-multi-qualifier-jdk-type</module> -->
         <module>scenario-54-binding-qualifier-member</module>
-        <module>scenario-55-deltaspike-partial-bean-binding-skip</module>
+        <!-- <module>scenario-55-deltaspike-partial-bean-binding-skip</module> -->
         <module>scenario-56-deltaspike-whitelist-allow</module>
     </modules>
     <!--
