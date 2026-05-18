@@ -27,12 +27,14 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarEntry;
@@ -57,10 +59,13 @@ import org.jboss.jandex.Type;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.TestBean;
 import org.os890.jawelte.core.api.TestBeans;
+import org.os890.jawelte.core.api.event.ContainerStarted;
 import org.os890.jawelte.core.api.port.TestBeanContainerPort;
 import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.cdi.api.port.WhitelistFilter;
 import org.os890.jawelte.module.cdi.impl.adapter.mock.InlineFieldBeanCreator;
 import org.os890.jawelte.module.cdi.impl.adapter.mock.MockBeanCreator;
+import org.os890.jawelte.module.cdi.impl.util.FrameworkAllowlist;
 
 import io.quarkus.arc.Arc;
 import io.quarkus.arc.ArcContainer;
@@ -137,6 +142,23 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             for (InlineField field : inlineFields) {
                 beanClasses.add(field.fieldType());
             }
+            WhitelistFilter filter = resolveWhitelistFilter();
+            if (filter != null) {
+                for (Class<?> candidate : discoveredClasses) {
+                    if (candidate.equals(testClass)) {
+                        continue;
+                    }
+                    if (candidate.isAnnotationPresent(EnableTestBeans.class)) {
+                        continue;
+                    }
+                    if (hasTestBeanField(candidate)) {
+                        continue;
+                    }
+                    if (filter.isAllowed(candidate)) {
+                        beanClasses.add(candidate);
+                    }
+                }
+            }
         } else {
             for (Class<?> candidate : discoveredClasses) {
                 if (candidate.equals(testClass)) {
@@ -157,6 +179,11 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         testContext.bindMetadata(ClassLoader.class, oldTccl);
         testContext.getMetadata(ClassLoader.class)
                 .ifPresent(cl -> testContext.bindMetadata(CdiOldTccl.class, new CdiOldTccl(cl)));
+
+        ArcContainer container = Arc.container();
+        if (container != null) {
+            container.beanManager().getEvent().fire(new ContainerStarted(testClass));
+        }
     }
 
     @Override
@@ -401,14 +428,16 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     private static Index indexClasses(Set<Class<?>> classes) throws IOException {
         Indexer indexer = new Indexer();
+        Set<Class<?>> visited = new HashSet<>();
         for (Class<?> clazz : classes) {
-            indexClass(indexer, clazz);
+            indexClass(indexer, clazz, visited);
         }
         return indexer.complete();
     }
 
-    private static void indexClass(Indexer indexer, Class<?> clazz) throws IOException {
-        if (clazz == null || clazz == Object.class) {
+    private static void indexClass(
+            Indexer indexer, Class<?> clazz, Set<Class<?>> visited) throws IOException {
+        if (clazz == null || clazz == Object.class || !visited.add(clazz)) {
             return;
         }
         String resourceName = clazz.getName().replace('.', '/') + ".class";
@@ -422,10 +451,16 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             }
         }
         if (clazz.getSuperclass() != null && clazz.getSuperclass() != Object.class) {
-            indexClass(indexer, clazz.getSuperclass());
+            indexClass(indexer, clazz.getSuperclass(), visited);
         }
         for (Class<?> iface : clazz.getInterfaces()) {
-            indexClass(indexer, iface);
+            indexClass(indexer, iface, visited);
+        }
+        // Index annotation classes so ArC's annotated discovery can
+        // see meta-annotations (e.g. @Stereotype, @NormalScope) that
+        // turn user annotations into bean-defining annotations.
+        for (Annotation ann : clazz.getAnnotations()) {
+            indexClass(indexer, ann.annotationType(), visited);
         }
     }
 
@@ -523,6 +558,34 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             }
         }
         return false;
+    }
+
+    /**
+     * Pick the active {@link WhitelistFilter} via {@code ServiceLoader},
+     * preferring lower {@code @Priority} values. Returns a default
+     * implementation (framework-allowlist only) when no SPI provider is
+     * registered — so {@code @EnableTestBeans(limitToTestBeans = true)}
+     * always has a usable filter and the bundled framework prefixes
+     * remain available to user code.
+     */
+    private static WhitelistFilter resolveWhitelistFilter() {
+        List<WhitelistFilter> providers = new ArrayList<>();
+        for (WhitelistFilter provider : ServiceLoader.load(WhitelistFilter.class)) {
+            providers.add(provider);
+        }
+        if (providers.isEmpty()) {
+            return FrameworkAllowlist::isAllowlisted;
+        }
+        providers.sort(Comparator
+                .comparingInt(CdiTestBeanContainer::providerPriority)
+                .thenComparing(p -> p.getClass().getName()));
+        return providers.get(0);
+    }
+
+    private static int providerPriority(Object provider) {
+        jakarta.annotation.Priority p = provider.getClass()
+                .getAnnotation(jakarta.annotation.Priority.class);
+        return p != null ? p.value() : Integer.MAX_VALUE;
     }
 
     // ----- Bean discovery (classpath scan) ------------------------------
@@ -804,6 +867,15 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 if (isSatisfied(effectiveType, requiredQualifiers, beans)) {
                     continue;
                 }
+                if (hasSyntheticBeanBinding(effectiveType.name())) {
+                    // The type is bound to a DeltaSpike partial-bean
+                    // proxy producer (directly or via a meta-annotation
+                    // tree). Skip auto-mock so the user-supplied
+                    // producer remains responsible for satisfying the
+                    // IP; if none is on the classpath the deployment
+                    // validation legitimately fails.
+                    continue;
+                }
                 String mockKey = buildMockKey(effectiveType, requiredQualifiers, nonbindingMembers);
                 if (!registeredMockKeys.add(mockKey)) {
                     continue;
@@ -862,6 +934,39 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         private static boolean isJdkType(String typeName) {
             return typeName.startsWith("java.") || typeName.startsWith("jakarta.")
                     || typeName.startsWith("javax.");
+        }
+
+        /**
+         * Whether the given type is bound to a synthetic bean producer
+         * by DeltaSpike's {@code @PartialBeanBinding} — directly or via
+         * a meta-annotation tree. Recognized by FQN so jawelte doesn't
+         * have to compile-depend on DeltaSpike.
+         */
+        private boolean hasSyntheticBeanBinding(DotName typeName) {
+            ClassInfo classInfo = index.getClassByName(typeName);
+            if (classInfo == null) {
+                return false;
+            }
+            return annotatedWithPartialBeanBinding(classInfo, new HashSet<>());
+        }
+
+        private boolean annotatedWithPartialBeanBinding(
+                ClassInfo classInfo, Set<DotName> visited) {
+            for (AnnotationInstance ann : classInfo.declaredAnnotations()) {
+                DotName n = ann.name();
+                if ("org.apache.deltaspike.partialbean.api.PartialBeanBinding"
+                        .equals(n.toString())) {
+                    return true;
+                }
+                if (!visited.add(n)) {
+                    continue;
+                }
+                ClassInfo metaInfo = index.getClassByName(n);
+                if (metaInfo != null && annotatedWithPartialBeanBinding(metaInfo, visited)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static String buildMockKey(

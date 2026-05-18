@@ -6013,3 +6013,35 @@ the auto-mock layer in `CdiTestBeanContainer`:
 Green now: 03, 21, 23, 24, 25, 28, 29, 30, 31, 34, 35 plus the previously-passing
 33-scenario block. Still failing (12): 32, 39, 40, 41, 42, 43, 46, 47, 48, 49,
 55, 56.
+
+---
+## 2026-05-18 — quarkus-poc: 52/56 cdi-module scenarios green
+
+Continued pushing on `quarkus-poc`. Added:
+
+- **`ContainerStarted` event**: `CdiTestBeanContainer.beforeAll` fires
+  `new ContainerStarted(testClass)` through `ArcContainer.beanManager().getEvent()`
+  right after `Arc.initialize(...)` — picks up scenarios 40 and 46.
+- **`WhitelistFilter` SPI in `limitToTestBeans` mode**: scenario 43 needed a way
+  to allow extra package prefixes beyond the framework allowlist. Added a
+  ServiceLoader + `@Priority` resolver in `CdiTestBeanContainer` that loads the
+  active `WhitelistFilter` and uses `FrameworkAllowlist::isAllowlisted` as the
+  default — picks up scenarios 43 and 56.
+- **Stereotype indexing**: `indexClass` now also indexes the annotation classes
+  on each indexed class (recursively, with a `visited` set). Lets ArC see meta-
+  annotations like `@Stereotype` / `@ApplicationScoped` on user-defined
+  stereotypes such as `@ConfigBean` — picks up scenarios 47, 48, 49.
+- **DeltaSpike `@PartialBeanBinding` skip**: auto-mock loop now consults the
+  Jandex index for the IP's required-type ClassInfo and walks the declared-
+  annotation tree (with cycle protection) looking for the DeltaSpike marker by
+  FQN — picks up scenario 55.
+
+Score: 52/56 on `quarkus-poc`. Remaining 4 (32, 39, 41, 42) are structural ArC
+incompatibilities: scenario 32 boots an `SeContainerInitializer` directly
+(ArC ships no SE-CDI implementation; jakarta SPI returns
+`No valid CDI implementation found`); scenarios 39 / 41 / 42 register portable
+CDI `Extension`s via `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+(ArC supports `BuildCompatibleExtension` but NOT the legacy `Extension` SPI).
+Both classes of failure would need substantial work outside the auto-mock
+container itself (an SE shim, or a portable-extension bridge into ArC's build-
+time hooks) — out of scope for the POC milestone.
