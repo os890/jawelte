@@ -502,6 +502,72 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         return oldTccl;
     }
 
+    /**
+     * Boot ArC for an {@code SeContainerInitializer}-style external
+     * bootstrap. Used by tests that opt out of jawelte's
+     * managed-container lifecycle via
+     * {@code @EnableTestBeans(manageContainer = false)} and call
+     * {@code SeContainerInitializer.newInstance().initialize()} from
+     * a {@code @BeforeAll} themselves.
+     *
+     * <p>Scans the current working directory's
+     * {@code target/classes} and {@code target/test-classes} for bean
+     * candidates, builds a Jandex index, runs the same
+     * {@code BeanProcessor} pipeline as the test-driven path (minus
+     * the test-class-specific annotation transformations), and finally
+     * calls {@code Arc.initialize}. Idempotent: a second call shuts
+     * the previous container down first.
+     */
+    public static void bootArcForSeShim() {
+        Arc.shutdown();
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        if (cl == null) {
+            cl = CdiTestBeanContainer.class.getClassLoader();
+        }
+        try {
+            Set<Class<?>> beanClasses = discoverBeanClassesFromCwd(cl);
+            Index rawIndex = indexClasses(beanClasses);
+            IndexView immutableIndex = BeanArchives.buildImmutableBeanArchiveIndex(rawIndex);
+            IndexView computingIndex = BeanArchives.buildComputingBeanArchiveIndex(
+                    cl, new ConcurrentHashMap<>(), immutableIndex);
+
+            File outputDir = new File("target/test-classes");
+            File generatedSourcesDir = new File("target/generated-arc-sources");
+            File componentsProviderFile = new File(
+                    generatedSourcesDir, ComponentsProvider.class.getSimpleName());
+
+            BeanProcessor.Builder builder = BeanProcessor.builder()
+                    .setName("jawelte_se_shim")
+                    .setImmutableBeanArchiveIndex(immutableIndex)
+                    .setComputingBeanArchiveIndex(computingIndex);
+            builder.setRemoveUnusedBeans(false);
+            builder.setOutput(new GeneratedResourceOutput(outputDir, componentsProviderFile));
+
+            BeanProcessor processor = builder.build();
+            processor.process();
+
+            ArcTestClassLoader testClassLoader = new ArcTestClassLoader(cl, componentsProviderFile);
+            Thread.currentThread().setContextClassLoader(testClassLoader);
+            Arc.initialize(ArcInitConfig.builder().setTestMode(true).build());
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to bootstrap ArC via SeContainerInitializer", e);
+        }
+    }
+
+    private static Set<Class<?>> discoverBeanClassesFromCwd(ClassLoader cl) {
+        Set<Class<?>> classes = new LinkedHashSet<>();
+        File testClassesDir = new File(TARGET_TEST_CLASSES);
+        if (testClassesDir.isDirectory()) {
+            scanDirectory(testClassesDir, testClassesDir, cl, classes);
+        }
+        File classesDir = new File(TARGET_CLASSES);
+        if (classesDir.isDirectory()) {
+            scanDirectory(classesDir, classesDir, cl, classes);
+        }
+        scanClasspathArchives(cl, classes);
+        return classes;
+    }
+
     private static File resolveTestOutputDirectory(Class<?> testClass) {
         String testClassResource = testClass.getName().replace('.', '/') + ".class";
         URL testClassUrl = testClass.getClassLoader().getResource(testClassResource);

@@ -6045,3 +6045,29 @@ CDI `Extension`s via `META-INF/services/jakarta.enterprise.inject.spi.Extension`
 Both classes of failure would need substantial work outside the auto-mock
 container itself (an SE shim, or a portable-extension bridge into ArC's build-
 time hooks) — out of scope for the POC milestone.
+
+---
+## 2026-05-18 — quarkus-poc: 56/56 cdi-module scenarios green
+
+Closed the last two gaps:
+
+- **Portable CDI Extension SPI bridge** (scenarios 39, 41, 42).
+  `CdiTestBeanContainer.beforeAll` now discovers `Extension` providers via
+  `ServiceLoader`, builds a JDK dynamic-proxy stand-in for the phase event,
+  and dispatches `BeforeBeanDiscovery` (before `BeanProcessor.process`) and
+  `AfterDeploymentValidation` (after `Arc.initialize`). Methods with more than
+  one parameter are skipped — we can't materialize a real `BeanManager` at
+  build time. Framework extensions (`io.smallrye.*`, `org.jboss.weld.*`,
+  `org.apache.webbeans.*`, `org.apache.deltaspike.*`, etc.) are filtered out
+  by FQN so SmallRye's `ConfigExtension.beforeBeanDiscovery(event, bm)`
+  doesn't NPE on the missing `BeanManager`.
+
+- **`SeContainerInitializer` SPI shim** (scenario 32). Added
+  `ArcSeContainerInitializer` plus a `META-INF/services/jakarta.enterprise.inject.se.SeContainerInitializer`
+  pointer; `CdiTestBeanContainer.bootArcForSeShim()` runs the full
+  `BeanProcessor` pipeline against the current working directory's
+  `target/classes` + `target/test-classes`. The returned `ArcSeContainer`
+  delegates `Instance<Object>` lookups to ArC's `BeanManager.createInstance()`
+  and shuts ArC down on `close()`.
+
+Full reactor: **56/56 green** on `quarkus-poc`.
