@@ -489,8 +489,14 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                                     if (preserveExplicit && hasExplicitOtherScope(ctx, triggerDot)) {
                                         return;
                                     }
-                                    ctx.remove(ann -> isCdiScopeAnnotation(ann.name())
-                                            && !ann.name().equals(triggerDot));
+                                    // Remove every direct CDI scope
+                                    // annotation, including the trigger
+                                    // itself when it IS a scope (e.g.
+                                    // @SessionScoped). The target scope
+                                    // is then added as a direct annotation
+                                    // and wins per CDI's class-level-
+                                    // scope-wins rule.
+                                    ctx.remove(ann -> isCdiScopeAnnotation(ann.name()));
                                     ctx.add(AnnotationInstance.builder(targetDot).build());
                                 }));
             }

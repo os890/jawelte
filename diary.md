@@ -6178,3 +6178,36 @@ Deleted: `JpaCdiExtension.java` and its
 
 Score on `quarkus-poc`: cdi-module **56/56**, scope-module **31/31**,
 jpa-module **64/64**.
+
+---
+## 2026-05-18 — quarkus-poc: jaxrs-module 17/17, BeanScopeMapper fix
+
+Continued the path-2 sweep:
+
+- Probed the modules that have **no portable CDI Extension** in their impl jar
+  (`content-diff-module`, `lnp-module`, `jaxrs-module`, `testcontrol-module`,
+  `batch-module`) by running their reactors:
+  - `content-diff-module`: **41/41** green out of the box.
+  - `lnp-module`: **9/9** green out of the box.
+  - `jaxrs-module`: 15/17 — two failures, both about
+    `@SessionScoped` → `@TestMethodScoped` remap.
+  - `testcontrol-module`: 0/N (all fail; needs investigation).
+  - `batch-module`: 4/15 — eleven failures.
+
+- The two `jaxrs-module` failures (scenarios 06 and 16) traced to a bug in
+  the cdi-module BeanScopeMapper class-level remap added last session:
+  the remap correctly added the target scope but only stripped scopes
+  *other than* the trigger. When the trigger IS itself a scope
+  (`@SessionScoped`), the class ended up carrying both `@SessionScoped` and
+  `@TestMethodScoped` and ArC raised
+  `Bean class … declares multiple scope type annotations`. Fixed by
+  dropping the "not equal to trigger" filter — every direct CDI scope
+  annotation is stripped before the target scope is added. The
+  `@ConfigBean` flow (trigger is a stereotype, not a scope) is unaffected
+  because the stripped-list never matched `@ConfigBean` in the first place.
+
+Score: cdi 56/56, scope 31/31, jpa 64/64, jaxrs 17/17, content-diff 41/41,
+lnp 9/9 — all green under ArC-only on `quarkus-poc`.
+Still to do: testcontrol (0 passing), batch (4/15), plus jta / ejb /
+wiremock / db-testdata / spring-data (all still ship a portable
+`jakarta.enterprise.inject.spi.Extension`).
