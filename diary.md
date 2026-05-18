@@ -5372,3 +5372,11 @@ Coverage: 50 / 56 cdi-module scenarios green on `-Powb`. Remaining 6 cluster int
 - 53 multi-qualifier-jdk-type
 
 The new `ProcessInjectionPoint` path now sees `{@Default, @Any}` qualifiers for the test class's `@Inject` fields (because the test class is a CDI bean and CDI fills in the defaults), where the old `addTestClassInjectionPoints` walked the field reflectively and only collected explicit qualifiers. The synthetic-bean registration in `SyntheticBeanUtil.registerAutoMockBean` may need to canonicalise that qualifier set (or my BuildStep should pre-filter `@Default` / `@Any` to match the old shape) so CDI's resolution matches the synthetic bean.
+
+## 2026-05-18 — TICKET-016 status: 50/56 green; remaining 6 are all auto-mock-IP edge cases
+
+Added the raw type to `SyntheticBeanUtil.beanTypes(targetType)` when targetType is `ParameterizedType` — harmless for non-parameterized cases, intended to let OWB's raw-type lookup find the synthetic bean. Didn't move the needle on the 6 remaining failures (03/21/24/25/30/53); they share the same shape: test class is now a CDI bean and its `@Inject` IPs go through `ProcessInjectionPoint`; for `Instance<X>` / `Provider<X>` / parameterized targets the synthetic mock is registered (auditProvider.get() works in scenario-30) but a sibling Instance lookup of a different inner type fails at runtime.
+
+Hypothesis to investigate next: the `IpKey` dedup may be collapsing two IPs with different inner types when the outer wrapper differs (Instance vs Provider) — the qualifier set being identical now ({@Default, @Any} from CDI) means only one mock is registered per (targetType, qualifiers) key. Or the issue might be that CDI deployment validation runs `ip.getBean()` for the test class IPs in a way that's subtly different from when the test class wasn't a bean.
+
+Coverage: 50 / 56 cdi-module scenarios green on `-Powb`. Branch `33-refactor-test-instance-via-junit-testinstancefactory-backed-by-a-core-spi`. Foundation is solid; the remaining cluster needs targeted CDI-debug work.

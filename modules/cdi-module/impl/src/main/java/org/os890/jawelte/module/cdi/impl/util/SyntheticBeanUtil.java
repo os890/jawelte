@@ -162,6 +162,14 @@ public abstract class SyntheticBeanUtil {
     private static Set<Type> beanTypes(Type targetType) {
         Set<Type> types = new HashSet<>();
         types.add(targetType);
+        if (targetType instanceof java.lang.reflect.ParameterizedType pt) {
+            // Register the raw type alongside the parameterized type so
+            // resolution matches both `@Inject BaseDao<Order>` and the
+            // raw `@Inject BaseDao` lookup OWB performs when the test
+            // class is itself a CDI bean and asks for the underlying
+            // type of an Instance/Provider wrapper.
+            types.add(pt.getRawType());
+        }
         types.add(Object.class);
         return Collections.unmodifiableSet(types);
     }
