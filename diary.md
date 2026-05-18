@@ -5594,3 +5594,13 @@ Mirrored 9 scenarios in this pass. 3 went green out of the box:
 - 46 container-started-event-timing — depends on jawelte's `ContainerStarted` firing during the bootstrap window.
 
 Coverage: 11 / 56 cdi-module scenarios green under @QuarkusTest. Remaining 45 cluster into @TestBean handling, qualifier matching, Provider/Instance unwrap, limitToTestBeans whitelist, exclude-packages, config-bean, and validation buckets — each a discrete BuildStep extension.
+
+## 2026-05-18 — TICKET-015 Phase B7: qualifier support (scenarios 04, 05, 06)
+
+Extended the build-step with qualifier extraction + producer-method conflict detection. For every `@Inject` field / method parameter (and the implicit IPs on `@Produces` / `@Observes` / `@ObservesAsync` / `@Disposes` methods) the step now collects the carrying qualifier annotations — built-in `@Named` plus any annotation whose type is meta-annotated with `@Qualifier`. The synthetic `SyntheticBeanBuildItem` is configured with those qualifiers via `.addQualifier(...)`.
+
+Dedup is now `(typeName, qualifierFingerprint)` so the same raw type with different qualifier sets produces distinct synthetic beans.
+
+`isProducedByExistingMethod` skips mock registration when an `@Produces` method already produces a matching `(returnType, qualifiers)` pair. Caught a regression on scenario-10 where my BuildStep would have double-registered for `@Named("formatted") String` (the test injects it; the producer also returns it).
+
+Coverage: 14 / 56 cdi-module scenarios green under @QuarkusTest. New green: 04 named-qualifier, 05 custom-qualifier, 06 multiple-qualifiers.

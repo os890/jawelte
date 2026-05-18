@@ -16,7 +16,9 @@
 package org.os890.jawelte.module.quarkus.deployment;
 
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 import jakarta.inject.Singleton;
@@ -63,6 +65,10 @@ public class JaweltesQuarkusProcessor {
     private static final DotName DISPOSES = DotName.createSimple("jakarta.enterprise.inject.Disposes");
     private static final DotName ENABLE_TEST_BEANS =
             DotName.createSimple("org.os890.jawelte.core.api.EnableTestBeans");
+    private static final DotName QUALIFIER = DotName.createSimple("jakarta.inject.Qualifier");
+    private static final DotName NAMED = DotName.createSimple("jakarta.inject.Named");
+    private static final DotName DEFAULT_QUALIFIER = DotName.createSimple("jakarta.enterprise.inject.Default");
+    private static final DotName ANY_QUALIFIER = DotName.createSimple("jakarta.enterprise.inject.Any");
 
     /** Default constructor used by the Quarkus build framework. */
     public JaweltesQuarkusProcessor() {
@@ -105,23 +111,33 @@ public class JaweltesQuarkusProcessor {
         if (index.getAnnotations(ENABLE_TEST_BEANS).isEmpty()) {
             return;
         }
-        Set<DotName> alreadyHandled = new LinkedHashSet<>();
+        Set<String> alreadyHandled = new LinkedHashSet<>();
         for (AnnotationInstance injectAnnotation : index.getAnnotations(INJECT)) {
             AnnotationTarget target = injectAnnotation.target();
             switch (target.kind()) {
-                case FIELD -> processCandidateType(
-                        target.asField().type(), index, alreadyHandled, syntheticBeans);
+                case FIELD -> {
+                    var field = target.asField();
+                    processCandidateType(
+                            field.type(),
+                            qualifiersOf(field.declaredAnnotations(), index),
+                            index, alreadyHandled, syntheticBeans);
+                }
                 case METHOD -> {
                     MethodInfo method = target.asMethod();
-                    for (Type parameterType : method.parameterTypes()) {
-                        processCandidateType(parameterType, index, alreadyHandled, syntheticBeans);
+                    for (int i = 0; i < method.parametersCount(); i++) {
+                        processCandidateType(
+                                method.parameterType(i),
+                                qualifiersOf(method.parameters().get(i).declaredAnnotations(), index),
+                                index, alreadyHandled, syntheticBeans);
                     }
                 }
                 case METHOD_PARAMETER -> {
-                    MethodInfo enclosing = target.asMethodParameter().method();
-                    int position = target.asMethodParameter().position();
+                    var parameterInfo = target.asMethodParameter();
+                    MethodInfo enclosing = parameterInfo.method();
+                    int position = parameterInfo.position();
                     processCandidateType(
-                            enclosing.parameterTypes().get(position),
+                            enclosing.parameterType(position),
+                            qualifiersOf(enclosing.parameters().get(position).declaredAnnotations(), index),
                             index, alreadyHandled, syntheticBeans);
                 }
                 default -> {
@@ -130,19 +146,18 @@ public class JaweltesQuarkusProcessor {
                 }
             }
         }
-        // @Produces methods: every parameter is an implicit injection point.
         for (AnnotationInstance produces : index.getAnnotations(PRODUCES)) {
             if (produces.target().kind() != AnnotationTarget.Kind.METHOD) {
                 continue;
             }
             MethodInfo method = produces.target().asMethod();
-            for (Type parameterType : method.parameterTypes()) {
-                processCandidateType(parameterType, index, alreadyHandled, syntheticBeans);
+            for (int i = 0; i < method.parametersCount(); i++) {
+                processCandidateType(
+                        method.parameterType(i),
+                        qualifiersOf(method.parameters().get(i).declaredAnnotations(), index),
+                        index, alreadyHandled, syntheticBeans);
             }
         }
-        // @Observes / @ObservesAsync: every NON-event parameter on the same
-        // method is an implicit injection point. @Disposes follows the same
-        // pattern for the non-@Disposes parameters.
         processSiblingParameters(index, alreadyHandled, syntheticBeans, OBSERVES);
         processSiblingParameters(index, alreadyHandled, syntheticBeans, OBSERVES_ASYNC);
         processSiblingParameters(index, alreadyHandled, syntheticBeans, DISPOSES);
@@ -150,7 +165,7 @@ public class JaweltesQuarkusProcessor {
 
     private static void processSiblingParameters(
             IndexView index,
-            Set<DotName> alreadyHandled,
+            Set<String> alreadyHandled,
             BuildProducer<SyntheticBeanBuildItem> syntheticBeans,
             DotName eventAnnotation) {
         for (AnnotationInstance instance : index.getAnnotations(eventAnnotation)) {
@@ -159,56 +174,125 @@ public class JaweltesQuarkusProcessor {
             }
             MethodInfo method = instance.target().asMethodParameter().method();
             int eventPosition = instance.target().asMethodParameter().position();
-            java.util.List<Type> parameters = method.parameterTypes();
-            for (int i = 0; i < parameters.size(); i++) {
+            for (int i = 0; i < method.parametersCount(); i++) {
                 if (i == eventPosition) {
                     continue;
                 }
-                processCandidateType(parameters.get(i), index, alreadyHandled, syntheticBeans);
+                processCandidateType(
+                        method.parameterType(i),
+                        qualifiersOf(method.parameters().get(i).declaredAnnotations(), index),
+                        index, alreadyHandled, syntheticBeans);
             }
         }
     }
 
+    private static List<AnnotationInstance> qualifiersOf(
+            List<AnnotationInstance> annotations, IndexView index) {
+        List<AnnotationInstance> qualifiers = new ArrayList<>();
+        for (AnnotationInstance ann : annotations) {
+            DotName n = ann.name();
+            if (n.equals(INJECT) || n.equals(DEFAULT_QUALIFIER) || n.equals(ANY_QUALIFIER)) {
+                continue;
+            }
+            if (n.equals(NAMED)) {
+                qualifiers.add(ann);
+                continue;
+            }
+            ClassInfo annClass = index.getClassByName(n);
+            if (annClass == null) {
+                continue;
+            }
+            if (annClass.declaredAnnotation(QUALIFIER) != null) {
+                qualifiers.add(ann);
+            }
+        }
+        return qualifiers;
+    }
+
+    private static String qualifierFingerprint(List<AnnotationInstance> qualifiers) {
+        if (qualifiers.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        for (AnnotationInstance ann : qualifiers) {
+            StringBuilder b = new StringBuilder(ann.name().toString());
+            for (var value : ann.values()) {
+                b.append('|').append(value.name()).append('=').append(value.value());
+            }
+            parts.add(b.toString());
+        }
+        parts.sort(String::compareTo);
+        return String.join(";", parts);
+    }
+
     private static void processCandidateType(
             Type candidate,
+            List<AnnotationInstance> qualifiers,
             IndexView index,
-            Set<DotName> alreadyHandled,
+            Set<String> alreadyHandled,
             BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
         DotName name = candidate.name();
-        if (!alreadyHandled.add(name)) {
+        String qualifierKey = qualifierFingerprint(qualifiers);
+        String dedupKey = name.toString() + "##" + qualifierKey;
+        if (!alreadyHandled.add(dedupKey)) {
             return;
         }
         String packageName = name.packagePrefix();
-        if (packageName != null
+        boolean isJdkOrFrameworkType = packageName != null
                 && (packageName.startsWith("java.")
                         || packageName.startsWith("jakarta.")
                         || packageName.startsWith("io.quarkus.")
                         || packageName.startsWith("org.jboss.")
-                        || packageName.startsWith("org.eclipse.microprofile."))) {
-            // Skip JDK / framework types — Quarkus or jakarta supply
-            // those, jawelte's auto-mock applies only to user code.
+                        || packageName.startsWith("org.eclipse.microprofile."));
+        if (isJdkOrFrameworkType && qualifiers.isEmpty()) {
+            return;
+        }
+        if (isProducedByExistingMethod(name, qualifierKey, index)) {
             return;
         }
         ClassInfo target = index.getClassByName(name);
-        if (target == null) {
+        if (target == null && !isJdkOrFrameworkType) {
             return;
         }
-        if (Modifier.isInterface(target.flags())) {
-            if (!index.getAllKnownImplementors(name).isEmpty()) {
-                return;
-            }
-        } else {
-            if (!target.declaredAnnotations().isEmpty()) {
-                return;
+        if (target != null) {
+            if (Modifier.isInterface(target.flags())) {
+                if (qualifiers.isEmpty() && !index.getAllKnownImplementors(name).isEmpty()) {
+                    return;
+                }
+            } else {
+                if (qualifiers.isEmpty() && !target.declaredAnnotations().isEmpty()) {
+                    return;
+                }
             }
         }
-        syntheticBeans.produce(
-                SyntheticBeanBuildItem.configure(name)
-                        .types(candidate)
-                        .scope(Singleton.class)
-                        .creator(MockBeanCreator.class)
-                        .param(MockBeanCreator.TYPE_NAME_PARAM, name.toString())
-                        .unremovable()
-                        .done());
+        var configurator = SyntheticBeanBuildItem.configure(name)
+                .types(candidate)
+                .scope(Singleton.class)
+                .creator(MockBeanCreator.class)
+                .param(MockBeanCreator.TYPE_NAME_PARAM, name.toString())
+                .unremovable();
+        for (AnnotationInstance qualifier : qualifiers) {
+            configurator.addQualifier(qualifier);
+        }
+        syntheticBeans.produce(configurator.done());
+    }
+
+    private static boolean isProducedByExistingMethod(
+            DotName targetName, String qualifierKey, IndexView index) {
+        for (AnnotationInstance produces : index.getAnnotations(PRODUCES)) {
+            if (produces.target().kind() != AnnotationTarget.Kind.METHOD) {
+                continue;
+            }
+            MethodInfo method = produces.target().asMethod();
+            if (!method.returnType().name().equals(targetName)) {
+                continue;
+            }
+            List<AnnotationInstance> producerQualifiers = qualifiersOf(
+                    method.declaredAnnotations(), index);
+            if (qualifierFingerprint(producerQualifiers).equals(qualifierKey)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
