@@ -174,16 +174,109 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             }
         }
 
+        List<jakarta.enterprise.inject.spi.Extension> portableExtensions =
+                discoverPortableExtensions();
+        invokePortableExtensionPhase(
+                portableExtensions, jakarta.enterprise.inject.spi.BeforeBeanDiscovery.class);
+
         ClassLoader oldTccl = buildAndBootArc(
                 testClass, beanClasses, selectedAlternatives, inlineFields, limitToTestBeans);
         testContext.bindMetadata(ClassLoader.class, oldTccl);
         testContext.getMetadata(ClassLoader.class)
                 .ifPresent(cl -> testContext.bindMetadata(CdiOldTccl.class, new CdiOldTccl(cl)));
 
+        invokePortableExtensionPhase(
+                portableExtensions, jakarta.enterprise.inject.spi.AfterDeploymentValidation.class);
+
         ArcContainer container = Arc.container();
         if (container != null) {
             container.beanManager().getEvent().fire(new ContainerStarted(testClass));
         }
+    }
+
+    /**
+     * Discover legacy CDI portable extensions via {@code ServiceLoader}.
+     * Quarkus's ArC does not natively run them (it only supports
+     * {@code BuildCompatibleExtension}), so this container loads them
+     * itself and dispatches the lifecycle phases observed by test
+     * fixtures (currently {@code BeforeBeanDiscovery} and
+     * {@code AfterDeploymentValidation}).
+     */
+    private static List<jakarta.enterprise.inject.spi.Extension>
+            discoverPortableExtensions() {
+        List<jakarta.enterprise.inject.spi.Extension> result = new ArrayList<>();
+        for (jakarta.enterprise.inject.spi.Extension ext
+                : ServiceLoader.load(jakarta.enterprise.inject.spi.Extension.class)) {
+            result.add(ext);
+        }
+        return result;
+    }
+
+    private static void invokePortableExtensionPhase(
+            List<jakarta.enterprise.inject.spi.Extension> extensions,
+            Class<?> phaseType) {
+        if (extensions.isEmpty()) {
+            return;
+        }
+        Object event = java.lang.reflect.Proxy.newProxyInstance(
+                phaseType.getClassLoader(),
+                new Class<?>[] {phaseType},
+                (proxy, method, args) -> {
+                    Class<?> returnType = method.getReturnType();
+                    if (returnType == boolean.class) {
+                        return Boolean.FALSE;
+                    }
+                    return null;
+                });
+        for (jakarta.enterprise.inject.spi.Extension ext : extensions) {
+            if (isFrameworkExtension(ext.getClass())) {
+                // Skip framework extensions (e.g. SmallRye's
+                // ConfigExtension): they expect a full Jakarta SE
+                // bootstrap with a live BeanManager, which we cannot
+                // provide for a build-time only phase.
+                continue;
+            }
+            for (java.lang.reflect.Method method : ext.getClass().getDeclaredMethods()) {
+                java.lang.reflect.Parameter[] params = method.getParameters();
+                if (params.length != 1) {
+                    continue;
+                }
+                if (!params[0].isAnnotationPresent(jakarta.enterprise.event.Observes.class)) {
+                    continue;
+                }
+                if (!params[0].getType().equals(phaseType)) {
+                    continue;
+                }
+                method.setAccessible(true);
+                try {
+                    method.invoke(ext, event);
+                } catch (java.lang.reflect.InvocationTargetException ite) {
+                    Throwable cause = ite.getTargetException();
+                    if (cause instanceof RuntimeException re) {
+                        throw re;
+                    }
+                    throw new IllegalStateException(
+                            "Portable extension observer for " + phaseType.getSimpleName()
+                                    + " threw " + cause, cause);
+                } catch (IllegalAccessException iae) {
+                    throw new IllegalStateException(
+                            "Cannot invoke portable extension observer "
+                                    + ext.getClass().getName() + "#" + method.getName(),
+                            iae);
+                }
+            }
+        }
+    }
+
+    private static boolean isFrameworkExtension(Class<?> extClass) {
+        String name = extClass.getName();
+        return name.startsWith("io.smallrye.")
+                || name.startsWith("io.quarkus.")
+                || name.startsWith("org.jboss.weld.")
+                || name.startsWith("org.apache.webbeans.")
+                || name.startsWith("org.apache.deltaspike.")
+                || name.startsWith("jakarta.")
+                || name.startsWith("javax.");
     }
 
     @Override
