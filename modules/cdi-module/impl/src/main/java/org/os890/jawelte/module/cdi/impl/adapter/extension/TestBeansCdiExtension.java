@@ -371,29 +371,37 @@ public class TestBeansCdiExtension implements Extension {
             // regular discovery picks up the user-declared bean.
             return;
         }
+        // Pre-build an InjectionTarget once to collect the declared
+        // IPs that addInjectionPoints needs at registration time.
+        // The producer below builds a fresh InjectionTarget at runtime
+        // because OWB's InjectionTarget instance is only valid in the
+        // bean-discovery window it was created in; calling
+        // inject(...) on a discovery-time IT during the runtime
+        // producer phase silently no-ops on the field set.
         AnnotatedType<?> annotatedType = beanManager.createAnnotatedType(testClass);
-        InjectionTarget injectionTarget = beanManager
+        InjectionTarget discoveryInjectionTarget = beanManager
                 .getInjectionTargetFactory(annotatedType)
                 .createInjectionTarget(null);
         // Declaring the test class's IPs on the synthetic bean lets
         // CDI's deployment validation surface unsatisfied dependencies
         // the same way it would for any managed bean — matching the
         // pre-TICKET-016 behaviour where unsatisfied IPs failed the
-        // container bootstrap. Without this, the synthetic bean's
-        // producer would only see the failure at runtime injection
-        // time, and CDI runtimes that silently null unsatisfied IPs
-        // would mask the problem.
+        // container bootstrap.
         event.addBean()
                 .beanClass(testClass)
                 .scope(Dependent.class)
                 .types(testClass, Object.class)
                 .qualifiers(Default.Literal.INSTANCE, Any.Literal.INSTANCE)
-                .addInjectionPoints(injectionTarget.getInjectionPoints())
-                .produceWith(instance -> instantiate(beanManager, injectionTarget));
+                .addInjectionPoints(discoveryInjectionTarget.getInjectionPoints())
+                .produceWith(instance -> instantiate(beanManager, testClass));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Object instantiate(BeanManager beanManager, InjectionTarget injectionTarget) {
+    private static Object instantiate(BeanManager beanManager, Class<?> testClass) {
+        AnnotatedType<?> annotatedType = beanManager.createAnnotatedType(testClass);
+        InjectionTarget injectionTarget = beanManager
+                .getInjectionTargetFactory(annotatedType)
+                .createInjectionTarget(null);
         CreationalContext context = beanManager.createCreationalContext(null);
         Object instance = injectionTarget.produce(context);
         injectionTarget.inject(instance, context);

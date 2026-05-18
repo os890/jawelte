@@ -30,8 +30,14 @@ import org.junit.jupiter.api.extension.BeforeAllCallback;
 import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
+import org.junit.jupiter.api.extension.TestInstanceFactory;
+import org.junit.jupiter.api.extension.TestInstanceFactoryContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
+import org.junit.jupiter.api.extension.TestInstantiationException;
 import org.os890.jawelte.core.api.port.TestBeansExtension;
+import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
 
 /**
  * Activates jawelte's CDI integration for a JUnit test class.
@@ -105,7 +111,8 @@ public @interface EnableTestBeans {
                        BeforeEachCallback,
                        TestInstancePostProcessor,
                        AfterEachCallback,
-                       AfterAllCallback {
+                       AfterAllCallback,
+                       TestInstanceFactory {
 
         private TestBeansExtension delegate;
 
@@ -142,6 +149,61 @@ public @interface EnableTestBeans {
         @Override
         public void afterAll(ExtensionContext extensionContext) throws Exception {
             delegate().afterAll(extensionContext);
+        }
+
+        @Override
+        public Object createTestInstance(
+                TestInstanceFactoryContext factoryContext,
+                ExtensionContext extensionContext) {
+            Class<?> testClass = factoryContext.getTestClass();
+            TestInstanceFactoryPort port = resolveTestInstancePort();
+            try {
+                if (port != null) {
+                    Object portInstance = port.createInstance(testClass);
+                    if (portInstance != null) {
+                        return portInstance;
+                    }
+                }
+                var constructor = testClass.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                return constructor.newInstance();
+            } catch (TestInstantiationException tie) {
+                throw tie;
+            } catch (Exception e) {
+                throw new TestInstantiationException(
+                        "Could not create a test instance for " + testClass.getName(), e);
+            } finally {
+                // Close the bootstrap window for TestContext.get(): the
+                // factory has produced the instance, so consumers inside
+                // the test body must not see an active TestContext.
+                // Pulled from the JUnit Store (populated by
+                // DelegatingJUnitExtension.beforeAll) rather than via
+                // TestContext.get() because the latter routes through MP
+                // Config — and not every test classpath in the project
+                // ships an MP Config implementation.
+                Namespace namespace = Namespace.create(TestContext.class);
+                TestContext storedContext = extensionContext.getStore(namespace)
+                        .get(TestContext.class, TestContext.class);
+                if (storedContext != null) {
+                    storedContext.reset();
+                }
+            }
+        }
+
+        private static TestInstanceFactoryPort resolveTestInstancePort() {
+            Iterator<TestInstanceFactoryPort> iterator =
+                    ServiceLoader.load(TestInstanceFactoryPort.class).iterator();
+            if (!iterator.hasNext()) {
+                return null;
+            }
+            TestInstanceFactoryPort port = iterator.next();
+            if (iterator.hasNext()) {
+                throw new IllegalStateException(
+                        "Multiple TestInstanceFactoryPort implementations found; "
+                                + "the SPI is single-impl. First: " + port.getClass().getName()
+                                + ", next: " + iterator.next().getClass().getName());
+            }
+            return port;
         }
 
         private synchronized TestBeansExtension delegate() {

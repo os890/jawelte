@@ -5399,3 +5399,33 @@ Final shape:
 Test results: 56 / 56 green on `-Powb`, 56 / 56 green on `-Pweld`. Ready for review.
 
 Next: validate the rest of the test reactor (other modules' scenarios) to make sure the refactor didn't regress anything elsewhere; then push and ask about issue #32 resumption.
+
+## 2026-05-18 — TICKET-016: factory consolidated into EnableTestBeans.Proxy
+
+Moved JUnit `TestInstanceFactory` registration from a separate
+`DelegatingJUnitTestInstanceFactory` class (auto-detected via
+`META-INF/services/org.junit.jupiter.api.extension.Extension` +
+`junit-platform.properties`) into the existing `EnableTestBeans.Proxy`
+inner class. `Proxy` now implements `TestInstanceFactory` alongside its
+existing `BeforeAllCallback` / `BeforeEachCallback` / etc., so the
+factory registers via the same `@ExtendWith(Proxy.class)` meta-annotation
+that already activates the rest of jawelte's JUnit integration. This
+matters because META-INF/services auto-detection does NOT propagate
+through EngineTestKit's nested launcher — scope-15 (PreDestroy on
+`@TestClassScoped`) and scope-22 (no-leakage) were failing under
+EngineTestKit before this consolidation.
+
+Deleted: `core/impl/.../DelegatingJUnitTestInstanceFactory.java`,
+`core/impl/.../META-INF/services/org.junit.jupiter.api.extension.Extension`,
+`core/impl/.../junit-platform.properties`.
+
+`TestBeansCdiExtension`: the producer now builds a fresh `InjectionTarget`
+at runtime instead of reusing the discovery-time one. OWB invalidates the
+discovery-time InjectionTarget outside the bean-discovery window —
+`inject(...)` silently no-ops on the field set. The discovery-time IT is
+still used at registration time to declare the test class's IPs via
+`addInjectionPoints(...)` so CDI deployment validation surfaces
+unsatisfied dependencies.
+
+Verified: cdi-module 56/56 under -Powb AND -Pweld, scope-module 32/32,
+jta-module incl. scenario-09. Full `verify-all.sh` sweep in flight.
