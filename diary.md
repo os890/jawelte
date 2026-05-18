@@ -5429,3 +5429,13 @@ unsatisfied dependencies.
 
 Verified: cdi-module 56/56 under -Powb AND -Pweld, scope-module 32/32,
 jta-module incl. scenario-09. Full `verify-all.sh` sweep in flight.
+
+## 2026-05-18 — verify-all.sh: lnp-mode summary hints partial coverage
+
+`lnp` mode skips every non-lnp module's tests in Phase 1 (`-DskipTests`)
+and only sweeps `tests/lnp-module` in Phase 2+ — so a green `lnp` run
+does NOT imply the correctness suite is green. Surfacing this in the
+end-of-run banner so the reminder is visible right where someone would
+naturally call a ticket "done". Motivated by the recently-discovered
+jta-09 regression that slipped through because the offending commit
+was verified with `verify-all.sh lnp` only.

@@ -308,6 +308,8 @@ echo "=================================================================="
 if [ "$LNP_MODE" = true ]; then
     printf "  LNP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+    echo   "  lnp-module ONLY  —  correctness modules were NOT verified."
+    echo   "  Run 'bash verify-all.sh' (full sweep) before finishing a ticket."
 elif [ "$WIP_MODE" = true ]; then
     printf "  WIP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
