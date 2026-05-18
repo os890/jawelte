@@ -18,11 +18,12 @@ package org.os890.jawelte.module.scope.impl.adapter.context;
 import java.lang.annotation.Annotation;
 import java.util.Map;
 
-import jakarta.enterprise.context.spi.AlterableContext;
 import jakarta.enterprise.context.spi.Contextual;
 import jakarta.enterprise.context.spi.CreationalContext;
 
 import org.os890.jawelte.module.scope.api.TestMethodScoped;
+
+import io.quarkus.arc.InjectableContext;
 
 /**
  * CDI {@code Context} for {@code @TestMethodScoped}. Thin delegate
@@ -37,12 +38,15 @@ import org.os890.jawelte.module.scope.api.TestMethodScoped;
  * observable but its veto status does NOT affect this context's
  * activation; activation is unconditional.
  *
- * <p>Implements {@link AlterableContext} so user code that calls
+ * <p>Implements {@link InjectableContext} so user code that calls
  * {@code Instance#destroy(Object)} on a method-scoped bean takes
  * effect — typical for tests that want to force a {@code @PreDestroy}
- * mid-method.
+ * mid-method. {@link InjectableContext} is ArC's runtime extension of
+ * CDI's {@code AlterableContext}; it adds the {@code destroy()}
+ * no-arg and {@code getState()} accessors that ArC's container
+ * plumbing needs.
  */
-public class TestMethodScopedContext implements AlterableContext {
+public class TestMethodScopedContext implements InjectableContext {
 
     private final TestMethodScopeStore store;
 
@@ -120,5 +124,20 @@ public class TestMethodScopedContext implements AlterableContext {
      */
     public void deactivate() {
         store.destroyAll();
+    }
+
+    @Override
+    public void destroy() {
+        store.destroyAll();
+    }
+
+    @Override
+    public ContextState getState() {
+        return Map::of;
+    }
+
+    @Override
+    public boolean isNormal() {
+        return true;
     }
 }

@@ -18,11 +18,12 @@ package org.os890.jawelte.module.scope.impl.adapter.context;
 import java.lang.annotation.Annotation;
 import java.util.Map;
 
-import jakarta.enterprise.context.spi.AlterableContext;
 import jakarta.enterprise.context.spi.Contextual;
 import jakarta.enterprise.context.spi.CreationalContext;
 
 import org.os890.jawelte.module.scope.api.TestClassScoped;
+
+import io.quarkus.arc.InjectableContext;
 
 /**
  * CDI {@code Context} for {@code @TestClassScoped}. Thin delegate
@@ -41,11 +42,15 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
  * {@code TestBeanContainerPort.afterAll} closes the
  * {@code SeContainer}.
  *
- * <p>Implements {@link AlterableContext} so user code that calls
+ * <p>Implements {@link InjectableContext} so user code that calls
  * {@code Instance#destroy(Object)} on a class-scoped bean takes
  * effect immediately rather than waiting for {@code afterAll}.
+ * {@link InjectableContext} is ArC's runtime extension of CDI's
+ * {@code AlterableContext}; it adds the {@code destroy()} no-arg
+ * and {@code getState()} accessors that ArC's container plumbing
+ * needs.
  */
-public class TestClassScopedContext implements AlterableContext {
+public class TestClassScopedContext implements InjectableContext {
 
     private final TestClassScopeStore store;
 
@@ -114,5 +119,20 @@ public class TestClassScopedContext implements AlterableContext {
      */
     public void deactivate() {
         store.destroyAll();
+    }
+
+    @Override
+    public void destroy() {
+        store.destroyAll();
+    }
+
+    @Override
+    public ContextState getState() {
+        return Map::of;
+    }
+
+    @Override
+    public boolean isNormal() {
+        return true;
     }
 }

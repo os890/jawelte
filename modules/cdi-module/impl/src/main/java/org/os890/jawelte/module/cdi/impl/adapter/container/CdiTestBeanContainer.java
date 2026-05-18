@@ -60,11 +60,13 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.TestBean;
 import org.os890.jawelte.core.api.TestBeans;
 import org.os890.jawelte.core.api.event.ContainerStarted;
+import org.os890.jawelte.core.api.port.BeanScopeMapper;
 import org.os890.jawelte.core.api.port.TestBeanContainerPort;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.WhitelistFilter;
 import org.os890.jawelte.module.cdi.impl.adapter.mock.InlineFieldBeanCreator;
 import org.os890.jawelte.module.cdi.impl.adapter.mock.MockBeanCreator;
+import org.os890.jawelte.module.cdi.impl.spi.ArcContextContributor;
 import org.os890.jawelte.module.cdi.impl.util.FrameworkAllowlist;
 
 import io.quarkus.arc.Arc;
@@ -179,8 +181,11 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         invokePortableExtensionPhase(
                 portableExtensions, jakarta.enterprise.inject.spi.BeforeBeanDiscovery.class);
 
+        List<ArcContextContributor> contextContributors = discoverArcContextContributors();
+
         ClassLoader oldTccl = buildAndBootArc(
-                testClass, beanClasses, selectedAlternatives, inlineFields, limitToTestBeans);
+                testClass, beanClasses, selectedAlternatives, inlineFields, limitToTestBeans,
+                testContext, contextContributors);
         testContext.bindMetadata(ClassLoader.class, oldTccl);
         testContext.getMetadata(ClassLoader.class)
                 .ifPresent(cl -> testContext.bindMetadata(CdiOldTccl.class, new CdiOldTccl(cl)));
@@ -190,6 +195,9 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
         ArcContainer container = Arc.container();
         if (container != null) {
+            testContext.bindMetadata(
+                    jakarta.enterprise.inject.se.SeContainer.class,
+                    new org.os890.jawelte.module.cdi.impl.adapter.se.ArcSeContainerView());
             container.beanManager().getEvent().fire(new ContainerStarted(testClass));
         }
     }
@@ -202,6 +210,23 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
      * fixtures (currently {@code BeforeBeanDiscovery} and
      * {@code AfterDeploymentValidation}).
      */
+    /**
+     * Discover {@link ArcContextContributor} providers via
+     * {@code ServiceLoader} and order them by {@code @Priority}
+     * ascending so lower numbers run first (consistent with
+     * {@code TestModuleLifecyclePort} chain ordering).
+     */
+    private static List<ArcContextContributor> discoverArcContextContributors() {
+        List<ArcContextContributor> result = new ArrayList<>();
+        for (ArcContextContributor c : ServiceLoader.load(ArcContextContributor.class)) {
+            result.add(c);
+        }
+        result.sort(Comparator
+                .comparingInt(CdiTestBeanContainer::providerPriority)
+                .thenComparing(c -> c.getClass().getName()));
+        return result;
+    }
+
     private static List<jakarta.enterprise.inject.spi.Extension>
             discoverPortableExtensions() {
         List<jakarta.enterprise.inject.spi.Extension> result = new ArrayList<>();
@@ -396,7 +421,9 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             Set<Class<?>> beanClasses,
             Set<Class<?>> selectedAlternatives,
             Set<InlineField> inlineFields,
-            boolean limitToTestBeans) {
+            boolean limitToTestBeans,
+            TestContext testContext,
+            List<ArcContextContributor> contextContributors) {
         Arc.shutdown();
 
         ClassLoader oldTccl = Thread.currentThread().getContextClassLoader();
@@ -439,6 +466,34 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                                     ctx.add(AnnotationInstance.builder(DEPENDENT).build());
                                 }
                             }));
+
+            // BeanScopeMapper-driven class-level scope rewrites. For
+            // every type carrying a registered trigger annotation
+            // (e.g. @ConfigBean, @SessionScoped), replace any direct
+            // scope annotation with the mapper's target scope so the
+            // ArC bean is built with the right scope. Mappers that
+            // opt into preserveExplicitDirectScopes() honour an
+            // explicit user-declared direct scope that differs from
+            // both the trigger and the trigger's stereotype-
+            // contributed scope.
+            List<BeanScopeMapper> scopeMappers = discoverBeanScopeMappers();
+            for (BeanScopeMapper mapper : scopeMappers) {
+                DotName triggerDot = DotName.createSimple(mapper.trigger().getName());
+                DotName targetDot = DotName.createSimple(mapper.targetScope().getName());
+                boolean preserveExplicit = mapper.preserveExplicitDirectScopes();
+                builder.addAnnotationTransformation(
+                        AnnotationTransformation.forClasses()
+                                .whenClass(c -> c.hasDeclaredAnnotation(triggerDot)
+                                        && !c.name().equals(testClassDotName))
+                                .transform(ctx -> {
+                                    if (preserveExplicit && hasExplicitOtherScope(ctx, triggerDot)) {
+                                        return;
+                                    }
+                                    ctx.remove(ann -> isCdiScopeAnnotation(ann.name())
+                                            && !ann.name().equals(triggerDot));
+                                    ctx.add(AnnotationInstance.builder(targetDot).build());
+                                }));
+            }
 
             // For classes named in @TestBean(bean=...): if the class
             // is already @Alternative, add @Dependent so it qualifies
@@ -485,9 +540,15 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 });
             }
 
-            builder.addBeanRegistrar(new MockAndInlineBeanRegistrar(inlineFields, computingIndex));
+            Class<? extends Annotation> autoMockDefaultScope = readAutoMockDefaultScope();
+            builder.addBeanRegistrar(new MockAndInlineBeanRegistrar(
+                    inlineFields, computingIndex, scopeMappers, autoMockDefaultScope));
             builder.setRemoveUnusedBeans(false);
             builder.setOutput(new GeneratedResourceOutput(testOutputDirectory, componentsProviderFile));
+
+            for (ArcContextContributor contributor : contextContributors) {
+                contributor.contribute(testContext, builder);
+            }
 
             BeanProcessor processor = builder.build();
             processor.process();
@@ -699,13 +760,20 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                                 + testClass.getName() + "." + field.getName() + " is null");
             }
             Set<Annotation> qualifiers = new LinkedHashSet<>();
+            Class<? extends Annotation> fieldScope = null;
             for (Annotation ann : field.getAnnotations()) {
-                if (ann.annotationType().isAnnotationPresent(jakarta.inject.Qualifier.class)) {
+                Class<? extends Annotation> annType = ann.annotationType();
+                if (annType.isAnnotationPresent(jakarta.inject.Qualifier.class)) {
                     qualifiers.add(ann);
+                }
+                if (annType.isAnnotationPresent(jakarta.enterprise.context.NormalScope.class)
+                        || annType.isAnnotationPresent(jakarta.inject.Scope.class)) {
+                    fieldScope = annType;
                 }
             }
             qualifiers.removeIf(a -> a.annotationType() == TestBean.class);
-            fields.add(new InlineField(testClass, field.getName(), field.getType(), qualifiers));
+            fields.add(new InlineField(
+                    testClass, field.getName(), field.getType(), qualifiers, fieldScope));
         }
         return fields;
     }
@@ -717,6 +785,56 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             }
         }
         return false;
+    }
+
+    /**
+     * Discover registered {@link BeanScopeMapper}s via
+     * {@code ServiceLoader} and order them deterministically by
+     * trigger-annotation FQN. Used to drive class-level scope rewrites
+     * at {@code BeanProcessor} build time and to default the scope of
+     * {@code @TestBean}-derived synthetic beans.
+     */
+    private static List<BeanScopeMapper> discoverBeanScopeMappers() {
+        List<BeanScopeMapper> result = new ArrayList<>();
+        for (BeanScopeMapper m : ServiceLoader.load(BeanScopeMapper.class)) {
+            result.add(m);
+        }
+        result.sort(Comparator.comparing(m -> m.trigger().getName()));
+        return result;
+    }
+
+    /**
+     * Read the MP Config key
+     * {@code org.os890.jawelte.module.cdi.auto-mock.default-scope}
+     * and resolve it to an {@code Annotation} class. {@code null}
+     * when the key is unset or the configured class is unloadable
+     * — callers fall back to the JDK-vs-user-type default heuristic.
+     */
+    @SuppressWarnings("unchecked")
+    private static Class<? extends Annotation> readAutoMockDefaultScope() {
+        try {
+            org.eclipse.microprofile.config.Config cfg =
+                    org.eclipse.microprofile.config.ConfigProvider.getConfig();
+            return cfg.getOptionalValue(
+                            "org.os890.jawelte.module.cdi.auto-mock.default-scope", String.class)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(name -> {
+                        try {
+                            Class<?> klass = Class.forName(name, false,
+                                    Thread.currentThread().getContextClassLoader());
+                            if (Annotation.class.isAssignableFrom(klass)) {
+                                return (Class<? extends Annotation>) klass;
+                            }
+                            return (Class<? extends Annotation>) null;
+                        } catch (ClassNotFoundException missing) {
+                            return null;
+                        }
+                    })
+                    .orElse(null);
+        } catch (RuntimeException missingMpConfig) {
+            return null;
+        }
     }
 
     /**
@@ -809,13 +927,16 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 while (entries.hasMoreElements()) {
                     JarEntry entry = entries.nextElement();
                     String name = entry.getName();
-                    if (!name.endsWith(".class") || name.contains("$")) {
+                    if (!name.endsWith(".class")) {
                         continue;
                     }
                     if (isVendorOrJdkPath(name)) {
                         continue;
                     }
                     String className = name.replace('/', '.').replace(".class", "");
+                    if (isAnonymousOrLocal(className)) {
+                        continue;
+                    }
                     try {
                         classes.add(cl.loadClass(className));
                     } catch (ClassNotFoundException | NoClassDefFoundError ignored) {
@@ -878,7 +999,7 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             } else if (file.getName().endsWith(".class")) {
                 String rel = root.toURI().relativize(file.toURI()).getPath();
                 String className = rel.replace('/', '.').replace(".class", "");
-                if (className.contains("$") || className.startsWith("META-INF")) {
+                if (className.startsWith("META-INF") || isAnonymousOrLocal(className)) {
                     continue;
                 }
                 try {
@@ -890,6 +1011,21 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         }
     }
 
+    /**
+     * Whether the given binary class name corresponds to an anonymous
+     * or local class — {@code Outer$1}, {@code Outer$2$3}, etc. Named
+     * static-nested or inner classes ({@code Outer$Inner}) are kept so
+     * user beans declared inside a test class are discoverable.
+     */
+    private static boolean isAnonymousOrLocal(String binaryName) {
+        int dollar = binaryName.lastIndexOf('$');
+        if (dollar < 0) {
+            return false;
+        }
+        String suffix = binaryName.substring(dollar + 1);
+        return suffix.isEmpty() || Character.isDigit(suffix.charAt(0));
+    }
+
     // ----- Scope / type utilities --------------------------------------
 
     private static boolean hasScope(AnnotationTransformation.TransformationContext ctx) {
@@ -897,6 +1033,45 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 || ctx.hasAnnotation(DEPENDENT)
                 || ctx.hasAnnotation(DotNames.APPLICATION_SCOPED)
                 || ctx.hasAnnotation(DotName.createSimple(RequestScoped.class.getName()));
+    }
+
+    /**
+     * Whether the transformation target has a directly-declared CDI
+     * scope annotation other than {@code triggerDot}. Used by the
+     * {@code BeanScopeMapper}-driven class-level remap to honour
+     * mappers that opt into preserving an explicit user-declared
+     * scope.
+     */
+    private static boolean hasExplicitOtherScope(
+            AnnotationTransformation.TransformationContext ctx, DotName triggerDot) {
+        for (AnnotationInstance ann : ctx.annotations()) {
+            DotName n = ann.name();
+            if (n.equals(triggerDot)) {
+                continue;
+            }
+            if (isCdiScopeAnnotation(n)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the given annotation FQN names a CDI scope known to
+     * cdi-module. Limited to the CDI-built-in scopes plus jawelte's
+     * own test-lifecycle scopes (looked up reflectively to avoid a
+     * compile-time dependency on scope-module).
+     */
+    private static boolean isCdiScopeAnnotation(DotName name) {
+        String fqn = name.toString();
+        return fqn.equals("jakarta.enterprise.context.ApplicationScoped")
+                || fqn.equals("jakarta.enterprise.context.RequestScoped")
+                || fqn.equals("jakarta.enterprise.context.SessionScoped")
+                || fqn.equals("jakarta.enterprise.context.ConversationScoped")
+                || fqn.equals("jakarta.enterprise.context.Dependent")
+                || fqn.equals("jakarta.inject.Singleton")
+                || fqn.equals("org.os890.jawelte.module.scope.api.TestClassScoped")
+                || fqn.equals("org.os890.jawelte.module.scope.api.TestMethodScoped");
     }
 
     private static boolean hasTypeClash(
@@ -934,10 +1109,18 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
         private final Set<InlineField> inlineFields;
         private final IndexView index;
+        private final List<BeanScopeMapper> scopeMappers;
+        private final Class<? extends Annotation> autoMockDefaultScope;
 
-        MockAndInlineBeanRegistrar(Set<InlineField> inlineFields, IndexView index) {
+        MockAndInlineBeanRegistrar(
+                Set<InlineField> inlineFields,
+                IndexView index,
+                List<BeanScopeMapper> scopeMappers,
+                Class<? extends Annotation> autoMockDefaultScope) {
             this.inlineFields = inlineFields;
             this.index = index;
+            this.scopeMappers = scopeMappers;
+            this.autoMockDefaultScope = autoMockDefaultScope;
         }
 
         @Override
@@ -949,13 +1132,26 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                     registrationContext, inlineFieldTypes, nonbindingMembers);
         }
 
+        private Class<? extends Annotation> mappedScopeFor(
+                Class<? extends Annotation> trigger, Class<? extends Annotation> fallback) {
+            for (BeanScopeMapper mapper : scopeMappers) {
+                if (mapper.trigger().equals(trigger)) {
+                    return mapper.targetScope();
+                }
+            }
+            return fallback;
+        }
+
         private Set<DotName> registerInlineFieldBeans(RegistrationContext registrationContext) {
             Set<DotName> inlineFieldTypes = new HashSet<>();
             for (InlineField field : inlineFields) {
                 DotName typeName = DotName.createSimple(field.fieldType().getName());
+                Class<? extends Annotation> scope = field.scope() != null
+                        ? field.scope()
+                        : mappedScopeFor(TestBean.class, Singleton.class);
                 BeanConfigurator<Object> configurator = registrationContext
                         .configure(typeName)
-                        .scope(Singleton.class)
+                        .scope(scope)
                         .addType(ClassType.create(typeName))
                         .defaultBean()
                         .creator(InlineFieldBeanCreator.class)
@@ -1042,9 +1238,14 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 Set<AnnotationInstance> cleanedQualifiers =
                         stripNonbindingValues(requiredQualifiers, nonbindingMembers);
                 String typeName = effectiveType.name().toString();
-                Class<? extends Annotation> scope = isJdkType(typeName)
-                        ? Dependent.class
-                        : RequestScoped.class;
+                Class<? extends Annotation> scope;
+                if (isJdkType(typeName)) {
+                    scope = Dependent.class;
+                } else if (autoMockDefaultScope != null) {
+                    scope = autoMockDefaultScope;
+                } else {
+                    scope = RequestScoped.class;
+                }
 
                 // Add BOTH the parameterized type AND the raw type
                 // as bean types. The parameterized one satisfies the
@@ -1318,11 +1519,17 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
      * @param fieldName      the field's declared name
      * @param fieldType      the field's declared type
      * @param qualifiers     CDI qualifiers carried on the field
+     * @param scope          the user-declared CDI scope on the field,
+     *                       or {@code null} when no scope annotation is
+     *                       present (registrar consults
+     *                       {@link BeanScopeMapper} or its built-in
+     *                       default)
      */
     public record InlineField(
             Class<?> declaringClass,
             String fieldName,
             Class<?> fieldType,
-            Set<Annotation> qualifiers) {
+            Set<Annotation> qualifiers,
+            Class<? extends Annotation> scope) {
     }
 }

@@ -6071,3 +6071,62 @@ Closed the last two gaps:
   and shuts ArC down on `close()`.
 
 Full reactor: **56/56 green** on `quarkus-poc`.
+
+---
+## 2026-05-18 — quarkus-poc: scope-module rewritten for ArC; 31/31 green
+
+Continued with path-2 (rewrite-per-module). scope-module/impl now talks to
+Quarkus ArC directly:
+
+- **Replaced `TestScopeCdiExtension`** (portable CDI Extension) with
+  `ScopeArcContextContributor` — an implementation of a new
+  `ArcContextContributor` SPI exposed by `cdi-module/impl/spi`.
+  `CdiTestBeanContainer` discovers contributors via `ServiceLoader`,
+  orders them by `@Priority` ascending, and invokes each one with
+  the live `TestContext` and the in-progress `BeanProcessor.Builder`
+  before `BeanProcessor.process()` runs. Contributors register custom
+  `Context`s through ArC's `ContextRegistrar` API.
+- **`TestClassScopedContext` / `TestMethodScopedContext`** now implement
+  `io.quarkus.arc.InjectableContext` (which extends
+  `AlterableContext`); added `destroy()`, `getState()`, `isNormal()`.
+- **`TestClassScopeContextCreator` / `TestMethodScopeContextCreator`**
+  are ArC `ContextCreator`s that read the per-test-class stores from
+  the static `TestScopeCurrentStores` holder set by the contributor
+  during `beforeAll`.
+- **`ScopeLifecycleAdapter`** now reaches the stores directly via
+  `TestContext` metadata (bypassing the `SeContainer`-mediated
+  `BeanManager.getContext(...)` path) and fires `BeforeScopeStarted`
+  through `Arc.container().beanManager()` when the container is up.
+- **scope-module/impl pom.xml**: pinned `quarkus-bom` locally, added
+  `quarkus-arc-processor` / `quarkus-arc` and a compile-dep on
+  `cdi-module-impl` for the new SPI.
+- Deleted the legacy `META-INF/services/jakarta.enterprise.inject.spi.Extension`
+  entry and the now-unused `TestScopeCdiExtension` class.
+
+To support the rewrite, `cdi-module/impl` picked up:
+
+- **`ArcContextContributor` SPI** — interface + ServiceLoader
+  discovery + integration in the `buildAndBootArc` path.
+- **Static-nested-class discovery**: the classpath scanner now
+  loads `Outer$Inner.class` (filtering out anonymous `Outer$1`).
+  Without this, user beans declared inside the test class
+  (`Scenario01Test$Counter`) were skipped and got auto-mocked
+  instead.
+- **`SeContainer` binding on `TestContext`**: the managed bootstrap
+  publishes an `ArcSeContainerView` (a read-only wrapper that
+  no-ops `close()`) so consumer modules can reach
+  `BeanManager` / `getContext(...)` through the standard SPI surface.
+- **`BeanScopeMapper` SPI integration**:
+  - Class-level remap (`@ConfigBean`, `@SessionScoped`, etc.):
+    applied via an `AnnotationTransformation` per registered mapper;
+    `preserveExplicitDirectScopes()` honoured.
+  - Inline `@TestBean` static-field default scope: looked up via
+    `mappedScopeFor(TestBean.class, ...)`; an explicit
+    user-declared scope annotation on the field still wins.
+  - Auto-mock default scope: MP Config key
+    `org.os890.jawelte.module.cdi.auto-mock.default-scope` (shipped
+    by scope-module) overrides the previous JDK-vs-user-type
+    fallback when present and the target type is non-JDK.
+
+Score: `tests/cdi-module` 56/56, `tests/scope-module` 31/31, both
+green under ArC-only on `quarkus-poc`.

@@ -15,31 +15,33 @@
  */
 package org.os890.jawelte.module.scope.impl.adapter.lifecycle;
 
-import java.util.Optional;
-
 import jakarta.annotation.Priority;
-import jakarta.enterprise.inject.se.SeContainer;
-import jakarta.enterprise.inject.spi.BeanManager;
 
 import org.os890.jawelte.core.api.event.BeforeScopeStarted;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
-import org.os890.jawelte.module.scope.api.TestClassScoped;
 import org.os890.jawelte.module.scope.api.TestMethodScoped;
-import org.os890.jawelte.module.scope.impl.adapter.context.TestClassScopedContext;
-import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopedContext;
+import org.os890.jawelte.module.scope.impl.adapter.context.TestClassScopeStore;
+import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopeStore;
+
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ArcContainer;
 
 /**
  * {@link TestModuleLifecyclePort} adapter shipped by scope-module.
  * Drives activation / deactivation of the test-method-scoped and
- * test-class-scoped CDI contexts registered by
- * {@link org.os890.jawelte.module.scope.impl.adapter.extension.TestScopeCdiExtension}.
+ * test-class-scoped CDI scopes registered by
+ * {@code ScopeArcContextContributor} (an {@code ArcContextContributor}
+ * consumed by cdi-module's {@code CdiTestBeanContainer} during its ArC
+ * bootstrap).
  *
- * <p>Stateless — no instance fields. The same adapter instance is
- * reused across every test class running in the JVM (per the
- * project rule "all per-test-class state on TestContext"); the
- * stores and the {@code SeContainer} live on {@code TestContext}
- * and are reached lazily through {@link TestContext#getMetadata(Class)}.
+ * <p>Stateless — no instance fields. Reaches the per-test-class
+ * stores via {@link TestContext#getMetadata(Class)} (bound by
+ * the contributor) and operates on them directly; the
+ * {@code Context} impls themselves are thin delegates over the
+ * stores, so calling {@code allocate()} / {@code destroyAll()} on
+ * the store has the same observable effect as going through the
+ * {@code Context} accessors.
  *
  * <p>{@code @Priority(100)} puts the adapter early in the
  * {@link TestModuleLifecyclePort} chain — after framework-wide
@@ -50,19 +52,15 @@ import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopedConte
  *
  * <p>The {@code BeforeScopeStarted(TestMethodScoped.class)} event
  * fired in {@link #beforeEach(TestContext)} is observable for any
- * CDI observer in the chain. Its veto status does <strong>not</strong>
- * affect this adapter's behaviour: the adapter calls
- * {@link TestMethodScopedContext#activate()} unconditionally
- * afterwards. The "usage-veto" semantics — telling consumers to
- * skip use of {@code @TestMethodScoped} beans for a given method —
- * are deferred to a follow-up ticket.
+ * CDI observer in the chain via ArC's runtime BeanManager. Its veto
+ * status does <strong>not</strong> affect this adapter's behaviour;
+ * the adapter calls {@link TestMethodScopeStore#allocate()}
+ * unconditionally afterwards.
  *
- * <p>If the CDI container was not booted by jawelte (e.g.
- * {@code @EnableTestBeans(manageContainer=false)} where the user
- * boots a container that does not load {@code TestScopeCdiExtension}),
- * the contexts are never registered. The adapter then silently
- * no-ops: the stores are absent from {@code TestContext} and the
- * adapter has nothing to drive.
+ * <p>If the stores are absent from {@link TestContext} (e.g. the
+ * user booted a container that did not load
+ * {@code ScopeArcContextContributor}), each callback silently
+ * no-ops.
  */
 @Priority(100)
 public class ScopeLifecycleAdapter implements TestModuleLifecyclePort {
@@ -73,80 +71,46 @@ public class ScopeLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void beforeAll(TestContext testContext) {
-        // No-op for scope-module's contexts:
-        //  - TestClassScopedContext is already active (its store was
-        //    allocated in its constructor during AfterBeanDiscovery).
-        //  - TestMethodScopedContext is activated per beforeEach.
+        // No-op: TestClassScopeStore allocates its map in its
+        // constructor; TestMethodScopeStore is allocated per
+        // beforeEach.
     }
 
     @Override
     public void beforeEach(TestContext testContext) {
-        Optional<BeanManager> beanManager = beanManagerFor(testContext);
-        if (beanManager.isEmpty()) {
+        TestMethodScopeStore methodStore = testContext.getMetadata(TestMethodScopeStore.class)
+                .orElse(null);
+        if (methodStore == null) {
             return;
         }
-        fireBeforeScopeStarted(beanManager.get(), TestMethodScoped.class);
-        TestMethodScopedContext methodContext = methodScopedContext(beanManager.get());
-        if (methodContext != null) {
-            methodContext.activate();
-        }
+        fireBeforeScopeStarted(TestMethodScoped.class);
+        methodStore.allocate();
     }
 
     @Override
     public void afterEach(TestContext testContext) {
-        Optional<BeanManager> beanManager = beanManagerFor(testContext);
-        if (beanManager.isEmpty()) {
-            return;
-        }
-        TestMethodScopedContext methodContext = methodScopedContext(beanManager.get());
-        if (methodContext != null) {
-            methodContext.deactivate();
-        }
+        testContext.getMetadata(TestMethodScopeStore.class)
+                .ifPresent(TestMethodScopeStore::destroyAll);
     }
 
     @Override
     public void afterAll(TestContext testContext) {
-        Optional<BeanManager> beanManager = beanManagerFor(testContext);
-        if (beanManager.isEmpty()) {
+        testContext.getMetadata(TestClassScopeStore.class)
+                .ifPresent(TestClassScopeStore::destroyAll);
+    }
+
+    private static void fireBeforeScopeStarted(Class<? extends java.lang.annotation.Annotation> scope) {
+        ArcContainer container = Arc.container();
+        if (container == null) {
             return;
         }
-        TestClassScopedContext classContext = classScopedContext(beanManager.get());
-        if (classContext != null) {
-            classContext.deactivate();
-        }
-    }
-
-    private static Optional<BeanManager> beanManagerFor(TestContext testContext) {
-        return testContext.getMetadata(SeContainer.class).map(SeContainer::getBeanManager);
-    }
-
-    private static void fireBeforeScopeStarted(
-            BeanManager beanManager, Class<? extends java.lang.annotation.Annotation> scope) {
         try {
-            beanManager.getEvent().fire(new BeforeScopeStarted(scope));
+            container.beanManager().getEvent().fire(new BeforeScopeStarted(scope));
         } catch (RuntimeException ignored) {
             // Per TICKET-004: a CDI runtime in an unexpected state during
             // event-firing is treated as "not vetoed". The unconditional
-            // activate() that follows still runs; any subsequent failure
+            // allocate() that follows still runs; any subsequent failure
             // propagates per TICKET-001.
-        }
-    }
-
-    private static TestMethodScopedContext methodScopedContext(BeanManager beanManager) {
-        try {
-            return (TestMethodScopedContext) beanManager.getContext(TestMethodScoped.class);
-        } catch (RuntimeException missingContext) {
-            // Container did not load scope-module's CDI Extension (e.g.
-            // a user-managed container without our jar on the classpath).
-            return null;
-        }
-    }
-
-    private static TestClassScopedContext classScopedContext(BeanManager beanManager) {
-        try {
-            return (TestClassScopedContext) beanManager.getContext(TestClassScoped.class);
-        } catch (RuntimeException missingContext) {
-            return null;
         }
     }
 }

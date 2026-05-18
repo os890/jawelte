@@ -12,4 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-org.os890.jawelte.module.scope.impl.adapter.extension.TestScopeCdiExtension
+# scope-module's ArC ContextRegistrar bridge — registers
+# @TestClassScoped and @TestMethodScoped as normal scopes against the
+# BeanProcessor that cdi-module's CdiTestBeanContainer assembles for
+# the current test class.
+
+org.os890.jawelte.module.scope.impl.adapter.contributor.ScopeArcContextContributor

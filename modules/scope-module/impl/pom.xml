@@ -31,16 +31,29 @@
     <packaging>jar</packaging>
 
     <name>jawelte (scope-module/impl)</name>
-    <description>Implementation of jawelte's test-lifecycle CDI scopes. Hosts the per-method / per-class CDI Context implementations, the bean stores bound on TestContext, the TestScopeCdiExtension that registers the contexts, the ConfigBeanScopeRemapCdiExtension that unconditionally remaps @ConfigBean from @ApplicationScoped to @TestClassScoped at ProcessAnnotatedType time, and the ScopeLifecycleAdapter (TestModuleLifecyclePort impl) that drives activation / deactivation.</description>
+    <description>Implementation of jawelte's test-lifecycle CDI scopes under Quarkus ArC. Hosts the per-method / per-class InjectableContext implementations, the bean stores bound on TestContext, an ArcContextContributor that registers both contexts through ArC's ContextRegistrar SPI at BeanProcessor build time, and the ScopeLifecycleAdapter (TestModuleLifecyclePort impl) that drives activation / deactivation.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM scoped to scope-module/impl. Pinned here
+                (rather than at the root pom) because the BOM also
+                forces smallrye-config / jackson / commons-io / etc.
+                versions; propagating those to unrelated modules would
+                break their existing deps. cdi-module/impl uses the
+                same isolation strategy.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
-        <!--
-            Compile deps. All scopes inherited from jawelte-parent's
-            <dependencyManagement>. scope-module/impl explicitly does
-            NOT compile-depend on cdi-module — cross-module wiring goes
-            through the TestBeanDefaultScope / AutoMockDefaultScope
-            records on TestContext.
-        -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-scope-module-api</artifactId>
@@ -49,10 +62,30 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
         </dependency>
+        <!--
+            scope-module/impl now compile-depends on cdi-module/impl
+            for the ArcContextContributor SPI it implements. The dep
+            also transitively pulls in quarkus-arc-processor so this
+            module can reference ContextRegistrar / ContextConfigurator
+            and quarkus-arc so the InjectableContext interface is
+            available.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc</artifactId>
         </dependency>
     </dependencies>
 
