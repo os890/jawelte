@@ -45,8 +45,15 @@
         <module>scenario-10-producer-method-parameter</module>
         <module>scenario-11-observer-method-parameter</module>
         <module>scenario-12-satisfied-not-mocked</module>
+        <module>scenario-13-testbean-bean</module>
+        <module>scenario-16-testbean-repeatable</module>
+        <module>scenario-17-testbean-meta-annotation</module>
         <module>scenario-22-same-simple-name</module>
+        <module>scenario-34-alternative-without-scope</module>
+        <module>scenario-35-testbean-not-alternative</module>
         <module>scenario-45-priority-resolver-tiebreak</module>
+        <module>scenario-50-multi-alternative-same-type</module>
+        <module>scenario-52-typed-narrowed-with-testbean</module>
         <module>scenario-54-binding-qualifier-member</module>
         <module>scenario-56-deltaspike-whitelist-allow</module>
     </modules>

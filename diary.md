@@ -5616,3 +5616,23 @@ Mirrored 7 scenarios but only 1 went green in this pass (54). The others surface
 - **24 provider-unwrap / 25 instance-unwrap** — `@Inject Provider<X>` / `@Inject Instance<X>` need wrapper-type unwrapping (cdi-module's `unwrapWrapper`). My BuildStep currently registers a mock for `Provider`/`Instance` itself instead of unwrapping to `X`.
 
 Coverage: 15 / 56 cdi-module scenarios green under @QuarkusTest.
+
+## 2026-05-18 — TICKET-015 Phase B9: @TestBean alternative support (scenarios 13, 16, 17, 34, 35, 50, 52)
+
+Added `activateTestBeanAlternatives` @BuildStep + AnnotationsTransformer that walks `@TestBean(bean=X)` and `@TestBeans(...)` annotations in the index, collects the target classes, and at type-discovery time:
+- Adds `@Priority(Integer.MAX_VALUE)` so the alternative wins.
+- Adds `@Dependent` as a fallback scope when the target carries no scope annotation (matches cdi-module's `forceDiscoveryWithDependentFallback`).
+
+Silent no-op when the target lacks `@Alternative` (matches cdi-module scenario-35).
+
+Coverage: 22 / 56 cdi-module scenarios green under @QuarkusTest:
+- 01-06 (auto-mock + qualifiers)
+- 08-12 (injection styles + satisfied check)
+- 13, 16, 17, 34, 35, 50, 52 (@TestBean alternative)
+- 22 (multi-package)
+- 45, 54, 56 (priority, binding qualifier, deltaspike)
+
+Mirrored but currently failing (kept off the reactor):
+- 14 testbean-bean-producer: `@TestBean(beanProducer=X)` uses a different mechanism (the producer class's @Produces methods become alternatives). Need a separate BuildStep that ensures the producer class is discovered as a bean and its methods are reachable.
+- 20 test-class-isolation: my BuildStep collects @TestBean targets from EVERY @EnableTestBeans class in the index, so each test class's alternatives bleed into siblings. Quarkus builds once per Maven module; per-test-class isolation requires either a runtime gate or one Quarkus app per scenario.
+- 26 typed-narrowed: `@Typed`-narrowing is jawelte-specific behavior the build-step doesn't yet apply.

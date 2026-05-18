@@ -25,6 +25,7 @@ import jakarta.inject.Singleton;
 
 import org.jboss.jandex.AnnotationInstance;
 import org.jboss.jandex.AnnotationTarget;
+import org.jboss.jandex.AnnotationValue;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
@@ -32,7 +33,9 @@ import org.jboss.jandex.MethodInfo;
 import org.jboss.jandex.Type;
 import org.os890.jawelte.module.quarkus.runtime.MockBeanCreator;
 
+import io.quarkus.arc.deployment.AnnotationsTransformerBuildItem;
 import io.quarkus.arc.deployment.SyntheticBeanBuildItem;
+import io.quarkus.arc.processor.AnnotationsTransformer;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
@@ -69,6 +72,20 @@ public class JaweltesQuarkusProcessor {
     private static final DotName NAMED = DotName.createSimple("jakarta.inject.Named");
     private static final DotName DEFAULT_QUALIFIER = DotName.createSimple("jakarta.enterprise.inject.Default");
     private static final DotName ANY_QUALIFIER = DotName.createSimple("jakarta.enterprise.inject.Any");
+    private static final DotName TEST_BEAN = DotName.createSimple("org.os890.jawelte.core.api.TestBean");
+    private static final DotName TEST_BEANS_CONTAINER = DotName.createSimple("org.os890.jawelte.core.api.TestBeans");
+    private static final DotName PRIORITY = DotName.createSimple("jakarta.annotation.Priority");
+    private static final DotName ALTERNATIVE = DotName.createSimple("jakarta.enterprise.inject.Alternative");
+    private static final DotName DEPENDENT = DotName.createSimple("jakarta.enterprise.context.Dependent");
+    private static final DotName[] SCOPE_ANNOTATIONS = {
+        DEPENDENT,
+        DotName.createSimple("jakarta.inject.Singleton"),
+        DotName.createSimple("jakarta.enterprise.context.ApplicationScoped"),
+        DotName.createSimple("jakarta.enterprise.context.RequestScoped"),
+        DotName.createSimple("jakarta.enterprise.context.SessionScoped"),
+        DotName.createSimple("jakarta.enterprise.context.ConversationScoped"),
+    };
+    private static final int TEST_BEAN_PRIORITY = Integer.MAX_VALUE;
 
     /** Default constructor used by the Quarkus build framework. */
     public JaweltesQuarkusProcessor() {
@@ -83,6 +100,94 @@ public class JaweltesQuarkusProcessor {
     @BuildStep
     FeatureBuildItem feature() {
         return new FeatureBuildItem(FEATURE);
+    }
+
+    /**
+     * Activates {@code @TestBean(bean=X)} alternatives by adding a
+     * {@code @Priority(Integer.MAX_VALUE)} annotation to each declared
+     * target class via Quarkus's {@link AnnotationsTransformer}. The
+     * target must already carry {@code @Alternative}; otherwise the
+     * registration is a silent no-op (matches cdi-module's scenario-35
+     * semantics).
+     *
+     * @param indexItem the combined index produced by Quarkus's core processor
+     * @return an annotations-transformer build item that selectively
+     *         adds {@code @Priority} to the {@code @TestBean} targets
+     */
+    @BuildStep
+    AnnotationsTransformerBuildItem activateTestBeanAlternatives(
+            CombinedIndexBuildItem indexItem) {
+        IndexView index = indexItem.getIndex();
+        Set<DotName> targets = collectTestBeanTargets(index);
+        return new AnnotationsTransformerBuildItem(new AnnotationsTransformer() {
+            @Override
+            public boolean appliesTo(AnnotationTarget.Kind kind) {
+                return kind == AnnotationTarget.Kind.CLASS;
+            }
+
+            @Override
+            public void transform(TransformationContext context) {
+                ClassInfo classInfo = context.getTarget().asClass();
+                if (!targets.contains(classInfo.name())) {
+                    return;
+                }
+                if (classInfo.declaredAnnotation(ALTERNATIVE) == null) {
+                    return;
+                }
+                var transformation = context.transform();
+                if (classInfo.declaredAnnotation(PRIORITY) == null) {
+                    transformation.add(AnnotationInstance.create(
+                            PRIORITY,
+                            classInfo,
+                            new AnnotationValue[] {
+                                    AnnotationValue.createIntegerValue("value", TEST_BEAN_PRIORITY)
+                            }));
+                }
+                if (!hasScope(classInfo)) {
+                    transformation.add(AnnotationInstance.create(
+                            DEPENDENT, classInfo, new AnnotationValue[0]));
+                }
+                transformation.done();
+            }
+
+            private boolean hasScope(ClassInfo classInfo) {
+                for (DotName scope : SCOPE_ANNOTATIONS) {
+                    if (classInfo.declaredAnnotation(scope) != null) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
+    }
+
+    private static Set<DotName> collectTestBeanTargets(IndexView index) {
+        Set<DotName> targets = new LinkedHashSet<>();
+        for (AnnotationInstance testBean : index.getAnnotations(TEST_BEAN)) {
+            addTestBeanTarget(testBean, targets);
+        }
+        for (AnnotationInstance container : index.getAnnotations(TEST_BEANS_CONTAINER)) {
+            AnnotationValue value = container.value();
+            if (value == null) {
+                continue;
+            }
+            for (AnnotationInstance nested : value.asNestedArray()) {
+                addTestBeanTarget(nested, targets);
+            }
+        }
+        return targets;
+    }
+
+    private static void addTestBeanTarget(AnnotationInstance testBean, Set<DotName> targets) {
+        AnnotationValue beanValue = testBean.value("bean");
+        if (beanValue == null) {
+            return;
+        }
+        DotName beanClass = beanValue.asClass().name();
+        if (beanClass.equals(DotName.createSimple("void"))) {
+            return;
+        }
+        targets.add(beanClass);
     }
 
     /**
