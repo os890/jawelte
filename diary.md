@@ -5380,3 +5380,22 @@ Added the raw type to `SyntheticBeanUtil.beanTypes(targetType)` when targetType 
 Hypothesis to investigate next: the `IpKey` dedup may be collapsing two IPs with different inner types when the outer wrapper differs (Instance vs Provider) — the qualifier set being identical now ({@Default, @Any} from CDI) means only one mock is registered per (targetType, qualifiers) key. Or the issue might be that CDI deployment validation runs `ip.getBean()` for the test class IPs in a way that's subtly different from when the test class wasn't a bean.
 
 Coverage: 50 / 56 cdi-module scenarios green on `-Powb`. Branch `33-refactor-test-instance-via-junit-testinstancefactory-backed-by-a-core-spi`. Foundation is solid; the remaining cluster needs targeted CDI-debug work.
+
+## 2026-05-18 — TICKET-016 Phase D: 56 / 56 green under `-Powb` AND `-Pweld`
+
+Last move: register the test class's `@Inject` IPs on the synthetic bean via `addInjectionPoints(injectionTarget.getInjectionPoints())`. Until that landed, CDI's deployment validation didn't see the test class's IPs (because `addBean` defaults to "no IPs"), so unsatisfied dependencies silently nulled at runtime injection. Scenario 55 (DeltaSpike `@PartialBeanBinding` skip) relies on the bootstrap failing when auto-mock is correctly skipped — declaring the IPs restored that behaviour.
+
+The late-registration approach (test class added as a synthetic `@Dependent` bean inside `AfterBeanDiscovery`, *after* every auto-mock and `@TestBean` alternative is in place) keeps the test class invisible to CDI's regular discovery pipeline — its `@Inject` fields don't fire `ProcessInjectionPoint`, mirroring the unmanaged shape jawelte used before TICKET-016. The auto-mock collector sees those IPs via the restored `addTestClassInjectionPoints` walk.
+
+Final shape:
+- `core/api`: `TestInstanceFactoryPort` (optional SPI)
+- `core/impl`: `DelegatingJUnitTestInstanceFactory` (auto-detected JUnit factory bridge; closes the TestContext bootstrap window after producing the instance)
+- `cdi-module/impl`: `CdiTestInstanceFactoryPortAdapter` calls `CDI.current().select(testClass).get()`
+- `cdi-module/impl`: `TestBeansCdiExtension` keeps `addTestClassInjectionPoints` for IP collection, registers the test class as a synthetic `@Dependent` bean in `AfterBeanDiscovery` with `addInjectionPoints(...)` so deployment validation still catches unsatisfied IPs.
+- `META-INF/services` + `junit-platform.properties` activations
+- `CdiTestBeanContainer.postProcessTestInstance` is a no-op — CDI does the field injection during the synthetic bean's producer
+- scenario-31 assertion flipped to "test class IS a `@Dependent` CDI bean"
+
+Test results: 56 / 56 green on `-Powb`, 56 / 56 green on `-Pweld`. Ready for review.
+
+Next: validate the rest of the test reactor (other modules' scenarios) to make sure the refactor didn't regress anything elsewhere; then push and ask about issue #32 resumption.
