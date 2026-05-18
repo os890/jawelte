@@ -5684,3 +5684,22 @@ Verified locally:
 - scope-module 32/32 green (EngineTestKit propagation of
   `@ExtendWith(Proxy.class)` still works for `InvocationInterceptor`)
 - quarkus-module 22/22 currently-implemented scenarios green
+
+## 2026-05-18 — TICKET-015 quarkus-module: @Nonbinding-aware qualifier dedup
+
+scenario-07 (nonbinding-deduplication) revealed `JaweltesQuarkusProcessor.qualifierFingerprint`
+was including ALL annotation member values in the dedup key — so two
+`@DataSource(name = "primary")` / `@DataSource(name = "secondary")`
+qualifier instances produced two distinct synthetic auto-mock beans,
+tripping Quarkus's `AmbiguousResolutionException` at deployment
+validation.
+
+Fix in `quarkus-module/deployment`: when fingerprinting a qualifier
+annotation, look up the qualifier's class in the Jandex index and skip
+members marked `@jakarta.enterprise.util.Nonbinding`. Threads the
+existing `IndexView` through the two callsites
+(`processCandidateType`, `isProducedByExistingMethod`).
+
+scenario-07 passes. 6 other newly-mirrored scenarios (21, 23, 24, 25,
+26, 30, 53) still fail with different root causes — to be tackled
+next.

@@ -314,20 +314,43 @@ public class JaweltesQuarkusProcessor {
         return qualifiers;
     }
 
-    private static String qualifierFingerprint(List<AnnotationInstance> qualifiers) {
+    private static final DotName NONBINDING = DotName.createSimple("jakarta.enterprise.util.Nonbinding");
+
+    private static String qualifierFingerprint(List<AnnotationInstance> qualifiers, IndexView index) {
         if (qualifiers.isEmpty()) {
             return "";
         }
         List<String> parts = new ArrayList<>();
         for (AnnotationInstance ann : qualifiers) {
+            // Skip @Nonbinding member values — CDI's qualifier
+            // equality treats two annotations with the same
+            // binding-member values as the same qualifier even if
+            // their @Nonbinding members differ. Without this filter
+            // each distinct @Nonbinding value would produce its own
+            // synthetic auto-mock bean and trip
+            // AmbiguousResolutionException at deployment-validation
+            // time (scenario-07).
+            ClassInfo qualifierType = index.getClassByName(ann.name());
             StringBuilder b = new StringBuilder(ann.name().toString());
             for (var value : ann.values()) {
+                if (qualifierType != null && isMemberNonbinding(qualifierType, value.name())) {
+                    continue;
+                }
                 b.append('|').append(value.name()).append('=').append(value.value());
             }
             parts.add(b.toString());
         }
         parts.sort(String::compareTo);
         return String.join(";", parts);
+    }
+
+    private static boolean isMemberNonbinding(ClassInfo qualifierType, String memberName) {
+        for (MethodInfo method : qualifierType.methods()) {
+            if (method.name().equals(memberName) && method.hasDeclaredAnnotation(NONBINDING)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void processCandidateType(
@@ -337,7 +360,7 @@ public class JaweltesQuarkusProcessor {
             Set<String> alreadyHandled,
             BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
         DotName name = candidate.name();
-        String qualifierKey = qualifierFingerprint(qualifiers);
+        String qualifierKey = qualifierFingerprint(qualifiers, index);
         String dedupKey = name.toString() + "##" + qualifierKey;
         if (!alreadyHandled.add(dedupKey)) {
             return;
@@ -394,7 +417,7 @@ public class JaweltesQuarkusProcessor {
             }
             List<AnnotationInstance> producerQualifiers = qualifiersOf(
                     method.declaredAnnotations(), index);
-            if (qualifierFingerprint(producerQualifiers).equals(qualifierKey)) {
+            if (qualifierFingerprint(producerQualifiers, index).equals(qualifierKey)) {
                 return true;
             }
         }

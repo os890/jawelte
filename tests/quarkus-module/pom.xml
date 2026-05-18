@@ -40,6 +40,7 @@
         <module>scenario-04-named-qualifier</module>
         <module>scenario-05-custom-qualifier</module>
         <module>scenario-06-multiple-qualifiers</module>
+        <module>scenario-07-nonbinding-deduplication</module>
         <module>scenario-08-constructor-injection</module>
         <module>scenario-09-initializer-method-injection</module>
         <module>scenario-10-producer-method-parameter</module>
@@ -48,12 +49,19 @@
         <module>scenario-13-testbean-bean</module>
         <module>scenario-16-testbean-repeatable</module>
         <module>scenario-17-testbean-meta-annotation</module>
+        <module>scenario-21-qualified-jdk-type</module>
         <module>scenario-22-same-simple-name</module>
+        <module>scenario-23-auto-mock-request-scoped</module>
+        <module>scenario-24-provider-unwrap</module>
+        <module>scenario-25-instance-unwrap</module>
+        <module>scenario-26-typed-narrowed</module>
+        <module>scenario-30-test-class-field-injection</module>
         <module>scenario-34-alternative-without-scope</module>
         <module>scenario-35-testbean-not-alternative</module>
         <module>scenario-45-priority-resolver-tiebreak</module>
         <module>scenario-50-multi-alternative-same-type</module>
         <module>scenario-52-typed-narrowed-with-testbean</module>
+        <module>scenario-53-multi-qualifier-jdk-type</module>
         <module>scenario-54-binding-qualifier-member</module>
         <module>scenario-56-deltaspike-whitelist-allow</module>
     </modules>
