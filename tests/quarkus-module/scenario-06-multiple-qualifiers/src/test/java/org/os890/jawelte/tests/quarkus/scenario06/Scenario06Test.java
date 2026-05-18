@@ -24,8 +24,8 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 
 import io.quarkus.test.junit.QuarkusTest;
 
-@EnableTestBeans
 @QuarkusTest
+@EnableTestBeans
 class Scenario06Test {
 
     @Inject

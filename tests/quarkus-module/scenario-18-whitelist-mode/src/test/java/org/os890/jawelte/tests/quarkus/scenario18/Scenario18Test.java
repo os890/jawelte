@@ -22,13 +22,13 @@ import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
-
-import io.quarkus.test.junit.QuarkusTest;
 import org.os890.jawelte.core.api.TestBean;
 
 import com.example.scenario18.EmailService;
 import com.example.scenario18.StubEmailService;
 import com.example.scenario18.UserService;
+
+import io.quarkus.test.junit.QuarkusTest;
 
 @QuarkusTest
 @EnableTestBeans(limitToTestBeans = true)

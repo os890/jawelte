@@ -20,9 +20,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.port.TestContext;
 
 import io.quarkus.test.junit.QuarkusTest;
-import org.os890.jawelte.core.api.port.TestContext;
 
 @QuarkusTest
 @EnableTestBeans

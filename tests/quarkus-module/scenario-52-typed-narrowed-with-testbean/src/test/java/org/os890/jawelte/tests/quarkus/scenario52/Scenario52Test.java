@@ -25,9 +25,9 @@ import org.os890.jawelte.core.api.TestBean;
 
 import io.quarkus.test.junit.QuarkusTest;
 
+@QuarkusTest
 @EnableTestBeans
 @TestBean(bean = CustomGreeting.class)
-@QuarkusTest
 class Scenario52Test {
 
     @Inject

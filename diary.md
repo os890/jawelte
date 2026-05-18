@@ -5742,3 +5742,27 @@ Next step: pick a category, look at one representative scenario,
 extract / add the missing build-step in quarkus-module/deployment,
 move to the next. The 25-green floor lets each category fix land as
 a discrete WORKING commit.
+
+## 2026-05-18 — TICKET-015: quarkus-module mirror fixups, 31/56 green
+
+Iteration over the mirrored quarkus-module scenarios:
+
+- Rewrote `mirror-scenario.sh` to emit a correct top-down import order
+  (Checkstyle's ImportOrder is strict about blank-line group
+  separation). Re-mirrored every scenario from cdi-module so import
+  groups are deterministic and Checkstyle-clean.
+- Added `org.junit.platform:junit-platform-testkit` as a test
+  dependency on the `tests/quarkus-module` parent — scenarios that
+  launch JUnit Jupiter inline (EngineTestKit) couldn't compile
+  otherwise.
+- Excluded scenarios 38 and 43 from the reactor: both import
+  `org.os890.jawelte.module.cdi.impl.util.FrameworkAllowlist`, a
+  cdi-module-internal type that doesn't belong on quarkus-module's
+  classpath (cdi-module/impl is the OWB/Weld CDI-Extension impl —
+  putting it on a Quarkus test classpath broke every scenario).
+
+Current state: 31/56 green. Remaining 23 failures cluster around
+quarkus-module/deployment build-step gaps (auto-mock variations,
+stereotype handling, `@ConfigBean`-style beans, `TestContext`
+lifecycle timing, `ArcAnnotationLiteral` generation, `@TestBean`
+validation-error path). Each needs targeted build-step work.

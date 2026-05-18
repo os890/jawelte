@@ -24,9 +24,9 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 
 import io.quarkus.test.junit.QuarkusTest;
 
+@QuarkusTest
 @EnableTestBeans
 @WithStubEmail
-@QuarkusTest
 class Scenario17Test {
 
     @Inject

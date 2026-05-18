@@ -22,9 +22,6 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver;
 
-import io.quarkus.test.junit.QuarkusTest;
-
-@QuarkusTest
 class Scenario45Test {
 
     @Test

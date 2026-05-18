@@ -23,9 +23,9 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
-import io.quarkus.test.junit.QuarkusTest;
-
 import com.example.scenario43.AllowedService;
+
+import io.quarkus.test.junit.QuarkusTest;
 
 @QuarkusTest
 @EnableTestBeans(limitToTestBeans = true)

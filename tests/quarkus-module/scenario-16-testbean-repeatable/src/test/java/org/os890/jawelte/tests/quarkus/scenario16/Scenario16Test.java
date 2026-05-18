@@ -25,10 +25,10 @@ import org.os890.jawelte.core.api.TestBean;
 
 import io.quarkus.test.junit.QuarkusTest;
 
+@QuarkusTest
 @EnableTestBeans
 @TestBean(bean = StubEmailService.class)
 @TestBean(bean = StubSmsService.class)
-@QuarkusTest
 class Scenario16Test {
 
     @Inject
