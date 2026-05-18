@@ -169,7 +169,14 @@ public @interface EnableTestBeans {
                 // {@code @QuarkusTest} that is Quarkus's own
                 // {@code QuarkusTestExtension.interceptTestClassConstructor}
                 // which produces the ArC-managed test instance).
-                TestInstanceFactoryPort port = TestContext.loadService(TestInstanceFactoryPort.class);
+                // Done inline via {@code ServiceLoader} + {@code @Priority}
+                // sorting — calling {@code TestContext.loadService(...)}
+                // here would force every test classpath to ship an MP
+                // Config implementation just to discover the priority
+                // resolver, which the bare {@code core/api} +
+                // {@code core/impl} test classpaths in {@code tests/core}
+                // do not all do.
+                TestInstanceFactoryPort port = resolveTestInstancePort();
                 if (port != null) {
                     Object portInstance = port.createInstance(testClass);
                     if (portInstance != null) {
@@ -203,6 +210,32 @@ public @interface EnableTestBeans {
                     storedContext.reset();
                 }
             }
+        }
+
+        /**
+         * Enumerate {@link TestInstanceFactoryPort} providers via
+         * {@code ServiceLoader} and pick the one with the lowest
+         * {@code @jakarta.annotation.Priority} value (CDI convention —
+         * lower is higher-priority). Providers without {@code @Priority}
+         * sort to {@link Integer#MAX_VALUE} (i.e. last). Returns
+         * {@code null} when no provider is on the classpath.
+         */
+        private static TestInstanceFactoryPort resolveTestInstancePort() {
+            List<TestInstanceFactoryPort> providers = new ArrayList<>();
+            for (TestInstanceFactoryPort provider : ServiceLoader.load(TestInstanceFactoryPort.class)) {
+                providers.add(provider);
+            }
+            if (providers.isEmpty()) {
+                return null;
+            }
+            providers.sort((a, b) -> Integer.compare(priorityOf(a), priorityOf(b)));
+            return providers.get(0);
+        }
+
+        private static int priorityOf(Object provider) {
+            jakarta.annotation.Priority annotation =
+                    provider.getClass().getAnnotation(jakarta.annotation.Priority.class);
+            return annotation != null ? annotation.value() : Integer.MAX_VALUE;
         }
 
         private synchronized TestBeansExtension delegate() {

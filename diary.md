@@ -5766,3 +5766,21 @@ quarkus-module/deployment build-step gaps (auto-mock variations,
 stereotype handling, `@ConfigBean`-style beans, `TestContext`
 lifecycle timing, `ArcAnnotationLiteral` generation, `@TestBean`
 validation-error path). Each needs targeted build-step work.
+
+## 2026-05-18 — TICKET-015 regression: switch back to raw ServiceLoader for port priority
+
+`tests/core/scenario-01-proxy-resolves-delegating-extension` regressed
+after the InvocationInterceptor pivot. Root cause:
+`Proxy.interceptTestClassConstructor` was calling
+`TestContext.loadService(TestInstanceFactoryPort.class)` which
+requires MP Config to be ready and `ServicePriorityResolver` to be
+bootstrappable. `tests/core`'s classpath doesn't carry every
+MP-Config-dependent bean, so the `loadService` call threw and the
+inner test reported as failed.
+
+Fix: replaced the `TestContext.loadService(...)` call with an inline
+`ServiceLoader` enumeration plus a `@jakarta.annotation.Priority`
+sort (lowest value wins, providers without `@Priority` sort last).
+Same selection semantics as `DefaultServicePriorityResolver` but with
+no MP Config dependency, so `Proxy` stays usable on bare
+`core/api + core/impl` test classpaths.
