@@ -47,6 +47,7 @@
         <module>scenario-12-satisfied-not-mocked</module>
         <module>scenario-22-same-simple-name</module>
         <module>scenario-45-priority-resolver-tiebreak</module>
+        <module>scenario-54-binding-qualifier-member</module>
         <module>scenario-56-deltaspike-whitelist-allow</module>
     </modules>
     <!--

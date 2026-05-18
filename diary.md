@@ -5604,3 +5604,15 @@ Dedup is now `(typeName, qualifierFingerprint)` so the same raw type with differ
 `isProducedByExistingMethod` skips mock registration when an `@Produces` method already produces a matching `(returnType, qualifiers)` pair. Caught a regression on scenario-10 where my BuildStep would have double-registered for `@Named("formatted") String` (the test injects it; the producer also returns it).
 
 Coverage: 14 / 56 cdi-module scenarios green under @QuarkusTest. New green: 04 named-qualifier, 05 custom-qualifier, 06 multiple-qualifiers.
+
+## 2026-05-18 — TICKET-015 Phase B8: scenario-54 green (binding qualifier member)
+
+Scenario-54 passes — qualifier with a binding member (`@ServiceType("express")` vs `@ServiceType("standard")`) produces two distinct synthetic mock beans because the dedup key `(typeName, qualifierFingerprint)` is sensitive to binding-member values.
+
+Mirrored 7 scenarios but only 1 went green in this pass (54). The others surfaced fundamental Quarkus-specific gaps that need further BuildStep work:
+- **07 nonbinding-deduplication** — qualifier with `@Nonbinding` member: the dedup key currently treats every member as binding. cdi-module's `qualifiersEquivalent` skips `@Nonbinding` members; need to mirror that.
+- **21 qualified-jdk-type / 53 multi-qualifier-jdk-type** — `NoClassDefFoundError: <Qualifier>_ArcAnnotationLiteral`. Quarkus's annotation-literal generator either doesn't pick up the test-scope qualifier or doesn't see my synthetic-bean qualifier registration. Needs investigation; possibly an explicit `AdditionalIndexedClassesBuildItem` or moving custom qualifiers to src/main/java.
+- **23 auto-mock-request-scoped** — current scope is `@Singleton`; scenario asserts request-scoped semantics. Need scope precedence aligned with cdi-module (MP Config + scope-module's `@TestMethodScoped` default; JDK types stay `@Dependent`).
+- **24 provider-unwrap / 25 instance-unwrap** — `@Inject Provider<X>` / `@Inject Instance<X>` need wrapper-type unwrapping (cdi-module's `unwrapWrapper`). My BuildStep currently registers a mock for `Provider`/`Instance` itself instead of unwrapping to `X`.
+
+Coverage: 15 / 56 cdi-module scenarios green under @QuarkusTest.
