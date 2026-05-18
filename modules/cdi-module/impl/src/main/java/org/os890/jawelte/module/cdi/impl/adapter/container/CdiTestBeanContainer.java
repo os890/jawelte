@@ -27,7 +27,6 @@ import org.os890.jawelte.core.api.event.ContainerStarted;
 import org.os890.jawelte.core.api.port.TestBeanContainerPort;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.CdiContainerPort;
-import org.os890.jawelte.module.cdi.impl.util.InjectFieldsHelper;
 
 /**
  * Adapter for {@link TestBeanContainerPort} that delegates the bean
@@ -76,7 +75,15 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     @Override
     public void postProcessTestInstance(TestContext testContext, Object testInstance) {
-        InjectFieldsHelper.inject(beanManager(testContext), testInstance);
+        // No-op. The test instance comes from
+        // DelegatingJUnitTestInstanceFactory, which routes through
+        // CDI.current().select(testClass).get() so CDI's normal
+        // bean-instantiation path populates the @Inject fields. Any
+        // scenario where the test instance is NOT a CDI bean (e.g.
+        // a future @EnableTestBeans(manageContainer=false) variant
+        // where jawelte's extension never sees the user's container)
+        // will have to handle its own injection — the framework no
+        // longer falls back to manual InjectionTarget population.
     }
 
     @Override

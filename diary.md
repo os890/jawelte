@@ -5319,3 +5319,28 @@ Continuation of the per-scenario audit: while reviewing the @Param fix on scenar
 Fix: extended `CrudRepositories` with derived queries (`findByStatus`, `findByDepartmentId`, `findByAuthorId`, `findByWarehouseId`, `findByAccountId`) and `@Query` aggregates / joins (`averagePrice`, `findAllWithItems`, `countPerDepartment`, `findByTagName`, `averageAmount`, `sumBalances`, `totalQuantity`). Added two new repositories (`SalaryRepository`, `FinancialTransactionRepository`) so the salary aggregate and the by-account transactions read hit the right tables. Every `:name` placeholder in a `@Query` is paired with `@Param("name")` for the same reflection reason that broke `deleteByOrderId` earlier today.
 
 Rewrote `AbstractFullCrudSpringDataScenarioTest` so each read-only body is a single delegate call into the matching repo; `allTablesPopulated` now calls `count()` on every one of the 12 repositories instead of just `customers.count()`. Locally re-ran scenario-08 under both `-P weld,lnp test` and `-P owb,lnp test` — 2101 tests / 0 errors / BUILD SUCCESS in both.
+
+## 2026-05-18 — TICKET-016 Phase A: TestInstanceFactory refactor — foundation landed, 40/56 green
+
+Branch `33-refactor-test-instance-via-junit-testinstancefactory-backed-by-a-core-spi`.
+
+Foundation in place:
+- `core/api`: new optional SPI `TestInstanceFactoryPort` (single method `createInstance(Class<?>)`).
+- `core/impl`: `DelegatingJUnitTestInstanceFactory` implements `org.junit.jupiter.api.extension.TestInstanceFactory`. Loads the port via `ServiceLoader`; falls back to reflection (`testClass.getDeclaredConstructor().newInstance()`) when no impl is on the classpath.
+- `cdi-module/impl`: `CdiTestInstanceFactoryPortAdapter` returns `CDI.current().select(testClass).get()` (and returns `null` on `IllegalStateException` / `isUnsatisfied()` so the bridge falls back to reflection — covers the rare cases where the factory runs without an active container).
+- `cdi-module/impl`: `TestBeansCdiExtension` now adds `@Dependent` to the test class during `BeforeBeanDiscovery` (skipped when the class already has a bean-defining annotation). `addTestClassInjectionPoints` deleted — the test class being a CDI bean means `ProcessInjectionPoint` already covers its IPs.
+- `cdi-module/impl`: ships `META-INF/services/org.junit.jupiter.api.extension.Extension` (auto-detect activation for the factory bridge), `META-INF/services/org.os890.jawelte.core.api.port.TestInstanceFactoryPort` (port SPI), and `src/main/resources/junit-platform.properties` setting `junit.jupiter.extensions.autodetection.enabled=true`.
+- `CdiTestBeanContainer.postProcessTestInstance` is now a no-op — CDI's normal bean-instantiation populates the `@Inject` fields when the test instance is a managed bean.
+- `tests/cdi-module/scenario-31-test-class-not-cdi-bean`: assertion flipped to "test class IS a `@Dependent` CDI bean".
+
+Coverage right now: 40 / 56 cdi-module scenarios pass on the `-Powb` default.
+
+Outstanding failures (each needs targeted work):
+- 03, 21, 24, 25, 53: parameterized / JDK / Provider / Instance type-unwrap on the auto-mock path. Now that `ProcessInjectionPoint` fires for test-class IPs with the standard `{@Default, @Any}` qualifier set, the synthetic-bean registration needs to track those qualifiers consistently.
+- 27, 28, 29: `@TestBean` validation errors. The misconfig is detected but the exception path through `EngineTestKit` doesn't surface the expected root-cause message in the new bootstrap order.
+- 30: test-class field injection assertion shape changed because the instance now comes from CDI rather than reflection.
+- 32: `@EnableTestBeans(manageContainer=false)` — per the user's direction we no longer fall back to manual `InjectionTarget` injection. Scenario needs to be revisited: either the test bootstraps the container in a way that lets `TestBeansCdiExtension` see the active `TestContext`, or the scenario gets retired.
+- 38, 41, 42, 44, 45: `TestContext` / `ServicePriorityResolver` lifecycle assertions tied to the old bootstrap order.
+- 55: DeltaSpike `@PartialBeanBinding` skip — the build-time guard didn't keep up with the new IP path.
+
+Next steps: investigate per-failure, fix incrementally, then push.

@@ -37,8 +37,6 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.Stereotype;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
 import jakarta.enterprise.inject.spi.AfterTypeDiscovery;
-import jakarta.enterprise.inject.spi.AnnotatedField;
-import jakarta.enterprise.inject.spi.AnnotatedType;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.BeforeBeanDiscovery;
 import jakarta.enterprise.inject.spi.Extension;
@@ -46,7 +44,6 @@ import jakarta.enterprise.inject.spi.InjectionPoint;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.enterprise.inject.spi.ProcessInjectionPoint;
 import jakarta.enterprise.util.Nonbinding;
-import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Qualifier;
 import jakarta.inject.Scope;
@@ -163,6 +160,14 @@ public class TestBeansCdiExtension implements Extension {
         for (Class<?> producerType : scanResult.producerTypes()) {
             forceDiscoveryWithDependentFallback(event, producerType);
         }
+        // Register the test class itself as a @Dependent CDI bean so
+        // CDI.current().select(testClass).get() returns the real test
+        // object (no normal-scope proxy). DelegatingJUnitTestInstanceFactory
+        // (core/impl, auto-detected via cdi-module/impl's META-INF/services)
+        // hands that instance to JUnit; postProcessTestInstance no longer
+        // needs to populate fields because CDI already did during
+        // bean instantiation.
+        registerTestClassAsDependentBean(event, testClass);
     }
 
     void onProcessAnnotatedType(@Observes ProcessAnnotatedType<?> event) {
@@ -238,9 +243,15 @@ public class TestBeansCdiExtension implements Extension {
             return;
         }
 
-        // Collect IPs from the test class itself (not a CDI bean,
-        // therefore no ProcessInjectionPoint events fire for it).
-        addTestClassInjectionPoints(beanManager);
+        // The test class is now registered as a @Dependent CDI bean
+        // (see registerTestClassAsDependentBean above), so its @Inject
+        // fields already fired ProcessInjectionPoint events and landed
+        // in unsatisfiedCandidateIps with the standard
+        // {@Default, @Any} qualifier set. The earlier
+        // addTestClassInjectionPoints fallback would now collide with
+        // those events (empty qualifier set vs {@Default, @Any}) and
+        // produce two synthetic mocks for the same IP, so it is no
+        // longer invoked.
 
         // Synthesise mocks for unsatisfied collected IPs. Each
         // (targetType, qualifier-set) pair gets its own bean so two
@@ -308,6 +319,29 @@ public class TestBeansCdiExtension implements Extension {
      */
     Set<IpKey> unsatisfiedCandidateIpsForTests() {
         return new LinkedHashSet<>(unsatisfiedCandidateIps);
+    }
+
+    /**
+     * Force the test class to be discovered as a {@code @Dependent}
+     * CDI bean. The pseudo-scope keeps the returned reference the
+     * real test object rather than a normal-scope proxy, which is
+     * important so private fields, package-private test classes, and
+     * JUnit's {@code PER_METHOD} lifecycle all keep working. Skipped
+     * when the test class already carries a bean-defining annotation
+     * — the user-declared scope wins in that case.
+     *
+     * @param event     the {@code BeforeBeanDiscovery} event passed
+     *                  through the active CDI runtime
+     * @param testClass the active test class as resolved from
+     *                  {@link TestContext#getTestClass()}
+     */
+    private static void registerTestClassAsDependentBean(
+            BeforeBeanDiscovery event, Class<?> testClass) {
+        if (hasBeanDefiningAnnotation(testClass)) {
+            return;
+        }
+        event.addAnnotatedType(testClass, testClass.getName())
+                .add(Dependent.Literal.INSTANCE);
     }
 
     private static void forceDiscoveryWithDependentFallback(BeforeBeanDiscovery event, Class<?> target) {
@@ -395,27 +429,6 @@ public class TestBeansCdiExtension implements Extension {
             }
         }
         return false;
-    }
-
-    private void addTestClassInjectionPoints(BeanManager beanManager) {
-        Class<?> testClass = activeContext.getTestClass();
-        AnnotatedType<?> testClassType = beanManager.createAnnotatedType(testClass);
-        for (AnnotatedField<?> field : testClassType.getFields()) {
-            if (!field.isAnnotationPresent(Inject.class)) {
-                continue;
-            }
-            Type targetType = unwrapWrapper(field.getBaseType());
-            if (targetType == null) {
-                continue;
-            }
-            Set<Annotation> qualifiers = new LinkedHashSet<>();
-            for (Annotation annotation : field.getAnnotations()) {
-                if (beanManager.isQualifier(annotation.annotationType())) {
-                    qualifiers.add(annotation);
-                }
-            }
-            unsatisfiedCandidateIps.add(new IpKey(targetType, qualifiers));
-        }
     }
 
     private static boolean isUnsatisfied(

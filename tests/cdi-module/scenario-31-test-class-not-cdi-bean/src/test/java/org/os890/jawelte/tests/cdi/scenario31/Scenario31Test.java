@@ -17,6 +17,10 @@ package org.os890.jawelte.tests.cdi.scenario31;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Set;
+
+import jakarta.enterprise.context.Dependent;
+import jakarta.enterprise.inject.spi.Bean;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.inject.Inject;
 
@@ -30,7 +34,9 @@ class Scenario31Test {
     BeanManager beanManager;
 
     @Test
-    void testClassIsNotRegisteredAsACdiBean() {
-        assertThat(beanManager.getBeans(Scenario31Test.class)).isEmpty();
+    void testClassIsRegisteredAsDependentCdiBean() {
+        Set<Bean<?>> beans = beanManager.getBeans(Scenario31Test.class);
+        assertThat(beans).hasSize(1);
+        assertThat(beans.iterator().next().getScope()).isEqualTo(Dependent.class);
     }
 }
