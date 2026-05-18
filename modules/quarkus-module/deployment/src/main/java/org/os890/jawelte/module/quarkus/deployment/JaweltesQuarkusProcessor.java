@@ -16,7 +16,6 @@
 package org.os890.jawelte.module.quarkus.deployment;
 
 import java.lang.reflect.Modifier;
-import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -26,8 +25,8 @@ import org.jboss.jandex.AnnotationInstance;
 import org.jboss.jandex.AnnotationTarget;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
-import org.jboss.jandex.FieldInfo;
 import org.jboss.jandex.IndexView;
+import org.jboss.jandex.MethodInfo;
 import org.jboss.jandex.Type;
 import org.os890.jawelte.module.quarkus.runtime.MockBeanCreator;
 
@@ -58,6 +57,10 @@ public class JaweltesQuarkusProcessor {
 
     private static final String FEATURE = "jawelte-quarkus";
     private static final DotName INJECT = DotName.createSimple("jakarta.inject.Inject");
+    private static final DotName PRODUCES = DotName.createSimple("jakarta.enterprise.inject.Produces");
+    private static final DotName OBSERVES = DotName.createSimple("jakarta.enterprise.event.Observes");
+    private static final DotName OBSERVES_ASYNC = DotName.createSimple("jakarta.enterprise.event.ObservesAsync");
+    private static final DotName DISPOSES = DotName.createSimple("jakarta.enterprise.inject.Disposes");
     private static final DotName ENABLE_TEST_BEANS =
             DotName.createSimple("org.os890.jawelte.core.api.EnableTestBeans");
 
@@ -77,74 +80,135 @@ public class JaweltesQuarkusProcessor {
     }
 
     /**
-     * Scans every {@code @EnableTestBeans}-annotated class in the
-     * Jandex index, walks its {@code @Inject} fields, and registers a
-     * synthetic Mockito-backed bean for every field whose declared
-     * type is an interface with no known implementor. Mirrors the
-     * portion of cdi-module's {@code TestBeansCdiExtension} that
-     * synthesises auto-mock beans at {@code AfterBeanDiscovery} time.
+     * Walks every {@code @Inject} annotation in the Jandex index — on
+     * fields, on methods (constructor / initializer; the method
+     * parameters are the actual injection points), and on method
+     * parameters directly. For each candidate target type that is
+     * (a) an interface with no known implementor, or (b) a concrete
+     * class with no class-level annotations, registers a synthetic
+     * Mockito-backed bean.
+     *
+     * <p>Only fires when at least one {@code @EnableTestBeans} class
+     * is present in the index — the build-step stays a no-op in
+     * non-test Quarkus apps.
      *
      * @param indexItem      the combined index produced by Quarkus's
-     *                       core processor; carries every class on
-     *                       the build classpath
+     *                       core processor
      * @param syntheticBeans build-item producer for the synthetic
      *                       mock beans this step contributes
      */
     @BuildStep
-    void autoMockUnsatisfiedInterfaces(
+    void autoMockUnsatisfiedInjectionPoints(
             CombinedIndexBuildItem indexItem,
             BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
         IndexView index = indexItem.getIndex();
+        if (index.getAnnotations(ENABLE_TEST_BEANS).isEmpty()) {
+            return;
+        }
         Set<DotName> alreadyHandled = new LinkedHashSet<>();
-        for (AnnotationInstance enableAnnotation : index.getAnnotations(ENABLE_TEST_BEANS)) {
-            if (enableAnnotation.target().kind() != AnnotationTarget.Kind.CLASS) {
-                continue;
-            }
-            ClassInfo testClass = enableAnnotation.target().asClass();
-            ClassInfo current = testClass;
-            while (current != null && !current.name().equals(DotName.OBJECT_NAME)) {
-                for (FieldInfo field : current.fields()) {
-                    if (field.annotation(INJECT) == null) {
-                        continue;
+        for (AnnotationInstance injectAnnotation : index.getAnnotations(INJECT)) {
+            AnnotationTarget target = injectAnnotation.target();
+            switch (target.kind()) {
+                case FIELD -> processCandidateType(
+                        target.asField().type(), index, alreadyHandled, syntheticBeans);
+                case METHOD -> {
+                    MethodInfo method = target.asMethod();
+                    for (Type parameterType : method.parameterTypes()) {
+                        processCandidateType(parameterType, index, alreadyHandled, syntheticBeans);
                     }
-                    Type fieldType = field.type();
-                    DotName fieldTypeName = fieldType.name();
-                    if (!alreadyHandled.add(fieldTypeName)) {
-                        continue;
-                    }
-                    ClassInfo target = index.getClassByName(fieldTypeName);
-                    if (target == null) {
-                        continue;
-                    }
-                    if (Modifier.isInterface(target.flags())) {
-                        Collection<ClassInfo> impls = index.getAllKnownImplementors(fieldTypeName);
-                        if (!impls.isEmpty()) {
-                            continue;
-                        }
-                    } else {
-                        if (!target.declaredAnnotations().isEmpty()) {
-                            // Concrete class with class-level annotations is
-                            // likely a managed bean — let Quarkus resolve it.
-                            // Auto-mock applies only to fully unmanaged
-                            // concrete classes.
-                            continue;
-                        }
-                    }
-                    syntheticBeans.produce(
-                            SyntheticBeanBuildItem.configure(fieldTypeName)
-                                    .types(fieldType)
-                                    .scope(Singleton.class)
-                                    .creator(MockBeanCreator.class)
-                                    .param(MockBeanCreator.TYPE_NAME_PARAM, fieldTypeName.toString())
-                                    .unremovable()
-                                    .done());
                 }
-                DotName superName = current.superName();
-                if (superName == null) {
-                    break;
+                case METHOD_PARAMETER -> {
+                    MethodInfo enclosing = target.asMethodParameter().method();
+                    int position = target.asMethodParameter().position();
+                    processCandidateType(
+                            enclosing.parameterTypes().get(position),
+                            index, alreadyHandled, syntheticBeans);
                 }
-                current = index.getClassByName(superName);
+                default -> {
+                    // Skip class-level / record-component / type-use targets;
+                    // those aren't injection points.
+                }
             }
         }
+        // @Produces methods: every parameter is an implicit injection point.
+        for (AnnotationInstance produces : index.getAnnotations(PRODUCES)) {
+            if (produces.target().kind() != AnnotationTarget.Kind.METHOD) {
+                continue;
+            }
+            MethodInfo method = produces.target().asMethod();
+            for (Type parameterType : method.parameterTypes()) {
+                processCandidateType(parameterType, index, alreadyHandled, syntheticBeans);
+            }
+        }
+        // @Observes / @ObservesAsync: every NON-event parameter on the same
+        // method is an implicit injection point. @Disposes follows the same
+        // pattern for the non-@Disposes parameters.
+        processSiblingParameters(index, alreadyHandled, syntheticBeans, OBSERVES);
+        processSiblingParameters(index, alreadyHandled, syntheticBeans, OBSERVES_ASYNC);
+        processSiblingParameters(index, alreadyHandled, syntheticBeans, DISPOSES);
+    }
+
+    private static void processSiblingParameters(
+            IndexView index,
+            Set<DotName> alreadyHandled,
+            BuildProducer<SyntheticBeanBuildItem> syntheticBeans,
+            DotName eventAnnotation) {
+        for (AnnotationInstance instance : index.getAnnotations(eventAnnotation)) {
+            if (instance.target().kind() != AnnotationTarget.Kind.METHOD_PARAMETER) {
+                continue;
+            }
+            MethodInfo method = instance.target().asMethodParameter().method();
+            int eventPosition = instance.target().asMethodParameter().position();
+            java.util.List<Type> parameters = method.parameterTypes();
+            for (int i = 0; i < parameters.size(); i++) {
+                if (i == eventPosition) {
+                    continue;
+                }
+                processCandidateType(parameters.get(i), index, alreadyHandled, syntheticBeans);
+            }
+        }
+    }
+
+    private static void processCandidateType(
+            Type candidate,
+            IndexView index,
+            Set<DotName> alreadyHandled,
+            BuildProducer<SyntheticBeanBuildItem> syntheticBeans) {
+        DotName name = candidate.name();
+        if (!alreadyHandled.add(name)) {
+            return;
+        }
+        String packageName = name.packagePrefix();
+        if (packageName != null
+                && (packageName.startsWith("java.")
+                        || packageName.startsWith("jakarta.")
+                        || packageName.startsWith("io.quarkus.")
+                        || packageName.startsWith("org.jboss.")
+                        || packageName.startsWith("org.eclipse.microprofile."))) {
+            // Skip JDK / framework types — Quarkus or jakarta supply
+            // those, jawelte's auto-mock applies only to user code.
+            return;
+        }
+        ClassInfo target = index.getClassByName(name);
+        if (target == null) {
+            return;
+        }
+        if (Modifier.isInterface(target.flags())) {
+            if (!index.getAllKnownImplementors(name).isEmpty()) {
+                return;
+            }
+        } else {
+            if (!target.declaredAnnotations().isEmpty()) {
+                return;
+            }
+        }
+        syntheticBeans.produce(
+                SyntheticBeanBuildItem.configure(name)
+                        .types(candidate)
+                        .scope(Singleton.class)
+                        .creator(MockBeanCreator.class)
+                        .param(MockBeanCreator.TYPE_NAME_PARAM, name.toString())
+                        .unremovable()
+                        .done());
     }
 }

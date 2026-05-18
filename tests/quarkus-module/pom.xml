@@ -37,6 +37,10 @@
         <module>scenario-01-interface-auto-mock</module>
         <module>scenario-02-concrete-class-auto-mock</module>
         <module>scenario-03-parameterized-generic</module>
+        <module>scenario-08-constructor-injection</module>
+        <module>scenario-09-initializer-method-injection</module>
+        <module>scenario-10-producer-method-parameter</module>
+        <module>scenario-11-observer-method-parameter</module>
         <module>scenario-12-satisfied-not-mocked</module>
     </modules>
 

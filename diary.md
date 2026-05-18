@@ -5563,3 +5563,17 @@ No BuildStep changes needed. `Scenario12Test` has `@Inject EmailService` where `
 Coverage: 3 / 56 cdi-module scenarios green under @QuarkusTest (01, 02, 12).
 
 Status: PAUSING for user review at this checkpoint. The infrastructure is proven (Quarkus 3.35.3 boots, jawelte-quarkus extension recognised, BuildStep + MockBeanCreator pipeline working). Subsequent scenarios will surface new cases: parameterized generics (Provider<>/Instance<>), qualifiers (@Named, custom), explicit @TestBean alternatives, static-field @TestBeans, scope-module-driven scope assignment, whitelist mode, framework-allowlist override, etc. Each is a discrete extension to JaweltesQuarkusProcessor.
+
+## 2026-05-18 — TICKET-015 Phase B5: scenarios 08-11 green (BuildStep upgrade for non-test-class IPs)
+
+Replaced `autoMockUnsatisfiedInterfaces` with `autoMockUnsatisfiedInjectionPoints`. The new step scans every `@Inject` annotation in the Jandex index (FIELD / METHOD / METHOD_PARAMETER targets), then also walks `@Produces` method parameters and the sibling parameters of `@Observes` / `@ObservesAsync` / `@Disposes` methods (those are implicit IPs that don't carry `@Inject`). Each candidate type goes through the same interface/concrete-class auto-mock check. A package-prefix guard skips JDK / jakarta / Quarkus / JBoss / MicroProfile types so the build-step doesn't try to mock framework internals. Gated on at least one `@EnableTestBeans` class being present in the index.
+
+Mirror script (`/tmp/mirror-scenario.sh`) drives the per-scenario clone: renames `org.os890.jawelte.tests.cdi.scenarioNN` → `...tests.quarkus.scenarioNN`, inserts `import io.quarkus.test.junit.QuarkusTest;` in its own (last) import group, prepends `@QuarkusTest` to the test class declaration, emits a fresh pom + application.properties.
+
+Scenarios green under `@QuarkusTest`: 01, 02, 03, 08, 09, 10, 11, 12 (8 / 56).
+
+Scenarios mirrored but currently failing (kept off the reactor):
+- 22 same-simple-name: mirror script only copies the test class's own package; this scenario also has `com.example.scenario22.{auth,billing}` sub-packages with same-simple-name types. Script needs to walk every package under src/test/java.
+- 31 test-class-not-cdi-bean: under `@QuarkusTest` the test class IS a CDI bean (Quarkus registers it for IP resolution); the assertion `beanManager.getBeans(Scenario31Test.class).isEmpty()` doesn't hold under Quarkus's model. Likely a deliberate skip; revisit when documenting Quarkus-specific deviations.
+
+Next batch: extend the mirror script for multi-package sources, then mirror the test-context / priority-resolver / container-started scenarios (39-46), then move into qualifier / @TestBean territory.
