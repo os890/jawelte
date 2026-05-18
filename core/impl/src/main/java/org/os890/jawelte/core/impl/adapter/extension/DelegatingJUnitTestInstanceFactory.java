@@ -95,7 +95,11 @@ public class DelegatingJUnitTestInstanceFactory implements TestInstanceFactory {
     }
 
     private static Object reflectiveInstance(Class<?> testClass) throws Exception {
-        return testClass.getDeclaredConstructor().newInstance();
+        var constructor = testClass.getDeclaredConstructor();
+        // JUnit test classes are often package-private; setAccessible
+        // makes the no-arg constructor reachable from this module.
+        constructor.setAccessible(true);
+        return constructor.newInstance();
     }
 
     private static TestInstanceFactoryPort loadPort() {

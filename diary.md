@@ -5358,3 +5358,17 @@ User-visible effect:
 - `TestContext.get()` inside a `@Test` body still throws (the factory bridge resets just before returning the instance), matching scenario 40's invariant.
 
 Coverage: 41 / 56 cdi-module scenarios green on `-Powb`. Remaining 15 cluster into generic/JDK/Provider/Instance unwrap (03, 21, 24, 25, 53), `@TestBean` validation-error exception path (27, 28, 29), test-class field-injection assertion (30), framework allowlist (38), `TestContext`-lifecycle scenarios with assertions tied to the old bootstrap-window timing (41, 42, 44, 45), and DeltaSpike `@PartialBeanBinding` skip (55).
+
+## 2026-05-18 — TICKET-016 Phase C: setAccessible fix for package-private test classes (50/56 green)
+
+`DelegatingJUnitTestInstanceFactory.reflectiveInstance` now calls `setAccessible(true)` on the no-arg constructor before invoking it. Most JUnit test classes are package-private (and per the project's Checkstyle convention, declared without an explicit modifier). The factory bridge lives in a different package so reflection without `setAccessible` couldn't reach them — that was the root cause of the chain of failures across scenarios 27, 28, 29, 38, 41, 42, 44, 45, 55 (each of those is a wrapper that uses `EngineTestKit` to run a `*Subject`; the wrapper itself doesn't carry `@EnableTestBeans` so it goes through the reflection fallback).
+
+Coverage: 50 / 56 cdi-module scenarios green on `-Powb`. Remaining 6 cluster into a single category — generic / JDK / Provider / Instance unwrap on the auto-mock path:
+- 03 parameterized-generic
+- 21 qualified-jdk-type
+- 24 provider-unwrap
+- 25 instance-unwrap
+- 30 test-class-field-injection
+- 53 multi-qualifier-jdk-type
+
+The new `ProcessInjectionPoint` path now sees `{@Default, @Any}` qualifiers for the test class's `@Inject` fields (because the test class is a CDI bean and CDI fills in the defaults), where the old `addTestClassInjectionPoints` walked the field reflectively and only collected explicit qualifiers. The synthetic-bean registration in `SyntheticBeanUtil.registerAutoMockBean` may need to canonicalise that qualifier set (or my BuildStep should pre-filter `@Default` / `@Any` to match the old shape) so CDI's resolution matches the synthetic bean.
