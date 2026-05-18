@@ -6392,3 +6392,46 @@ jawelte's test-only features (auto-mock, `@TestClassScoped`, …)
 plug into Quarkus's build-time pipeline — the answer probably routes
 through CDI 4.0's `BuildCompatibleExtension` (ArC supports it) or a
 Quarkus extension's `@BuildStep`s.
+
+---
+## 2026-05-18 — quarkus-full-poc: auto-mock works via BuildCompatibleExtension
+
+cdi-module/scenario-30 (heaviest IP shape: inherited interface field +
+`Provider<X>` + `Instance<X>` + custom-qualified bean + plain class)
+is now green under `@QuarkusTest`. Auto-mock plumbing comes from a
+CDI 4.0 `BuildCompatibleExtension`:
+
+- **`@Registration(types = Object.class)`** accumulates every bean's
+  (type, qualifiers) shape and every IP across the bean archive.
+- **`@Synthesis`** walks the IPs and, for every (type, qualifiers)
+  pair no existing bean covers, registers a synthetic bean of that
+  type/qualifier set whose `SyntheticBeanCreator` returns
+  `Mockito.mock(targetType)`.
+- `Provider<X>` / `Instance<X>` IPs are unwrapped to `X` so ArC's
+  built-in wrapper handling serves the wrapper part.
+
+Hosted in `cdi-module/impl/adapter/quarkus`:
+- `JaweltAutoMockBuildCompatibleExtension` (the BCE itself).
+- `MockSyntheticBeanCreator` (runtime: Mockito mock per `targetType`
+  parameter).
+- `META-INF/services/jakarta.enterprise.inject.build.compatible.spi.BuildCompatibleExtension`.
+
+Limitations of this first pass (matches the standalone-ArC pivot's
+first-pass shape, will be tightened): qualifier-matching is by FQN
+set only (no `@Nonbinding` normalisation yet), parameterised
+non-wrapper types are registered as raw bean types, scope is hard-
+coded to `@Dependent`.
+
+`CdiTestBeanContainer.postProcessTestInstance` /
+`beforeEach` now short-circuit when an external driver
+(`@QuarkusTest`) owns the container; detected via the absence of
+the `CdiOldTccl` metadata our `beforeAll` would normally bind.
+
+The headline architectural finding: **`BuildCompatibleExtension`
+covers auto-mock and synthetic beans, but `SyntheticComponents` has
+no `addContext`.** Custom scopes (`@TestClassScoped`,
+`@TestMethodScoped`, `@TransactionScoped`) still need either a
+real Quarkus extension with `@BuildStep` returning
+`ContextRegistrarBuildItem`, or staying on the standalone-ArC
+backend. Worth a follow-up decision point before we migrate
+scope-module.
