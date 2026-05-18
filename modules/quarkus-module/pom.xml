@@ -37,4 +37,25 @@
         <module>runtime</module>
         <module>deployment</module>
     </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM scoped to the quarkus-module subtree only.
+                Imported here (not in the root pom) because the BOM
+                overrides smallrye-config / jackson / commons-io / etc.
+                versions; letting those overrides propagate to non-
+                Quarkus modules breaks bean discovery in OWB / Weld
+                (concretely surfaced as scenario-04 ambiguity in
+                wiremock-module).
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 </project>

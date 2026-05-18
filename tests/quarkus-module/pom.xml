@@ -111,6 +111,26 @@
              whitelist / exclude-packages buckets.
     -->
 
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM, scoped to the tests/quarkus-module subtree
+                only. NOT inherited from the root pom because Quarkus
+                BOM overrides smallrye-config / jackson / commons-io /
+                etc. versions and propagating those to non-Quarkus
+                modules breaks bean discovery in OWB / Weld (concretely
+                surfaced as scenario-04 ambiguity in wiremock-module).
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!--
             jawelte-core-api + jawelte-core-impl are needed by every

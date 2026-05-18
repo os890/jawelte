@@ -5813,3 +5813,29 @@ diffs are quarkus-module additions and core/api's Proxy (which I've
 reverted to byte-identical to main, verified with `diff -u`). Yet
 the test still regresses. I could not root-cause this in the
 time available; flagging for review.
+
+## 2026-05-18 — FIXED: quarkus-bom scope (wiremock-04 regression root cause)
+
+Found the wiremock-04 regression. Root cause: the Quarkus BOM was
+imported in the ROOT pom's `<dependencyManagement>`, which propagated
+its version overrides to the WHOLE reactor — including non-Quarkus
+modules. Concretely:
+
+- `smallrye-config-core` 3.10.0 → 3.17.2
+- `smallrye-common-*` 2.7.0 → 2.17.0
+- `jackson-*` 2.20.x → 2.21.x
+- (plus a long tail of similar overrides)
+
+That changed OWB's transitive `smallrye-config-core` version, which
+in turn altered some bean-discovery behaviour in wiremock-module's
+WireMock producer, causing two `@PaymentApi WireMockServer` beans to
+register where main had only one. Surfaced as
+`AmbiguousResolutionException` in scenario-04.
+
+Fix: moved the `quarkus-bom` `<scope>import</scope>` out of the root
+pom's `<dependencyManagement>`. Re-imported it in:
+- `modules/quarkus-module/pom.xml`
+- `tests/quarkus-module/pom.xml`
+
+so the override list is now confined to the Quarkus subtree only.
+wiremock-04 passes again on the branch.

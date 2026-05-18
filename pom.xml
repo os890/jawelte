@@ -133,20 +133,29 @@
             </dependency>
 
             <!--
-                BOM import: pins every io.quarkus:* artifact to
-                ${quarkus.version}. Used by modules/quarkus-module
-                (the Quarkus-flavour TestBeanContainerPort adapter)
-                and by per-module impl-quarkus siblings that ship
-                Quarkus extensions (deployment + runtime artifact
-                pairs).
+                Quarkus BOM is intentionally NOT imported here. Quarkus
+                bom-imports override smallrye-config, jackson, and many
+                other transitive dependency versions across the whole
+                reactor — that breaks OWB / Weld bean discovery in
+                modules unrelated to Quarkus (concretely surfaced as an
+                AmbiguousResolutionException in wiremock-module's
+                scenario-04). The Quarkus BOM is imported only in the
+                poms that actually need it:
+                  - modules/quarkus-module/pom.xml (aggregator)
+                  - tests/quarkus-module/pom.xml (test aggregator)
+                so its version overrides stay confined to the Quarkus
+                subtree.
             -->
-            <dependency>
-                <groupId>io.quarkus</groupId>
-                <artifactId>quarkus-bom</artifactId>
-                <version>${quarkus.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
+            <!--
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-bom</artifactId>
+                    <version>${quarkus.version}</version>
+                    <type>pom</type>
+                    <scope>import</scope>
+                </dependency>
+            -->
+
 
             <!--
                 Jakarta APIs are provided by the CDI runtime at test time;
