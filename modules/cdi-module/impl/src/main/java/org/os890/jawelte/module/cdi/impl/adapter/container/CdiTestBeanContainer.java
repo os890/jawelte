@@ -147,13 +147,7 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             WhitelistFilter filter = resolveWhitelistFilter();
             if (filter != null) {
                 for (Class<?> candidate : discoveredClasses) {
-                    if (candidate.equals(testClass)) {
-                        continue;
-                    }
-                    if (candidate.isAnnotationPresent(EnableTestBeans.class)) {
-                        continue;
-                    }
-                    if (hasTestBeanField(candidate)) {
+                    if (shouldSkipCandidate(candidate, testClass)) {
                         continue;
                     }
                     if (filter.isAllowed(candidate)) {
@@ -163,13 +157,7 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             }
         } else {
             for (Class<?> candidate : discoveredClasses) {
-                if (candidate.equals(testClass)) {
-                    continue;
-                }
-                if (candidate.isAnnotationPresent(EnableTestBeans.class)) {
-                    continue;
-                }
-                if (hasTestBeanField(candidate)) {
+                if (shouldSkipCandidate(candidate, testClass)) {
                     continue;
                 }
                 beanClasses.add(candidate);
@@ -190,14 +178,24 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         testContext.getMetadata(ClassLoader.class)
                 .ifPresent(cl -> testContext.bindMetadata(CdiOldTccl.class, new CdiOldTccl(cl)));
 
-        invokePortableExtensionPhase(
-                portableExtensions, jakarta.enterprise.inject.spi.AfterDeploymentValidation.class);
-
         ArcContainer container = Arc.container();
         if (container != null) {
             testContext.bindMetadata(
                     jakarta.enterprise.inject.se.SeContainer.class,
                     new org.os890.jawelte.module.cdi.impl.adapter.se.ArcSeContainerView());
+        }
+
+        // AfterBeanDiscovery / AfterDeploymentValidation are fired
+        // after ArC is initialized so framework extensions that need
+        // a live BeanManager (e.g. Apache BatchEE's
+        // BatchCDIInjectionExtension, which stores the BeanManager
+        // for its @Named artifact lookup) get the runtime instance.
+        invokePortableExtensionPhase(
+                portableExtensions, jakarta.enterprise.inject.spi.AfterBeanDiscovery.class);
+        invokePortableExtensionPhase(
+                portableExtensions, jakarta.enterprise.inject.spi.AfterDeploymentValidation.class);
+
+        if (container != null) {
             container.beanManager().getEvent().fire(new ContainerStarted(testClass));
         }
     }
@@ -263,7 +261,7 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             }
             for (java.lang.reflect.Method method : ext.getClass().getDeclaredMethods()) {
                 java.lang.reflect.Parameter[] params = method.getParameters();
-                if (params.length != 1) {
+                if (params.length < 1 || params.length > 2) {
                     continue;
                 }
                 if (!params[0].isAnnotationPresent(jakarta.enterprise.event.Observes.class)) {
@@ -272,9 +270,25 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 if (!params[0].getType().equals(phaseType)) {
                     continue;
                 }
+                Object[] callArgs;
+                if (params.length == 1) {
+                    callArgs = new Object[] {event};
+                } else if (params[1].getType()
+                        .equals(jakarta.enterprise.inject.spi.BeanManager.class)) {
+                    ArcContainer container = Arc.container();
+                    if (container == null) {
+                        // BeforeBeanDiscovery observer asking for a
+                        // BeanManager — we can't supply one before
+                        // Arc.initialize, so skip this method.
+                        continue;
+                    }
+                    callArgs = new Object[] {event, container.beanManager()};
+                } else {
+                    continue;
+                }
                 method.setAccessible(true);
                 try {
-                    method.invoke(ext, event);
+                    method.invoke(ext, callArgs);
                 } catch (java.lang.reflect.InvocationTargetException ite) {
                     Throwable cause = ite.getTargetException();
                     if (cause instanceof RuntimeException re) {
@@ -680,17 +694,28 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 indexer.index(stream);
             }
         }
-        if (clazz.getSuperclass() != null && clazz.getSuperclass() != Object.class) {
-            indexClass(indexer, clazz.getSuperclass(), visited);
-        }
-        for (Class<?> iface : clazz.getInterfaces()) {
-            indexClass(indexer, iface, visited);
-        }
-        // Index annotation classes so ArC's annotated discovery can
-        // see meta-annotations (e.g. @Stereotype, @NormalScope) that
-        // turn user annotations into bean-defining annotations.
-        for (Annotation ann : clazz.getAnnotations()) {
-            indexClass(indexer, ann.annotationType(), visited);
+        try {
+            if (clazz.getSuperclass() != null && clazz.getSuperclass() != Object.class) {
+                indexClass(indexer, clazz.getSuperclass(), visited);
+            }
+            for (Class<?> iface : clazz.getInterfaces()) {
+                indexClass(indexer, iface, visited);
+            }
+            // Index annotation classes so ArC's annotated discovery can
+            // see meta-annotations (e.g. @Stereotype, @NormalScope) that
+            // turn user annotations into bean-defining annotations.
+            for (Annotation ann : clazz.getAnnotations()) {
+                indexClass(indexer, ann.annotationType(), visited);
+            }
+        } catch (NoClassDefFoundError missingTransitive) {
+            // A discovered class references types not on the current
+            // test classpath (e.g. a batchee class wiring optional JPA
+            // support). Indexing has already captured the bytes of
+            // {@code clazz} itself via the resource stream above;
+            // skipping the supertype/interface/annotation walk just
+            // means ArC's index won't carry those edges. ArC's
+            // computing index falls back to the classloader for any
+            // missing class lookups during downstream resolution.
         }
     }
 
@@ -789,12 +814,46 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
     }
 
     private static boolean hasTestBeanField(Class<?> cls) {
-        for (Field field : cls.getDeclaredFields()) {
-            if (field.isAnnotationPresent(TestBean.class)) {
-                return true;
+        try {
+            for (Field field : cls.getDeclaredFields()) {
+                if (field.isAnnotationPresent(TestBean.class)) {
+                    return true;
+                }
             }
+        } catch (NoClassDefFoundError missingTransitive) {
+            // A discovered class references a type that isn't on the
+            // current test classpath (e.g. jakarta.persistence.* in a
+            // batch jar that wires JPA support optionally). Treat as
+            // "no @TestBean field" — there's no way for the missing
+            // transitive type to express @TestBean.
         }
         return false;
+    }
+
+    /**
+     * Whether the given classpath-discovered candidate should be
+     * excluded from cdi-module's bean archive. Filters out the test
+     * class itself, classes carrying {@code @EnableTestBeans} (i.e.
+     * sibling test classes), and classes that declare a
+     * {@code @TestBean} field (those go through the inline-field
+     * registration path instead). Any {@code NoClassDefFoundError}
+     * encountered while reading the candidate's declared structure
+     * causes the candidate to be skipped — a class whose transitive
+     * deps are missing from the current test classpath cannot host
+     * useful CDI metadata anyway.
+     */
+    private static boolean shouldSkipCandidate(Class<?> candidate, Class<?> testClass) {
+        if (candidate.equals(testClass)) {
+            return true;
+        }
+        try {
+            if (candidate.isAnnotationPresent(EnableTestBeans.class)) {
+                return true;
+            }
+        } catch (NoClassDefFoundError missingTransitive) {
+            return true;
+        }
+        return hasTestBeanField(candidate);
     }
 
     /**
@@ -908,15 +967,32 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
     }
 
     private static void scanClasspathArchives(ClassLoader cl, Set<Class<?>> classes) {
+        Set<String> scanned = new HashSet<>();
+        // Two markers identify a bean archive jar:
+        //   - META-INF/beans.xml: the canonical CDI marker.
+        //   - META-INF/services/jakarta.enterprise.inject.spi.Extension:
+        //     a portable extension's "host" jar. Apache BatchEE and
+        //     other framework jars ship producer beans (e.g.
+        //     BatchProducerBean -> @Produces JobContext) but omit
+        //     beans.xml, relying on the SE container's annotated
+        //     discovery to pick them up. ArC's annotated discovery
+        //     only sees what's in the indexed bean archive, so we
+        //     have to drop these jars into the index explicitly.
+        scanArchiveMarker(cl, "META-INF/beans.xml", classes, scanned);
+        scanArchiveMarker(cl, "META-INF/services/jakarta.enterprise.inject.spi.Extension",
+                classes, scanned);
+    }
+
+    private static void scanArchiveMarker(
+            ClassLoader cl, String markerResource, Set<Class<?>> classes, Set<String> scanned) {
         try {
-            Enumeration<URL> beansXmls = cl.getResources("META-INF/beans.xml");
-            Set<String> scanned = new HashSet<>();
-            while (beansXmls.hasMoreElements()) {
-                URL beansUrl = beansXmls.nextElement();
-                if ("jar".equals(beansUrl.getProtocol())) {
-                    scanJarArchive(beansUrl, cl, classes, scanned);
-                } else if ("file".equals(beansUrl.getProtocol())) {
-                    scanFileArchive(beansUrl, cl, classes, scanned);
+            Enumeration<URL> markers = cl.getResources(markerResource);
+            while (markers.hasMoreElements()) {
+                URL markerUrl = markers.nextElement();
+                if ("jar".equals(markerUrl.getProtocol())) {
+                    scanJarArchive(markerUrl, cl, classes, scanned);
+                } else if ("file".equals(markerUrl.getProtocol())) {
+                    scanFileArchive(markerUrl, cl, classes, scanned);
                 }
             }
         } catch (IOException e) {

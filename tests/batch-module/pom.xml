@@ -31,7 +31,7 @@
     <packaging>pom</packaging>
 
     <name>jawelte (tests/batch-module aggregator and parent)</name>
-    <description>Aggregator AND parent for per-scenario test modules covering jawelte-batch-module. Each scenario boots a CDI SE container (via cdi-module) so batch-module's observer + producer run end-to-end against a real jBatch runtime (Apache BatchEE on the test classpath of every scenario except scenario-07, which deliberately omits the runtime to exercise the "no JobOperator" error path). Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld) for the CDI runtime.</description>
+    <description>Aggregator AND parent for per-scenario test modules covering jawelte-batch-module. Each scenario boots a CDI container (via cdi-module's ArC bootstrap) so batch-module's observer + producer run end-to-end against a real jBatch runtime (Apache BatchEE on the test classpath of every scenario except scenario-07, which deliberately omits the runtime to exercise the "no JobOperator" error path).</description>
 
     <modules>
         <module>scenario-01-simple-job-completes</module>
@@ -135,36 +135,10 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <!--
-            CDI SE runtime selection. Mirrors the -Powb / -Pweld
-            split used by every other tests/<module>/pom.xml.
-            No batch-runtime profile — only Apache BatchEE is in use
-            (a single runtime suffices since the impl bridges through
-            the spec API). Each scenario adds batchee-jbatch in its
-            own test scope, except scenario-07 which omits it on
-            purpose.
-        -->
-        <profile>
-            <id>owb</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>org.apache.openwebbeans</groupId>
-                    <artifactId>openwebbeans-se</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>weld</id>
-            <dependencies>
-                <dependency>
-                    <groupId>org.jboss.weld.se</groupId>
-                    <artifactId>weld-se-shaded</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
+    <!--
+        cdi-module/impl now bootstraps Quarkus ArC at test time and ships
+        its own SeContainerInitializer SPI; the -Powb / -Pweld profiles
+        that previously selected a Jakarta SE CDI runtime for this
+        module are no longer needed.
+    -->
 </project>

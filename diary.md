@@ -6211,3 +6211,44 @@ lnp 9/9 — all green under ArC-only on `quarkus-poc`.
 Still to do: testcontrol (0 passing), batch (4/15), plus jta / ejb /
 wiremock / db-testdata / spring-data (all still ship a portable
 `jakarta.enterprise.inject.spi.Extension`).
+
+---
+## 2026-05-18 — quarkus-poc: batch-module 15/15
+
+batch-module had two ArC-only-related gaps:
+
+- **Apache BatchEE ships `BatchCDIInjectionExtension`** as a portable CDI
+  Extension whose `setBeanManager(AfterBeanDiscovery, BeanManager)` observer
+  stores the live `BeanManager` for `CDIBatchArtifactFactory`'s `@Named`
+  artifact lookup. With ArC-only and the existing portable-extension bridge,
+  this observer never ran (the bridge skipped 2-arg observers and only fired
+  BBD / ADV), so jBatch's artifact lookup fell back to `Class.forName(id)`
+  and every job failed with `ClassNotFoundException: simpleBatchlet`.
+
+  Extended the bridge in `CdiTestBeanContainer`:
+  - Now fires `AfterBeanDiscovery` between `Arc.initialize` and
+    `AfterDeploymentValidation`.
+  - 2-arg observers whose second parameter is `BeanManager` are now dispatched
+    with `Arc.container().beanManager()` (only after `Arc.initialize`; a BBD
+    observer asking for a BeanManager is still skipped because none exists
+    pre-init).
+
+- **`META-INF/beans.xml`-less jars get scanned too.** BatchEE's
+  `batchee-jbatch.jar` ships `BatchProducerBean` (with
+  `@Produces JobContext`) but no `beans.xml`. Annotated SE containers
+  discover it via classpath scan; ArC's annotated mode only indexes what
+  cdi-module hands it. Extended `scanClasspathArchives` to use
+  `META-INF/services/jakarta.enterprise.inject.spi.Extension` as a
+  second archive marker — jars that ship a portable extension also
+  ship producer beans that the extension wires up.
+
+- Wrapped `hasTestBeanField` and `indexClass` in `NoClassDefFoundError`
+  guards so jars whose classes reference optional transitive deps (BatchEE
+  ships JPA-related classes) don't break discovery / indexing.
+
+- Dropped `-Powb` / `-Pweld` profiles from `tests/batch-module/pom.xml`
+  (ArC-only on `quarkus-poc`; the leftover OWB dep would have tripped
+  the same SeContainerInitializer dedup as jpa-module's scenario 23).
+
+Score: cdi 56/56, scope 31/31, jpa 64/64, jaxrs 17/17, content-diff 41/41,
+lnp 9/9, **batch 15/15** — all green under ArC-only on `quarkus-poc`.
