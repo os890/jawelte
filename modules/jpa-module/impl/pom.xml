@@ -31,19 +31,27 @@
     <packaging>jar</packaging>
 
     <name>jawelte (jpa-module/impl)</name>
-    <description>Implementation of jawelte's JPA integration. Hosts JpaLifecycleAdapter (TestModuleLifecyclePort, @Priority(200)), JpaCdiExtension, the @Transactional / @ReadOnly interceptors, the @TransactionScoped Context, the JVM-wide EMF cache, the EntityManager proxy, the per-thread EM stack, the table cleaner, the UserTransaction impl, the default RESOURCE_LOCAL TransactionStrategy, and the ASM-based entity scanner.</description>
+    <description>ArC-native implementation of jawelte's JPA integration. Hosts JpaLifecycleAdapter (TestModuleLifecyclePort, @Priority(200)), JpaArcContextContributor (registers synthetic EntityManagerFactory / EntityManager / UserTransaction beans + the @TransactionScoped Context via ArC's BeanRegistrar / ContextRegistrar; rewrites @PersistenceContext / @PersistenceUnit fields to @Inject via Jandex AnnotationTransformation), the @Transactional / @ReadOnly interceptors, the @TransactionScoped Context, the JVM-wide EMF cache, the EntityManager proxy, the per-thread EM stack, the table cleaner, the UserTransaction impl, the default RESOURCE_LOCAL TransactionStrategy, and the ASM-based entity scanner.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM scoped to jpa-module/impl, matching
+                cdi-module / scope-module: the BOM also forces
+                smallrye-config / jackson / commons-io / etc. versions
+                and we don't want those propagated to non-jpa modules.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
-        <!--
-            Compile deps. All scopes inherited from jawelte-parent's
-            <dependencyManagement>. jpa-module/impl has no compile-time
-            dep on cdi-module: it contributes to cdi-module's
-            auto-mock exclude list through the ConfigKeyAliasProvider
-            SPI in core/api, switching on the literal logical-key
-            string (no import). Cross-module wiring otherwise goes
-            through TestContext / TestModuleLifecyclePort and the CDI
-            runtime.
-        -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-jpa-module-api</artifactId>
@@ -52,10 +60,28 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
         </dependency>
+        <!--
+            jpa-module/impl compile-depends on cdi-module-impl for the
+            ArcContextContributor SPI; transitively pulls in
+            quarkus-arc-processor / quarkus-arc so we can reference
+            BeanRegistrar / ContextRegistrar / InjectableContext.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc</artifactId>
         </dependency>
         <dependency>
             <groupId>jakarta.persistence</groupId>

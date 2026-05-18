@@ -30,11 +30,15 @@ import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
 import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
 import org.os890.jawelte.module.jpa.impl.adapter.context.TransactionScopedContext;
+import org.os890.jawelte.module.jpa.impl.util.DeferredExtendedBeanManager;
 import org.os890.jawelte.module.jpa.impl.util.EmfCache;
 import org.os890.jawelte.module.jpa.impl.util.FileModeState;
 import org.os890.jawelte.module.jpa.impl.util.JpaActivePersistenceUnits;
 import org.os890.jawelte.module.jpa.impl.util.TestMethodTransactionMarker;
 import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
+
+import io.quarkus.arc.Arc;
+import io.quarkus.arc.ArcContainer;
 
 /**
  * {@link TestModuleLifecyclePort} adapter shipped by jpa-module.
@@ -99,6 +103,18 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
             String filePath = resolveFileModePath(testContext);
             testContext.bindMetadata(FileModeState.class, new FileModeState(filePath));
         }
+        // Hand Hibernate its runtime BeanManager now that ArC is up.
+        // The previous CDI-portable-extension path observed
+        // @Initialized(ApplicationScoped.class); under ArC the
+        // contributor stashed a DeferredExtendedBeanManager on
+        // TestContext, and this is the earliest port-callback that
+        // runs after Arc.initialize.
+        testContext.getMetadata(DeferredExtendedBeanManager.class).ifPresent(deferred -> {
+            ArcContainer container = Arc.container();
+            if (container != null) {
+                deferred.onBeanManagerInitialized(container.beanManager());
+            }
+        });
     }
 
     @Override

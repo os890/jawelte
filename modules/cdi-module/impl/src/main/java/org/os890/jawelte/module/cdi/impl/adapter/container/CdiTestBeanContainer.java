@@ -611,7 +611,11 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             Thread.currentThread().setContextClassLoader(testClassLoader);
             Arc.initialize(ArcInitConfig.builder().setTestMode(true).build());
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to bootstrap ArC via SeContainerInitializer", e);
+            String causeMessage = e.getMessage() != null
+                    ? e.getMessage()
+                    : e.getClass().getSimpleName();
+            throw new IllegalStateException(
+                    "Failed to bootstrap ArC via SeContainerInitializer: " + causeMessage, e);
         }
     }
 

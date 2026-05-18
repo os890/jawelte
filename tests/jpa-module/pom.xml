@@ -31,7 +31,7 @@
     <packaging>pom</packaging>
 
     <name>jawelte (tests/jpa-module aggregator and parent)</name>
-    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-jpa-module. Each scenario boots a CDI container (via cdi-module) so jpa-module's lifecycle adapter, CDI Extension, interceptors, and TransactionScopedContext run end-to-end with Hibernate ORM and H2. Scenarios run under either OpenWebBeans (-Powb, default) or Weld (-Pweld).</description>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-jpa-module. Each scenario boots a CDI container (via cdi-module's ArC bootstrap) so jpa-module's lifecycle adapter, ArcContextContributor, interceptors, and TransactionScopedContext run end-to-end with Hibernate ORM and H2.</description>
 
     <modules>
         <module>scenario-01-entity-manager-injectable</module>
@@ -217,27 +217,11 @@
         </dependency>
     </dependencies>
 
-    <profiles>
-        <profile>
-            <id>owb</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>org.apache.openwebbeans</groupId>
-                    <artifactId>openwebbeans-se</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-        <profile>
-            <id>weld</id>
-            <dependencies>
-                <dependency>
-                    <groupId>org.jboss.weld.se</groupId>
-                    <artifactId>weld-se-shaded</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
-    </profiles>
+    <!--
+        cdi-module/impl now bootstraps Quarkus ArC at test time via
+        io.quarkus.arc.processor.BeanProcessor and ships its own
+        SeContainerInitializer SPI; the -Powb / -Pweld profiles that
+        previously selected a Jakarta SE CDI runtime for this module
+        are no longer needed.
+    -->
 </project>

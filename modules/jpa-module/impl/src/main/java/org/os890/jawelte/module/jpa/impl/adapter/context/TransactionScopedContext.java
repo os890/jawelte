@@ -22,13 +22,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import jakarta.enterprise.context.ContextNotActiveException;
-import jakarta.enterprise.context.spi.AlterableContext;
 import jakarta.enterprise.context.spi.Contextual;
 import jakarta.enterprise.context.spi.CreationalContext;
 import jakarta.transaction.TransactionScoped;
 
+import io.quarkus.arc.InjectableContext;
+
 /**
- * CDI {@link AlterableContext} for
+ * CDI {@link InjectableContext} (ArC's extension of
+ * {@code AlterableContext}) for
  * {@link jakarta.transaction.TransactionScoped}. Driven exclusively
  * by jpa-module's {@code TransactionalInterceptor}: each
  * {@code @Transactional} invocation pushes a fresh frame on the
@@ -40,12 +42,12 @@ import jakarta.transaction.TransactionScoped;
  * isolated from the outer's. {@link #isActive()} reports
  * {@code true} while the deque is non-empty on the calling thread.
  *
- * <p>{@link AlterableContext#destroy(Contextual)} removes a single
+ * <p>{@link InjectableContext#destroy(Contextual)} removes a single
  * entry from the top frame so user code can force a
  * {@code @PreDestroy} mid-transaction (e.g. via
  * {@code Instance#destroy(Object)}).
  */
-public class TransactionScopedContext implements AlterableContext {
+public class TransactionScopedContext implements InjectableContext {
 
     /**
      * Singleton handle on the most recently registered instance.
@@ -193,5 +195,23 @@ public class TransactionScopedContext implements AlterableContext {
             throw new ContextNotActiveException("@TransactionScoped is not active on the calling thread");
         }
         return frame;
+    }
+
+    @Override
+    public void destroy() {
+        Deque<Map<Contextual<?>, TransactionScopedBeanInstance<?>>> deque = stacks.get();
+        while (!deque.isEmpty()) {
+            deactivate();
+        }
+    }
+
+    @Override
+    public ContextState getState() {
+        return Map::of;
+    }
+
+    @Override
+    public boolean isNormal() {
+        return true;
     }
 }

@@ -6130,3 +6130,51 @@ To support the rewrite, `cdi-module/impl` picked up:
 
 Score: `tests/cdi-module` 56/56, `tests/scope-module` 31/31, both
 green under ArC-only on `quarkus-poc`.
+
+---
+## 2026-05-18 — quarkus-poc: jpa-module rewritten for ArC; 64/64 jpa scenarios green
+
+Path-2 continued — jpa-module ported off the CDI portable-extension SPI:
+
+- **Replaced `JpaCdiExtension`** (BeforeBeanDiscovery + ProcessAnnotatedType +
+  ProcessProducer + AfterBeanDiscovery observers, unsupported on ArC) with
+  `JpaArcContextContributor` (`ArcContextContributor` SPI from cdi-module).
+  The contributor runs before `BeanProcessor.process()` and:
+  - Pre-warms one `EntityManagerFactory` per active persistence unit (same
+    Hibernate + auto-discovery path as before).
+  - Adds a Jandex `AnnotationTransformation` that rewrites every
+    `@PersistenceContext` / `@PersistenceUnit` field to `@Inject` (plus
+    `@Named(unitName)` when supplied) — replacing the old
+    `@Observes ProcessAnnotatedType` mutator.
+  - Adds a `BeanRegistrar` (`JpaSyntheticBeanRegistrar`) that registers a
+    synthetic `EntityManagerFactory`, `EntityManager`, and `UserTransaction`
+    per PU (with user-producer back-off detected by inspecting the producers
+    already collected).
+  - Adds a `ContextRegistrar` that registers `TransactionScopedContext`
+    (unless `CdiTransactionalSupportProvider` reports a platform impl).
+- **`TransactionScopedContext`** now implements
+  `io.quarkus.arc.InjectableContext` (adds `destroy()`, `getState()`,
+  `isNormal()`).
+- **`JpaLifecycleAdapter.beforeAll`** now grabs the
+  `DeferredExtendedBeanManager` from `TestContext` and notifies it with
+  `Arc.container().beanManager()` — the spot where the prior code's
+  `@Observes @Initialized(ApplicationScoped.class)` observer would have
+  fired.
+- **`jpa-module/impl/pom.xml`**: pinned `quarkus-bom` locally, added
+  `quarkus-arc-processor` / `quarkus-arc` + a compile-dep on
+  `cdi-module-impl` (for the SPI).
+- **`tests/jpa-module/pom.xml`**: dropped the `-Powb` / `-Pweld` profiles —
+  ArC is the only runtime under `quarkus-poc`. The leftover OWB dep was
+  also tripping `SeContainerInitializer.newInstance` (two providers on the
+  classpath); removing it lets the ArC SE shim be the single provider.
+- **`CdiTestBeanContainer.bootArcForSeShim`** now includes the underlying
+  cause's message in the wrapping `IllegalStateException`, so scenarios
+  that assert on the failure message text (scenario 23) see the ArC
+  `Unsatisfied dependency for type EntityManager…` message through the
+  wrapper.
+
+Deleted: `JpaCdiExtension.java` and its
+`META-INF/services/jakarta.enterprise.inject.spi.Extension` registration.
+
+Score on `quarkus-poc`: cdi-module **56/56**, scope-module **31/31**,
+jpa-module **64/64**.
