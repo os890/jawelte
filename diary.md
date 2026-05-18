@@ -5636,3 +5636,51 @@ Mirrored but currently failing (kept off the reactor):
 - 14 testbean-bean-producer: `@TestBean(beanProducer=X)` uses a different mechanism (the producer class's @Produces methods become alternatives). Need a separate BuildStep that ensures the producer class is discovered as a bean and its methods are reachable.
 - 20 test-class-isolation: my BuildStep collects @TestBean targets from EVERY @EnableTestBeans class in the index, so each test class's alternatives bleed into siblings. Quarkus builds once per Maven module; per-test-class isolation requires either a runtime gate or one Quarkus app per scenario.
 - 26 typed-narrowed: `@Typed`-narrowing is jawelte-specific behavior the build-step doesn't yet apply.
+
+## 2026-05-18 — TICKET-015: Proxy switches to InvocationInterceptor; quarkus-module no-op port
+
+Pivoted to the InvocationInterceptor path so jawelte's Proxy and
+Quarkus's QuarkusTestExtension coexist cleanly under
+`@QuarkusTest + @EnableTestBeans`.
+
+Key findings on the way:
+
+- Quarkus's `QuarkusTestExtension` does **not** implement
+  `TestInstanceFactory`. It produces the CDI-managed test instance
+  via `InvocationInterceptor.interceptTestClassConstructor`. So our
+  TICKET-016 design (Proxy as `TestInstanceFactory`) was silently
+  BYPASSING Quarkus's interceptor — JUnit's resolution prefers
+  factory over constructor-with-interception, so Quarkus's
+  interceptor never ran.
+- Quarkus's `FacadeClassLoader` scans the test class's direct
+  annotations for `@QuarkusTest` (or
+  `@ExtendWith(QuarkusTestExtension.class)`) and reloads it in a
+  `QuarkusClassLoader`. Runtime mechanisms (MP Config, ServiceLoader)
+  can't reach that early. So tests under quarkus-module MUST carry
+  `@QuarkusTest` literally; an MP Config-driven delegate alone is
+  not enough to drop it.
+
+Implementation:
+
+- `core/api`: `EnableTestBeans.Proxy` now implements
+  `InvocationInterceptor` instead of `TestInstanceFactory`. The
+  override is just `interceptTestClassConstructor`. It does the
+  priority-aware `TestContext.loadService(TestInstanceFactoryPort.class)`
+  lookup; if the port returns a non-null instance it calls
+  `invocation.skip()` (JUnit's chain requires either `proceed()` or
+  `skip()`) and returns the port's instance. If the port is absent
+  or returns null it calls `invocation.proceed()`, handing the call
+  to the next interceptor — under `@QuarkusTest` that is Quarkus's
+  own `QuarkusTestExtension.interceptTestClassConstructor`, which
+  produces the ArC-managed bean.
+- `modules/quarkus-module/runtime`: ships
+  `QuarkusTestInstanceFactoryPortAdapter` with `@Priority(100)`. It
+  always returns `null` so Proxy's interceptor chains through to
+  Quarkus's. Stays JUnit-free.
+
+Verified locally:
+
+- cdi-module 56/56 green under `-Powb`
+- scope-module 32/32 green (EngineTestKit propagation of
+  `@ExtendWith(Proxy.class)` still works for `InvocationInterceptor`)
+- quarkus-module 22/22 currently-implemented scenarios green
