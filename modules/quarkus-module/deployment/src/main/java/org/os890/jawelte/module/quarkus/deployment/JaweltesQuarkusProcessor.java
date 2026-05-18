@@ -183,11 +183,15 @@ public class JaweltesQuarkusProcessor {
     }
 
     private static void addTestBeanTarget(AnnotationInstance testBean, Set<DotName> targets) {
-        AnnotationValue beanValue = testBean.value("bean");
-        if (beanValue == null) {
+        addClassValueTarget(testBean.value("bean"), targets);
+        addClassValueTarget(testBean.value("beanProducer"), targets);
+    }
+
+    private static void addClassValueTarget(AnnotationValue value, Set<DotName> targets) {
+        if (value == null) {
             return;
         }
-        DotName beanClass = beanValue.asClass().name();
+        DotName beanClass = value.asClass().name();
         if (beanClass.equals(DotName.createSimple("void"))) {
             return;
         }
