@@ -306,11 +306,35 @@ public abstract class TransactionScopedEmHolder {
      */
     public static EntityManager peekOrAutoBegin(String persistenceUnitName) {
         EntityManager existing = peek(persistenceUnitName);
-        if (existing != null) {
-            return existing;
-        }
         TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
         boolean jtaMode = strategy.getTransactionType() == PersistenceUnitTransactionType.JTA;
+        if (existing != null) {
+            // Under JTA mode a nested @Transactional method runs in a
+            // fresh JTA transaction (the strategy suspends the outer
+            // before tm.begin). The current frame on FRAME_PUS_STACK
+            // is the inner scope's joined-PU set; when this PU is NOT
+            // yet recorded there, the existing EM on top of STACKS
+            // belongs to the outer (suspended) tx — fall through to
+            // auto-create a fresh EM enlisted with the inner tx so
+            // their persistence contexts stay isolated. The outer EM
+            // is recovered when the inner JTA tx completes and the
+            // EmCleanupSynchronization pops the inner EM off the top.
+            boolean reuseExisting = true;
+            if (jtaMode) {
+                Deque<Set<String>> framesStack = FRAME_PUS_STACK.get();
+                System.out.println("[peekOrAutoBegin] jtaMode framesStackSize=" + framesStack.size()
+                        + " topFrame=" + (framesStack.isEmpty() ? "null" : framesStack.peek())
+                        + " pu=" + persistenceUnitName);
+                if (!framesStack.isEmpty()
+                        && !framesStack.peek().contains(persistenceUnitName)) {
+                    reuseExisting = false;
+                    System.out.println("[peekOrAutoBegin] inner frame; auto-creating new EM");
+                }
+            }
+            if (reuseExisting) {
+                return existing;
+            }
+        }
         // Source of truth for "is a tx active" differs between modes:
         // RESOURCE_LOCAL relies on the holder's own scope stack
         // (interceptor / strategy push frames there); JTA reads

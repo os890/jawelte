@@ -151,6 +151,54 @@ public class JpaArcContextContributor implements ArcContextContributor {
         builder.addAnnotationTransformation(persistenceFieldRewrite());
         builder.addBeanRegistrar(new JpaSyntheticBeanRegistrar(activePersistenceUnits));
 
+        // @jakarta.transaction.Transactional declares its value() / rollbackOn()
+        // / dontRollbackOn() members as @Nonbinding, so the interceptor's
+        // @Transactional binding ought to match a method's
+        // @Transactional(REQUIRES_NEW) without considering the members.
+        // ArC's default discovery doesn't surface that @Nonbinding intent
+        // unless the binding is explicitly registered as such, leaving
+        // nested @Transactional(REQUIRES_NEW) methods un-intercepted.
+        // Register the binding with all three members marked nonbinding
+        // so the interceptor fires regardless of the chosen TxType.
+        // @ReadOnly mirrored alongside so standalone-ArC fires the
+        // ReadOnlyInterceptor without the jpa-module/deployment
+        // build step (which only fires under @QuarkusTest).
+        builder.addInterceptorBindingRegistrar(new io.quarkus.arc.processor.InterceptorBindingRegistrar() {
+            @Override
+            public List<io.quarkus.arc.processor.InterceptorBindingRegistrar.InterceptorBinding> getAdditionalBindings() {
+                return List.of(
+                        io.quarkus.arc.processor.InterceptorBindingRegistrar.InterceptorBinding.of(
+                                DotName.createSimple("jakarta.transaction.Transactional"),
+                                Set.of("value", "rollbackOn", "dontRollbackOn")),
+                        io.quarkus.arc.processor.InterceptorBindingRegistrar.InterceptorBinding.of(
+                                DotName.createSimple("org.os890.jawelte.module.jpa.api.ReadOnly")));
+            }
+        });
+
+        // Strip the value()/rollbackOn()/dontRollbackOn() members from
+        // every @Transactional annotation on methods/classes so the
+        // interceptor's default-shape binding always matches at ArC
+        // bean processing time. jpa-module's TransactionalInterceptor
+        // ignores TxType anyway (every call is treated as REQUIRED,
+        // with the JtaTransactionStrategy suspending the outer for
+        // nesting — effectively REQUIRES_NEW). Without this rewrite,
+        // ArC's interceptor binding matcher leaves
+        // @Transactional(REQUIRES_NEW)-annotated methods un-intercepted
+        // under standalone-ArC.
+        DotName transactionalDot = DotName.createSimple("jakarta.transaction.Transactional");
+        builder.addAnnotationTransformation(AnnotationTransformation.forMethods()
+                .whenAnyMatch(ann -> ann.name().equals(transactionalDot))
+                .transform(ctx -> {
+                    ctx.remove(ann -> ann.name().equals(transactionalDot));
+                    ctx.add(AnnotationInstance.builder(transactionalDot).build());
+                }));
+        builder.addAnnotationTransformation(AnnotationTransformation.forClasses()
+                .whenAnyMatch(ann -> ann.name().equals(transactionalDot))
+                .transform(ctx -> {
+                    ctx.remove(ann -> ann.name().equals(transactionalDot));
+                    ctx.add(AnnotationInstance.builder(transactionalDot).build());
+                }));
+
         if (!cdiTransactionalSupport().platformProvidesTransactionScopedContext()) {
             builder.addContextRegistrar(registration -> registration
                     .configure(jakarta.transaction.TransactionScoped.class)
