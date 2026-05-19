@@ -28,7 +28,10 @@ import org.os890.jawelte.module.scope.api.TestMethodScoped;
 import org.os890.jawelte.module.scope.impl.adapter.context.TestClassScopedContext;
 import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopedContext;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 @EnableTestBeans
+@QuarkusTest
 class Scenario21Test {
 
     @Inject

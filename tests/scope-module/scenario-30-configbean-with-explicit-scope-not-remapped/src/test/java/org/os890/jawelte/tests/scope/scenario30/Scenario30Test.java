@@ -26,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.ConfigBean;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 30 — {@code @ConfigBean} together with an explicit
  * non-{@code @ApplicationScoped} scope declaration on the class. The
@@ -36,6 +38,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  * after CDI bootstrap.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario30Test {
 
     @Test
