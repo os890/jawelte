@@ -16,6 +16,7 @@
 package org.os890.jawelte.core.api;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
@@ -52,9 +53,20 @@ import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
  *
  * <p>Zero or multiple {@link TestBeansExtension} providers cause the
  * proxy to throw an {@link IllegalStateException} on first use.
+ *
+ * <p><b>Inheritance.</b> Marked {@link Inherited} so a subclass picks
+ * the annotation up automatically. JUnit's
+ * {@code AnnotationSupport.findAnnotation} already walks the class
+ * hierarchy independent of {@code @Inherited}, but the framework's
+ * own reflective lookups (e.g. {@code Class.getAnnotation}) only see
+ * inherited annotations on the subclass when the meta-annotation is
+ * present — required for the {@code @QuarkusTest}-subclass pattern
+ * documented in
+ * {@code docs/triple-runtime-architecture.md}.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
+@Inherited
 @ExtendWith(EnableTestBeans.Proxy.class)
 public @interface EnableTestBeans {
 

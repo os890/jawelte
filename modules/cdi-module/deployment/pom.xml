@@ -22,21 +22,14 @@
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
-        <artifactId>jawelte-modules</artifactId>
+        <artifactId>jawelte-cdi-module</artifactId>
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-cdi-module</artifactId>
+    <artifactId>jawelte-cdi-module-deployment</artifactId>
     <packaging>pom</packaging>
 
-    <name>jawelte (cdi-module aggregator)</name>
-    <description>CDI SE adapter for jawelte. cdi-module/api hosts the pluggable filter ports (ExcludedPackageFilter, WhitelistFilter); cdi-module/impl hosts the TestBeanContainerPort adapter, the CDI Extension, default port impls, and helpers.</description>
-
-    <modules>
-        <module>api</module>
-        <module>impl</module>
-        <module>impl-arc</module>
-        <module>deployment</module>
-    </modules>
+    <name>jawelte (cdi-module/deployment)</name>
+    <description>SKELETON. Quarkus extension deployment jar for cdi-module. See README.md for the cherry-pick targets on quarkus-full-poc.</description>
 </project>

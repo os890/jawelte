@@ -76,6 +76,12 @@
         <jakarta.transaction.version>2.0.1</jakarta.transaction.version>
         <jakarta.ejb.version>4.0.1</jakarta.ejb.version>
         <hibernate.orm.version>7.0.4.Final</hibernate.orm.version>
+        <!--
+            Quarkus version pulled in by the optional -Pquarkus runtime
+            (cdi-module/impl-arc + the per-module deployment jars). See
+            docs/triple-runtime-architecture.md.
+        -->
+        <quarkus.version>3.35.3</quarkus.version>
         <h2.version>2.3.232</h2.version>
         <asm.version>9.8</asm.version>
         <xbean.version>4.30</xbean.version>
