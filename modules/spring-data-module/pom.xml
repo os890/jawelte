@@ -33,6 +33,24 @@
     <name>jawelte (spring-data-module)</name>
     <description>Single-jar CDI side-car that auto-discovers Spring Data repository interfaces from the test classpath during CDI bootstrap and registers real Spring Data implementations as @ApplicationScoped CDI beans, dispatching to jpa-module's transaction-scoped EntityManager. No api/impl split, no TestModuleLifecyclePort adapter, no SPI ports: discovery is implicit (ship the jar, the extension does the rest). The only place org.springframework.data.* types appear; the CDI runtime discovers the extension via META-INF/services/jakarta.enterprise.inject.spi.Extension.</description>
 
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM scoped to spring-data-module — gives us a
+                managed arc-processor version without propagating the
+                BOM-forced smallrye-config / jackson / commons-io
+                versions to non-spring-data modules.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!--
             core-api: javadoc references only. No runtime dependency
@@ -97,6 +115,21 @@
         <dependency>
             <groupId>org.springframework.data</groupId>
             <artifactId>spring-data-jpa</artifactId>
+        </dependency>
+
+        <!--
+            cdi-module/impl supplies the ArcContextContributor SPI;
+            transitively pulls in arc-processor so we can reference
+            BeanProcessor.Builder / BeanRegistrar from the
+            SpringDataArcContextContributor.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
         </dependency>
     </dependencies>
 

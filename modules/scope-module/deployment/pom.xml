@@ -28,8 +28,65 @@
     </parent>
 
     <artifactId>jawelte-scope-module-deployment</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
 
     <name>jawelte (scope-module/deployment)</name>
-    <description>SKELETON. Quarkus extension deployment jar for scope-module. Registers @TestClassScoped / @TestMethodScoped contexts and remaps @ConfigBean scope. See README.md for the cherry-pick targets on quarkus-full-poc.</description>
+    <description>Quarkus extension deployment artifact for scope-module. Hosts the @BuildStep that returns a ContextRegistrarBuildItem registering @TestClassScoped and @TestMethodScoped with ArC's build pipeline so the scopes work under @QuarkusTest.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- The runtime artifact this extension manages. -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-scope-module-impl-arc</artifactId>
+        </dependency>
+        <!-- Quarkus's ArC build-time API: ContextRegistrarBuildItem +
+             @BuildStep + friends. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!--
+                        Quarkus's extension-processor scans @BuildStep
+                        classes at compile time and emits the
+                        META-INF/quarkus-build-steps.list metadata
+                        Quarkus's bootstrap loads from the deployment
+                        artifact. Without this annotation processor on
+                        the path, the build step is invisible to
+                        Quarkus at app boot.
+                    -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.quarkus</groupId>
+                            <artifactId>quarkus-extension-processor</artifactId>
+                            <version>${quarkus.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -28,8 +28,53 @@
     </parent>
 
     <artifactId>jawelte-cdi-module-deployment</artifactId>
-    <packaging>pom</packaging>
+    <packaging>jar</packaging>
 
     <name>jawelte (cdi-module/deployment)</name>
-    <description>SKELETON. Quarkus extension deployment jar for cdi-module. See README.md for the cherry-pick targets on quarkus-full-poc.</description>
+    <description>Quarkus extension deployment artifact for cdi-module. Hosts build steps that bridge jawelte's CDI-stereotype-style markers (e.g. @ConfigBean) into ArC's bean-defining-annotation set so they remain auto-discovered under @QuarkusTest.</description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.quarkus</groupId>
+                            <artifactId>quarkus-extension-processor</artifactId>
+                            <version>${quarkus.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -30,11 +30,18 @@
     <artifactId>jawelte-cdi-module-impl-arc</artifactId>
     <packaging>jar</packaging>
 
-    <name>jawelte (cdi-module/impl-arc)</name>
-    <description>SKELETON. ArC-backed companion to cdi-module/impl. Loaded under -Pquarkus or whenever arc-processor is on the test classpath; the SE-shaped cdi-module/impl stays default for OWB and Weld. See modules/cdi-module/impl-arc/README.md for the cherry-pick targets on the quarkus-full-poc branch.</description>
+    <name>jawelte (cdi-module/impl)</name>
+    <description>ArC-based adapter for jawelte. Drives Quarkus's ArC container lifecycle from a regular JUnit extension by invoking io.quarkus.arc.processor.BeanProcessor as a library at test time. Hosts CdiTestBeanContainer (TestBeanContainerPort impl), the bean creators (Mockito-backed mocks, @TestBean inline fields), and the default filter implementations.</description>
 
     <dependencyManagement>
         <dependencies>
+            <!--
+                Quarkus BOM scoped to cdi-module/impl. Imported here
+                rather than in the root pom because the BOM overrides
+                smallrye-config / jackson / commons-io / etc. versions —
+                propagating those to non-CDI modules would break
+                unrelated dependencies.
+            -->
             <dependency>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-bom</artifactId>
@@ -54,21 +61,26 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
         </dependency>
-        <!--
-            Re-use the OWB/Weld impl's helpers (FrameworkAllowlist,
-            InjectFieldsHelper, TestBeanScanner, SyntheticBeanUtil).
-            The ArC and SE backends share that surface.
-        -->
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-cdi-module-impl</artifactId>
-        </dependency>
 
         <dependency>
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
         </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+        </dependency>
 
+        <!--
+            ArC build-time bean processor exposed as a library. Used at
+            test runtime to programmatically register synthetic mock
+            beans, apply @TestBean alternatives, and build the ArC
+            deployment.
+        -->
         <dependency>
             <groupId>io.quarkus.arc</groupId>
             <artifactId>arc-processor</artifactId>

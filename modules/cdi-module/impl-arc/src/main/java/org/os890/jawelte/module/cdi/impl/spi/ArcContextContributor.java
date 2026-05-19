@@ -20,57 +20,49 @@ import org.os890.jawelte.core.api.port.TestContext;
 import io.quarkus.arc.processor.BeanProcessor;
 
 /**
- * SPI for modules that need to participate in the ArC build pipeline.
- * Discovered via {@code ServiceLoader}; called from
- * {@code ArcCdiContainerPort} after {@code BeforeBeanDiscovery} fires
- * on portable extensions and before {@code BeanProcessor.process()}
- * runs.
+ * SPI by which downstream modules contribute build-time configuration
+ * to the ArC {@link BeanProcessor} that cdi-module's
+ * {@code CdiTestBeanContainer} builds for the current test class.
+ * Typical contributions: custom CDI {@code Context} registrations
+ * (scope-module's {@code @TestClassScoped} / {@code @TestMethodScoped}),
+ * extra {@code BeanRegistrar}s, or {@code AnnotationTransformation}s.
  *
- * <p>ArC under standalone use does not dispatch
- * {@code ProcessAnnotatedType} to portable extensions and never
- * invokes legacy {@code AfterBeanDiscovery.addBean(...)} for synthetic
- * beans. Every module that relied on those portable phases registers
- * an {@code ArcContextContributor} alongside its portable extension
- * to perform the same work via ArC's native build surfaces:
+ * <p>Implementations are discovered via {@code ServiceLoader} from
+ * {@code META-INF/services/org.os890.jawelte.module.cdi.impl.spi.ArcContextContributor};
+ * {@code CdiTestBeanContainer.beforeAll} loads them in
+ * {@code @Priority}-ascending order and invokes
+ * {@link #contribute(TestContext, BeanProcessor.Builder)} for each
+ * before {@code BeanProcessor.process()} runs.
  *
- * <ul>
- *   <li>{@code builder.addAnnotationTransformation(...)} — replaces
- *       {@code ProcessAnnotatedType} mutations
- *       (see ejb-module's class-level scope rewriting).</li>
- *   <li>{@code builder.addBeanRegistrar(...)} — replaces
- *       {@code AfterBeanDiscovery.addBean(...)} (see wiremock-module
- *       and spring-data-module's synthetic-bean registration).</li>
- *   <li>{@code builder.addInterceptorBindingRegistrar(...)} —
- *       replaces {@code BeforeBeanDiscovery.addInterceptorBinding(...)}
- *       (see jpa-module's {@code @Transactional} +
- *       {@code @ReadOnly} registration).</li>
- *   <li>{@code builder.addContextRegistrar(...)} — replaces
- *       {@code AfterBeanDiscovery.addContext(...)} (see scope-module's
- *       {@code @TestClassScoped} / {@code @TestMethodScoped}
- *       registration).</li>
- *   <li>{@code builder.addExcludeType(...)} — replaces
- *       {@code ProcessAnnotatedType.veto()} (see jta-module's
- *       vendor-bean veto).</li>
- * </ul>
+ * <p>The contributor receives the live {@link TestContext} so it can
+ * publish per-test-class state (stores, controllers, etc.) for the
+ * matching {@code TestModuleLifecyclePort} adapter to drive at
+ * {@code beforeEach} / {@code afterEach} / {@code afterAll}.
  *
- * <p>Contributors that register synthetic beans for IPs should also
- * pre-register the resulting {@code (type, qualifiers)} shapes via
- * {@code JaweltAutoMockBuildCompatibleExtension.preRegisterExistingBeanShape}
- * so the auto-mock BCE doesn't add a parallel auto-mock for the same
- * IPs at {@code @Synthesis} time.
+ * <p>Why this exists instead of CDI portable extensions: Quarkus ArC
+ * does not support {@code jakarta.enterprise.inject.spi.Extension}
+ * portable extensions. cdi-module/impl ships a minimal bridge for the
+ * {@code BeforeBeanDiscovery} and {@code AfterDeploymentValidation}
+ * phases, but {@code AfterBeanDiscovery.addContext(...)} — the
+ * canonical place to register custom contexts — has no runtime
+ * equivalent; contexts in ArC are build-time entities registered via
+ * {@code ContextRegistrar} on the {@code BeanProcessor}. This SPI is
+ * the ArC-native replacement.
  */
 public interface ArcContextContributor {
 
     /**
-     * Run the contributor's work against the in-flight
-     * {@link BeanProcessor.Builder}. The {@link TestContext} carries
-     * the active test class so the contributor can inspect
-     * annotations (e.g. {@code @PersistenceConfig},
-     * {@code @EnableWireMock}, {@code @TestControl}).
+     * Contribute to the ArC {@link BeanProcessor.Builder} that
+     * cdi-module is preparing for the current test class.
      *
-     * @param testContext the framework's active test context; never
-     *                    {@code null}
-     * @param builder     the ArC builder; never {@code null}
+     * @param testContext the live test context for the current run;
+     *                    contributors typically bind metadata that
+     *                    their matching lifecycle adapter looks up
+     *                    later
+     * @param builder     the in-progress {@code BeanProcessor.Builder};
+     *                    contributors call methods such as
+     *                    {@code addContextRegistrar} or
+     *                    {@code addBeanRegistrar} on it
      */
     void contribute(TestContext testContext, BeanProcessor.Builder builder);
 }

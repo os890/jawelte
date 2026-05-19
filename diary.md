@@ -5456,3 +5456,6 @@ finally exercised the failing combo.
 ticket-015: EnableTestBeans.Proxy: TestInstanceFactory -> InvocationInterceptor
 
 @QuarkusTest registers its own TestInstanceFactory; JUnit allows only one per test class hierarchy. InvocationInterceptor is composable — Quarkus's interceptor handles the constructor under @QuarkusTest and ours steps aside via invocation.proceed(). Same flow under OWB/Weld via the TestInstanceFactoryPort SPI.
+
+ticket-015 triple-runtime layout: impl-arc + deployment infrastructure
+Per-module impl-arc/ submodules contain the ArC-native variants of the cdi-module/impl plumbing (ArcSeContainerInitializer, ArcSeContainerView, JaweltAutoMockBuildCompatibleExtension, MockBeanCreator family, ArcContextContributor SPI) and ports of the lifecycle adapters. cdi/jpa/scope-module also ship deployment/ submodules whose @BuildStep methods register context contributors / interceptor bindings / build-compatible extensions for @QuarkusTest. spring-data-module gets a flat ArcContextContributor implementation.
