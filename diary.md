@@ -6562,3 +6562,24 @@ All three pass against the existing BCE without code changes — the
 class-level scan already walks meta-annotations and unwraps
 `@TestBeans`, and the `Alternative` reflection check enforces the
 silent-skip contract.
+
+## 2026-05-19: @TestBean(beanProducer=Y) class-level activation under @QuarkusTest
+
+Extended the BCE to handle `@TestBean(beanProducer = Y.class)`:
+
+- `collectFromTestBean` now also reads the `beanProducer` member and
+  records target FQNs in a sibling `testBeanProducerTargetFqns` set.
+- New `@Synthesis` pass `registerTestBeanProducerAlternatives` walks
+  each producer-target class, skips it silently if not `@Alternative`,
+  enumerates each `@Produces` method, and registers a synthetic
+  alternative bean of the method's return type with `@Priority(MAX)`.
+- New `TestBeanProducerMethodSyntheticBeanCreator` instantiates the
+  producer and invokes the named method per request.
+- Producer methods with parameters (i.e. method injection points) are
+  silently skipped in this pass — synthetic beans cannot declare
+  injection points, so supporting that needs separate plumbing.
+- Scope resolution prefers a CDI scope on the method itself, falls
+  back to one on the return type, then to `@Dependent` (CDI's default
+  for producer methods).
+
+scenario-14-testbean-bean-producer now passes under `@QuarkusTest`.

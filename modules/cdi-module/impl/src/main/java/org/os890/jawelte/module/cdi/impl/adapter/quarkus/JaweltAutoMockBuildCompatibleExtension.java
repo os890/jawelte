@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.cdi.impl.adapter.quarkus;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.HashSet;
@@ -26,6 +27,7 @@ import java.util.TreeSet;
 
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.inject.Alternative;
+import jakarta.enterprise.inject.Produces;
 import jakarta.enterprise.inject.build.compatible.spi.BeanInfo;
 import jakarta.enterprise.inject.build.compatible.spi.BuildCompatibleExtension;
 import jakarta.enterprise.inject.build.compatible.spi.InjectionPointInfo;
@@ -122,6 +124,8 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     private final Set<InlineFieldRecord> inlineFields = new LinkedHashSet<>();
 
     private final Set<String> testBeanTargetFqns = new LinkedHashSet<>();
+
+    private final Set<String> testBeanProducerTargetFqns = new LinkedHashSet<>();
 
     /** Public no-arg constructor required by {@code ServiceLoader}. */
     public JaweltAutoMockBuildCompatibleExtension() {
@@ -242,6 +246,10 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
         if (beanFqn != null && !VOID_FQN.equals(beanFqn)) {
             testBeanTargetFqns.add(beanFqn);
         }
+        String producerFqn = readClassMember(testBeanAnnotation, "beanProducer");
+        if (producerFqn != null && !VOID_FQN.equals(producerFqn)) {
+            testBeanProducerTargetFqns.add(producerFqn);
+        }
     }
 
     private static String readClassMember(AnnotationInfo annotation, String memberName) {
@@ -267,6 +275,7 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     public void registerSynthetics(SyntheticComponents components) {
         registerInlineFieldBeans(components);
         registerTestBeanAlternatives(components);
+        registerTestBeanProducerAlternatives(components);
         registerAutoMockBeans(components);
     }
 
@@ -328,6 +337,80 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
         for (Class<?> beanType : beanTypes) {
             builder.type(beanType);
             existingBeans.add(new BeanShape(beanType.getName(), Set.of()));
+        }
+    }
+
+    private void registerTestBeanProducerAlternatives(SyntheticComponents components) {
+        for (String producerFqn : testBeanProducerTargetFqns) {
+            Class<?> producerClass = loadClass(producerFqn);
+            if (producerClass == null) {
+                continue;
+            }
+            if (!producerClass.isAnnotationPresent(Alternative.class)) {
+                // Same silent-skip contract as @TestBean(bean=…) for
+                // non-@Alternative classes.
+                continue;
+            }
+            for (Method method : producerClass.getDeclaredMethods()) {
+                if (!method.isAnnotationPresent(Produces.class)) {
+                    continue;
+                }
+                if (method.getParameterCount() != 0) {
+                    // @Produces method injection points are not
+                    // representable through synthetic-bean creators;
+                    // they need their own injection-point plumbing.
+                    // Skip silently for now — the auto-mock pass picks
+                    // up any unsatisfied IPs the absent producer
+                    // method would have served.
+                    continue;
+                }
+                registerProducerMethodAlternative(components, producerClass, method);
+            }
+        }
+    }
+
+    /**
+     * Helper extracted to capture the producer method's return type
+     * {@code T} for the synthetic bean's implementation class, mirroring
+     * the {@link #registerTestBeanAlternative} pattern.
+     */
+    private <T> void registerProducerMethodAlternative(
+            SyntheticComponents components, Class<?> producerClass, Method method) {
+        @SuppressWarnings("unchecked")
+        Class<T> returnType = (Class<T>) method.getReturnType();
+        if (returnType == void.class) {
+            return;
+        }
+        List<Class<?>> beanTypes = computeBeanTypes(returnType);
+        Class<? extends Annotation> scope = resolveScope(method, returnType);
+        @SuppressWarnings("unchecked")
+        Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>> creator =
+                (Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>>)
+                        (Class<?>) TestBeanProducerMethodSyntheticBeanCreator.class;
+        SyntheticBeanBuilder<T> builder = components.addBean(returnType)
+                .scope(scope)
+                .alternative(true)
+                .priority(Integer.MAX_VALUE)
+                .createWith(creator)
+                .withParam("producerClass", producerClass.getName())
+                .withParam("methodName", method.getName());
+        for (Class<?> beanType : beanTypes) {
+            builder.type(beanType);
+            existingBeans.add(new BeanShape(beanType.getName(), Set.of()));
+        }
+        applyMethodQualifiers(builder, method);
+    }
+
+    private static <T> void applyMethodQualifiers(SyntheticBeanBuilder<T> builder, Method method) {
+        for (Annotation annotation : method.getAnnotations()) {
+            Class<? extends Annotation> annType = annotation.annotationType();
+            if (!annType.isAnnotationPresent(jakarta.inject.Qualifier.class)) {
+                continue;
+            }
+            if (isBuiltInQualifier(annType.getName())) {
+                continue;
+            }
+            builder.qualifier(annType);
         }
     }
 
@@ -405,6 +488,22 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
             }
         }
         return Dependent.class;
+    }
+
+    /**
+     * Resolve the scope for a {@code @Produces} method's synthetic
+     * bean: prefer a CDI scope annotation on the method itself, then
+     * one on the method's return type, defaulting to {@code @Dependent}
+     * (CDI's contract for producer methods without a declared scope).
+     */
+    private static Class<? extends Annotation> resolveScope(Method method, Class<?> returnType) {
+        for (Annotation annotation : method.getAnnotations()) {
+            Class<? extends Annotation> annType = annotation.annotationType();
+            if (isCdiScopeAnnotation(annType.getName())) {
+                return annType;
+            }
+        }
+        return resolveScope(returnType);
     }
 
     private static boolean isCdiScopeAnnotation(String fqn) {
