@@ -22,12 +22,15 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * A field annotated only with {@code @PersistenceUnit} (no {@code @Inject})
  * is rewritten by jpa-module's {@code JpaCdiExtension} to {@code @Inject}.
  * The rewritten field receives jpa-module's synthetic EntityManagerFactory.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario05Test {
 
     @Inject

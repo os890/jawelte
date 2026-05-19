@@ -25,12 +25,15 @@ import jakarta.transaction.UserTransaction;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * {@code UserTransaction} is injectable; in resting state it reports
  * {@link Status#STATUS_NO_TRANSACTION}; {@code begin()} + persist +
  * {@code commit()} produces a row that is visible from a fresh tx.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario33Test {
 
     @Inject

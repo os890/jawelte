@@ -23,12 +23,15 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * A {@code @Transactional} method that throws an {@link Error} must roll back:
  * the persisted row never reaches the DB. Locks in the interceptor's
  * {@code catch (Error)} branch.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario12Test {
 
     @Inject

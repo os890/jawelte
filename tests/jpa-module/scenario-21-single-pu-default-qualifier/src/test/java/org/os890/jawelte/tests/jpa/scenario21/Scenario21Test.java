@@ -25,6 +25,8 @@ import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * With a single persistence unit declared, jpa-module's {@code JpaCdiExtension}
  * registers the synthetic EMF + EM beans as {@code @Default} so an unqualified
@@ -32,6 +34,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  * {@code @Default} qualifier resolves to the same bean.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario21Test {
 
     @Inject

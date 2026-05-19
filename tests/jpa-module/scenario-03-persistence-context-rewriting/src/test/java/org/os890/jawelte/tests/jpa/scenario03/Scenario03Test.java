@@ -22,12 +22,15 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * A field annotated only with {@code @PersistenceContext} (no {@code @Inject})
  * is rewritten by jpa-module's {@code JpaCdiExtension} to {@code @Inject}.
  * The rewritten field receives jpa-module's transaction-scoped EM proxy.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario03Test {
 
     @Inject

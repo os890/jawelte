@@ -25,6 +25,8 @@ import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * The persistence unit declares no {@code <class>} elements but keeps
  * {@code <exclude-unlisted-classes>false</exclude-unlisted-classes>}. jpa-module's
@@ -33,6 +35,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  * persist/query roundtrip.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario06Test {
 
     @Inject

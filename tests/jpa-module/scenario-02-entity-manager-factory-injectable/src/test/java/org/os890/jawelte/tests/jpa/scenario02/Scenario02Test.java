@@ -24,11 +24,14 @@ import jakarta.persistence.EntityManagerFactory;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * {@code @Inject EntityManagerFactory} resolves to the JVM-cached EMF for the
  * scenario's PU; it is open and can create fresh EntityManagers.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario02Test {
 
     @Inject
