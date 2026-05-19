@@ -248,6 +248,18 @@
                 quarkus-junit5 boots ArC directly and the per-module
                 jawelte-*-impl-arc + jawelte-*-deployment jars take
                 over for ArC-native bean discovery.
+
+                quarkus-bom is intentionally NOT imported here. It
+                mediates dozens of transitive versions (smallrye-config-
+                core, jackson, jakarta APIs, …) and the resulting
+                version skew with the pinned `smallrye-config` 3.10
+                meta-artifact breaks the OWB / Weld CDI bootstrap (the
+                project's own scenario-04 multi-endpoint WireMock case
+                fails with AmbiguousResolutionException once the core
+                jumps to 3.17). Each Quarkus-using artifact imports
+                quarkus-bom locally: every modules/*/deployment/pom.xml
+                does, and every tests/*/pom.xml's -Pquarkus profile
+                pulls quarkus-junit5 directly.
             -->
             <dependency>
                 <groupId>org.apache.openwebbeans</groupId>
@@ -260,13 +272,6 @@
                 <artifactId>weld-se-shaded</artifactId>
                 <version>${weld.version}</version>
                 <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.quarkus</groupId>
-                <artifactId>quarkus-bom</artifactId>
-                <version>${quarkus.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
             </dependency>
 
             <!-- Internal cdi-module cross-references -->
@@ -1104,4 +1109,30 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Root-level -Pquarkus profile. Only adds quarkus-bom to
+            dependencyManagement when -Pquarkus is explicitly active —
+            keeping the BOM out of the default classpath avoids the
+            smallrye-config 3.10 / -core 3.17 split that breaks
+            OWB/Weld CDI bootstraps. Test poms under -Pquarkus inherit
+            this management and resolve quarkus-junit5 + every
+            transitive Quarkus jar at the BOM-pinned version.
+        -->
+        <profile>
+            <id>quarkus</id>
+            <dependencyManagement>
+                <dependencies>
+                    <dependency>
+                        <groupId>io.quarkus</groupId>
+                        <artifactId>quarkus-bom</artifactId>
+                        <version>${quarkus.version}</version>
+                        <type>pom</type>
+                        <scope>import</scope>
+                    </dependency>
+                </dependencies>
+            </dependencyManagement>
+        </profile>
+    </profiles>
 </project>
