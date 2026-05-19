@@ -7508,3 +7508,48 @@ Ran the four core module aggregators with skip-flags. Result:
   emulator in cdi-module/impl or per-module Quarkus deployment artifacts
   (analogous to jpa-module/deployment) that pre-stage the same effects via
   `AnnotationsTransformerBuildItem` / `BeanRegistrarBuildItem`.
+
+## 2026-05-19 — ejb-module: 24 / 27 green via ArcContextContributor
+
+Added `EjbArcContextContributor` in `modules/ejb-module/impl/.../adapter/contributor/`:
+the standalone-ArC bootstrap dispatches only `BeforeBeanDiscovery` /
+`AfterBeanDiscovery` / `AfterDeploymentValidation` to portable extensions,
+so `EjbAnnotationExtension`'s `ProcessAnnotatedType` rewriting never fired
+under the ArC-based test container. The contributor performs the
+equivalent rewrite via ArC's `AnnotationTransformation` surface:
+
+  - `@jakarta.ejb.Singleton` →  `@ApplicationScoped` (or `@TestClassScoped`
+                                when scope-module is on the runtime classpath)
+                              + `@jakarta.transaction.Transactional`
+  - `@jakarta.ejb.Stateless` →  `@Dependent`
+                              + `@jakarta.transaction.Transactional`
+
+Both transformations honour a user-declared CDI scope / `@Transactional`
+already on the class. scope-module's `@TestClassScoped` resolved
+reflectively to avoid a compile-time dep.
+
+**Result snapshot**
+
+  24 / 27 ejb scenarios pass:
+    - 01–22, 24, 25, 27 — happy paths, scope, mapper-list edge cases
+    - 03–07, 12 — implicit `@Transactional` + EM-injection paths
+
+  3 scenarios still fail:
+    - 23  `additional-mapper-claims-stateful` — needs the priority-ordered
+          `EjbAnnotationMapper` chain (custom user mappers via `ServiceLoader`).
+          Not yet ported to the contributor.
+    - 26  `priority-ordering-between-additional-mappers` — same root cause.
+    - 28  `user-declared-transactional-preserved` — uses
+          `BeanManager.createAnnotatedType(...)` from the test code itself;
+          ArC throws `UnsupportedOperationException`. Test-side limitation,
+          not a contributor gap.
+
+**Build/run lesson**
+
+The first aggregator run after adding the contributor produced
+intermittent `Null contextual instance` failures on scenarios that
+*did* pass standalone (scenario 02, then 04, then 08). The root cause
+was stale `target/` and a half-installed impl jar — a clean
+`rm -rf tests/ejb-module/scenario-*/target` + `mvn -pl modules/ejb-module/impl install`
+restored the expected behaviour. Worth keeping in mind for future
+contributor work: rebuild + clean before iterating on the aggregator.
