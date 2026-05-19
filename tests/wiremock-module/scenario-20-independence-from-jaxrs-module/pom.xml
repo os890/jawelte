@@ -37,6 +37,25 @@
         of the wiremock scenarios stay free of JAX-RS
         transitive deps.
     -->
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                RESTEasy 7.0.0 transitively pulls io.smallrye:jandex 3.4.0
+                which is older than arc-processor 3.35.3's 3.5.3 — without
+                a pin, Maven's nearest-wins resolution lands the 3.4.0
+                jar on the classpath and ArC's BeanDeployment.findBeans
+                crashes with NoSuchMethodError on
+                MethodInfo.signatureKey() (added in 3.5). Pin 3.5.3 to
+                keep ArC happy.
+            -->
+            <dependency>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex</artifactId>
+                <version>3.5.3</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>${project.groupId}</groupId>
