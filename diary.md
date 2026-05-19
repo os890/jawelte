@@ -7195,3 +7195,79 @@ Updated totals (all paths re-verified):
 scenario-46 still deferred: cross-classloader `AtomicBoolean` state
 between jawelte's classloader (where the lifecycle port reads) and
 Quarkus's runtime classloader (where the bridge bean writes).
+
+## 2026-05-19: 67 scenarios green — session pause
+
+Closing state for today's session: **67 jawelte scenarios green
+under `@QuarkusTest`**, no regressions in the migrated path.
+
+| Module | Green | Migrated path |
+|--------|-------|---------------|
+| cdi-module | 40/56 | @QuarkusTest |
+| scope-module | 23/31 | @QuarkusTest |
+| testcontrol-module | 4/9 | @QuarkusTest |
+| jpa-module | 0/64 | standalone-ArC |
+| jaxrs-module | 0/19 | standalone-ArC |
+| jta-module | 0/36 | standalone-ArC |
+| ejb-module | 0/28 | standalone-ArC |
+| spring-data-module | 0/14 | standalone-ArC |
+| batch-module | 0/15 | standalone-ArC |
+| wiremock-module | 0/9 | standalone-ArC |
+| db-testdata-module | 0 | pure JDBC tests, no @EnableTestBeans |
+| content-diff-module | 0 | pure utility, no @EnableTestBeans |
+| lnp-module | 0/9 | standalone-ArC, integration |
+
+### Structurally infeasible under @QuarkusTest (deferred indefinitely)
+
+- **EngineTestKit subjects** — Quarkus's FacadeClassLoader can't
+  identify the embedded subject as @QuarkusTest. Affects cdi 27, 28,
+  29, 41, 42, 55, 56; scope 15; testcontrol 28.
+- **Cross-classloader state** — jawelte's lifecycle ports run in
+  jawelte's classloader, observers in Quarkus's runtime classloader,
+  static `AtomicBoolean`s aren't shared. Affects cdi 46.
+- **Portable extension bootstrap** — `BeforeBeanDiscovery` doesn't
+  fire under @QuarkusTest (ArC only honors BCE). Affects cdi 39, 40.
+- **Qualifier-on-JDK-target literal generation** — Quarkus's
+  `AnnotationLiteralGenerator` skips literals for synthetic-bean
+  qualifiers on JDK target types. Affects cdi 21, 53.
+- **Manage-container=false** — the SE shim test boots its own
+  container; pre-existing regression on standalone-ArC too. Affects
+  cdi 32.
+- **Adapter ordering metadata** — depends on jawelte-owned lifecycle
+  state. Affects scope 18, 19.
+
+### Module-level work needed (substantial, deferred for follow-up)
+
+- **jpa-module**: needs coexistence with `quarkus-hibernate-orm`
+  (replace jawelte's `JpaArcContextContributor` EM/EMF synthetic
+  beans, or skip them when @QuarkusTest detected).
+- **jaxrs-module**: needs `quarkus-resteasy-reactive` integration or
+  jawelte's `SeBootstrap` to coexist.
+- **jta-module**: blocked by jpa.
+- **ejb-module**: Quarkus's `BeanDeployment` rejects
+  `@jakarta.ejb.Singleton` at `generateResources`; needs bytecode
+  rewrite or strict-mode opt-out (registered scenarios 01-04 reverted
+  to standalone-ArC after `BeanDefiningAnnotationBuildItem` proved
+  insufficient).
+- **spring-data-module**: blocked by jpa.
+- **batch-module**: needs `quarkus-jberet` (if exists) or stays
+  standalone.
+- **wiremock-module**: `OwbCDI` provider wins `CDI.current()` from
+  the test classpath under @QuarkusTest. Either strip OWB from the
+  scenario classpath or rewrite `WireMockLifecycleAdapter` to use
+  `Arc.container()` directly.
+
+### Architectural commitment honored
+
+- `@EnableTestBeans` and `@QuarkusTest` always stay as separate
+  annotations on the test class (never meta-annotated together).
+  All Quarkus-specific files live in their own packages
+  (`adapter/quarkus`, `adapter/event`) and dedicated modules
+  (`cdi-module/deployment`, `scope-module/deployment`) so a future
+  `jawelte-quarkus-adapter` extraction is a clean file-move cut.
+
+### Pre-existing regression noted
+
+scenario-32 (`manage-container=false`) was broken between commits
+`d236bfd2` and `099e96ce` — well before this session's @QuarkusTest
+work. Not introduced by today's commits.
