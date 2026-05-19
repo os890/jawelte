@@ -32,7 +32,10 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.scope.api.TestMethodScoped;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 @EnableTestBeans
+@QuarkusTest
 class Scenario09Test {
 
     @Inject

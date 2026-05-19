@@ -21,7 +21,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 @EnableTestBeans
+@QuarkusTest
 class Scenario07Test {
 
     @Test

@@ -6682,3 +6682,23 @@ and `@DataSource(name="secondary")` (nonbinding) continue to share one
 mock — scenario-54 joins scenario-07 in passing under @QuarkusTest.
 
 Total CDI scenarios green under @QuarkusTest: **34 of 56**.
+
+## 2026-05-19: scope-module — 14 scenarios green under @QuarkusTest
+
+Migrated scope-module scenarios 02-07, 09-14, 17 to @QuarkusTest
+without any further BCE / extension changes — the lazy-stores
+fallback in `ScopeLifecycleAdapter` and the `ScopeModuleProcessor`
+Quarkus extension already cover everything they need.
+
+Deferred (kept standalone-ArC):
+- 08, 16: aggregate-exceptions tests — depend on jawelte's own
+  exception-aggregation policy in `DelegatingJUnitExtension`, which
+  runs differently under `@QuarkusTest` (we don't own the lifecycle).
+- 18, 19: adapter-ordering tests — same root cause.
+- 15: uses `EngineTestKit` on a subject; the subject itself stays
+  standalone-ArC for the same reason as cdi scenarios 28/29.
+
+Total jawelte scenarios green under @QuarkusTest:
+- cdi-module: 34/56
+- scope-module: 14/19 (+ 1 incidental pass on scenario-15's subject
+  driver)
