@@ -7478,3 +7478,33 @@ Ran the four core module aggregators with skip-flags. Result:
                         `ejb-module/deployment` that pre-registers
                         @Singleton/@Stateless mappings via
                         `AnnotationsTransformerBuildItem`.
+
+## 2026-05-19 — full-suite verification snapshot
+
+  | module                | result              |
+  |-----------------------|---------------------|
+  | jpa-module            | 65 / 65   SUCCESS   |
+  | scope-module          | 31 / 31   SUCCESS   |
+  | testcontrol-module    |  9 /  9   SUCCESS   |
+  | cdi-module            | 31 / 32   scenario-32 (`manage-container-false`) — pre-existing SE container gap |
+  | jta-module            | 27 / 28   scenario-45 (`vendor-bean-veto`) — needs `-Pjta-narayana` profile |
+  | content-diff-module   | 41 / 41   SUCCESS   |
+  | db-testdata-module    | 67 / 67   SUCCESS   |
+  | core                  | 24 / 24   SUCCESS   |
+  | jaxrs-module          | 17 / 17   SUCCESS   |
+  | batch-module          | 15 / 15   SUCCESS   |
+  | ejb-module            |  0 /  N   scenario-01 fails — `ProcessAnnotatedType` not dispatched to portable extensions, so EJB→CDI scope mapping never happens and the BCE auto-mocks `@Singleton` classes |
+  | wiremock-module       |  0 /  N   scenario-01 `UnsupportedOperationException` from a `WireMockProducer.@Produces` method (portable-extension API gap) |
+  | spring-data-module    |  0 /  N   scenario-01 `NullPointerException` on `AfterBeanDiscovery.addBean()` (ArC returns null from that legacy builder) |
+  | lnp-module            | not run (largest module — 900+ test files) |
+
+  Five modules fully green for the second iteration; testcontrol-module
+  closed in this session. Remaining failure clusters point at one
+  underlying root cause: the standalone-ArC bootstrap (`CdiTestBeanContainer`)
+  only dispatches `BeforeBeanDiscovery` / `AfterBeanDiscovery` /
+  `AfterDeploymentValidation` to portable extensions and stops short of
+  `ProcessAnnotatedType` + the configurator-based `addBean(...)` shape ArC
+  returns null for. Resolving those three needs either a portable-extension
+  emulator in cdi-module/impl or per-module Quarkus deployment artifacts
+  (analogous to jpa-module/deployment) that pre-stage the same effects via
+  `AnnotationsTransformerBuildItem` / `BeanRegistrarBuildItem`.
