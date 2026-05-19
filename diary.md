@@ -6583,3 +6583,28 @@ Extended the BCE to handle `@TestBean(beanProducer = Y.class)`:
   for producer methods).
 
 scenario-14-testbean-bean-producer now passes under `@QuarkusTest`.
+
+## 2026-05-19: @TestBean shape validations under @QuarkusTest
+
+Added defensive shape validation in
+`CdiTestBeanContainer.postProcessTestInstance`: it now invokes the
+existing `collectSelectedAlternatives` (which throws "not both" if
+`@TestBean(bean=…, beanProducer=…)`) and `collectInlineFields` (which
+throws "is null" / "must be static") on the test class before the
+container-ownership check.
+
+Under standalone-ArC the existing `beforeAll` already runs these — the
+test fails there and `postProcessTestInstance` is never reached. Under
+`@QuarkusTest` (where `beforeAll` is skipped because we don't manage
+the container) the validation now fires at test-instance creation
+time, giving the user the same shape errors instead of a confusing
+late injection failure.
+
+The validation scenarios 28 (null static field) and 29 (both
+`bean=`+`beanProducer=`) stay on the standalone-ArC path: `EngineTestKit`
++ `@QuarkusTest` doesn't work together because Quarkus's
+`FacadeClassLoader` can't identify the embedded subject as a
+`@QuarkusTest`. The defensive validation is therefore not directly
+covered by an automated test for now — a follow-up could add a
+process-spawn-based test that runs `mvn test` on a malformed subject
+and asserts the exit message.

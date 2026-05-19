@@ -320,6 +320,17 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     @Override
     public void postProcessTestInstance(TestContext testContext, Object testInstance) {
+        // @TestBean shape validations ("bean OR beanProducer, not both"
+        // / "@TestBean static field is null") fire eagerly regardless
+        // of whether we own the container. Under @QuarkusTest our
+        // beforeAll is skipped, so this is the first lifecycle hook
+        // that runs after the test class has been resolved — surfacing
+        // the same errors the standalone-ArC path raises in its own
+        // beforeAll.
+        Class<?> testClass = testContext.getTestClass();
+        collectSelectedAlternatives(testClass);
+        collectInlineFields(testClass);
+
         ArcContainer container = Arc.container();
         if (container == null) {
             return;
