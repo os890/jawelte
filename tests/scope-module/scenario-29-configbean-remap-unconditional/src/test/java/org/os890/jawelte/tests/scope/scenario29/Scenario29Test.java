@@ -26,6 +26,8 @@ import org.os890.jawelte.core.api.ConfigBean;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 29 — the {@code @ConfigBean} remap is unconditional when
  * scope-module is on the classpath: it happens at
@@ -35,6 +37,7 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
  * NO testcontrol-module artefact in play and still expects the remap.
  */
 @EnableTestBeans
+@QuarkusTest
 class Scenario29Test {
 
     @Test

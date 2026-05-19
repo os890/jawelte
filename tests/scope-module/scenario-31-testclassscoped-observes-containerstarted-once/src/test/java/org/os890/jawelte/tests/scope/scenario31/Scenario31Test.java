@@ -27,6 +27,8 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.event.ContainerStarted;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 31 — a {@code @TestClassScoped} bean observes
  * {@link ContainerStarted} and behaves as a per-test-class
@@ -51,6 +53,7 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
  * {@code @TestClassScoped} bean.
  */
 @EnableTestBeans
+@QuarkusTest
 class Scenario31Test {
 
     @Inject

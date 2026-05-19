@@ -26,7 +26,10 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.TestBean;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 @EnableTestBeans
+@QuarkusTest
 class Scenario24Test {
 
     @TestBean

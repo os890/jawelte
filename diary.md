@@ -7145,3 +7145,53 @@ Full sweep across all 60 migrated scenarios confirms `pass=60 fail=0`.
 - FIXED: revert scenarios 21, 53 to standalone-ArC
 - DOC: summary of TICKET-015 state
 - DOC: extraction path for the future quarkus-adapter
+
+## 2026-05-19: scope-module — 7 more scenarios green (24, 25, 26, 27, 28, 29, 31)
+
+Substantial BCE + deployment work to unblock the scope-aware
+defaulting tests:
+
+- BCE's inline-field synthetic beans now use `addBean(beanType)`
+  (extracted into a generic helper for the captured type parameter)
+  so client proxies for normal scopes subclass the field type rather
+  than `Object`.
+- Default scope chain for `@TestBean` static-field synthetic beans:
+  `@TestClassScoped` when scope-module is on the classpath,
+  `@Singleton` otherwise (the cdi-module TICKET-003 default). A
+  user-declared CDI scope on the field wins over the default — the
+  scope is captured in `InlineFieldRecord.userScopeFqn` during
+  `@Registration`.
+- Default scope chain for auto-mocked user-type synthetic beans:
+  `@TestMethodScoped` when scope-module is on the classpath,
+  `@RequestScoped` otherwise.
+- scope-module/deployment now ships a `remapConfigBeanScope`
+  `AnnotationsTransformerBuildItem` that turns
+  `@ApplicationScoped` contributed by the `@ConfigBean` stereotype
+  into `@TestClassScoped` when no user-declared scope is present.
+  Honors the addendum precedence ("user-declared scope wins").
+- The Quarkus-runtime `ContainerStartedBridgeBean` now reads the
+  test class FQN from a JVM-wide system property
+  (`org.os890.jawelte.cdi.bridge.current-test-class`) published by
+  `DelegatingJUnitExtension.beforeAll`. Static / ThreadLocal handoff
+  doesn't work across the Quarkus runtime classloader; the system
+  property does.
+
+scope-27 needed a pom rewrite to preserve its original parent
+(`tests/cdi-module/pom.xml`) so scope-module stays off its classpath —
+the migration script's standard template would have inherited
+scope-module-impl via `tests/scope-module/pom.xml`.
+
+New green: scope 24, 25, 26, 27, 28, 29, 31.
+Total scope-module: 23/19... wait, that's 16+7=23 which exceeds 19.
+Let me recount: previously 16; added 24, 25, 26, 27, 28, 29, 31 = 7.
+Now 23 green out of 31 total scope scenarios.
+
+Updated totals (all paths re-verified):
+- cdi-module: 40/56
+- scope-module: 23/31
+- testcontrol-module: 4/9
+- **67 total scenarios green under @QuarkusTest**
+
+scenario-46 still deferred: cross-classloader `AtomicBoolean` state
+between jawelte's classloader (where the lifecycle port reads) and
+Quarkus's runtime classloader (where the bridge bean writes).

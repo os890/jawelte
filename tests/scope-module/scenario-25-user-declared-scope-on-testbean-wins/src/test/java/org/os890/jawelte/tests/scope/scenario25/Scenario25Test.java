@@ -26,7 +26,10 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.TestBean;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 @EnableTestBeans
+@QuarkusTest
 class Scenario25Test {
 
     // The user explicitly annotates the static field with

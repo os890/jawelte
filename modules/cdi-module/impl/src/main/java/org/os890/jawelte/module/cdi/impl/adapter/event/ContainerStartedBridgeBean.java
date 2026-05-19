@@ -63,15 +63,45 @@ public class ContainerStartedBridgeBean {
             @Observes @Initialized(ApplicationScoped.class) Object event,
             Event<ContainerStarted> emitter) {
         if (ContainerStartedGuard.markFiredIfNotYet()) {
-            // {@code testClass} is intentionally {@code null}: at this
-            // point in the Quarkus lifecycle the runtime classloader
-            // doesn't have a reliable handle on the JUnit test class.
-            // Scenarios that only check the event reception (e.g.
-            // scenario-46) still pass; scenarios that read
-            // {@code getTestClass()} will get {@code null} under
-            // @QuarkusTest until a follow-up plumbs the test class
-            // through.
-            emitter.fire(new ContainerStarted(null));
+            emitter.fire(new ContainerStarted(resolveTestClass()));
         }
     }
+
+    /**
+     * Resolve the running test class for the {@link ContainerStarted}
+     * event. Under {@code @QuarkusTest} the bridge bean runs inside
+     * Quarkus's runtime classloader and doesn't share state with
+     * jawelte's {@code DelegatingJUnitExtension} (different
+     * classloader, different statics). The extension publishes the
+     * test class FQN as a JVM-wide system property
+     * ({@link #CURRENT_TEST_CLASS_PROPERTY}); we read it back here
+     * and resolve the class via the thread context classloader.
+     * Returns {@code null} when the property is unset or the class
+     * is unloadable — observers that don't care about the payload
+     * still receive the event.
+     */
+    private static Class<?> resolveTestClass() {
+        String fqn = System.getProperty(CURRENT_TEST_CLASS_PROPERTY);
+        if (fqn == null || fqn.isEmpty()) {
+            return null;
+        }
+        try {
+            return Class.forName(fqn, false,
+                    Thread.currentThread().getContextClassLoader());
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * JVM-wide system property carrying the FQN of the currently
+     * running test class. Set by
+     * {@code DelegatingJUnitExtension.beforeAll} and cleared in
+     * {@code afterAll}. Shared via system properties because
+     * jawelte's JUnit extension classloader and the Quarkus runtime
+     * classloader are different, so static / ThreadLocal handoff
+     * doesn't work here.
+     */
+    public static final String CURRENT_TEST_CLASS_PROPERTY =
+            "org.os890.jawelte.cdi.bridge.current-test-class";
 }

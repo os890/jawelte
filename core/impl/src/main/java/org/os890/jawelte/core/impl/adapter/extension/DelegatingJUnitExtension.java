@@ -87,9 +87,21 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
     public DelegatingJUnitExtension() {
     }
 
+    /**
+     * JVM-wide system property published per test class so consumers
+     * across classloader boundaries (notably the Quarkus runtime
+     * classloader's {@code ContainerStartedBridgeBean}) can identify
+     * the running test class. Static / ThreadLocal handoff doesn't
+     * compose with Quarkus's classloader split; a system property
+     * does.
+     */
+    public static final String CURRENT_TEST_CLASS_PROPERTY =
+            "org.os890.jawelte.cdi.bridge.current-test-class";
+
     @Override
     public void beforeAll(ExtensionContext extensionContext) throws Exception {
         Class<?> testClass = extensionContext.getRequiredTestClass();
+        System.setProperty(CURRENT_TEST_CLASS_PROPERTY, testClass.getName());
         boolean manageContainer = readManageContainer(testClass);
 
         TestContext testContext = new TestContextImpl(testClass);
@@ -197,6 +209,8 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
                 collected.add(t);
             }
         }
+
+        System.clearProperty(CURRENT_TEST_CLASS_PROPERTY);
 
         // TICKET-016 safety net: clear the TestContext ThreadLocal in
         // case DelegatingJUnitTestInstanceFactory didn't (the factory

@@ -27,6 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.core.api.TestBean;
 
+import io.quarkus.test.junit.QuarkusTest;
+
 /**
  * Without scope-module on the classpath the override records
  * (TestBeanDefaultScope, AutoMockDefaultScope) stay unbound, so
@@ -38,6 +40,7 @@ import org.os890.jawelte.core.api.TestBean;
  * inherits cdi-module test deps but no scope-module artifacts.
  */
 @EnableTestBeans
+@QuarkusTest
 class Scenario27Test {
 
     @TestBean

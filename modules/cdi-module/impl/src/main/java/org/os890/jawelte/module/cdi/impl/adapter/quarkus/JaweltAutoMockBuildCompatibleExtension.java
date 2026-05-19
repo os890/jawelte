@@ -260,11 +260,13 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                 continue;
             }
             Set<String> qualifierNames = annotationQualifierFqnSet(field.annotations());
+            String userScopeFqn = userDeclaredScopeFqn(field.annotations());
             inlineFields.add(new InlineFieldRecord(
                     declaringClass.name(),
                     field.name(),
                     typeName,
-                    qualifierNames));
+                    qualifierNames,
+                    userScopeFqn));
         }
     }
 
@@ -357,20 +359,89 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     }
 
     private void registerInlineFieldBeans(SyntheticComponents components) {
+        Class<? extends Annotation> defaultScope = resolveInlineFieldDefaultScope();
         for (InlineFieldRecord field : inlineFields) {
             Class<?> beanType = loadClass(field.typeName);
             if (beanType == null) {
                 continue;
             }
-            SyntheticBeanBuilder<Object> builder = components.<Object>addBean(Object.class)
-                    .type(beanType)
-                    .scope(Dependent.class)
-                    .createWith(InlineFieldSyntheticBeanCreator.class)
-                    .withParam("declaringClass", field.declaringClass)
-                    .withParam("fieldName", field.fieldName);
-            applyQualifiers(builder, field.qualifierNames);
+            // A user-declared CDI scope on the static field wins over
+            // the default. Scope-25 locks this precedence in.
+            Class<? extends Annotation> scope = defaultScope;
+            if (field.userScopeFqn != null) {
+                Class<?> userScope = loadClass(field.userScopeFqn);
+                if (userScope != null && Annotation.class.isAssignableFrom(userScope)) {
+                    @SuppressWarnings("unchecked")
+                    Class<? extends Annotation> typedScope =
+                            (Class<? extends Annotation>) userScope;
+                    scope = typedScope;
+                }
+            }
+            registerInlineFieldBean(components, field, beanType, scope);
             existingBeans.add(new BeanShape(field.typeName, field.qualifierNames));
         }
+    }
+
+    /**
+     * Helper extracted to capture the field's static type {@code T}
+     * so {@code addBean(beanType)} fixes the proxy ArC generates for
+     * normal-scoped synthetic beans (e.g. {@code @TestClassScoped})
+     * to subclass the field's declared type rather than {@code Object}
+     * — the latter would fail the cast at injection time.
+     */
+    private <T> void registerInlineFieldBean(
+            SyntheticComponents components,
+            InlineFieldRecord field,
+            Class<T> beanType,
+            Class<? extends Annotation> defaultScope) {
+        @SuppressWarnings("unchecked")
+        Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>> creator =
+                (Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>>)
+                        (Class<?>) InlineFieldSyntheticBeanCreator.class;
+        SyntheticBeanBuilder<T> builder = components.addBean(beanType)
+                .type(beanType)
+                .scope(defaultScope)
+                .createWith(creator)
+                .withParam("declaringClass", field.declaringClass)
+                .withParam("fieldName", field.fieldName);
+        applyQualifiers(builder, field.qualifierNames);
+    }
+
+    /**
+     * Default scope for {@code @TestBean} static-field synthetic
+     * beans: {@code @TestClassScoped} when scope-module is on the
+     * classpath (one instance per test class — survives test methods
+     * via the test-class store), falling back to {@code @Singleton}
+     * (per the TICKET-003 cdi-module default — scope-27 locks this
+     * in). Mirrors the standalone-ArC {@code BeanScopeMapper}
+     * default chain.
+     */
+    private static Class<? extends Annotation> resolveInlineFieldDefaultScope() {
+        return loadScopeAnnotation("org.os890.jawelte.module.scope.api.TestClassScoped",
+                jakarta.inject.Singleton.class);
+    }
+
+    /**
+     * Default scope for auto-mocked user-type synthetic beans:
+     * {@code @TestMethodScoped} when scope-module is on the classpath,
+     * falling back to {@code @RequestScoped} otherwise. Mirrors the
+     * standalone-ArC {@code BeanScopeMapper} default chain
+     * (scope-26 locks this in).
+     */
+    private static Class<? extends Annotation> resolveAutoMockUserTypeScope() {
+        return loadScopeAnnotation("org.os890.jawelte.module.scope.api.TestMethodScoped",
+                jakarta.enterprise.context.RequestScoped.class);
+    }
+
+    private static Class<? extends Annotation> loadScopeAnnotation(
+            String preferredFqn, Class<? extends Annotation> fallback) {
+        Class<?> klass = loadClass(preferredFqn);
+        if (klass != null && Annotation.class.isAssignableFrom(klass)) {
+            @SuppressWarnings("unchecked")
+            Class<? extends Annotation> scope = (Class<? extends Annotation>) klass;
+            return scope;
+        }
+        return fallback;
     }
 
     private void registerTestBeanAlternatives(SyntheticComponents components) {
@@ -528,14 +599,17 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                 (Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>>)
                         (Class<?>) MockSyntheticBeanCreator.class;
         // Default scope mirrors the standalone-ArC
-        // MockAndInlineBeanRegistrar:
+        // MockAndInlineBeanRegistrar's BeanScopeMapper chain:
         // - @Dependent for JDK types (sharing a stateful collection
         //   / map across IPs would be surprising)
-        // - @RequestScoped for user types (shared per request — one
-        //   mock-and-verify cycle per test method)
+        // - @TestMethodScoped for user types when scope-module is
+        //   present (one mock-and-verify cycle per test method, plus
+        //   per-method reset)
+        // - @RequestScoped for user types when scope-module is absent
+        //   (closest stock CDI scope to "per request")
         Class<? extends Annotation> autoMockScope = isJdkType(ip.typeName)
                 ? Dependent.class
-                : jakarta.enterprise.context.RequestScoped.class;
+                : resolveAutoMockUserTypeScope();
         SyntheticBeanBuilder<T> builder = components.addBean(beanType)
                 .scope(autoMockScope)
                 .createWith(creator)
@@ -981,11 +1055,32 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
      * @param typeName       FQN of the field's declared type
      * @param qualifierNames FQNs of user-declared qualifiers on the
      *                       field (excluding the implicit ones)
+     * @param userScopeFqn   FQN of any user-declared CDI scope on the
+     *                       field, or {@code null} when the user did
+     *                       not declare a scope (in which case the
+     *                       default chain applies)
      */
     private record InlineFieldRecord(
             String declaringClass,
             String fieldName,
             String typeName,
-            Set<String> qualifierNames) {
+            Set<String> qualifierNames,
+            String userScopeFqn) {
+    }
+
+    /**
+     * Return the FQN of any CDI scope annotation declared directly on
+     * a field, or {@code null} when none is present. Used to honor
+     * the addendum precedence "user-declared scope on a
+     * {@code @TestBean} static field wins over the scope-module
+     * default".
+     */
+    private static String userDeclaredScopeFqn(Collection<AnnotationInfo> annotations) {
+        for (AnnotationInfo annotation : annotations) {
+            if (isCdiScopeAnnotation(annotation.name())) {
+                return annotation.name();
+            }
+        }
+        return null;
     }
 }

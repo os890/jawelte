@@ -26,6 +26,8 @@ import org.os890.jawelte.core.api.ConfigBean;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.scope.api.TestClassScoped;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 28 — a {@code @ConfigBean}-annotated class is remapped
  * from the stereotype's contributed {@code @ApplicationScoped} to
@@ -34,6 +36,7 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
  * {@link BeanManager} after CDI bootstrap.
  */
 @EnableTestBeans
+@QuarkusTest
 class Scenario28Test {
 
     @Test
