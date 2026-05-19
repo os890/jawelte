@@ -5471,3 +5471,5 @@ Each per-profile mvn phase now snapshots its scenarios' target/surefire-reports/
 
 FIXED: move quarkus-bom import from root depMgmt into -Pquarkus profile
 Importing quarkus-bom at root level mediated smallrye-config-core/common to 3.17.2 while the explicit pin on smallrye-config (the metabundle) stayed at 3.10.0. That split broke OWB/Weld CDI bootstraps — visible as scenario-04 multi-endpoint wiremock failing with AmbiguousResolutionException on every test that used the SmallRye Config core under the (default) -Powb sweep. Moving the import into a root-level <profiles><profile id=quarkus> block contains the BOM mediation to runs that actually need it.
+
+FIXED: spring-data-module's compile-scope dep on cdi-module-impl-arc became transitive on consumers, pulling impl-arc onto -Powb/-Pweld test classpaths alongside impl. Same-FQN classes with different bytecode let ServiceLoader find the ArC BeanManager (UnsupportedOperationException on createAnnotatedType). Switched both impl-arc and arc-processor to scope=provided.
