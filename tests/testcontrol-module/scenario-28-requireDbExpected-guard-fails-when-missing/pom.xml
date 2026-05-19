@@ -27,4 +27,25 @@
     <artifactId>jawelte-tests-testcontrol-module-scenario-28-requireDbExpected-guard-fails-when-missing</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/testcontrol-module scenario 28: @TestControl(testData=…) with no dbExpected/*.xml fails in beforeEach by default (requireDbExpected guard)</name>
+
+    <dependencies>
+        <!--
+            testcontrol-module/impl references jakarta.persistence.EntityManager
+            in TestDataSeedTransactionTemplate. Even though this scenario fails
+            in the requireDbExpected guard before the template is ever invoked,
+            standalone-ArC still walks the testcontrol jar at bean-discovery
+            time and tries to generate a _ClientProxy for the template — that
+            walk needs persistence-api on the classpath to succeed.
+        -->
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
