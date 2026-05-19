@@ -6640,3 +6640,24 @@ fixing the regressions they exposed:
 
 12 new scenarios are green: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10,
 11, 12. Total CDI scenarios green under @QuarkusTest: 20 (out of 49).
+
+## 2026-05-19: more CDI scenarios green — 33 of 56 total
+
+Added @QuarkusTest to scenarios 20, 21, 22, 23, 24, 25, 26, 33, 34,
+50, 51, 52, 53 — all green. Two additional BCE adjustments:
+
+- JDK auto-mock scope: scenario-21 expects `@Dependent` for JDK
+  types (e.g. `List<String>`) — sharing a stateful collection across
+  IPs would be surprising. New `isJdkType` check chooses `@Dependent`
+  for `java.` / `javax.` types, `@RequestScoped` for user types.
+- User-type auto-mock scope: scenario-23 explicitly asserts
+  `RequestScoped`. Standalone-ArC's
+  `MockAndInlineBeanRegistrar` defaults to `@RequestScoped` for
+  user types; the BCE now matches.
+
+Running tally of CDI scenarios green under @QuarkusTest: **33 of 56**
+(01-17, 20-26, 30, 31, 33, 34, 35, 50-53). Deferred (still
+standalone-ArC): 18, 19, 27, 28, 29, 32, 36-49, 54-56 — these need
+broader framework integration (whitelist filter, TestContext,
+manage-container-false SE shim, binding qualifier members,
+DeltaSpike, etc.) that are out of scope for this loop iteration.

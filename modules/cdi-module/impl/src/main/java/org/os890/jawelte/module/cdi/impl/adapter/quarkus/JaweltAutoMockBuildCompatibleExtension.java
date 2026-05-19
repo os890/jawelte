@@ -525,8 +525,17 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
         Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>> creator =
                 (Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>>)
                         (Class<?>) MockSyntheticBeanCreator.class;
+        // Default scope mirrors the standalone-ArC
+        // MockAndInlineBeanRegistrar:
+        // - @Dependent for JDK types (sharing a stateful collection
+        //   / map across IPs would be surprising)
+        // - @RequestScoped for user types (shared per request — one
+        //   mock-and-verify cycle per test method)
+        Class<? extends Annotation> autoMockScope = isJdkType(ip.typeName)
+                ? Dependent.class
+                : jakarta.enterprise.context.RequestScoped.class;
         SyntheticBeanBuilder<T> builder = components.addBean(beanType)
-                .scope(jakarta.inject.Singleton.class)
+                .scope(autoMockScope)
                 .createWith(creator)
                 .withParam("targetType", beanType);
         Type cdiIpType = injectionPointTypes.get(ip);
@@ -805,6 +814,16 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                 || typeName.startsWith("jakarta.inject.")
                 || typeName.startsWith("io.quarkus.arc.")
                 || "java.lang.Object".equals(typeName);
+    }
+
+    /**
+     * Whether the given FQN names a JDK type. JDK auto-mocks default
+     * to {@code @Dependent} (per-IP fresh instance) rather than the
+     * {@code @Singleton} used for user types — sharing a stateful
+     * JDK collection / map across IPs would be surprising.
+     */
+    private static boolean isJdkType(String typeName) {
+        return typeName.startsWith("java.") || typeName.startsWith("javax.");
     }
 
     /**
