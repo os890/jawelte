@@ -554,15 +554,61 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
         Set<AnnotationInfo> capturedQualifiers = injectionPointQualifiers.get(ip);
         if (capturedQualifiers != null && !capturedQualifiers.isEmpty()) {
             // Preserve qualifier member values (e.g. @Named("primary"))
-            // by passing the captured AnnotationInfo through; the
-            // FQN-only applyQualifiers fallback would instantiate the
-            // annotation with default values.
+            // by passing the captured AnnotationInfo through. Fall
+            // back to Class-based registration when the qualifier has
+            // no binding members (e.g. @ConfigKey with @Nonbinding
+            // name): Quarkus skips the annotation-literal-class
+            // generation for AnnotationInfo-supplied qualifiers on
+            // synthetic beans whose target type is a JDK class (the
+            // synthetic_Bean class compiles fine but boot fails with
+            // NoClassDefFoundError because the literal class never
+            // gets generated). Class-based registration goes through
+            // a different code path that does emit the literal.
             for (AnnotationInfo qualifier : capturedQualifiers) {
+                if (hasOnlyNonbindingMembers(qualifier)) {
+                    Class<?> qualifierClass = loadClass(qualifier.name());
+                    if (qualifierClass != null
+                            && java.lang.annotation.Annotation.class.isAssignableFrom(qualifierClass)) {
+                        @SuppressWarnings("unchecked")
+                        Class<? extends java.lang.annotation.Annotation> qualifierAnnotationType =
+                                (Class<? extends java.lang.annotation.Annotation>) qualifierClass;
+                        builder.qualifier(qualifierAnnotationType);
+                        continue;
+                    }
+                }
                 builder.qualifier(qualifier);
             }
         } else {
             applyQualifiers(builder, ip.qualifierNames);
         }
+    }
+
+    /**
+     * Whether every declared member of the qualifier annotation is
+     * meta-annotated with {@code @Nonbinding}. When true, the
+     * qualifier instance's member values are irrelevant for CDI
+     * resolution, so we can register the qualifier by type
+     * ({@code builder.qualifier(Class)}) and dodge the
+     * annotation-literal-class generation gap that strikes
+     * {@code builder.qualifier(AnnotationInfo)} on JDK-target
+     * synthetic beans.
+     */
+    private static boolean hasOnlyNonbindingMembers(AnnotationInfo qualifier) {
+        ClassInfo declaration = qualifier.declaration();
+        if (declaration == null) {
+            return false;
+        }
+        Collection<jakarta.enterprise.lang.model.declarations.MethodInfo> methods =
+                declaration.methods();
+        if (methods.isEmpty()) {
+            return true;
+        }
+        for (jakarta.enterprise.lang.model.declarations.MethodInfo method : methods) {
+            if (!method.hasAnnotation(ann -> NONBINDING_FQN.equals(ann.name()))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
