@@ -24,6 +24,8 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 02 — transactional verify path. {@code dbIn/customers.xml}
  * seeds {@code (1, Alice)} and {@code (2, Bob)}. The test method
@@ -40,6 +42,7 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * failure is what this scenario verifies.
  */
 @EnableTestBeans
+@QuarkusTest
 @PersistenceConfig(persistenceUnitName = "testcontrolScenario02PU")
 class Scenario02Test {
 

@@ -24,6 +24,8 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
+import io.quarkus.test.junit.QuarkusTest;
+
 /**
  * Scenario 01 — happy-path test of the {@code @TestControl(testData)}
  * seeding pipeline. {@code testdata/scenario01/dbIn/customers.xml}
@@ -36,6 +38,7 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * {@code @Transactional} service injected here counts them.
  */
 @EnableTestBeans
+@QuarkusTest
 @PersistenceConfig(persistenceUnitName = "testcontrolScenario01PU")
 class Scenario01Test {
 

@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 08 — multi-PU testData routing. Two persistence units
  * ({@code testcontrolScenario08CustomersPU} for {@link Customer},
@@ -41,6 +43,7 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * post-test state.
  */
 @EnableTestBeans
+@QuarkusTest
 class Scenario08Test {
 
     @Inject
