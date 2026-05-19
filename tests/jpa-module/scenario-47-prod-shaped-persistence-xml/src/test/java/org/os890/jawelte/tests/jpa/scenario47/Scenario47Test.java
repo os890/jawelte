@@ -22,6 +22,8 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Verifies that a production-shaped {@code persistence.xml}
  * (transaction-type=JTA, {@code <jta-data-source>}, PostgreSQL
@@ -34,6 +36,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  * data source and fail.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario47Test {
 
     @Inject

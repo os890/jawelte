@@ -22,12 +22,15 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Nested {@code @Transactional}: outer + inner each persist on their own
  * EntityManager / EntityTransaction; both commit; both rows are visible
  * afterwards (mirrors POC's {@code NestedTransactionalTest.nestedBothCommit}).
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario13Test {
 
     @Inject
