@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.tests.cdi.scenario01;
 
+import io.quarkus.test.junit.QuarkusTest;
+
 /**
  * Quarkus companion of {@link Scenario01Test}. Annotated only with
  * {@code @io.quarkus.test.junit.QuarkusTest}; inherits the
@@ -22,14 +24,12 @@ package org.os890.jawelte.tests.cdi.scenario01;
  * and the test method from the parent.
  *
  * <p>Activated only under the {@code -Pquarkus} profile (the OWB and
- * Weld profiles filter this class out of surefire's include set so it
- * doesn't try to boot ArC alongside the SE container).
+ * Weld profiles filter this class out of compilation and surefire so
+ * it doesn't try to boot ArC alongside the SE container).
  *
- * <p>Reference implementation lives on the {@code quarkus-full-poc}
- * branch; the layout here demonstrates the subclass pattern the
- * triple-runtime architecture proposes — see
- * {@code docs/triple-runtime-architecture.md} for the rationale.
+ * <p>See {@code docs/triple-runtime-architecture.md} for the subclass
+ * pattern rationale.
  */
-// @io.quarkus.test.junit.QuarkusTest  -- uncomment under -Pquarkus
+@QuarkusTest
 class Scenario01QuarkusTest extends Scenario01Test {
 }

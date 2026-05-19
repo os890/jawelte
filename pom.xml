@@ -244,7 +244,10 @@
                 CDI SE implementations. Both pinned in
                 <dependencyManagement> with scope=test; the active impl
                 is selected by Maven profile (-Powb default, -Pweld) on
-                the consuming module.
+                the consuming module. -Pquarkus selects a third path —
+                quarkus-junit5 boots ArC directly and the per-module
+                jawelte-*-impl-arc + jawelte-*-deployment jars take
+                over for ArC-native bean discovery.
             -->
             <dependency>
                 <groupId>org.apache.openwebbeans</groupId>
@@ -258,6 +261,13 @@
                 <version>${weld.version}</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
 
             <!-- Internal cdi-module cross-references -->
             <dependency>
@@ -268,6 +278,16 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-cdi-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-cdi-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-cdi-module-deployment</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -282,6 +302,16 @@
                 <artifactId>jawelte-scope-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-scope-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-scope-module-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal jpa-module cross-references -->
             <dependency>
@@ -292,6 +322,16 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-jpa-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jpa-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jpa-module-deployment</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -306,6 +346,11 @@
                 <artifactId>jawelte-jta-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jta-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal ejb-module cross-references -->
             <dependency>
@@ -316,6 +361,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-ejb-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-ejb-module-impl-arc</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -342,6 +392,11 @@
                 <artifactId>jawelte-db-testdata-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-db-testdata-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal testcontrol-module cross-references -->
             <dependency>
@@ -352,6 +407,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-testcontrol-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-testcontrol-module-impl-arc</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -376,6 +436,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-wiremock-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-wiremock-module-impl-arc</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

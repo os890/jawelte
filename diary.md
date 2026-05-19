@@ -5459,3 +5459,6 @@ ticket-015: EnableTestBeans.Proxy: TestInstanceFactory -> InvocationInterceptor
 
 ticket-015 triple-runtime layout: impl-arc + deployment infrastructure
 Per-module impl-arc/ submodules contain the ArC-native variants of the cdi-module/impl plumbing (ArcSeContainerInitializer, ArcSeContainerView, JaweltAutoMockBuildCompatibleExtension, MockBeanCreator family, ArcContextContributor SPI) and ports of the lifecycle adapters. cdi/jpa/scope-module also ship deployment/ submodules whose @BuildStep methods register context contributors / interceptor bindings / build-compatible extensions for @QuarkusTest. spring-data-module gets a flat ArcContextContributor implementation.
+
+ticket-015 triple-runtime layout: -Pquarkus profile in cdi-module tests
+Scenario01 demonstrates the subclass pattern under -Pquarkus. EnableTestBeans.Proxy now defers to invocation.proceed() when @QuarkusTest is present so Quarkus's interceptor can take over construction. Root pom adds quarkus-bom and the *-deployment depMgmt entries; tests/cdi-module/pom.xml gates impl vs impl-arc by profile and configures compile/surefire excludes (-Powb/-Pweld skip *QuarkusTest, -Pquarkus runs only those).

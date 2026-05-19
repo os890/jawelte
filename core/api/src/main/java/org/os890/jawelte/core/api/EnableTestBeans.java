@@ -179,6 +179,16 @@ public @interface EnableTestBeans {
             TestContext storedContext = extensionContext.getStore(namespace)
                     .get(TestContext.class, TestContext.class);
             try {
+                if (hasQuarkusTestAnnotation(testClass)) {
+                    // Quarkus owns the instance lifecycle (its own
+                    // QuarkusTestExtension constructs the test through
+                    // an FCL-aware path and binds it as actualTestInstance
+                    // for downstream callbacks). Resolving through our
+                    // port here would short-circuit that and break
+                    // Quarkus's method-handle lookup. Step out of the
+                    // chain — let Quarkus and JUnit handle construction.
+                    return invocation.proceed();
+                }
                 TestInstanceFactoryPort port = resolveTestInstancePort();
                 if (port != null) {
                     Object portInstance = port.createInstance(testClass);
@@ -194,11 +204,9 @@ public @interface EnableTestBeans {
                         return cast;
                     }
                 }
-                // Port absent or returned null: hand off to the next
-                // interceptor (under @QuarkusTest that is Quarkus's own
-                // QuarkusTestExtension.interceptTestClassConstructor) or,
-                // if no other interceptor takes the call, JUnit invokes
-                // the constructor reflectively for an unmanaged instance.
+                // Port absent or returned null and no @QuarkusTest:
+                // JUnit invokes the constructor reflectively for an
+                // unmanaged instance.
                 return invocation.proceed();
             } finally {
                 // Close the bootstrap window for TestContext.get(): the
@@ -213,6 +221,22 @@ public @interface EnableTestBeans {
                     storedContext.reset();
                 }
             }
+        }
+
+        /**
+         * Probe by FQN string so {@code core/api} doesn't have a
+         * compile-time dependency on Quarkus. Mirrors the check in
+         * {@code DelegatingJUnitExtension.hasQuarkusTestAnnotation}.
+         */
+        private static boolean hasQuarkusTestAnnotation(Class<?> testClass) {
+            for (java.lang.annotation.Annotation annotation : testClass.getAnnotations()) {
+                String name = annotation.annotationType().getName();
+                if ("io.quarkus.test.junit.QuarkusTest".equals(name)
+                        || "io.quarkus.test.junit.QuarkusComponentTest".equals(name)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static TestInstanceFactoryPort resolveTestInstancePort() {
