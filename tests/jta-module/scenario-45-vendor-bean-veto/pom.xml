@@ -27,4 +27,21 @@
     <packaging>jar</packaging>
     <name>jawelte tests/jta-module scenario 45: vendor-bean-veto</name>
     <description>Stand-in beans in org.apache.geronimo.transaction.* are vetoed by JtaCdiExtension's @Observes ProcessAnnotatedType — Geronimo ships no CDI integration jpa-module delegates to, so its internal beans must not collide with jpa-module's synthetic registrations. com.arjuna.ats.jta.cdi.* is intentionally NOT blanket-vetoed: when Narayana's CDI integration is on the classpath jpa-module delegates to it via the CdiTransactionalSupportProvider seam, and that delegation depends on the package staying alive. A regular bean in a non-vetoed package resolves normally — proves the veto is targeted, not wholesale.</description>
+
+    <dependencies>
+        <!--
+            Pull narayana-jta locally so the "delegating" branch fires
+            in JtaArcContextContributor — without it the contributor
+            blanket-vetoes com.arjuna.ats.jta.cdi.* (including this
+            scenario's FakeNarayanaBean stand-in). The narayana-jta
+            uber-jar carries Narayana's CDI integration, which is the
+            signal jpa-module's CdiTransactionalSupportProvider uses
+            to switch into delegating mode and skip the blanket veto.
+        -->
+        <dependency>
+            <groupId>org.jboss.narayana.jta</groupId>
+            <artifactId>narayana-jta</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

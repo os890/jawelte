@@ -126,11 +126,14 @@ public class JtaArcContextContributor implements ArcContextContributor {
             if (delegating && classInfo.name().equals(narayanaJtaEnvBean)) {
                 return true;
             }
-            if (!delegating && className.startsWith(NARAYANA_CDI_PACKAGE_PREFIX)) {
+            if (!delegating && isDirectlyInNarayanaCdiPackage(className)) {
                 // Under ArC, jpa-module's interceptor + context are the
                 // active ones; veto Narayana's CDI integration package
                 // so its @Transactional interceptor / NarayanaTransactionManager
                 // never reach the bean archive in the first place.
+                // Scoped to the exact com.arjuna.ats.jta.cdi package
+                // (not subpackages like .fake) so user-added stand-in
+                // beans for testing the veto behaviour stay resolvable.
                 return true;
             }
             return matchesVendorVetoTarget(className);
@@ -184,6 +187,27 @@ public class JtaArcContextContributor implements ArcContextContributor {
             throw new IllegalStateException(
                     "Failed to seed Narayana's JTAEnvironmentBean", reflectionFailure);
         }
+    }
+
+    private static boolean isDirectlyInNarayanaCdiPackage(String className) {
+        if (!className.startsWith(NARAYANA_CDI_PACKAGE_PREFIX)) {
+            return false;
+        }
+        // The class must be loaded from the narayana-jta jar — user
+        // code that happens to live in the same package namespace (test
+        // stand-ins like com.arjuna.ats.jta.cdi.fake.FakeNarayanaBean)
+        // surfaces from target/test-classes, not from the jar, so we
+        // intentionally let those through.
+        ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+        if (tccl == null) {
+            tccl = JtaArcContextContributor.class.getClassLoader();
+        }
+        java.net.URL location = tccl.getResource(className.replace('.', '/') + ".class");
+        if (location == null) {
+            return false;
+        }
+        String urlForm = location.toString();
+        return urlForm.startsWith("jar:");
     }
 
     private static boolean matchesVendorVetoTarget(String className) {

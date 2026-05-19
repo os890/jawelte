@@ -397,12 +397,30 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             return;
         }
         if (!ownsContainer(testContext)) {
-            // External driver (e.g. @QuarkusTest) owns the test
-            // instance lifecycle and field injection. Skip our own
-            // reflective inject pass — it would double-inject.
-            return;
+            // We did not bootstrap the container ourselves — it was
+            // either driven by @QuarkusTest or by user code calling
+            // SeContainerInitializer.newInstance().initialize() under
+            // @EnableTestBeans(manageContainer = false). The
+            // @QuarkusTest path owns its own injection; the SE-shim
+            // path doesn't inject the test instance at all, so we
+            // step in here.
+            if (isQuarkusTest(testClass)) {
+                return;
+            }
+            // SE-shim path: Arc is up but no one else will inject. Run
+            // our own reflective pass so @Inject fields resolve.
         }
         injectFields(testInstance, testInstance.getClass(), container);
+    }
+
+    private static boolean isQuarkusTest(Class<?> testClass) {
+        for (java.lang.annotation.Annotation annotation : testClass.getAnnotations()) {
+            if ("io.quarkus.test.junit.QuarkusTest"
+                    .equals(annotation.annotationType().getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -412,9 +430,15 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             return;
         }
         if (!ownsContainer(testContext)) {
-            // External driver activates / manages the request context;
-            // skip our activation so we don't conflict with it.
-            return;
+            // We did not bootstrap the container ourselves — under
+            // @QuarkusTest the test extension already activates the
+            // request context, but the SE-shim path
+            // (@EnableTestBeans(manageContainer = false) + user-driven
+            // SeContainerInitializer) does not activate one. Treat the
+            // SE-shim case the same as the owned path.
+            if (isQuarkusTest(testContext.getTestClass())) {
+                return;
+            }
         }
         RequestContextController controller =
                 container.select(RequestContextController.class).get();
