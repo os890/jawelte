@@ -16,7 +16,10 @@
 package org.os890.jawelte.module.wiremock.impl.adapter.lifecycle;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -24,18 +27,19 @@ import java.util.Set;
 
 import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.Default;
-import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
+import jakarta.inject.Qualifier;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
 import org.os890.jawelte.module.wiremock.api.EnableWireMock;
 import org.os890.jawelte.module.wiremock.api.WireMockEndpoint;
 import org.os890.jawelte.module.wiremock.impl.WireMockServerRegistry;
-import org.os890.jawelte.module.wiremock.impl.adapter.extension.WireMockCdiExtension;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 
 /**
  * {@link TestModuleLifecyclePort} adapter shipped by
@@ -54,9 +58,16 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
  *
  * <p><b>Trigger.</b> The adapter is a no-op for test classes that
  * are not annotated {@link EnableWireMock}. When present, the
- * adapter reads the discovered endpoints off the
- * {@link WireMockCdiExtension} via
- * {@code BeanManager.getExtension(...)}. Empty discovery → start
+ * adapter scans the test class hierarchy directly for
+ * {@code @Inject}-able WireMock fields and walks each field's
+ * qualifier hierarchy looking for an
+ * {@code @WireMockEndpoint}-rooted user qualifier — the same logic
+ * {@code WireMockCdiExtension.onBeforeBeanDiscovery} runs under
+ * OWB/Weld, kept locally so the adapter does not depend on a
+ * portable extension being reachable through ArC's
+ * {@code BeanManager} (which rejects
+ * {@code getExtension(...)} with
+ * {@code UnsupportedOperationException}). Empty discovery → start
  * one default endpoint on port 0 and register under
  * {@code jakarta.enterprise.inject.Default.class}. Non-empty
  * discovery → iterate unique endpoint keys (the values of the
@@ -85,17 +96,26 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
     public WireMockLifecycleAdapter() {
     }
 
+    private static final Set<Class<?>> INJECTABLE_WIREMOCK_TYPES = Set.of(
+            WireMockServer.class,
+            WireMock.class,
+            WireMockRuntimeInfo.class);
+
     @Override
     public void beforeAll(TestContext testContext) {
         Class<?> testClass = testContext.getTestClass();
         if (testClass.getAnnotation(EnableWireMock.class) == null) {
             return;
         }
-        BeanManager beanManager = CDI.current().getBeanManager();
         WireMockServerRegistry registry = CDI.current().select(WireMockServerRegistry.class).get();
-        WireMockCdiExtension extension = beanManager.getExtension(WireMockCdiExtension.class);
+        // Under ArC, BeanManager.getExtension(...) is unsupported, so
+        // discover the @WireMockEndpoint qualifier hierarchy directly
+        // off the test class's @Inject fields. Mirrors the logic
+        // WireMockCdiExtension.onBeforeBeanDiscovery runs under
+        // OWB/Weld, kept locally so the adapter doesn't depend on the
+        // portable extension being reachable through CDI.
         Map<Class<? extends Annotation>, Class<? extends Annotation>> endpoints =
-                extension.discoveredEndpoints();
+                discoverEndpoints(testClass);
         Set<Class<? extends Annotation>> uniqueKeys = new LinkedHashSet<>(endpoints.values());
 
         List<WireMockServer> started = new ArrayList<>();
@@ -160,6 +180,75 @@ public class WireMockLifecycleAdapter implements TestModuleLifecyclePort {
         if (aggregate != null) {
             throw aggregate;
         }
+    }
+
+    /**
+     * Walks the test class hierarchy and returns a
+     * {@code userQualifierType → endpointKey} map of every
+     * {@code @WireMockEndpoint}-rooted qualifier reachable from a
+     * field whose type is one of the injectable WireMock types.
+     * Mirrors {@code WireMockCdiExtension.onBeforeBeanDiscovery} so
+     * the adapter does not have to read it through
+     * {@code BeanManager.getExtension(...)} — which ArC's
+     * {@code BeanManagerImpl} rejects with
+     * {@code UnsupportedOperationException}.
+     *
+     * @param testClass the active test class
+     * @return the discovered map (insertion-ordered); empty in the
+     *         default-only case
+     */
+    private static Map<Class<? extends Annotation>, Class<? extends Annotation>>
+            discoverEndpoints(Class<?> testClass) {
+        Map<Class<? extends Annotation>, Class<? extends Annotation>> sink = new LinkedHashMap<>();
+        for (Class<?> current = testClass; current != null && current != Object.class;
+                current = current.getSuperclass()) {
+            for (Field field : current.getDeclaredFields()) {
+                if (!INJECTABLE_WIREMOCK_TYPES.contains(field.getType())) {
+                    continue;
+                }
+                for (Annotation annotation : field.getAnnotations()) {
+                    collectEndpoint(annotation.annotationType(), sink, new HashSet<>());
+                }
+            }
+        }
+        return sink;
+    }
+
+    private static void collectEndpoint(
+            Class<? extends Annotation> annotationType,
+            Map<Class<? extends Annotation>, Class<? extends Annotation>> sink,
+            Set<Class<? extends Annotation>> visited) {
+        if (!visited.add(annotationType)) {
+            return;
+        }
+        Class<? extends Annotation> endpointKey = findEndpointAncestor(annotationType, new HashSet<>());
+        if (endpointKey == null) {
+            return;
+        }
+        if (annotationType.isAnnotationPresent(Qualifier.class)) {
+            sink.putIfAbsent(annotationType, endpointKey);
+        }
+    }
+
+    private static Class<? extends Annotation> findEndpointAncestor(
+            Class<? extends Annotation> annotationType, Set<Class<? extends Annotation>> visited) {
+        if (!visited.add(annotationType)) {
+            return null;
+        }
+        if (annotationType.isAnnotationPresent(WireMockEndpoint.class)) {
+            return annotationType;
+        }
+        for (Annotation meta : annotationType.getAnnotations()) {
+            String packageName = meta.annotationType().getPackageName();
+            if (packageName.startsWith("java.lang") || packageName.startsWith("jakarta.")) {
+                continue;
+            }
+            Class<? extends Annotation> result = findEndpointAncestor(meta.annotationType(), visited);
+            if (result != null) {
+                return result;
+            }
+        }
+        return null;
     }
 
     private static WireMockServer startServer(int port) {
