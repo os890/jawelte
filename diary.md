@@ -7315,3 +7315,71 @@ is migrated. Some that exercise jpa-module-specific features
 (@ReadOnly, @TransactionScoped beans, the table cleaner, file mode,
 multi-PU) will need additional build steps to route the feature
 through Quarkus's own JPA / JTA pipeline.
+
+## 2026-05-19: jpa-module — 8 scenarios green (01, 02, 03, 05, 06, 12, 21, 33)
+
+Total green: **75 scenarios** under `@QuarkusTest`.
+
+### Per-module breakdown
+
+| Module | Green | Total |
+|--------|-------|-------|
+| cdi-module | 40 | 56 |
+| scope-module | 23 | 31 |
+| testcontrol-module | 4 | 9 |
+| jpa-module | 8 | 64 |
+| **TOTAL** | **75** | — |
+
+### jpa-module migration pattern
+
+For each migrated scenario:
+1. New `application.properties` in `src/test/resources` with H2
+   datasource + `quarkus.hibernate-orm.persistence-xml.ignore=true`
+   + `quarkus.hibernate-orm.database.version-check.enabled=false`.
+2. Pom rewrites with Quarkus deps (`quarkus-hibernate-orm`,
+   `quarkus-jdbc-h2`, `quarkus-narayana-jta`, `quarkus-junit5`,
+   `quarkus-arc`) and `hibernate.orm.version=7.3.2.Final`.
+3. `@QuarkusTest` annotation added to the test class (separately
+   from `@EnableTestBeans`).
+
+### Code changes that unblocked jpa
+
+- **jpa-module/deployment** Quarkus extension scaffolded. One
+  `@BuildStep` registers `@ReadOnly` as an interceptor binding via
+  `InterceptorBindingRegistrarBuildItem` so `ReadOnlyInterceptor` is
+  discoverable.
+- **`JpaLifecycleAdapter.beginTransactionForTransactionalTestMethod`**
+  no-ops when no jawelte-managed PU is active (`JpaActivePersistenceUnits.get().isEmpty()`).
+  Quarkus's narayana-jta handles `@Transactional` directly.
+- **`TransactionalInterceptor.aroundInvoke`** silently proceeds when
+  `TransactionScopedContext.current() == null`. Same reason.
+- BCE `isBuiltInCdiType` widened to skip auto-mocking `io.quarkus.*`,
+  `io.agroal.*`, `io.smallrye.*`, `org.hibernate.*`,
+  `jakarta.persistence.*`, `jakarta.transaction.*` types — these are
+  Quarkus-managed synthetic beans and the BCE was producing
+  duplicate-id collisions.
+
+### Deferred jpa scenarios (jawelte-specific behavior diverges from narayana)
+
+- 09 (transactional-on-test-method) — asserts jawelte's
+  `TransactionStrategy.isActive()`; under @QuarkusTest narayana
+  drives the test method's tx.
+- 11 (commit-on-checked-exception) — asserts jawelte's
+  rollback-on-checked policy; narayana commits on checked per
+  Jakarta EE default.
+- 07, 04 — Quarkus build failure at deployment (likely persistence.xml
+  config interaction; tracked for follow-up).
+- 36 (user-transaction-commit-no-active-tx) — asserts jawelte's
+  `IllegalStateException` from its UserTransaction; narayana throws
+  a different exception type.
+
+### testcontrol-module — deferred
+
+testcontrol scenarios 01, 02, 08 depend on the jpa-module's
+seed-transaction template + AfterTestTransaction event, which are
+deeply wired into jawelte's `JpaLifecycleAdapter` /
+`TransactionalInterceptor`. Bridging them through Quarkus's
+narayana-jta interceptor needs a follow-up that fires
+`AfterTestTransaction` from the right hook in the narayana commit
+path. 08a / 28 use `EngineTestKit` (structurally infeasible under
+@QuarkusTest).
