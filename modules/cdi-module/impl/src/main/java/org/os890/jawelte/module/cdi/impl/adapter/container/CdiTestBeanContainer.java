@@ -128,6 +128,13 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     @Override
     public void beforeAll(TestContext testContext) {
+        // Clear cross-test BCE state from the previous bootstrap. ArC
+        // is sequential per test class on the same JVM so a stale
+        // pre-registration set from the prior class must not leak.
+        org.os890.jawelte.module.cdi.impl.adapter.quarkus
+                .JaweltAutoMockBuildCompatibleExtension
+                .clearPreRegisteredBeanShapes();
+
         Class<?> testClass = testContext.getTestClass();
         EnableTestBeans config = testClass.getAnnotation(EnableTestBeans.class);
         boolean limitToTestBeans = config != null && config.limitToTestBeans();
@@ -237,6 +244,43 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         return result;
     }
 
+    /**
+     * Build a no-op proxy for the given {@code BeanConfigurator}-like
+     * return type. Every method that returns the same configurator
+     * type chains back to {@code this} so the legacy
+     * {@code event.addBean().types(...).qualifiers(...).scope(...).produceWith(...)}
+     * call chain works without blowing up at the first
+     * {@code null}-method receiver. The chained calls are inert —
+     * standalone-ArC routes the actual synthetic-bean registration
+     * through {@code BeanRegistrar} contributors instead, so the
+     * portable extension's {@code addBean} chain is allowed to
+     * complete and discard.
+     */
+    private static Object chainableConfiguratorStub(Class<?> returnType) {
+        if (returnType == null || !returnType.isInterface()) {
+            return null;
+        }
+        return java.lang.reflect.Proxy.newProxyInstance(
+                returnType.getClassLoader(),
+                new Class<?>[] {returnType},
+                (innerProxy, innerMethod, innerArgs) -> {
+                    Class<?> innerReturnType = innerMethod.getReturnType();
+                    if (innerReturnType == returnType) {
+                        return innerProxy;
+                    }
+                    if (innerReturnType == void.class || innerReturnType == Void.class) {
+                        return null;
+                    }
+                    if (innerReturnType == boolean.class) {
+                        return Boolean.FALSE;
+                    }
+                    if (innerReturnType.isInterface()) {
+                        return chainableConfiguratorStub(innerReturnType);
+                    }
+                    return null;
+                });
+    }
+
     private static void invokePortableExtensionPhase(
             List<jakarta.enterprise.inject.spi.Extension> extensions,
             Class<?> phaseType) {
@@ -247,7 +291,22 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                 phaseType.getClassLoader(),
                 new Class<?>[] {phaseType},
                 (proxy, method, args) -> {
+                    String methodName = method.getName();
                     Class<?> returnType = method.getReturnType();
+                    // AfterBeanDiscovery.addBean() returns a
+                    // BeanConfigurator the portable extension chains
+                    // .types(...).qualifiers(...).scope(...).produceWith(...)
+                    // on. ArC doesn't implement that surface, but
+                    // ArcContextContributors do the same registration via
+                    // BeanRegistrar. Return a chainable no-op stub so the
+                    // legacy chain in onAfterBeanDiscovery doesn't NPE
+                    // — the chained calls are intentionally inert under
+                    // standalone-ArC.
+                    if ("addBean".equals(methodName)
+                            && phaseType
+                                    == jakarta.enterprise.inject.spi.AfterBeanDiscovery.class) {
+                        return chainableConfiguratorStub(returnType);
+                    }
                     if (returnType == boolean.class) {
                         return Boolean.FALSE;
                     }
@@ -1231,6 +1290,24 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     // ----- Mock / inline-field BeanRegistrar ----------------------------
 
+    private static boolean isPreRegisteredByContributor(
+            Type effectiveType, Set<AnnotationInstance> requiredQualifiers) {
+        String typeFqn = effectiveType.name().toString();
+        Set<String> qualifierFqns = new HashSet<>();
+        for (AnnotationInstance q : requiredQualifiers) {
+            String qFqn = q.name().toString();
+            if ("jakarta.enterprise.inject.Default".equals(qFqn)
+                    || "jakarta.enterprise.inject.Any".equals(qFqn)
+                    || "jakarta.inject.Named".equals(qFqn)) {
+                continue;
+            }
+            qualifierFqns.add(qFqn);
+        }
+        return org.os890.jawelte.module.cdi.impl.adapter.quarkus
+                .JaweltAutoMockBuildCompatibleExtension
+                .isPreRegisteredBeanShape(typeFqn, qualifierFqns);
+    }
+
     private static class MockAndInlineBeanRegistrar implements BeanRegistrar {
 
         private final Set<InlineField> inlineFields;
@@ -1346,6 +1423,18 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
                     continue;
                 }
                 if (isSatisfied(effectiveType, requiredQualifiers, beans)) {
+                    continue;
+                }
+                if (isPreRegisteredByContributor(effectiveType, requiredQualifiers)) {
+                    // An external ArcContextContributor has staged a
+                    // synthetic bean for this IP via the BCE's
+                    // preRegisterExistingBeanShape side-channel. The
+                    // BeanRegistrar for that contributor runs after
+                    // this one (CdiTestBeanContainer adds it later in
+                    // the chain), so registrationContext.beans() does
+                    // not yet expose it — but the shape is already
+                    // registered as "to be provided", so we must not
+                    // double-register an auto-mock for the same IP.
                     continue;
                 }
                 if (hasSyntheticBeanBinding(effectiveType.name())) {

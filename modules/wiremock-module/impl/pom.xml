@@ -33,6 +33,24 @@
     <name>jawelte (wiremock-module/impl)</name>
     <description>Implementation of wiremock-module: WireMockLifecycleAdapter (TestModuleLifecyclePort at @Priority(75) — same band as jaxrs-module, between testcontrol at 50 and scope at 100); a CDI producer (the api↔library bridge — the ONLY place upstream org.wiremock library types are imported, satisfying @Inject WireMock / @Inject WireMockServer); a CDI extension for @WireMockEndpoint discovery + synthetic-bean registration in AfterBeanDiscovery; the per-class WireMockServerRegistry bean carrying an impl-internal marker annotation; and a BeanScopeMapper SPI provider (SL-registered on core/api's SPI) that remaps the registry's marker to @TestClassScoped at ProcessAnnotatedType time, driven by core/impl's ScopeRemapCdiExtension. SPI lookups for core go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
 
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM scoped to wiremock-module/impl — gives us a
+                managed arc-processor version without propagating the
+                BOM-forced smallrye-config / jackson / commons-io versions
+                to non-wiremock modules.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <!--
             wiremock-module/api supplies @EnableWireMock (read off
@@ -111,6 +129,23 @@
         <dependency>
             <groupId>org.eclipse.microprofile.config</groupId>
             <artifactId>microprofile-config-api</artifactId>
+        </dependency>
+
+        <!--
+            wiremock-module/impl compile-depends on cdi-module/impl for
+            the ArcContextContributor SPI it implements; the impl jar
+            also transitively pulls in arc-processor so we can reference
+            ArC's BeanProcessor.Builder / BeanRegistrar surface from
+            WireMockArcContextContributor. Mirrors jpa-module/impl and
+            ejb-module/impl.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
         </dependency>
     </dependencies>
 

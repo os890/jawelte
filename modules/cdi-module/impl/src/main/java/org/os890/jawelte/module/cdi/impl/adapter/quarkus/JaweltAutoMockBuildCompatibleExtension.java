@@ -123,6 +123,70 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
 
     private final Set<BeanShape> existingBeans = new LinkedHashSet<>();
 
+    /**
+     * Bean shapes pre-registered by other modules' {@code ArcContextContributor}s
+     * via {@link #preRegisterExistingBeanShape(String, Set)} before
+     * {@code BeanProcessor.process()} runs. Drained into
+     * {@link #existingBeans} at the start of {@code @Synthesis} so the
+     * auto-mock pass sees them, regardless of whether ArC's {@code @Registration}
+     * callback ever fired for the corresponding synthetic beans.
+     *
+     * <p>The auto-mock check at {@code @Synthesis} compares against
+     * {@code existingBeans}; beans added through ArC's {@code BeanRegistrar}
+     * surface during {@code BeanProcessor.process()} aren't always
+     * delivered through the BCE's {@code @Registration} hook for the
+     * bean's full {@code types()} view (the registrar runs in the same
+     * processing phase, not before), so contributors that register
+     * synthetic beans for qualified IPs need a side-channel to suppress
+     * the BCE's own auto-mock for those IPs.
+     */
+    private static final Set<BeanShape> PRE_REGISTERED_BEAN_SHAPES =
+            new LinkedHashSet<>();
+
+    /**
+     * Pre-register a bean shape (type FQN + non-built-in qualifier FQNs)
+     * so the BCE's auto-mock pass at {@code @Synthesis} treats the IP
+     * with the same shape as already satisfied — even when ArC's
+     * {@code @Registration} callback never delivered the synthetic bean
+     * to {@link #collect(BeanInfo)}.
+     *
+     * <p>Qualifier FQNs must <em>exclude</em> the CDI built-ins
+     * {@code jakarta.enterprise.inject.Default},
+     * {@code jakarta.enterprise.inject.Any} and
+     * {@code jakarta.inject.Named} (matching the filtering in
+     * {@link #qualifierFqnSet(java.util.Collection)}).
+     *
+     * @param typeFqn       the bean type's fully-qualified name
+     * @param qualifierFqns the non-built-in qualifier FQNs, in any order
+     */
+    public static void preRegisterExistingBeanShape(String typeFqn, Set<String> qualifierFqns) {
+        PRE_REGISTERED_BEAN_SHAPES.add(new BeanShape(typeFqn, Set.copyOf(qualifierFqns)));
+    }
+
+    /**
+     * Clear the pre-registered bean shapes set — called by
+     * {@code CdiTestBeanContainer.afterAll} (and the SE-shim path) so
+     * shapes registered for one test class don't leak into the next.
+     * The standalone-ArC bootstrap is sequential per test class so the
+     * set has at most one test class's worth of entries in flight at
+     * any time; this clear is a safety net.
+     */
+    public static void clearPreRegisteredBeanShapes() {
+        PRE_REGISTERED_BEAN_SHAPES.clear();
+    }
+
+    /**
+     * Whether a contributor has already pre-registered a bean shape
+     * for {@code typeFqn + qualifierFqns}. Used by
+     * {@code MockAndInlineBeanRegistrar} to skip its own auto-mock
+     * pass for IPs that an external contributor's
+     * {@code BeanRegistrar} is going to satisfy later in the same
+     * processing cycle.
+     */
+    public static boolean isPreRegisteredBeanShape(String typeFqn, Set<String> qualifierFqns) {
+        return PRE_REGISTERED_BEAN_SHAPES.contains(new BeanShape(typeFqn, Set.copyOf(qualifierFqns)));
+    }
+
     private final Set<UnsatisfiedKey> seenInjectionPoints = new LinkedHashSet<>();
 
     /**
@@ -563,6 +627,11 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     }
 
     private void registerAutoMockBeans(SyntheticComponents components) {
+        // Pull in shapes pre-registered by external contributors that
+        // wrote synthetic beans through ArC's BeanRegistrar surface;
+        // their beans never reach this BCE's @Registration callback,
+        // so without this merge the auto-mock would duplicate them.
+        existingBeans.addAll(PRE_REGISTERED_BEAN_SHAPES);
         for (UnsatisfiedKey ip : seenInjectionPoints) {
             if (existingBeans.contains(new BeanShape(ip.typeName, ip.qualifierNames))) {
                 continue;
