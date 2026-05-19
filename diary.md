@@ -6519,3 +6519,26 @@ Green scenarios under `@QuarkusTest`:
 - `cdi-module/scenario-30` (heavy auto-mock)
 - `cdi-module/scenario-31` (test class is a Dependent bean)
 - `scope-module/scenario-01` (method-scope state resets)
+
+## 2026-05-19: @TestBean(bean=X) class-level activation under @QuarkusTest
+
+Extended `JaweltAutoMockBuildCompatibleExtension` to handle class-level
+`@TestBean(bean = X.class)` annotations on the test class:
+
+- New `@Registration` collector walks the bean's declaring-class
+  annotation chain (including meta-annotations and `@TestBeans`
+  repeatable holders) and records every `bean=X` target FQN.
+- New `@Synthesis` pass loads each target reflectively, skips it
+  silently if it is not `@Alternative` (matches scenario 35), and
+  registers a synthetic alternative bean with
+  `@Priority(Integer.MAX_VALUE)` covering all of the target's bean
+  types. Scope mirrors the target's declared CDI scope (defaults to
+  `@Dependent`).
+- New `TestBeanInstanceSyntheticBeanCreator` instantiates the target
+  per invocation via reflection.
+- Captured the target's static type via a generic helper method so the
+  client proxy ArC generates for normal-scoped synthetic beans
+  subclasses the target itself rather than `Object` (the original cause
+  of the `ClassCastException` seen on the first attempt).
+
+scenario-13-testbean-bean now passes under `@QuarkusTest`.
