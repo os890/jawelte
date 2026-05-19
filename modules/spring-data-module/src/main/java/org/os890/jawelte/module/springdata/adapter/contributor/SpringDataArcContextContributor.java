@@ -81,6 +81,15 @@ public class SpringDataArcContextContributor implements ArcContextContributor {
         builder.addBeanRegistrar(registration -> {
             for (Class<?> repositoryInterface : repositoryInterfaces) {
                 DotName typeDot = DotName.createSimple(repositoryInterface.getName());
+                // If a user-supplied bean (e.g. an @Produces method)
+                // already covers this repository interface, back off:
+                // the original extension does the same through its
+                // ProcessBean / existingBeanTypes observer chain.
+                // Registering a competing synthetic here would land us
+                // in AmbiguousResolutionException at deployment.
+                if (!registration.beans().withBeanType(typeDot).collect().isEmpty()) {
+                    continue;
+                }
                 @SuppressWarnings({"rawtypes", "unchecked"})
                 io.quarkus.arc.processor.BeanConfigurator<?> configurator =
                         registration.configure(typeDot);
@@ -106,38 +115,133 @@ public class SpringDataArcContextContributor implements ArcContextContributor {
     }
 
     /**
-     * Walks the test class hierarchy and returns every
-     * {@code @Inject}-able Spring Data repository interface
-     * reachable through field types. Mirrors
-     * {@code SpringDataRepositoryExtension.collectFromTestClass} so
-     * the discovery decision is identical regardless of which CDI
-     * runtime drives the bootstrap.
+     * Finds every {@code @Inject}-able Spring Data repository
+     * interface reachable from any class on the test classpath.
+     * The original {@code SpringDataRepositoryExtension} sees those
+     * IPs through {@code ProcessInjectionPoint}, which fires for
+     * every IP in the bean archive — mirrors that scope here by
+     * scanning {@code target/test-classes} (and {@code target/classes})
+     * directly, since standalone-ArC doesn't dispatch the portable
+     * extension's PIP observer.
      */
     private static Set<Class<?>> discoverRepositoryInterfaces(Class<?> testClass) {
         Set<Class<?>> result = new LinkedHashSet<>();
-        for (Class<?> current = testClass; current != null && current != Object.class;
-                current = current.getSuperclass()) {
-            for (Field field : current.getDeclaredFields()) {
-                if (!field.isAnnotationPresent(Inject.class)) {
-                    continue;
-                }
-                Class<?> fieldType = field.getType();
-                if (!fieldType.isInterface()) {
-                    continue;
-                }
-                if (isSpringDataMarker(fieldType)) {
-                    continue;
-                }
-                if (fieldType.isAnnotationPresent(NoRepositoryBean.class)) {
-                    continue;
-                }
-                if (!Repository.class.isAssignableFrom(fieldType)) {
-                    continue;
-                }
-                result.add(fieldType);
-            }
+        Set<Class<?>> visited = new LinkedHashSet<>();
+        // First, the test class tree (covers nested @ApplicationScoped
+        // bridge beans like Scenario02Test.CrudInvoker).
+        collectRepositoriesFromClassTree(testClass, result, visited);
+        // Then every other class in target/test-classes — picks up
+        // top-level helper beans (Scenario07Test's CustomerService)
+        // that aren't reachable through the test class's nesting.
+        for (Class<?> candidate : scanTestClassesDirectory(testClass)) {
+            collectRepositoriesFromClassTree(candidate, result, visited);
         }
         return result;
+    }
+
+    private static void collectRepositoriesFromClassTree(
+            Class<?> entry, Set<Class<?>> result, Set<Class<?>> visited) {
+        for (Class<?> current = entry; current != null && current != Object.class;
+                current = current.getSuperclass()) {
+            if (!visited.add(current)) {
+                return;
+            }
+            collectRepositoriesFromDeclaredFields(current, result);
+            for (Class<?> nested : current.getDeclaredClasses()) {
+                collectRepositoriesFromClassTree(nested, result, visited);
+            }
+        }
+    }
+
+    private static void collectRepositoriesFromDeclaredFields(Class<?> owner, Set<Class<?>> result) {
+        for (Field field : owner.getDeclaredFields()) {
+            if (!field.isAnnotationPresent(Inject.class)) {
+                continue;
+            }
+            Class<?> fieldType = field.getType();
+            if (!fieldType.isInterface()) {
+                continue;
+            }
+            if (isSpringDataMarker(fieldType)) {
+                continue;
+            }
+            if (fieldType.isAnnotationPresent(NoRepositoryBean.class)) {
+                continue;
+            }
+            if (!Repository.class.isAssignableFrom(fieldType)) {
+                continue;
+            }
+            result.add(fieldType);
+        }
+    }
+
+    /**
+     * Walks {@code target/test-classes} (and {@code target/classes})
+     * under the test class's project directory and returns every
+     * class loadable through the test class's ClassLoader. Same
+     * approach {@code CdiTestBeanContainer.discoverBeanClasses}
+     * uses; replicated here to keep spring-data-module independent
+     * of cdi-module/impl's internal API.
+     */
+    private static Set<Class<?>> scanTestClassesDirectory(Class<?> testClass) {
+        Set<Class<?>> result = new LinkedHashSet<>();
+        ClassLoader cl = testClass.getClassLoader();
+        if (cl == null) {
+            return result;
+        }
+        try {
+            String resourceName = testClass.getName().replace('.', '/') + ".class";
+            java.net.URL url = cl.getResource(resourceName);
+            if (url == null) {
+                return result;
+            }
+            String path = url.getFile();
+            int idx = path.indexOf("target/test-classes");
+            if (idx < 0) {
+                return result;
+            }
+            String projectBase = path.substring(0, idx);
+            java.io.File testClassesDir = new java.io.File(projectBase + "target/test-classes");
+            if (testClassesDir.isDirectory()) {
+                scanDirectory(testClassesDir, testClassesDir, cl, result);
+            }
+            java.io.File classesDir = new java.io.File(projectBase + "target/classes");
+            if (classesDir.isDirectory()) {
+                scanDirectory(classesDir, classesDir, cl, result);
+            }
+        } catch (RuntimeException scanFailure) {
+            // best-effort discovery — any IP we miss surfaces later as
+            // an unsatisfied resolution at deployment time
+        }
+        return result;
+    }
+
+    private static void scanDirectory(
+            java.io.File root, java.io.File dir, ClassLoader cl, Set<Class<?>> result) {
+        java.io.File[] entries = dir.listFiles();
+        if (entries == null) {
+            return;
+        }
+        for (java.io.File entry : entries) {
+            if (entry.isDirectory()) {
+                scanDirectory(root, entry, cl, result);
+                continue;
+            }
+            if (!entry.getName().endsWith(".class")) {
+                continue;
+            }
+            String relative = entry.getAbsolutePath().substring(root.getAbsolutePath().length() + 1);
+            String className = relative.substring(0, relative.length() - ".class".length())
+                    .replace(java.io.File.separatorChar, '.');
+            try {
+                Class<?> loaded = Class.forName(className, false, cl);
+                result.add(loaded);
+            } catch (Throwable loadFailure) {
+                // skip classes that fail to load (e.g. missing deps);
+                // anything we couldn't reach can't have repository IPs
+                // we care about
+            }
+        }
     }
 
     private static boolean isSpringDataMarker(Class<?> candidate) {
