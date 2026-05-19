@@ -6973,3 +6973,32 @@ end of today's session:
   ordering).
 - **testcontrol-module remaining (5 scenarios)**: 01, 02, 08, 08a,
   28 — all depend on jpa-module.
+
+## 2026-05-19: scenarios 21, 53 reverted to standalone-ArC
+
+scenario-21 (qualified-jdk-type) and scenario-53 (multi-qualifier-jdk-type)
+fail under `@QuarkusTest` with
+`NoClassDefFoundError: ConfigKey_ArcAnnotationLiteral`. Quarkus does
+not generate the qualifier annotation literal class for synthetic
+beans whose target type is a JDK class (`List`, etc.) and whose
+qualifier is user-defined — ArC generates the `Synthetic_Bean`
+class referencing the literal but skips the literal class itself.
+
+Reverted both scenarios to standalone-ArC. The bug needs Quarkus
+investigation (likely a `QualifierRegistrarBuildItem` or explicit
+`AnnotationLiteralRequiredBuildItem` registration from
+cdi-module/deployment). Tracked as follow-up.
+
+Architectural note from the user: `@EnableTestBeans` MUST stay a
+separate annotation from `@QuarkusTest`. Do not meta-annotate
+`@EnableTestBeans` with `@QuarkusTest` — a future quarkus-adapter
+extraction needs the two concerns decoupled (jawelte's
+`@EnableTestBeans` runs on plain CDI runtimes too; the
+quarkus-adapter is what consumers add alongside to switch
+runtime). Already aligned in the codebase.
+
+Total jawelte scenarios green under @QuarkusTest:
+- cdi-module: 40/56 (21, 53 removed)
+- scope-module: 16/19
+- testcontrol-module: 4/9
+- **60 total** (unchanged)

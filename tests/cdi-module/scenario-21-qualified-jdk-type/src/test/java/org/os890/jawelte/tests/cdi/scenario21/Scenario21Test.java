@@ -30,10 +30,7 @@ import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
-
-import io.quarkus.test.junit.QuarkusTest;
 @EnableTestBeans
-@QuarkusTest
 class Scenario21Test {
 
     @Inject
