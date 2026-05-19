@@ -6866,3 +6866,28 @@ Total jawelte scenarios green under @QuarkusTest:
 - scope-module: 14/19
 - testcontrol-module: 4/9
 - **60 total**
+
+## 2026-05-19: ejb-module migration spike — deferred
+
+Drafted ejb-module/deployment with build steps to:
+- `registerSingletonBeans` — add `@jakarta.ejb.Singleton` classes as
+  `@ApplicationScoped` beans.
+- `registerStatelessBeans` — add `@jakarta.ejb.Stateless` classes as
+  `@Dependent` beans.
+- `stripEjbSingletonAnnotation` / `stripEjbStatelessAnnotation` —
+  AnnotationsTransformerBuildItems to remove the EJB annotations so
+  Quarkus doesn't trip its "use @jakarta.inject.Singleton instead"
+  check at `ArcProcessor#generateResources`.
+
+The strip transformer didn't actually remove the annotations at the
+check point — Quarkus's check runs at a phase the
+`AnnotationsTransformerBuildItem` doesn't reach. Deferred; the
+deployment artifact is reverted from the tree. A follow-up needs to
+either (a) tap a different Quarkus build phase, (b) use a
+`BeanArchivePredicateBuildItem` to skip the offending classes, or
+(c) rename the annotations via bytecode rewrite at compile time.
+
+Total jawelte scenarios green under @QuarkusTest unchanged at **60**:
+- cdi-module: 42/56
+- scope-module: 14/19
+- testcontrol-module: 4/9
