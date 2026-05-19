@@ -294,6 +294,17 @@
         </profile>
         <profile>
             <id>quarkus</id>
+            <properties>
+                <!--
+                    Quarkus 3.35.3 ships hibernate-orm 7.3.2.Final;
+                    the project-wide pin (7.0.4.Final) drives the
+                    standalone OWB/Weld JPA path. Force the
+                    Quarkus-matched version so quarkus-hibernate-orm's
+                    deployment processor sees the API surface it was
+                    compiled against.
+                -->
+                <hibernate.orm.version>7.3.2.Final</hibernate.orm.version>
+            </properties>
             <dependencies>
                 <dependency>
                     <groupId>${project.groupId}</groupId>
@@ -318,6 +329,31 @@
                 <dependency>
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-junit5</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <!--
+                    Under -Pquarkus, EntityManager / UserTransaction /
+                    JDBC come from Quarkus's first-party extensions
+                    (quarkus-hibernate-orm + quarkus-jdbc-h2 +
+                    quarkus-narayana-jta). The jawelte
+                    JpaArcContextContributor's synthetic-bean registrar
+                    backs off when a producer for the same type is
+                    present, so the standalone JPA bootstrap doesn't
+                    fight Quarkus's pipeline.
+                -->
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-hibernate-orm</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-jdbc-h2</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-narayana-jta</artifactId>
                     <scope>test</scope>
                 </dependency>
             </dependencies>

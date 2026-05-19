@@ -222,6 +222,13 @@
         </profile>
         <profile>
             <id>quarkus</id>
+            <properties>
+                <!--
+                    Match quarkus-bom's Hibernate so quarkus-hibernate-
+                    orm's deployment processor sees its expected API.
+                -->
+                <hibernate.orm.version>7.3.2.Final</hibernate.orm.version>
+            </properties>
             <dependencies>
                 <dependency>
                     <groupId>${project.groupId}</groupId>
@@ -249,8 +256,38 @@
                     <scope>test</scope>
                 </dependency>
                 <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-jpa-module-impl-arc</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-jpa-module-deployment</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-junit5</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <!--
+                    testcontrol scenarios that seed via @TestData need
+                    real JPA + JTA + JDBC at runtime; under -Pquarkus
+                    those come from Quarkus's first-party extensions.
+                -->
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-hibernate-orm</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-jdbc-h2</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-narayana-jta</artifactId>
                     <scope>test</scope>
                 </dependency>
             </dependencies>
