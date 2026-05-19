@@ -522,6 +522,13 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
      * built-in wrapper machinery serves the wrapped bean, but we
      * have to hand the field an instance of the wrapper, not the
      * wrapped value. Plain fields fall back to a raw-type lookup.
+     *
+     * <p>{@link jakarta.enterprise.inject.spi.BeanManager} is wrapped
+     * with a JDK proxy that delegates to ArC's BeanManager for
+     * everything <em>except</em> {@code createAnnotatedType(Class)} —
+     * ArC rejects that with {@code UnsupportedOperationException} but
+     * a minimal reflection-backed view is enough for test code that
+     * just reads {@code getAnnotations()} off the result.
      */
     private static Object resolveInjectionValue(
             ArcContainer container, Field field, Annotation[] qArr) {
@@ -531,7 +538,80 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             Class<?> inner = extractFirstTypeArgument(field);
             return container.beanManager().createInstance().select(inner, qArr);
         }
+        if (fieldType == jakarta.enterprise.inject.spi.BeanManager.class) {
+            return wrapBeanManager(container.beanManager());
+        }
         return container.instance(fieldType, qArr).get();
+    }
+
+    /**
+     * Wraps ArC's {@code BeanManager} with a JDK proxy that
+     * intercepts {@code createAnnotatedType(Class)} (ArC throws
+     * {@code UnsupportedOperationException} on that one) and replaces
+     * it with a minimal reflection-backed
+     * {@link jakarta.enterprise.inject.spi.AnnotatedType} stub. Other
+     * methods delegate straight through.
+     */
+    private static jakarta.enterprise.inject.spi.BeanManager wrapBeanManager(
+            jakarta.enterprise.inject.spi.BeanManager delegate) {
+        return (jakarta.enterprise.inject.spi.BeanManager) java.lang.reflect.Proxy.newProxyInstance(
+                jakarta.enterprise.inject.spi.BeanManager.class.getClassLoader(),
+                new Class<?>[] {jakarta.enterprise.inject.spi.BeanManager.class},
+                (proxy, method, args) -> {
+                    if ("createAnnotatedType".equals(method.getName())
+                            && method.getParameterCount() == 1
+                            && method.getParameterTypes()[0] == Class.class) {
+                        return reflectiveAnnotatedType((Class<?>) args[0]);
+                    }
+                    try {
+                        return method.invoke(delegate, args);
+                    } catch (java.lang.reflect.InvocationTargetException ite) {
+                        throw ite.getTargetException();
+                    }
+                });
+    }
+
+    private static jakarta.enterprise.inject.spi.AnnotatedType<?> reflectiveAnnotatedType(
+            Class<?> javaClass) {
+        return (jakarta.enterprise.inject.spi.AnnotatedType<?>) java.lang.reflect.Proxy.newProxyInstance(
+                javaClass.getClassLoader() != null
+                        ? javaClass.getClassLoader()
+                        : CdiTestBeanContainer.class.getClassLoader(),
+                new Class<?>[] {jakarta.enterprise.inject.spi.AnnotatedType.class},
+                (proxy, method, args) -> {
+                    String name = method.getName();
+                    if ("getJavaClass".equals(name)) {
+                        return javaClass;
+                    }
+                    if ("getAnnotations".equals(name)) {
+                        return new java.util.LinkedHashSet<>(
+                                java.util.Arrays.asList(javaClass.getAnnotations()));
+                    }
+                    if ("getAnnotation".equals(name) && args != null && args.length == 1) {
+                        @SuppressWarnings("unchecked")
+                        Class<? extends Annotation> type = (Class<? extends Annotation>) args[0];
+                        return javaClass.getAnnotation(type);
+                    }
+                    if ("isAnnotationPresent".equals(name) && args != null && args.length == 1) {
+                        @SuppressWarnings("unchecked")
+                        Class<? extends Annotation> type = (Class<? extends Annotation>) args[0];
+                        return javaClass.isAnnotationPresent(type);
+                    }
+                    if ("getBaseType".equals(name)) {
+                        return javaClass;
+                    }
+                    if ("getTypeClosure".equals(name)) {
+                        return java.util.Set.of(javaClass, Object.class);
+                    }
+                    Class<?> returnType = method.getReturnType();
+                    if (returnType == java.util.Set.class) {
+                        return java.util.Set.of();
+                    }
+                    if (returnType == boolean.class) {
+                        return Boolean.FALSE;
+                    }
+                    return null;
+                });
     }
 
     private static Class<?> extractFirstTypeArgument(Field field) {
