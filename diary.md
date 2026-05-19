@@ -6775,3 +6775,37 @@ signalling mechanism.
 
 The bridge bean is harmless for already-green scenarios (verified
 01, 13, 30, 47).
+
+## 2026-05-19: scenarios 37, 43 green under @QuarkusTest
+
+Migrated scenarios 37 (testbean-overrides-exclude) and 43 (custom
+whitelist filter) to `@QuarkusTest`. Both happen to already work:
+- 37 — `@TestBean(bean=StubEmailService)` for a class normally
+  excluded by jawelte's `ExcludedPackageFilter` (`com.example.domain`).
+  Under `@QuarkusTest` there is no exclusion (Quarkus picks up the
+  whole classpath), so the @TestBean alternative just wins on its
+  own merits via the BCE.
+- 43 — `@EnableTestBeans(limitToTestBeans=true)` with a custom
+  whitelist filter that allows one package. Under `@QuarkusTest`
+  the whitelist filter is unused (Quarkus discovers all classes),
+  but the assertion only checks that `AllowedService` is present and
+  resolves — which it does.
+
+Deferred (not migratable without further work):
+- 39, 40, 41, 42: portable-extension `BeforeBeanDiscovery` hook —
+  Quarkus's build pipeline doesn't run jawelte's portable-extension
+  bridge, so the capturing observer never fires.
+- 18, 19, 36: rely on jawelte's `ExcludedPackageFilter` / whitelist
+  to *remove* beans from the bean archive — would need a Quarkus
+  extension build step that consults the filter and excludes those
+  classes from ArC's archive.
+- 46: classloader-split ContainerStarted (bridge bean writes from
+  Quarkus runtime classloader, lifecycle port reads from jawelte's).
+- 55, 56: DeltaSpike partial-bean-binding — needs separate
+  integration.
+
+Total jawelte scenarios green under @QuarkusTest:
+- cdi-module: 39/56
+- scope-module: 14/19
+- testcontrol-module: 4/9
+- **57 total**
