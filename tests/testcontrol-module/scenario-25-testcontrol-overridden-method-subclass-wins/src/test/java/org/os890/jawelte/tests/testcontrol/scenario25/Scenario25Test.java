@@ -19,6 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 25 — subclass override carries its own
  * {@code @TestControl}. The superclass declared the method with one
@@ -35,6 +37,7 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * pipeline does not blow up on the doubled declaration.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario25Test extends Scenario25Base {
 
     @Override

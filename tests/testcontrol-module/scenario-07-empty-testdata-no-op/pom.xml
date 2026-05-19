@@ -27,4 +27,29 @@
     <artifactId>jawelte-tests-testcontrol-module-scenario-07-empty-testdata-no-op</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/testcontrol-module scenario 07: no @TestControl on method is a silent no-op</name>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

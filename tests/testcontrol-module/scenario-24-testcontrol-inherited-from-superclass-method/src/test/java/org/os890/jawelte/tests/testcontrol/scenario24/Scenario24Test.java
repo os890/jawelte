@@ -18,6 +18,8 @@ package org.os890.jawelte.tests.testcontrol.scenario24;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 24 — {@code @TestControl} on a superclass method, no
  * override in the subclass. Java inheritance exposes the parent
@@ -30,5 +32,6 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * declaration) lives in {@link Scenario24Base}.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario24Test extends Scenario24Base {
 }

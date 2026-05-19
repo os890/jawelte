@@ -25,6 +25,8 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
 import org.os890.jawelte.module.scope.api.TestMethodScoped;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 12 — {@code @TestControl(startScopes = {})}. Empty array
  * is the documented sentinel for "all scope-module scopes activate
@@ -34,6 +36,7 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
  * both reachable in the test method.
  */
 @EnableTestBeans
+@QuarkusTest
 class Scenario12Test {
 
     @Inject

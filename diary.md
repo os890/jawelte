@@ -6730,3 +6730,22 @@ Scenarios green under @QuarkusTest:
 - cdi-module: 37/56 (added 47, 48, 49)
 - scope-module: 14/19
 - **51 total**
+
+## 2026-05-19: testcontrol-module — 4 scenarios green under @QuarkusTest
+
+Migrated testcontrol-module scenarios 07, 12, 24, 25 to @QuarkusTest
+without any further code changes — the `@TestControl` annotation's
+runtime side is a regular CDI observer of `BeforeScopeStarted`, which
+scope-module already publishes correctly under `@QuarkusTest` via its
+deployment extension's context configurators.
+
+Deferred (require deeper work):
+- 01, 02, 08, 08a: `@TestData(dbIn=…, dbExpected=…)` — needs the
+  jpa-module migration first (datasource + EntityManager bootstrap).
+- 28: `@RequireDbExpected` guard — same.
+
+Total jawelte scenarios green under @QuarkusTest:
+- cdi-module: 37/56
+- scope-module: 14/19
+- testcontrol-module: 4/9
+- **55 total**

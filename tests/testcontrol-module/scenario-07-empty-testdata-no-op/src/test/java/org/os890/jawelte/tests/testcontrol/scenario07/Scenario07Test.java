@@ -20,6 +20,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+
+import io.quarkus.test.junit.QuarkusTest;
 /**
  * Scenario 07 — no {@code @TestControl} on any test method. Verifies
  * that testcontrol-module's adapter is a silent no-op on the
@@ -27,6 +29,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  * exception. The test simply boots a CDI container and runs.
  */
 @EnableTestBeans
+@QuarkusTest
 class Scenario07Test {
 
     @Test
