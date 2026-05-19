@@ -7625,3 +7625,37 @@ Three coordinated changes closed the multi-endpoint wiremock gaps:
 Same `preRegisterExistingBeanShape` hook can be reused by future
 contributors that register synthetic beans through ArC's
 `BeanRegistrar` (spring-data-module, etc.).
+
+## 2026-05-19 — spring-data-module: 4 / 14 green; transactional gap remains
+
+Mirrors wiremock-module's pattern: a `SpringDataArcContextContributor`
+that walks the test class hierarchy for `@Inject`-able Spring Data
+repository interfaces, registers a `@RequestScoped` synthetic bean per
+repository via ArC's `BeanRegistrar` surface, and pre-registers the
+shape on `JaweltAutoMockBuildCompatibleExtension` so the auto-mock
+BCE doesn't double up. The creator builds the repository through
+Spring Data's `JpaRepositoryFactory` on first use, holding a reference
+to jpa-module's `EntityManagerProxy`.
+
+  4 / 14 scenarios pass:
+    01 — repository-injectable (proves the contributor wires the bean)
+    09 — no-repository-bean-skipped (proves the discovery filter)
+    10 — no-repository-bean-on-parent
+    12 — request-scoped-per-test-method (single test method works)
+
+  10 / 14 still fail. Pattern: every CRUD-touching test ends up with
+  `save()` returning `null`, derived queries returning empty, etc. The
+  repository instance is wired correctly, but the `EntityManager` it
+  holds isn't engaging with the active `@Transactional` boundary —
+  jpa-module's transaction-scoped EM is empty when Spring Data's
+  `SimpleJpaRepository.save` reads through the proxy.
+
+  Likely root cause: Spring Data's `SharedEntityManagerCreator`
+  unwraps the proxy in a way that captures a snapshot of the
+  per-thread EM stack at injection time rather than dispatching on
+  every call. Fixing it needs either (a) a different
+  `EntityManager`-resolution strategy in the synthetic bean's
+  creator (resolve through a `Provider<EntityManager>` rather than
+  baking the proxy in) or (b) holding off until the repository
+  instance is itself materialised inside the `@Transactional` method.
+  Out of scope for this iteration.
