@@ -6702,3 +6702,31 @@ Total jawelte scenarios green under @QuarkusTest:
 - cdi-module: 34/56
 - scope-module: 14/19 (+ 1 incidental pass on scenario-15's subject
   driver)
+
+## 2026-05-19: cdi-module/deployment Quarkus extension — config-bean stereotype discovery
+
+Added `modules/cdi-module/deployment` mirroring the
+`scope-module/deployment` pattern. One `@BuildStep`:
+`registerConfigBeans` scans the combined Jandex index for every
+class annotated with `@ConfigBean` and adds them to ArC's bean
+archive via `AdditionalBeanBuildItem`.
+
+Why this is needed: CDI 4.0 §4.1 says a stereotype with a scope is
+itself bean-defining, but ArC's annotated-only discovery doesn't
+follow the `@Stereotype` chain by default for stereotypes outside
+its known set. Without this build step, `@ConfigBean`-annotated
+classes are invisible to Quarkus and the auto-mock BCE catches the
+unsatisfied IP, returning a mock that has all-null methods.
+
+Wired the extension end-to-end:
+- `cdi-module/impl/META-INF/quarkus-extension.properties` +
+  `quarkus-extension.yaml` (deployment-artifact pointer)
+- `cdi-module/deployment/pom.xml` + the
+  `quarkus-extension-processor` annotation processor that emits the
+  `META-INF/quarkus-build-steps.list` Quarkus loads
+- `modules/cdi-module/pom.xml` adds `deployment` to its modules
+
+Scenarios green under @QuarkusTest:
+- cdi-module: 37/56 (added 47, 48, 49)
+- scope-module: 14/19
+- **51 total**
