@@ -23,6 +23,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import jakarta.enterprise.context.Dependent;
@@ -118,6 +119,7 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     private static final String TEST_BEANS_FQN = "org.os890.jawelte.core.api.TestBeans";
     private static final String QUALIFIER_FQN = "jakarta.inject.Qualifier";
     private static final String VOID_FQN = "void";
+    private static final String NONBINDING_FQN = "jakarta.enterprise.util.Nonbinding";
 
     private final Set<BeanShape> existingBeans = new LinkedHashSet<>();
 
@@ -685,21 +687,93 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     }
 
     /**
-     * Filter a bean's qualifier set down to user-declared FQNs.
-     * Drops the implicit {@code @Default} / {@code @Any} that CDI
-     * tags every bean with so a real bean with {@code [Default, Any]}
-     * still matches an IP with {@code [Default]}.
+     * Per-qualifier signatures that include each qualifier's binding
+     * member values (anything not marked {@code @Nonbinding}).
+     * {@code @ServiceType("express")} and {@code @ServiceType("standard")}
+     * yield distinct signatures and therefore distinct synthetic mock
+     * beans, while {@code @DataSource(name="primary")} and
+     * {@code @DataSource(name="secondary")} (where {@code name} is
+     * {@code @Nonbinding}) collapse to the same signature and share
+     * one mock.
+     *
+     * <p>Drops the implicit {@code @Default} / {@code @Any} so a bean
+     * tagged {@code [Default, Any]} still matches an IP with
+     * {@code [Default]}.
      */
     private static Set<String> qualifierFqnSet(Collection<AnnotationInfo> qualifiers) {
-        Set<String> names = new TreeSet<>();
+        Set<String> signatures = new TreeSet<>();
         for (AnnotationInfo qualifier : qualifiers) {
             String name = qualifier.name();
             if (isBuiltInQualifier(name)) {
                 continue;
             }
-            names.add(name);
+            signatures.add(qualifierBindingSignature(qualifier));
         }
-        return names;
+        return signatures;
+    }
+
+    /**
+     * Encode a qualifier annotation as {@code FQN{m1=v1,m2=v2}} where
+     * each {@code m_i} is a binding member (no {@code @Nonbinding}
+     * meta-annotation on the declaring method) with the value the
+     * caller passed.
+     */
+    private static String qualifierBindingSignature(AnnotationInfo qualifier) {
+        StringBuilder out = new StringBuilder(qualifier.name());
+        out.append('{');
+        boolean first = true;
+        for (java.util.Map.Entry<String, AnnotationMember> entry
+                : new TreeMap<>(qualifier.members()).entrySet()) {
+            String memberName = entry.getKey();
+            if (isNonbindingMember(qualifier, memberName)) {
+                continue;
+            }
+            if (!first) {
+                out.append(',');
+            }
+            first = false;
+            out.append(memberName).append('=').append(renderMember(entry.getValue()));
+        }
+        out.append('}');
+        return out.toString();
+    }
+
+    private static boolean isNonbindingMember(AnnotationInfo qualifier, String memberName) {
+        ClassInfo declaration = qualifier.declaration();
+        if (declaration == null) {
+            return false;
+        }
+        for (jakarta.enterprise.lang.model.declarations.MethodInfo method : declaration.methods()) {
+            if (memberName.equals(method.name())) {
+                return method.hasAnnotation(ann -> NONBINDING_FQN.equals(ann.name()));
+            }
+        }
+        return false;
+    }
+
+    private static String renderMember(AnnotationMember member) {
+        if (member.isString()) {
+            return '"' + member.asString() + '"';
+        }
+        if (member.isBoolean()) {
+            return Boolean.toString(member.asBoolean());
+        }
+        if (member.isInt()) {
+            return Integer.toString(member.asInt());
+        }
+        if (member.isLong()) {
+            return Long.toString(member.asLong());
+        }
+        if (member.isEnum()) {
+            return member.asEnumConstant();
+        }
+        if (member.isClass()) {
+            return typeName(member.asType());
+        }
+        // Fallback: rely on the platform's default representation; sufficient
+        // for the qualifier-signature comparison, since equal values always
+        // render to equal strings.
+        return String.valueOf(member);
     }
 
     /**

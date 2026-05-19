@@ -6661,3 +6661,24 @@ standalone-ArC): 18, 19, 27, 28, 29, 32, 36-49, 54-56 — these need
 broader framework integration (whitelist filter, TestContext,
 manage-container-false SE shim, binding qualifier members,
 DeltaSpike, etc.) that are out of scope for this loop iteration.
+
+## 2026-05-19: binding-qualifier-member dedup — scenario-54 green under @QuarkusTest
+
+Fixed the BCE's qualifier-FQN-only dedup so qualifier binding member
+values (anything not marked `@Nonbinding`) participate in the
+unsatisfied-IP key:
+
+- `qualifierFqnSet` now returns per-qualifier signatures of the form
+  `FQN{m1=v1,m2=v2}`, with binding members only.
+- `qualifierBindingSignature` walks the qualifier annotation's
+  declaring `ClassInfo` for member methods; skips any method
+  meta-annotated `@Nonbinding`.
+- `renderMember` covers string / boolean / int / long / enum / class
+  values (the common cases for qualifier members).
+
+`@ServiceType("express")` and `@ServiceType("standard")` (binding) now
+produce two distinct synthetic mocks, while `@DataSource(name="primary")`
+and `@DataSource(name="secondary")` (nonbinding) continue to share one
+mock — scenario-54 joins scenario-07 in passing under @QuarkusTest.
+
+Total CDI scenarios green under @QuarkusTest: **34 of 56**.
