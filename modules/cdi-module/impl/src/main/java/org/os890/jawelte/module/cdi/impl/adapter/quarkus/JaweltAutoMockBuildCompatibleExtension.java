@@ -1006,7 +1006,12 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     private static boolean isBuiltInCdiType(String typeName) {
         return typeName.startsWith("jakarta.enterprise.")
                 || typeName.startsWith("jakarta.inject.")
-                || typeName.startsWith("io.quarkus.arc.")
+                || typeName.startsWith("jakarta.persistence.")
+                || typeName.startsWith("jakarta.transaction.")
+                || typeName.startsWith("io.quarkus.")
+                || typeName.startsWith("io.agroal.")
+                || typeName.startsWith("io.smallrye.")
+                || typeName.startsWith("org.hibernate.")
                 || "java.lang.Object".equals(typeName);
     }
 

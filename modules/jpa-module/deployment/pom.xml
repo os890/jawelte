@@ -22,27 +22,16 @@
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
-        <artifactId>jawelte-tests-jpa-module</artifactId>
+        <artifactId>jawelte-jpa-module</artifactId>
         <version>0.1.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-tests-jpa-module-scenario-01-entity-manager-injectable</artifactId>
+    <artifactId>jawelte-jpa-module-deployment</artifactId>
     <packaging>jar</packaging>
 
-    <name>jawelte tests/jpa-module scenario 01: entity-manager-injectable</name>
-
-    <properties>
-        <!--
-            Quarkus 3.35.3 ships hibernate-orm 7.3.2.Final; the root
-            pom pins 7.0.4.Final for the standalone-ArC path. Force
-            the Quarkus version for this @QuarkusTest scenario so the
-            classpath stays consistent with quarkus-hibernate-orm's
-            deployment processor (which relies on the BOM-pinned
-            Hibernate internals).
-        -->
-        <hibernate.orm.version>7.3.2.Final</hibernate.orm.version>
-    </properties>
+    <name>jawelte (jpa-module/deployment)</name>
+    <description>Quarkus extension deployment artifact for jpa-module. Registers @ReadOnly as an interceptor binding so ReadOnlyInterceptor is discoverable under @QuarkusTest (the standalone portable extension doesn't fire there).</description>
 
     <dependencyManagement>
         <dependencies>
@@ -57,30 +46,41 @@
     </dependencyManagement>
 
     <dependencies>
+        <!--
+            Quarkus requires the deployment artifact to depend on the
+            corresponding runtime artifact — the runtime artifact's
+            META-INF/quarkus-extension.properties points back here and
+            the bootstrap dep-resolver enforces the symmetric link.
+        -->
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5</artifactId>
-            <scope>test</scope>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jpa-module-impl</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-arc</artifactId>
-            <scope>test</scope>
+            <artifactId>quarkus-arc-deployment</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-hibernate-orm</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jdbc-h2</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-narayana-jta</artifactId>
-            <scope>test</scope>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.quarkus</groupId>
+                            <artifactId>quarkus-extension-processor</artifactId>
+                            <version>${quarkus.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

@@ -7271,3 +7271,47 @@ under `@QuarkusTest`**, no regressions in the migrated path.
 scenario-32 (`manage-container=false`) was broken between commits
 `d236bfd2` and `099e96ce` — well before this session's @QuarkusTest
 work. Not introduced by today's commits.
+
+## 2026-05-19: jpa-module — scenario-01 green under @QuarkusTest
+
+First jpa-module scenario green. Required:
+
+- **`jpa-module/deployment`** Quarkus extension scaffolded mirroring
+  `cdi-module/deployment` / `scope-module/deployment`. Hosts a single
+  `@BuildStep` that registers `@ReadOnly` (jpa-module's interceptor
+  binding) via `InterceptorBindingRegistrarBuildItem` — the standalone
+  portable extension registers this at `BeforeBeanDiscovery`, which
+  doesn't fire under @QuarkusTest.
+- **`JpaLifecycleAdapter.beginTransactionForTransactionalTestMethod`**
+  now skips silently when `JpaActivePersistenceUnits.get()` is empty —
+  under @QuarkusTest the jawelte JPA contributor doesn't run, so
+  there's no jawelte-managed PU. Quarkus's narayana-jta handles
+  `@Transactional` directly.
+- **`TransactionalInterceptor.aroundInvoke`** now silently proceeds
+  when `TransactionScopedContext.current() == null`. Same reason —
+  Quarkus's narayana-jta interceptor wraps the call from outside;
+  jawelte's interceptor stays out of the way.
+- BCE's `isBuiltInCdiType` widened to skip auto-mocking
+  `io.quarkus.*`, `io.agroal.*`, `io.smallrye.*`, `org.hibernate.*`,
+  `jakarta.persistence.*`, `jakarta.transaction.*` types — Quarkus's
+  hibernate-orm extension registers its own synthetic beans for
+  these, and the BCE would create duplicate-id collisions.
+- Scenario-01 pom adds the Quarkus deps (`quarkus-hibernate-orm`,
+  `quarkus-jdbc-h2`, `quarkus-narayana-jta`), pins
+  `hibernate.orm.version` to Quarkus's `7.3.2.Final` (the root pom's
+  `7.0.4.Final` would clash with Quarkus's BOM), and ships an
+  `application.properties` that configures the H2 datasource +
+  ignores the test-classpath `persistence.xml` (the bundled
+  `testPU01` unit relies on jawelte's `TestPersistenceUnitInfo`,
+  which doesn't run under @QuarkusTest).
+
+Running tally: cdi 40 + scope 23 + testcontrol 4 + jpa 1 = **68
+scenarios green under @QuarkusTest**.
+
+The pattern for the remaining 63 jpa scenarios: each needs the same
+Quarkus deps + application.properties + persistence-xml ignore +
+optional `hibernate.orm.version` pin. Many will work once the pom
+is migrated. Some that exercise jpa-module-specific features
+(@ReadOnly, @TransactionScoped beans, the table cleaner, file mode,
+multi-PU) will need additional build steps to route the feature
+through Quarkus's own JPA / JTA pipeline.

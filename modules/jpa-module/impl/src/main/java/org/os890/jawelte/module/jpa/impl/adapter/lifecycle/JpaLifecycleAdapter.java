@@ -212,6 +212,15 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         if (testMethod == null || !testMethod.isAnnotationPresent(Transactional.class)) {
             return;
         }
+        if (JpaActivePersistenceUnits.get().isEmpty()) {
+            // No jawelte-managed PU is active — under @QuarkusTest the
+            // portable JpaCdiExtension doesn't fire and the ArC
+            // contributor doesn't run, so jawelte has no PU to drive.
+            // Quarkus's own narayana-jta interceptor handles the
+            // method's @Transactional directly; the jawelte side
+            // silently stays out of the way.
+            return;
+        }
         TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
         TransactionScopedContext transactionScopedContext = TransactionScopedContext.current();
         strategy.begin();

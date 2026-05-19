@@ -25,6 +25,8 @@ import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
+import io.quarkus.test.junit.QuarkusTest;
+
 /**
  * {@code @Inject EntityManager} resolves to a non-null transaction-scoped proxy that
  * can run JPQL. Two lookups in the same test method return the same proxy instance —
@@ -32,6 +34,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  * locks in via {@code assertSame(em1, em2)}.
  */
 @EnableTestBeans
+@QuarkusTest
 public class Scenario01Test {
 
     @Inject

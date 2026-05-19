@@ -113,8 +113,14 @@ public class TransactionalInterceptor {
         TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
         TransactionScopedContext transactionScopedContext = TransactionScopedContext.current();
         if (transactionScopedContext == null) {
-            throw new IllegalStateException(
-                    "TransactionScopedContext is not registered. Was JpaCdiExtension.afterBeanDiscovery skipped?");
+            // No jawelte-managed TransactionScopedContext is
+            // registered — under @QuarkusTest the portable
+            // JpaCdiExtension doesn't fire afterBeanDiscovery, so the
+            // jpa-module side has nothing to drive. Quarkus's own
+            // narayana-jta interceptor already runs higher up the
+            // chain and has begun / will commit the transaction; we
+            // proceed silently and let it handle the boundary.
+            return invocationContext.proceed();
         }
         callStack.push(currentMethod);
         // Under JTA the strategy intentionally doesn't push a frame
