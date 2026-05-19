@@ -6488,3 +6488,34 @@ Score under `@QuarkusTest`:
 - `tests/cdi-module/scenario-30` ✓
 - `tests/cdi-module/scenario-31` ✓
 - `tests/scope-module/scenario-01` ✓
+
+---
+## 2026-05-19 — quarkus-full-poc: @TestBean static fields via BCE
+
+Merged the inline-field path into the single
+`JaweltAutoMockBuildCompatibleExtension`. The synthesis step now
+runs in two passes: register every `@TestBean` static-field
+synthetic bean first (and pre-register its shape in
+`existingBeans`), then walk the unsatisfied-IP set for the
+auto-mock pass — so auto-mock doesn't compete with inline-field
+for the same `(type, qualifiers)` slot.
+
+Runtime side: `InlineFieldSyntheticBeanCreator` — a
+`SyntheticBeanCreator` that reads the named static field via
+reflection and returns its value. Validates non-null at runtime
+(the standalone-ArC path validates at `beforeAll`; we keep the
+runtime fallback so the failure mode is explicit if static-field
+validation is bypassed somehow).
+
+Other tweak: pulled qualifier filtering out into helpers
+(`qualifierFqnSet` for the implicit `@Default`/`@Any` strip,
+`annotationQualifierFqnSet` for the qualifier-meta walk on field
+annotations) and confirmed the standalone-ArC path on
+`quarkus-poc` keeps working — the BCE only runs under
+`@QuarkusTest`-driven boots.
+
+Green scenarios under `@QuarkusTest`:
+- `cdi-module/scenario-15` (testbean-static-field) **new**
+- `cdi-module/scenario-30` (heavy auto-mock)
+- `cdi-module/scenario-31` (test class is a Dependent bean)
+- `scope-module/scenario-01` (method-scope state resets)

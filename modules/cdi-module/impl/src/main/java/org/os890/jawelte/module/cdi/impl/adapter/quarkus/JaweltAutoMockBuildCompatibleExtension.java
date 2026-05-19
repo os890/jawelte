@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.module.cdi.impl.adapter.quarkus;
 
+import java.lang.reflect.Modifier;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.TreeSet;
@@ -28,14 +30,31 @@ import jakarta.enterprise.inject.build.compatible.spi.Synthesis;
 import jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanBuilder;
 import jakarta.enterprise.inject.build.compatible.spi.SyntheticComponents;
 import jakarta.enterprise.lang.model.AnnotationInfo;
+import jakarta.enterprise.lang.model.declarations.ClassInfo;
+import jakarta.enterprise.lang.model.declarations.FieldInfo;
 import jakarta.enterprise.lang.model.types.ClassType;
 import jakarta.enterprise.lang.model.types.ParameterizedType;
 import jakarta.enterprise.lang.model.types.Type;
 
 /**
- * CDI 4.0 {@link BuildCompatibleExtension} that auto-mocks every
- * injection point left unsatisfied by the rest of the bean archive.
- * Replaces the standalone-ArC {@code MockAndInlineBeanRegistrar}
+ * CDI 4.0 {@link BuildCompatibleExtension} that hosts cdi-module's
+ * two test-only synthesis features under {@code @QuarkusTest}:
+ *
+ * <ol>
+ *   <li><b>Inline {@code @TestBean} static fields.</b> Every
+ *       {@code @TestBean}-annotated static field declared on a class
+ *       bean is registered as a synthetic bean of the field's type;
+ *       at runtime {@link InlineFieldSyntheticBeanCreator} reads the
+ *       field value reflectively.</li>
+ *   <li><b>Auto-mock unsatisfied injection points.</b> For every IP
+ *       no existing or inline-field bean satisfies, a synthetic
+ *       Mockito-mock bean of the IP's required type (with qualifiers)
+ *       is registered via {@link MockSyntheticBeanCreator}.
+ *       {@code Provider<X>} / {@code Instance<X>} wrappers are
+ *       unwrapped to {@code X}.</li>
+ * </ol>
+ *
+ * <p>Replaces the standalone-ArC {@code MockAndInlineBeanRegistrar}
  * under {@code @QuarkusTest}: Quarkus owns the build, so we plug in
  * via the CDI-standard build-time SPI rather than via ArC's
  * {@code BeanRegistrar} API.
@@ -43,18 +62,17 @@ import jakarta.enterprise.lang.model.types.Type;
  * <p>Discovered via
  * {@code META-INF/services/jakarta.enterprise.inject.build.compatible.spi.BuildCompatibleExtension}.
  *
- * <p>Phases used:
+ * <p>Phases:
  * <ul>
- *   <li><b>{@link Registration @Registration(types = Object.class)}</b>:
- *       fires once per registered bean. We accumulate the set of
- *       bean type FQNs (so the synthesis phase can decide which IPs
- *       are unsatisfied) and the set of injection points across all
- *       beans (so we know which (type, qualifiers) pairs need mocks).</li>
- *   <li><b>{@link Synthesis @Synthesis}</b>: for every collected IP
- *       whose target type has no matching bean, register a synthetic
- *       Mockito-mock bean for it. {@code Provider<X>} / {@code Instance<X>}
- *       wrapper IPs are unwrapped to {@code X}; ArC's own
- *       Provider / Instance wrappers serve the wrapper part.</li>
+ *   <li>{@code @Registration(types = Object.class)} fires once per
+ *       bean. We accumulate three sets: bean shapes (type +
+ *       qualifiers) for satisfaction matching, injection-point
+ *       shapes for the auto-mock pass, and {@code @TestBean} static
+ *       field records for the inline-field pass.</li>
+ *   <li>{@code @Synthesis} first registers all inline-field beans —
+ *       so the auto-mock walk that follows can treat them as
+ *       already-existing — then registers auto-mocks for whatever's
+ *       still uncovered.</li>
  * </ul>
  *
  * <p>Limitations of this first pass (intentional, to be expanded):
@@ -72,19 +90,23 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
 
     private static final String PROVIDER_FQN = "jakarta.inject.Provider";
     private static final String INSTANCE_FQN = "jakarta.enterprise.inject.Instance";
+    private static final String TEST_BEAN_FQN = "org.os890.jawelte.core.api.TestBean";
+    private static final String QUALIFIER_FQN = "jakarta.inject.Qualifier";
 
     private final Set<BeanShape> existingBeans = new LinkedHashSet<>();
 
     private final Set<UnsatisfiedKey> seenInjectionPoints = new LinkedHashSet<>();
+
+    private final Set<InlineFieldRecord> inlineFields = new LinkedHashSet<>();
 
     /** Public no-arg constructor required by {@code ServiceLoader}. */
     public JaweltAutoMockBuildCompatibleExtension() {
     }
 
     /**
-     * Capture the types of every bean and the injection-point types
-     * of every bean. {@code types = Object.class} matches any bean
-     * type; CDI fires this once per bean.
+     * Capture the types of every bean, the injection-point types of
+     * every bean, and every class bean's {@code @TestBean} static
+     * fields.
      *
      * @param bean the bean being registered
      */
@@ -103,17 +125,66 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                 seenInjectionPoints.add(key);
             }
         }
+        if (bean.isClassBean()) {
+            collectInlineFields(bean.declaringClass());
+        }
+    }
+
+    private void collectInlineFields(ClassInfo declaringClass) {
+        if (declaringClass == null) {
+            return;
+        }
+        for (FieldInfo field : declaringClass.fields()) {
+            if (!hasTestBeanAnnotation(field)) {
+                continue;
+            }
+            if (!Modifier.isStatic(field.modifiers())) {
+                // Non-static @TestBean fields are a user error; the
+                // standalone-ArC path's collectInlineFields throws
+                // on them up front. Skip silently here so the user
+                // sees the framework's error rather than a confusing
+                // Quarkus build failure.
+                continue;
+            }
+            String typeName = typeName(field.type());
+            if (typeName == null) {
+                continue;
+            }
+            Set<String> qualifierNames = annotationQualifierFqnSet(field.annotations());
+            inlineFields.add(new InlineFieldRecord(
+                    declaringClass.name(),
+                    field.name(),
+                    typeName,
+                    qualifierNames));
+        }
     }
 
     /**
-     * After all beans are registered, walk the collected IPs and
-     * register a synthetic Mockito-mock bean for every (type, qualifiers)
-     * pair that no existing bean covers.
+     * Synthesis runs in two passes: inline-field beans first (so
+     * their types light up the existing-beans set for the auto-mock
+     * decision), then auto-mocks for whatever's still uncovered.
      *
      * @param components the synthesis surface CDI hands the extension
      */
     @Synthesis
-    public void registerSyntheticMocks(SyntheticComponents components) {
+    public void registerSynthetics(SyntheticComponents components) {
+        for (InlineFieldRecord field : inlineFields) {
+            Class<?> beanType;
+            try {
+                beanType = Class.forName(field.typeName, false,
+                        Thread.currentThread().getContextClassLoader());
+            } catch (ClassNotFoundException missing) {
+                continue;
+            }
+            SyntheticBeanBuilder<Object> builder = components.<Object>addBean(Object.class)
+                    .type(beanType)
+                    .scope(Dependent.class)
+                    .createWith(InlineFieldSyntheticBeanCreator.class)
+                    .withParam("declaringClass", field.declaringClass)
+                    .withParam("fieldName", field.fieldName);
+            applyQualifiers(builder, field.qualifierNames);
+            existingBeans.add(new BeanShape(field.typeName, field.qualifierNames));
+        }
         for (UnsatisfiedKey ip : seenInjectionPoints) {
             if (existingBeans.contains(new BeanShape(ip.typeName, ip.qualifierNames))) {
                 continue;
@@ -133,25 +204,40 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                     .scope(Dependent.class)
                     .createWith(MockSyntheticBeanCreator.class)
                     .withParam("targetType", beanType);
-            for (String qualifierFqn : ip.qualifierNames) {
-                if (isBuiltInQualifier(qualifierFqn)) {
-                    continue;
-                }
-                Class<?> qualifierClass;
-                try {
-                    qualifierClass = Class.forName(qualifierFqn, false,
-                            Thread.currentThread().getContextClassLoader());
-                } catch (ClassNotFoundException missing) {
-                    continue;
-                }
-                if (java.lang.annotation.Annotation.class.isAssignableFrom(qualifierClass)) {
-                    @SuppressWarnings("unchecked")
-                    Class<? extends java.lang.annotation.Annotation> typedQualifier =
-                            (Class<? extends java.lang.annotation.Annotation>) qualifierClass;
-                    builder.qualifier(typedQualifier);
-                }
+            applyQualifiers(builder, ip.qualifierNames);
+            existingBeans.add(new BeanShape(ip.typeName, ip.qualifierNames));
+        }
+    }
+
+    private static void applyQualifiers(
+            SyntheticBeanBuilder<Object> builder, Set<String> qualifierFqns) {
+        for (String qualifierFqn : qualifierFqns) {
+            if (isBuiltInQualifier(qualifierFqn)) {
+                continue;
+            }
+            Class<?> qualifierClass;
+            try {
+                qualifierClass = Class.forName(qualifierFqn, false,
+                        Thread.currentThread().getContextClassLoader());
+            } catch (ClassNotFoundException missing) {
+                continue;
+            }
+            if (java.lang.annotation.Annotation.class.isAssignableFrom(qualifierClass)) {
+                @SuppressWarnings("unchecked")
+                Class<? extends java.lang.annotation.Annotation> typedQualifier =
+                        (Class<? extends java.lang.annotation.Annotation>) qualifierClass;
+                builder.qualifier(typedQualifier);
             }
         }
+    }
+
+    private static boolean hasTestBeanAnnotation(FieldInfo field) {
+        for (AnnotationInfo annotation : field.annotations()) {
+            if (TEST_BEAN_FQN.equals(annotation.name())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isBuiltInQualifier(String qualifierFqn) {
@@ -159,19 +245,37 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                 || "jakarta.enterprise.inject.Any".equals(qualifierFqn);
     }
 
-    private static Set<String> qualifierFqnSet(java.util.Collection<AnnotationInfo> qualifiers) {
+    /**
+     * Filter a bean's qualifier set down to user-declared FQNs.
+     * Drops the implicit {@code @Default} / {@code @Any} that CDI
+     * tags every bean with so a real bean with {@code [Default, Any]}
+     * still matches an IP with {@code [Default]}.
+     */
+    private static Set<String> qualifierFqnSet(Collection<AnnotationInfo> qualifiers) {
         Set<String> names = new TreeSet<>();
         for (AnnotationInfo qualifier : qualifiers) {
             String name = qualifier.name();
-            // Skip @Default and @Any: CDI implicitly adds them to
-            // every bean's qualifier set, while injection points
-            // only carry the qualifiers the user wrote. Normalising
-            // both sides by dropping these two lets a bean with
-            // [Default, Any] still match an IP with [Default].
             if (isBuiltInQualifier(name)) {
                 continue;
             }
             names.add(name);
+        }
+        return names;
+    }
+
+    /**
+     * Filter a field's full annotation set down to the qualifier
+     * annotations among them (those meta-annotated with
+     * {@code @Qualifier}).
+     */
+    private static Set<String> annotationQualifierFqnSet(Collection<AnnotationInfo> annotations) {
+        Set<String> names = new TreeSet<>();
+        for (AnnotationInfo annotation : annotations) {
+            boolean isQualifier = annotation.declaration().hasAnnotation(
+                    ann -> QUALIFIER_FQN.equals(ann.name()));
+            if (isQualifier && !isBuiltInQualifier(annotation.name())) {
+                names.add(annotation.name());
+            }
         }
         return names;
     }
@@ -250,11 +354,30 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
 
     /**
      * Shape of an existing bean as seen during {@code @Registration}:
-     * one type FQN paired with the full qualifier-FQN set.
+     * one type FQN paired with the user-declared qualifier-FQN set.
      *
      * @param typeName       FQN of one of the bean's bean types
-     * @param qualifierNames the bean's qualifier FQNs
+     * @param qualifierNames the bean's qualifier FQNs (excluding the
+     *                       implicit {@code @Default} / {@code @Any})
      */
     private record BeanShape(String typeName, Set<String> qualifierNames) {
+    }
+
+    /**
+     * Captured {@code @TestBean} static-field declaration used to
+     * thread information between {@code @Registration} and
+     * {@code @Synthesis}.
+     *
+     * @param declaringClass FQN of the class declaring the field
+     * @param fieldName      the field's name
+     * @param typeName       FQN of the field's declared type
+     * @param qualifierNames FQNs of user-declared qualifiers on the
+     *                       field (excluding the implicit ones)
+     */
+    private record InlineFieldRecord(
+            String declaringClass,
+            String fieldName,
+            String typeName,
+            Set<String> qualifierNames) {
     }
 }

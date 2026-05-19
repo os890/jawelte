@@ -23,9 +23,9 @@ import org.mockito.Mockito;
 
 /**
  * Runtime side of
- * {@link JaweltAutoMockBuildCompatibleExtension#registerSyntheticMocks}.
- * Each invocation of {@link #create} produces a fresh Mockito mock
- * of the type stored in the synthetic bean's
+ * {@link JaweltAutoMockBuildCompatibleExtension#registerSynthetics}'s
+ * auto-mock path. Each invocation of {@link #create} produces a
+ * fresh Mockito mock of the type stored in the synthetic bean's
  * {@code "targetType"} parameter.
  */
 public class MockSyntheticBeanCreator implements SyntheticBeanCreator<Object> {
