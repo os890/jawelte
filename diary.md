@@ -7389,3 +7389,59 @@ path. 08a / 28 use `EngineTestKit` (structurally infeasible under
 testcontrol-01 was failing with "No active persistence unit on the calling thread" inside DbSeed.forCurrentPersistenceUnit(). Root cause: under @QuarkusTest the standalone ArC bootstrap path isn't taken, so DbTestDataArcContextContributor.contribute(...) never runs and CapturedPersistenceUnitNameHolder stays empty. The empty holder makes DbSeed.forPersistenceUnit() (no-arg) fall through to forCurrentPersistenceUnit(), which expects jawelte's per-thread PU stack to be populated — and it isn't under Quarkus.
 
 Fix: DefaultPersistenceUnitNameSupplier.get() now falls back to reading the active test class via the org.os890.jawelte.cdi.bridge.current-test-class system property (already published by DelegatingJUnitExtension.beforeAll) and resolves @PersistenceConfig.persistenceUnitName() reflectively when the holder is empty. With a non-empty PU name, DbSeed.forPersistenceUnit() routes through resolver().connectionFor(name), which has a CDI EntityManager fallback that surfaces Quarkus's @Default EntityManager.
+
+## 2026-05-19 — testcontrol-module fully green under @QuarkusTest + standalone-ArC
+
+**Recap of the migration**
+All 9 testcontrol-module scenarios are now passing:
+  - 7 / 9 under `@QuarkusTest` (01, 02, 07, 08, 12, 24, 25 — happy / verify / multi-PU /
+    scope-filter / inherited / overridden)
+  - 2 / 9 stay on standalone-ArC via JUnit's `EngineTestKit` (08a, 28 — failure-mode
+    scenarios that drive a sibling subject class through `EngineTestKit.engine(...)`)
+
+**Key fixes shipped in this session**
+1. `DefaultPersistenceUnitNameSupplier` falls back to the active test class's
+   `@PersistenceConfig.persistenceUnitName` when `CapturedPersistenceUnitNameHolder`
+   is empty (the holder is only populated by the standalone-ArC bootstrap path).
+   Reads the active test class from
+   `org.os890.jawelte.cdi.bridge.current-test-class` — already published by
+   `DelegatingJUnitExtension.beforeAll`.
+
+   With this fallback, `DbSeed.forPersistenceUnit()` (no-arg) resolves the
+   configured PU name and routes through `connectionFor(name)`, whose existing
+   CDI-EM lookup surfaces Quarkus's `@Default` `EntityManager` — sidestepping
+   the empty per-thread PU stack jpa-module relies on under standalone-ArC.
+
+2. `JaweltAutoMockBuildCompatibleExtension.registerAutoMockBeans` skips final
+   classes — ArC can't subclass a leaf-modifier class for the normal-scope
+   client proxy, so a synthetic auto-mock here crashes with
+   `IncompatibleClassChangeError` at runtime when Quarkus loads the generated
+   `_ClientProxy`. Hit by `EntityManagerCreatedEvent` (final record) in
+   testcontrol-01.
+
+3. scenario-08 multi-PU: configured two named Quarkus datasources + two named
+   PUs (`testcontrolScenario08CustomersPU`, `testcontrolScenario08OrdersPU`).
+   Per-PU `database.version-check.enabled=false` is required: the global
+   setting only applies to the default PU, named PUs need explicit
+   disablement to tolerate the H2 2.3.232 driver vs 2.4.240 server mismatch.
+
+4. scenario-28 (standalone-ArC, `EngineTestKit`-driven): declared
+   `jakarta.persistence-api` + `jakarta.transaction-api` directly. ArC walks
+   the testcontrol-module/impl jar at bean-discovery and needs persistence-api
+   on the classpath to generate a `_ClientProxy` for
+   `TestDataSeedTransactionTemplate`, even though the test fails in the
+   `requireDbExpected` guard before the template is ever invoked.
+
+**Module-wide migration status (snapshot)**
+
+  | module               | files w/ @QuarkusTest | total test files |
+  |----------------------|-----------------------|------------------|
+  | cdi-module           | 40                    | 57               |
+  | scope-module         | 23                    | 31               |
+  | jpa-module           | 10                    | 64               |
+  | testcontrol-module   |  7                    |  9               |
+  | core                 |  3                    | 24               |
+  | jta / ejb / content-diff / db-testdata / jaxrs / wiremock / batch / spring-data / lnp | 0 | many |
+
+  Counts are file-level, not scenario-level. testcontrol-module and jpa-module
+  fully verified green this session.
