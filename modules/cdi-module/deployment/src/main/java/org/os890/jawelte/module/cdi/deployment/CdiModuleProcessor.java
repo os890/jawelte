@@ -126,6 +126,7 @@ public class CdiModuleProcessor {
             return;
         }
         Set<String> declaredAllowed = collectDeclaredAllowedTypes(testClass);
+        java.util.function.Predicate<Class<?>> customFilter = loadCustomWhitelistFilter(index);
         for (ClassInfo candidate : index.getKnownClasses()) {
             String name = candidate.name().toString();
             if (name.equals(testClass.name().toString())) {
@@ -137,7 +138,92 @@ public class CdiModuleProcessor {
             if (isFrameworkAllowed(name)) {
                 continue;
             }
+            if (customFilter != null && allowedByCustomFilter(customFilter, name)) {
+                continue;
+            }
             producer.produce(new ExcludedTypeBuildItem(name));
+        }
+    }
+
+    /**
+     * Load a user-supplied {@code WhitelistFilter} from the Jandex,
+     * picking the lowest {@code @Priority} value (matching jawelte's
+     * standalone-{@code ServicePriorityResolver} contract). Returns
+     * {@code null} when no custom implementation is on the classpath.
+     *
+     * <p>Built on reflection against the current thread's context
+     * classloader — Quarkus's augmentation classloader has access to
+     * the test classpath, where user-supplied filters live.
+     */
+    private static java.util.function.Predicate<Class<?>> loadCustomWhitelistFilter(IndexView index) {
+        DotName whitelistFilterDot =
+                DotName.createSimple("org.os890.jawelte.module.cdi.api.port.WhitelistFilter");
+        Set<String> filterFqns = new LinkedHashSet<>();
+        for (ClassInfo impl : index.getAllKnownImplementors(whitelistFilterDot)) {
+            filterFqns.add(impl.name().toString());
+        }
+        if (filterFqns.isEmpty()) {
+            return null;
+        }
+        Object instance = null;
+        int bestPriority = Integer.MAX_VALUE;
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        for (String fqn : filterFqns) {
+            try {
+                Class<?> klass = Class.forName(fqn, true, cl);
+                int priority = readPriority(klass);
+                if (priority >= bestPriority) {
+                    continue;
+                }
+                Object candidate = klass.getDeclaredConstructor().newInstance();
+                bestPriority = priority;
+                instance = candidate;
+            } catch (ReflectiveOperationException | LinkageError ignored) {
+                // Filter not loadable from the augmentation classloader
+                // — skip it.
+            }
+        }
+        if (instance == null) {
+            return null;
+        }
+        Object finalInstance = instance;
+        return targetClass -> invokeIsAllowed(finalInstance, targetClass);
+    }
+
+    private static int readPriority(Class<?> klass) {
+        try {
+            Class<?> priorityAnn = Class.forName("jakarta.annotation.Priority", false,
+                    klass.getClassLoader());
+            @SuppressWarnings("unchecked")
+            java.lang.annotation.Annotation priority = klass.getDeclaredAnnotation(
+                    (Class<? extends java.lang.annotation.Annotation>) priorityAnn);
+            if (priority == null) {
+                return Integer.MAX_VALUE;
+            }
+            return (int) priorityAnn.getDeclaredMethod("value").invoke(priority);
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    private static boolean invokeIsAllowed(Object filter, Class<?> targetClass) {
+        try {
+            return (boolean) filter.getClass()
+                    .getMethod("isAllowed", Class.class)
+                    .invoke(filter, targetClass);
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean allowedByCustomFilter(
+            java.util.function.Predicate<Class<?>> filter, String classFqn) {
+        try {
+            Class<?> candidate = Class.forName(classFqn, false,
+                    Thread.currentThread().getContextClassLoader());
+            return filter.test(candidate);
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return false;
         }
     }
 

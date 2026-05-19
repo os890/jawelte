@@ -6839,3 +6839,30 @@ Total jawelte scenarios green under @QuarkusTest:
 - scope-module: 14/19
 - testcontrol-module: 4/9
 - **59 total**
+
+## 2026-05-19: custom WhitelistFilter loaded at build time — scenario-43 green
+
+Extended `honorLimitToTestBeans` build step to also consult any
+user-supplied `WhitelistFilter` implementation:
+
+- Scans Jandex for all classes implementing the
+  `org.os890.jawelte.module.cdi.api.port.WhitelistFilter` interface.
+- Loads each via the augmentation classloader, instantiates via
+  no-arg constructor, picks the one with the lowest `@Priority` (the
+  same ordering the standalone-ArC `ServicePriorityResolver` uses).
+- For every candidate class otherwise destined for exclusion, also
+  asks the custom filter whether to allow it (and skips the
+  exclusion when it says yes).
+
+Implementation is fully reflection-based so `cdi-module/deployment`
+doesn't take a compile-time dep on `jakarta.annotation.Priority` or
+the user's filter class.
+
+scenario-43 (custom-whitelist-filter) now joins 18/19/36 in passing
+under `@QuarkusTest`.
+
+Total jawelte scenarios green under @QuarkusTest:
+- cdi-module: 42/56 (added 43 back)
+- scope-module: 14/19
+- testcontrol-module: 4/9
+- **60 total**
