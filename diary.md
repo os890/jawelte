@@ -7751,3 +7751,58 @@ jta-module REQUIRES_NEW + @ReadOnly nested transaction scenarios:
   core                     24 / 24     ✓
 
   +74 scenarios fixed across 5 modules this session.
+
+## 2026-05-19 — FULL GREEN: every module passing
+
+This iteration closed the last two outstanding failures, jta-47 and
+jta-48 (nested @Transactional(REQUIRES_NEW) + @ReadOnly), via the
+JpaArcContextContributor.
+
+Root cause: ArC's standalone interceptor-binding discovery doesn't
+honor the `@Nonbinding` meta-annotation on
+`@jakarta.transaction.Transactional`'s `value() / rollbackOn() /
+dontRollbackOn()` members. ArC's binding matcher therefore treats
+`@Transactional()` (the default on jpa-module's TransactionalInterceptor)
+and `@Transactional(REQUIRES_NEW)` (on the inner method) as DIFFERENT
+bindings, leaving the inner method un-intercepted. The inner's
+`@ReadOnly` interceptor still fires (it has no member to mismatch on),
+calls `tm.setRollbackOnly()` against the OUTER's tx (because inner's
+`@Transactional` was never entered to suspend the outer), and the
+outer's persist gets rolled back.
+
+Two changes in JpaArcContextContributor close it:
+  - `addInterceptorBindingRegistrar` declares
+    `@jakarta.transaction.Transactional` (with value / rollbackOn /
+    dontRollbackOn as nonbinding) and
+    `@org.os890.jawelte.module.jpa.api.ReadOnly` as explicit
+    interceptor bindings.
+  - An AnnotationTransformation (for methods AND classes) strips the
+    value / rollbackOn / dontRollbackOn members from every
+    `@Transactional` instance. jpa-module's interceptor ignores TxType
+    anyway — every call begins a fresh JTA tx (suspending the outer
+    on nesting), effectively REQUIRES_NEW. Stripping the members
+    keeps the interceptor binding identical across all call sites so
+    ArC's matcher fires every time.
+
+**Full-suite final scoreboard:**
+
+  | module                | result                  |
+  |-----------------------|-------------------------|
+  | core                  | 24 / 24    ✓            |
+  | cdi-module            | 32 / 32    ✓            |
+  | scope-module          | 31 / 31    ✓            |
+  | jpa-module            | 65 / 65    ✓            |
+  | jta-module            | 40 / 40    ✓            |
+  | ejb-module            | 28 / 28    ✓            |
+  | testcontrol-module    |  9 /  9    ✓            |
+  | content-diff-module   | 41 / 41    ✓            |
+  | db-testdata-module    | 67 / 67    ✓            |
+  | jaxrs-module          | 17 / 17    ✓            |
+  | wiremock-module       | 25 / 25    ✓            |
+  | spring-data-module    | 14 / 14    ✓            |
+  | batch-module          | 15 / 15    ✓            |
+  | **TOTAL**             | **408 / 408 GREEN**     |
+
+(Counts are scenario-aggregator level. Individual test methods within
+each scenario sum to a higher number; each scenario module has its
+own surefire run.)
