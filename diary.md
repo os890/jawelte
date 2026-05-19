@@ -6542,3 +6542,23 @@ Extended `JaweltAutoMockBuildCompatibleExtension` to handle class-level
   of the `ClassCastException` seen on the first attempt).
 
 scenario-13-testbean-bean now passes under `@QuarkusTest`.
+
+## 2026-05-19: scenarios 16, 17, 35 green under @QuarkusTest
+
+Added `@QuarkusTest` (and the matching `quarkus-bom` / `quarkus-junit5`
+/ `quarkus-arc` deps) to:
+
+- scenario-16-testbean-repeatable — verifies that two
+  `@TestBean(bean=…)` annotations on the same class are both picked
+  up via the `@TestBeans` repeatable container.
+- scenario-17-testbean-meta-annotation — verifies that a custom
+  meta-annotation (`@WithStubEmail`) annotated with `@TestBean` is
+  followed transitively.
+- scenario-35-testbean-not-alternative — verifies that a
+  non-`@Alternative` class named in `@TestBean(bean=…)` is silently
+  ignored (no synthetic bean registered).
+
+All three pass against the existing BCE without code changes — the
+class-level scan already walks meta-annotations and unwraps
+`@TestBeans`, and the `Alternative` reflection check enforces the
+silent-skip contract.
