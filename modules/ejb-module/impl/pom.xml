@@ -33,6 +33,25 @@
     <name>jawelte (ejb-module/impl)</name>
     <description>Default EjbAnnotationMapper plus the CDI Extension that drives the mapper chain. Registers @jakarta.ejb.Singleton / @jakarta.ejb.Stateless as CDI stereotypes during BeforeBeanDiscovery, walks the priority-sorted mapper chain during ProcessAnnotatedType, and applies the resulting annotations via configureAnnotatedType. No compile-time dependency on scope-module / jpa-module / jta-module — scope-module's @TestClassScoped is loaded reflectively for the @Singleton mapping (with @ApplicationScoped fallback when scope-module isn't on the classpath); the implicit @jakarta.transaction.Transactional is interpreted by whichever module supplies the interceptor.</description>
 
+    <dependencyManagement>
+        <dependencies>
+            <!--
+                Quarkus BOM scoped to ejb-module/impl, matching
+                jpa-module / scope-module / jta-module: gives us a
+                managed arc-processor version without propagating
+                the BOM-forced smallrye-config / jackson / commons-io
+                versions to non-ejb modules.
+            -->
+            <dependency>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>${quarkus.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -41,6 +60,22 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+        <!--
+            ejb-module/impl compile-depends on cdi-module/impl for the
+            ArcContextContributor SPI it implements; the impl jar also
+            transitively pulls in arc-processor so we can reference
+            ArC's BeanProcessor.Builder + AnnotationTransformation surface
+            from the contributor without a separate dep declaration.
+            Mirrors jpa-module/impl and scope-module/impl.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus.arc</groupId>
+            <artifactId>arc-processor</artifactId>
         </dependency>
 
         <dependency>
