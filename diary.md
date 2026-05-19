@@ -7002,3 +7002,57 @@ Total jawelte scenarios green under @QuarkusTest:
 - scope-module: 16/19
 - testcontrol-module: 4/9
 - **60 total** (unchanged)
+
+## 2026-05-19: extraction path for the future quarkus-adapter
+
+User confirmed the architecture must keep `@EnableTestBeans` and
+`@QuarkusTest` as **separate annotations** on the test class (never
+meta-annotate one with the other). The intent is to be able to
+extract a dedicated `jawelte-quarkus-adapter` module later — consumers
+who want Quarkus support add it to the test classpath alongside
+their existing `@EnableTestBeans` deps.
+
+Current code is already structured so that extraction is mechanical:
+
+### To extract into `jawelte-quarkus-adapter`
+
+- `modules/cdi-module/impl/.../adapter/quarkus/` →
+  `quarkus-adapter/runtime/.../adapter/quarkus/`
+  - `JaweltAutoMockBuildCompatibleExtension.java`
+  - `MockSyntheticBeanCreator.java`
+  - `InlineFieldSyntheticBeanCreator.java`
+  - `TestBeanInstanceSyntheticBeanCreator.java`
+  - `TestBeanProducerMethodSyntheticBeanCreator.java`
+  - `META-INF/services/jakarta.enterprise.inject.build.compatible.spi.BuildCompatibleExtension`
+- `modules/cdi-module/impl/.../adapter/event/` →
+  `quarkus-adapter/runtime/.../adapter/event/`
+  - `ContainerStartedBridgeBean.java`
+  - `ContainerStartedGuard.java`
+- `modules/cdi-module/deployment` → `quarkus-adapter/deployment`
+  - The `CdiModuleProcessor` (config-bean + limitToTestBeans build
+    steps).
+- `modules/scope-module/deployment` → can stay in `scope-module` OR
+  move alongside `quarkus-adapter` — scope-module's standalone-ArC
+  bootstrap doesn't depend on the deployment artifact.
+
+### What stays in cdi-module/impl
+
+- The standalone-ArC `CdiTestBeanContainer` and its `BeanRegistrar` /
+  `AnnotationTransformation` pipeline.
+- The OWB / Weld portable-extension support
+  (`TestBeansCdiExtension`).
+- The defensive `@TestBean` shape validation in
+  `postProcessTestInstance` (works on both paths).
+
+### What the user does after extraction
+
+- Adds `<dependency>jawelte-quarkus-adapter</dependency>` to test
+  classpath.
+- Adds `<dependency>quarkus-junit5</dependency>` /
+  `<dependency>quarkus-arc</dependency>`.
+- Annotates the test class with `@QuarkusTest` AND
+  `@EnableTestBeans` (separately, never combined).
+
+Nothing in the current implementation prevents this extraction; the
+boundary is a clean cut along the `adapter/quarkus/` and
+`adapter/event/` packages.
