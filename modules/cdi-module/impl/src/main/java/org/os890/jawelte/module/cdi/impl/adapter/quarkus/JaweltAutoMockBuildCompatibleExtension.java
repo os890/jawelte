@@ -31,6 +31,7 @@ import jakarta.enterprise.inject.Produces;
 import jakarta.enterprise.inject.build.compatible.spi.BeanInfo;
 import jakarta.enterprise.inject.build.compatible.spi.BuildCompatibleExtension;
 import jakarta.enterprise.inject.build.compatible.spi.InjectionPointInfo;
+import jakarta.enterprise.inject.build.compatible.spi.ObserverInfo;
 import jakarta.enterprise.inject.build.compatible.spi.Registration;
 import jakarta.enterprise.inject.build.compatible.spi.Synthesis;
 import jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanBuilder;
@@ -39,6 +40,7 @@ import jakarta.enterprise.lang.model.AnnotationInfo;
 import jakarta.enterprise.lang.model.AnnotationMember;
 import jakarta.enterprise.lang.model.declarations.ClassInfo;
 import jakarta.enterprise.lang.model.declarations.FieldInfo;
+import jakarta.enterprise.lang.model.declarations.ParameterInfo;
 import jakarta.enterprise.lang.model.types.ClassType;
 import jakarta.enterprise.lang.model.types.ParameterizedType;
 import jakarta.enterprise.lang.model.types.Type;
@@ -121,6 +123,25 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
 
     private final Set<UnsatisfiedKey> seenInjectionPoints = new LinkedHashSet<>();
 
+    /**
+     * IP-shape → CDI {@link Type} representing the actual type to
+     * register as the synthetic mock's bean type. Lets a parameterized
+     * IP like {@code BaseDao<Order>} register a synthetic bean of
+     * exactly {@code BaseDao<Order>} (which Quarkus's strict synthetic
+     * bean type matching requires) rather than the raw {@code BaseDao}.
+     */
+    private final java.util.Map<UnsatisfiedKey, Type> injectionPointTypes = new java.util.LinkedHashMap<>();
+
+    /**
+     * IP-shape → the user-declared qualifier {@link AnnotationInfo}s
+     * captured at {@code @Registration}. Preserves qualifier member
+     * values (e.g. {@code @Named("primary")}) so the synthetic auto-mock
+     * bean registers with exactly the qualifier the IP requires, rather
+     * than a default-valued instance of the qualifier annotation type.
+     */
+    private final java.util.Map<UnsatisfiedKey, Set<AnnotationInfo>> injectionPointQualifiers
+            = new java.util.LinkedHashMap<>();
+
     private final Set<InlineFieldRecord> inlineFields = new LinkedHashSet<>();
 
     private final Set<String> testBeanTargetFqns = new LinkedHashSet<>();
@@ -153,6 +174,8 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
             UnsatisfiedKey key = unsatisfiedKeyFor(ip);
             if (key != null) {
                 seenInjectionPoints.add(key);
+                injectionPointTypes.putIfAbsent(key, effectiveIpType(ip));
+                injectionPointQualifiers.putIfAbsent(key, userQualifierAnnotations(ip));
             }
         }
         if (bean.isClassBean()) {
@@ -160,6 +183,58 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
             collectInlineFields(declaringClass);
             collectTestBeanTargets(declaringClass);
         }
+    }
+
+    /**
+     * Treat every observer-method parameter that is not the event
+     * parameter as an injection point — CDI declares those parameters
+     * to be CDI injection targets, but they are not exposed via
+     * {@link BeanInfo#injectionPoints()}.
+     *
+     * @param observer the observer method being registered
+     */
+    @Registration(types = Object.class)
+    public void collectObserverParameters(ObserverInfo observer) {
+        ParameterInfo eventParameter = observer.eventParameter();
+        for (ParameterInfo parameter : observer.observerMethod().parameters()) {
+            if (parameter == eventParameter) {
+                continue;
+            }
+            String typeFqn = typeName(parameter.type());
+            if (typeFqn == null) {
+                continue;
+            }
+            Set<String> qualifierNames = parameterQualifierFqnSet(parameter);
+            UnsatisfiedKey key = new UnsatisfiedKey(typeFqn, qualifierNames);
+            seenInjectionPoints.add(key);
+            injectionPointTypes.putIfAbsent(key, parameter.type());
+            injectionPointQualifiers.putIfAbsent(
+                    key, parameterQualifierAnnotations(parameter));
+        }
+    }
+
+    private static Set<String> parameterQualifierFqnSet(ParameterInfo parameter) {
+        Set<String> names = new TreeSet<>();
+        for (AnnotationInfo annotation : parameter.annotations()) {
+            boolean isQualifier = annotation.declaration().hasAnnotation(
+                    ann -> QUALIFIER_FQN.equals(ann.name()));
+            if (isQualifier && !isBuiltInQualifier(annotation.name())) {
+                names.add(annotation.name());
+            }
+        }
+        return names;
+    }
+
+    private static Set<AnnotationInfo> parameterQualifierAnnotations(ParameterInfo parameter) {
+        Set<AnnotationInfo> result = new LinkedHashSet<>();
+        for (AnnotationInfo annotation : parameter.annotations()) {
+            boolean isQualifier = annotation.declaration().hasAnnotation(
+                    ann -> QUALIFIER_FQN.equals(ann.name()));
+            if (isQualifier && !isBuiltInQualifier(annotation.name())) {
+                result.add(annotation);
+            }
+        }
+        return result;
     }
 
     private void collectInlineFields(ClassInfo declaringClass) {
@@ -426,13 +501,56 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
             if (beanType == null) {
                 continue;
             }
-            SyntheticBeanBuilder<Object> builder = components.<Object>addBean(Object.class)
-                    .type(beanType)
-                    .scope(Dependent.class)
-                    .createWith(MockSyntheticBeanCreator.class)
-                    .withParam("targetType", beanType);
-            applyQualifiers(builder, ip.qualifierNames);
+            registerAutoMockBean(components, ip, beanType);
             existingBeans.add(new BeanShape(ip.typeName, ip.qualifierNames));
+        }
+    }
+
+    /**
+     * Helper extracted to capture the target's static type {@code T} so
+     * {@code addBean(beanType)} (rather than {@code addBean(Object.class)})
+     * fixes the proxy that ArC generates for normal-scoped synthetic
+     * beans to subclass the IP's required type. Without this capture
+     * the proxy is for {@code Object} and the cast to the IP's bean
+     * type fails at injection time.
+     *
+     * <p>Default scope is {@code @Singleton}: gives one shared mock per
+     * IP shape (so multiple IPs with the same type+qualifier — modulo
+     * {@code @Nonbinding} members — resolve to the same instance), and
+     * avoids the request-context preconditions of {@code @RequestScoped}.
+     */
+    private <T> void registerAutoMockBean(
+            SyntheticComponents components, UnsatisfiedKey ip, Class<T> beanType) {
+        @SuppressWarnings("unchecked")
+        Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>> creator =
+                (Class<? extends jakarta.enterprise.inject.build.compatible.spi.SyntheticBeanCreator<T>>)
+                        (Class<?>) MockSyntheticBeanCreator.class;
+        SyntheticBeanBuilder<T> builder = components.addBean(beanType)
+                .scope(jakarta.inject.Singleton.class)
+                .createWith(creator)
+                .withParam("targetType", beanType);
+        Type cdiIpType = injectionPointTypes.get(ip);
+        if (cdiIpType != null && cdiIpType.isParameterizedType()) {
+            // Match parameterized IPs (e.g. BaseDao<Order>) with a
+            // synthetic bean of exactly that parameterized type —
+            // ArC's bean-resolution treats raw and parameterized bean
+            // types differently and a raw BaseDao bean won't satisfy
+            // a BaseDao<Order> IP.
+            builder.type(cdiIpType);
+        } else {
+            builder.type(beanType);
+        }
+        Set<AnnotationInfo> capturedQualifiers = injectionPointQualifiers.get(ip);
+        if (capturedQualifiers != null && !capturedQualifiers.isEmpty()) {
+            // Preserve qualifier member values (e.g. @Named("primary"))
+            // by passing the captured AnnotationInfo through; the
+            // FQN-only applyQualifiers fallback would instantiate the
+            // annotation with default values.
+            for (AnnotationInfo qualifier : capturedQualifiers) {
+                builder.qualifier(qualifier);
+            }
+        } else {
+            applyQualifiers(builder, ip.qualifierNames);
         }
     }
 
@@ -525,7 +643,7 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
     }
 
     private static void applyQualifiers(
-            SyntheticBeanBuilder<Object> builder, Set<String> qualifierFqns) {
+            SyntheticBeanBuilder<?> builder, Set<String> qualifierFqns) {
         for (String qualifierFqn : qualifierFqns) {
             if (isBuiltInQualifier(qualifierFqn)) {
                 continue;
@@ -604,6 +722,42 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
             return null;
         }
         return new UnsatisfiedKey(raw, qualifierNames);
+    }
+
+    /**
+     * Capture the IP's user-declared qualifier annotations (excluding
+     * the implicit {@code @Default} / {@code @Any}) so the synthetic
+     * auto-mock bean can register them with their member values
+     * intact.
+     */
+    private static Set<AnnotationInfo> userQualifierAnnotations(InjectionPointInfo ip) {
+        Set<AnnotationInfo> result = new LinkedHashSet<>();
+        for (AnnotationInfo qualifier : ip.qualifiers()) {
+            if (isBuiltInQualifier(qualifier.name())) {
+                continue;
+            }
+            result.add(qualifier);
+        }
+        return result;
+    }
+
+    /**
+     * The {@code Type} a synthetic auto-mock bean should advertise for
+     * this injection point — the wrapper-unwrapped argument type for
+     * {@code Provider<X>} / {@code Instance<X>}, otherwise the IP's
+     * raw type.
+     */
+    private static Type effectiveIpType(InjectionPointInfo ip) {
+        Type ipType = ip.type();
+        if (ipType.isParameterizedType()) {
+            ParameterizedType parameterized = ipType.asParameterizedType();
+            String wrapperName = parameterized.declaration().name();
+            if ((PROVIDER_FQN.equals(wrapperName) || INSTANCE_FQN.equals(wrapperName))
+                    && parameterized.typeArguments().size() == 1) {
+                return parameterized.typeArguments().get(0);
+            }
+        }
+        return ipType;
     }
 
     /**

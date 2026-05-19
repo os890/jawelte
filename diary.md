@@ -6608,3 +6608,35 @@ The validation scenarios 28 (null static field) and 29 (both
 covered by an automated test for now — a follow-up could add a
 process-spawn-based test that runs `mvn test` on a malformed subject
 and asserts the exit message.
+
+## 2026-05-19: auto-mock parity — scenarios 01-12 green under @QuarkusTest
+
+Migrated scenarios 01-12 (the auto-mock surface), plus uncovered
+parameterized / qualifier / observer-parameter gaps in the BCE while
+fixing the regressions they exposed:
+
+- Parameterized IPs (e.g. `BaseDao<Order>`): the BCE now keeps the
+  IP's CDI `Type` alongside the FQN key and registers the synthetic
+  bean of exactly that parameterized type. A raw `BaseDao` bean
+  doesn't satisfy a `BaseDao<Order>` IP under ArC's strict synthetic
+  bean type matching.
+- Qualifier member values (e.g. `@Named("primary")`): the BCE now
+  captures qualifier `AnnotationInfo`s at registration time and passes
+  them through to the synthetic bean — the FQN-only `applyQualifiers`
+  fallback would have instantiated the annotation with default member
+  values, which doesn't match an IP with explicit values.
+- Observer-method parameters: `BeanInfo.injectionPoints()` doesn't
+  expose them, so a separate `@Registration(ObserverInfo)` walk now
+  collects every non-event parameter and feeds it into the same
+  unsatisfied-IP set.
+- Synthetic auto-mock scope changed from `@Dependent` to `@Singleton`
+  with `addBean(beanType)` (not `Object.class`) so:
+  - the proxy ArC generates for normal-scoped synthetic beans
+    subclasses the IP's required type (no more cast-to-`Object`
+    failures);
+  - multiple IPs with the same type+qualifier (modulo `@Nonbinding`
+    members) resolve to the same instance, matching the standalone
+    `MockAndInlineBeanRegistrar`'s shared-mock semantics.
+
+12 new scenarios are green: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10,
+11, 12. Total CDI scenarios green under @QuarkusTest: 20 (out of 49).
