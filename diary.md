@@ -7583,3 +7583,45 @@ the adapter so it no longer needs CDI to reach the result.
   qualified injections fall back to the auto-mock path. Closing
   these needs a `WireMockArcContextContributor` that registers the
   same synthetic beans through ArC's `BeanRegistrar` surface.
+
+## 2026-05-19 — wiremock-module: 24 / 25 green + cdi-module-impl ContextContributor hooks
+
+Three coordinated changes closed the multi-endpoint wiremock gaps:
+
+  1. `WireMockArcContextContributor` registers the same synthetic
+     `WireMockServer` / `WireMock` / `WireMockRuntimeInfo` beans the
+     legacy `WireMockCdiExtension.onAfterBeanDiscovery` would have
+     created — but through ArC's `BeanRegistrar` surface, the only
+     synthetic-bean path that works under standalone-ArC. Also vetoes
+     `WireMockProducer` via `builder.addExcludeType` when at least
+     one user qualifier was discovered.
+
+  2. cdi-module/impl gains two new SPI surfaces:
+       - `JaweltAutoMockBuildCompatibleExtension.preRegisterExistingBeanShape`
+         / `clearPreRegisteredBeanShapes` / `isPreRegisteredBeanShape` —
+         contributors that register synthetic beans through
+         `BeanRegistrar` can pre-stage the resulting `(type, qualifiers)`
+         shapes so the BCE's `@Synthesis` auto-mock pass and the
+         pre-BCE `MockAndInlineBeanRegistrar` both skip parallel
+         auto-mocks for the same IPs. Without this, every qualified
+         IP my contributor satisfied also got an auto-mock → ambiguous
+         resolution.
+       - `CdiTestBeanContainer.beforeAll` clears the pre-registered
+         shapes so no cross-test leakage.
+
+  3. The portable-extension proxy's `addBean()` now returns a
+     chainable no-op `BeanConfigurator` stub (instead of `null`) so
+     legacy `AfterBeanDiscovery` observers calling
+     `addBean().types(...).qualifiers(...).scope(...).produceWith(...)`
+     don't NPE under standalone-ArC. Their writes are inert — actual
+     registration lives in the `BeanRegistrar` contributor.
+
+  24 / 25 wiremock scenarios pass on the aggregator run. The last
+  one (scenario 20, `jaxrs + wiremock` combo) fails with a Jandex
+  3.5+ vs older `MethodInfo.signatureKey()` `NoSuchMethodError`
+  — classpath issue from jaxrs-module's transitive Jandex, not
+  related to this contributor.
+
+Same `preRegisterExistingBeanShape` hook can be reused by future
+contributors that register synthetic beans through ArC's
+`BeanRegistrar` (spring-data-module, etc.).
