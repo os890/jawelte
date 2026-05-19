@@ -7383,3 +7383,9 @@ narayana-jta interceptor needs a follow-up that fires
 `AfterTestTransaction` from the right hook in the narayana commit
 path. 08a / 28 use `EngineTestKit` (structurally infeasible under
 @QuarkusTest).
+
+## 2026-05-19 — testcontrol-01 under @QuarkusTest: PU-name fallback
+
+testcontrol-01 was failing with "No active persistence unit on the calling thread" inside DbSeed.forCurrentPersistenceUnit(). Root cause: under @QuarkusTest the standalone ArC bootstrap path isn't taken, so DbTestDataArcContextContributor.contribute(...) never runs and CapturedPersistenceUnitNameHolder stays empty. The empty holder makes DbSeed.forPersistenceUnit() (no-arg) fall through to forCurrentPersistenceUnit(), which expects jawelte's per-thread PU stack to be populated — and it isn't under Quarkus.
+
+Fix: DefaultPersistenceUnitNameSupplier.get() now falls back to reading the active test class via the org.os890.jawelte.cdi.bridge.current-test-class system property (already published by DelegatingJUnitExtension.beforeAll) and resolves @PersistenceConfig.persistenceUnitName() reflectively when the holder is empty. With a non-empty PU name, DbSeed.forPersistenceUnit() routes through resolver().connectionFor(name), which has a CDI EntityManager fallback that surfaces Quarkus's @Default EntityManager.

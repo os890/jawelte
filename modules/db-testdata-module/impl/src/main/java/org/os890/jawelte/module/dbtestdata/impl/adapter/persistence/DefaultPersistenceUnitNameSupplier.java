@@ -18,6 +18,7 @@ package org.os890.jawelte.module.dbtestdata.impl.adapter.persistence;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.os890.jawelte.module.dbtestdata.api.port.PersistenceUnitNameSupplier;
+import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 
 /**
  * Default {@link PersistenceUnitNameSupplier}: an
@@ -37,9 +38,22 @@ import org.os890.jawelte.module.dbtestdata.api.port.PersistenceUnitNameSupplier;
  * {@code BeanManager.getExtension(...)} (it throws
  * {@code UnsupportedOperationException}), so the value flow is now:
  * contributor → static holder → bean.
+ *
+ * <p>Under {@code @QuarkusTest} the standalone ArC bootstrap path is
+ * not taken — Quarkus drives its own container init and jawelte's
+ * {@code ArcContextContributor} chain never runs. The supplier
+ * therefore falls back to reading the active test class via the JVM
+ * system property
+ * {@code org.os890.jawelte.cdi.bridge.current-test-class} (published
+ * by {@code DelegatingJUnitExtension.beforeAll}) and resolves
+ * {@link PersistenceConfig#persistenceUnitName()} reflectively when
+ * the holder is empty.
  */
 @ApplicationScoped
 public class DefaultPersistenceUnitNameSupplier implements PersistenceUnitNameSupplier {
+
+    private static final String CURRENT_TEST_CLASS_PROPERTY =
+            "org.os890.jawelte.cdi.bridge.current-test-class";
 
     /** No-arg constructor required by the CDI normal-scope proxy. */
     public DefaultPersistenceUnitNameSupplier() {
@@ -47,6 +61,25 @@ public class DefaultPersistenceUnitNameSupplier implements PersistenceUnitNameSu
 
     @Override
     public String get() {
-        return CapturedPersistenceUnitNameHolder.get();
+        String captured = CapturedPersistenceUnitNameHolder.get();
+        if (!captured.isEmpty()) {
+            return captured;
+        }
+        return readFromActiveTestClass();
+    }
+
+    private static String readFromActiveTestClass() {
+        String testClassName = System.getProperty(CURRENT_TEST_CLASS_PROPERTY);
+        if (testClassName == null || testClassName.isEmpty()) {
+            return "";
+        }
+        try {
+            Class<?> testClass = Class.forName(testClassName, false,
+                    Thread.currentThread().getContextClassLoader());
+            PersistenceConfig config = testClass.getAnnotation(PersistenceConfig.class);
+            return config == null ? "" : config.persistenceUnitName();
+        } catch (ClassNotFoundException | LinkageError unavailable) {
+            return "";
+        }
     }
 }
