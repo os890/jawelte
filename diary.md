@@ -5453,3 +5453,6 @@ scope so both `.class` literals (narayana + geronimo) resolve under
 every `jta-*` profile the script sweeps. Pre-existing scenario-56 bug —
 not a TICKET-016 regression — surfaced now because the wider sweep
 finally exercised the failing combo.
+ticket-015: EnableTestBeans.Proxy: TestInstanceFactory -> InvocationInterceptor
+
+@QuarkusTest registers its own TestInstanceFactory; JUnit allows only one per test class hierarchy. InvocationInterceptor is composable — Quarkus's interceptor handles the constructor under @QuarkusTest and ours steps aside via invocation.proceed(). Same flow under OWB/Weld via the TestInstanceFactoryPort SPI.
