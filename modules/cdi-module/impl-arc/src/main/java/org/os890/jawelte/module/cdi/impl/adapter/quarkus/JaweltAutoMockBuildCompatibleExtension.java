@@ -345,6 +345,15 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
      * {@code @TestBean(bean = X)} target FQN. Visit-bookkeeping uses
      * annotation FQN to avoid revisiting the same meta-annotation in a
      * cyclic chain.
+     *
+     * <p>Walks the superclass hierarchy via reflection so a
+     * {@code *QuarkusTest extends *Test} subclass inherits
+     * {@code @TestBean} declarations sitting on the parent — Jandex's
+     * {@code ClassInfo.annotations()} doesn't resolve inherited
+     * annotations and the BCE has no handle on the {@code IndexView}
+     * to walk {@code superClassType()}. Reflection works here because
+     * by the time {@code @Registration} fires the test class has been
+     * loaded (it's the runtime classpath that holds the @QuarkusTest).
      */
     private void collectTestBeanTargets(ClassInfo declaringClass) {
         if (declaringClass == null) {
@@ -352,6 +361,79 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
         }
         Set<String> visited = new HashSet<>();
         walkAnnotationsForTestBean(declaringClass.annotations(), visited);
+        collectTestBeanTargetsFromSuperclasses(declaringClass.name().toString());
+    }
+
+    private void collectTestBeanTargetsFromSuperclasses(String fqn) {
+        Class<?> klass;
+        try {
+            klass = Class.forName(fqn, false, Thread.currentThread().getContextClassLoader());
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return;
+        }
+        Class<?> superClass = klass.getSuperclass();
+        while (superClass != null && superClass != Object.class) {
+            collectTestBeanFromReflection(superClass);
+            superClass = superClass.getSuperclass();
+        }
+    }
+
+    private void collectTestBeanFromReflection(Class<?> klass) {
+        Class<?> testBeanType = loadCoreAnnotation("org.os890.jawelte.core.api.TestBean");
+        Class<?> testBeansType = loadCoreAnnotation("org.os890.jawelte.core.api.TestBeans");
+        if (testBeanType == null) {
+            return;
+        }
+        for (java.lang.annotation.Annotation a : klass.getDeclaredAnnotations()) {
+            if (a.annotationType().getName().equals(testBeanType.getName())) {
+                collectFromReflectiveTestBean(a);
+            } else if (testBeansType != null
+                    && a.annotationType().getName().equals(testBeansType.getName())) {
+                collectFromReflectiveTestBeans(a, testBeanType);
+            }
+        }
+    }
+
+    private void collectFromReflectiveTestBean(java.lang.annotation.Annotation annotation) {
+        try {
+            Class<?> beanValue = (Class<?>) annotation.annotationType()
+                    .getMethod("bean").invoke(annotation);
+            if (beanValue != null && beanValue != void.class) {
+                testBeanTargetFqns.add(beanValue.getName());
+            }
+            Class<?> producerValue = (Class<?>) annotation.annotationType()
+                    .getMethod("beanProducer").invoke(annotation);
+            if (producerValue != null && producerValue != void.class) {
+                testBeanProducerTargetFqns.add(producerValue.getName());
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+    }
+
+    private void collectFromReflectiveTestBeans(java.lang.annotation.Annotation annotation,
+            Class<?> testBeanType) {
+        try {
+            Object[] values = (Object[]) annotation.annotationType()
+                    .getMethod("value").invoke(annotation);
+            if (values == null) {
+                return;
+            }
+            for (Object v : values) {
+                if (testBeanType.isInstance(v)) {
+                    collectFromReflectiveTestBean((java.lang.annotation.Annotation) v);
+                }
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Class<?> loadCoreAnnotation(String fqn) {
+        try {
+            return Class.forName(fqn, false, Thread.currentThread().getContextClassLoader());
+        } catch (ClassNotFoundException ignored) {
+            return null;
+        }
     }
 
     private void walkAnnotationsForTestBean(
