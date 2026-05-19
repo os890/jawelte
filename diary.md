@@ -6749,3 +6749,29 @@ Total jawelte scenarios green under @QuarkusTest:
 - scope-module: 14/19
 - testcontrol-module: 4/9
 - **55 total**
+
+## 2026-05-19: ContainerStarted bridge bean for @QuarkusTest path
+
+Added `ContainerStartedBridgeBean` + `ContainerStartedGuard` in
+`cdi-module/impl/adapter/event`. The bridge is an `@ApplicationScoped`
+CDI bean that observes the standard CDI
+`@Initialized(ApplicationScoped.class)` event and fires
+`ContainerStarted` from inside the Quarkus runtime classloader, where
+`Arc.container()` is actually available.
+
+`ContainerStartedGuard` (static AtomicBoolean) prevents the managed
+bootstrap path and the bridge from double-firing: `CdiTestBeanContainer.beforeAll`
+now also goes through the guard, and `afterAll` resets it.
+
+scenario-46 is still not green under `@QuarkusTest` (the first
+assertion — `StartupListener.RECEIVED_CONTAINER_STARTED` — now passes,
+but the second — `TestScenarioAssertingLifecyclePort.SAW_CONTAINER_STARTED_BEFORE_BEFORE_ALL`
+— fails because the lifecycle port's static is read from
+jawelte's classloader while the bridge bean writes to it via the
+Quarkus runtime classloader; cross-classloader AtomicBoolean state
+isn't shared). Defer until a follow-up that either runs the lifecycle
+port inside the Quarkus runtime classloader or uses a JVM-shared
+signalling mechanism.
+
+The bridge bean is harmless for already-green scenarios (verified
+01, 13, 30, 47).

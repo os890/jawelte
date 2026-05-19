@@ -195,7 +195,9 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
         invokePortableExtensionPhase(
                 portableExtensions, jakarta.enterprise.inject.spi.AfterDeploymentValidation.class);
 
-        if (container != null) {
+        if (container != null
+                && org.os890.jawelte.module.cdi.impl.adapter.event
+                        .ContainerStartedGuard.markFiredIfNotYet()) {
             container.beanManager().getEvent().fire(new ContainerStarted(testClass));
         }
     }
@@ -390,6 +392,8 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
             Thread.currentThread().setContextClassLoader(holder.classLoader());
             testContext.unbindMetadata(CdiOldTccl.class);
         });
+        org.os890.jawelte.module.cdi.impl.adapter.event
+                .ContainerStartedGuard.reset();
     }
 
     /**
