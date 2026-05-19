@@ -25,7 +25,10 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 
 import com.example.scenario36.MarkerService;
 
+import io.quarkus.test.junit.QuarkusTest;
+
 @EnableTestBeans
+@QuarkusTest
 class Scenario36Test {
 
     @Inject

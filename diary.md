@@ -6809,3 +6809,33 @@ Total jawelte scenarios green under @QuarkusTest:
 - scope-module: 14/19
 - testcontrol-module: 4/9
 - **57 total**
+
+## 2026-05-19: limitToTestBeans honored under @QuarkusTest
+
+Extended `cdi-module/deployment` with a new build step
+`honorLimitToTestBeans`:
+
+- Scans the Jandex for the `@QuarkusTest`-driving class's
+  `@EnableTestBeans(limitToTestBeans = true)`.
+- For every other class in the combined index, produces an
+  `ExcludedTypeBuildItem` unless the class is:
+  - The test class itself.
+  - Listed in `@TestBean(bean = …)` (including the repeatable
+    `@TestBeans({…})` container).
+  - In one of the bundled framework-allowlist prefixes (mirrors
+    `FrameworkAllowlist`'s MP-Config defaults, plus `io.quarkus.`,
+    `io.smallrye.`, `org.eclipse.microprofile.` so Quarkus's own
+    test-mode infrastructure isn't excluded out from under itself).
+
+New green scenarios under @QuarkusTest: 18, 19, 36.
+Reverted to standalone-ArC: 43 (its assertion depends on a custom
+`WhitelistFilter` allowing `com.example.scenario43`, which the
+build step doesn't honor — supporting that needs the build step to
+load and run the user's `WhitelistFilter` at build time, which we
+don't do yet).
+
+Total jawelte scenarios green under @QuarkusTest:
+- cdi-module: 41/56 (added 18, 19, 36; removed 43)
+- scope-module: 14/19
+- testcontrol-module: 4/9
+- **59 total**
