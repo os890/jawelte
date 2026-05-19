@@ -6891,3 +6891,85 @@ Total jawelte scenarios green under @QuarkusTest unchanged at **60**:
 - cdi-module: 42/56
 - scope-module: 14/19
 - testcontrol-module: 4/9
+
+## 2026-05-19: state-of-the-art summary for TICKET-015
+
+Snapshot of where jawelte's `@QuarkusTest` migration stands at the
+end of today's session:
+
+### Green under @QuarkusTest (60 scenarios)
+
+- **cdi-module (42/56)**:
+  01-17 (auto-mock + @TestBean class-level + @TestBean static-field
+  + repeatable + meta-annotation + qualifier variations),
+  18, 19 (limitToTestBeans + framework allowlist),
+  20 (test-class-isolation, one of two test classes),
+  21-26 (qualified JDK / same-simple-name / @RequestScoped auto-mock /
+  Provider+Instance unwrap / @Typed narrowed),
+  30, 31, 33, 34, 35, 36, 37,
+  43 (custom WhitelistFilter loaded at build time),
+  47, 48, 49 (@ConfigBean stereotype discovery),
+  50-54 (multi-alternative / stereotype-with-qualifier / typed-narrowed
+  with @TestBean / multi-qualifier JDK / binding-qualifier-member).
+- **scope-module (14/19)**: 01-07, 09-14, 17.
+- **testcontrol-module (4/9)**: 07, 12, 24, 25.
+
+### Architecture added
+
+- `JaweltAutoMockBuildCompatibleExtension` (CDI 4.0 BCE) —
+  auto-mock unsatisfied IPs, @TestBean static-field synthetic beans,
+  @TestBean(bean=…) class-level alternatives,
+  @TestBean(beanProducer=…) producer-method alternatives, including
+  binding-qualifier-member dedup and `Provider`/`Instance` unwrap.
+- `cdi-module/deployment` Quarkus extension —
+  `registerConfigBeans` (stereotype discovery), `honorLimitToTestBeans`
+  (build-time exclusion mirroring jawelte's `WhitelistFilter`,
+  including loading user-supplied filters at augmentation time).
+- `scope-module/deployment` Quarkus extension —
+  `registerScopes` (`@TestClassScoped` / `@TestMethodScoped` context
+  configurators), `registerScopedBeansAsBeans`.
+- `ContainerStartedBridgeBean` + `ContainerStartedGuard` —
+  re-fire `ContainerStarted` from the Quarkus runtime classloader via
+  the standard CDI `@Initialized(ApplicationScoped.class)` event.
+- Defensive `@TestBean` shape validation in
+  `CdiTestBeanContainer.postProcessTestInstance` for the @QuarkusTest
+  path (no automated coverage yet — EngineTestKit + @QuarkusTest
+  doesn't compose cleanly).
+
+### Deferred (need bigger work)
+
+- **jpa-module** (64 scenarios): needs quarkus-hibernate-orm +
+  quarkus-narayana-jta + quarkus-jdbc-h2 plus a coexistence story
+  with jawelte's `JpaArcContextContributor`, `EntityManagerProxy`,
+  `@TransactionScoped` context, and `@ReadOnly` interceptor.
+- **jaxrs-module** (19 scenarios): needs to either replace jawelte's
+  SeBootstrap with Quarkus's REST server or run them side-by-side.
+- **ejb-module** (28 scenarios): Quarkus's
+  `ArcProcessor#generateResources` strict-mode check rejects
+  `@jakarta.ejb.Singleton` and `AnnotationsTransformerBuildItem` to
+  strip it doesn't take effect at the right phase. Needs
+  `BeanArchivePredicate` or bytecode rewrite.
+- **spring-data-module** (14 scenarios): blocked by jpa-module.
+- **wiremock-module** (9 scenarios): test classpath has both OWB and
+  ArC; `CDI.current()` resolves to OWB which can't find the Quarkus
+  container. Needs OWB removal under @QuarkusTest or a different
+  CDI lookup strategy in `WireMockLifecycleAdapter`.
+- **lnp-module** (9 scenarios): full-stack integration tests; blocked
+  on jpa/jaxrs.
+- **batch-module** (15 scenarios): JBeret integration; unclear how
+  it interacts with Quarkus.
+- **db-testdata-module** (9 scenarios): mostly pure-JDBC tests that
+  don't need migration; the 1-2 that do need jpa-module first.
+- **content-diff-module** (43 scenarios): pure utility — no
+  migration needed; runs as-is under any container or none.
+- **cdi-module remaining (14 scenarios)**: 27-29 (EngineTestKit
+  validation), 32 (manage-container=false SE shim), 38, 41, 42, 44,
+  45 (framework unit tests — don't need @EnableTestBeans), 39, 40
+  (testcontext during portable-extension bootstrap, doesn't fire
+  under @QuarkusTest), 46 (ContainerStarted timing, classloader
+  split), 55, 56 (DeltaSpike partial-bean-binding).
+- **scope-module remaining (5 scenarios)**: 08, 16 (exception
+  aggregation), 15 (EngineTestKit subject), 18, 19 (adapter
+  ordering).
+- **testcontrol-module remaining (5 scenarios)**: 01, 02, 08, 08a,
+  28 — all depend on jpa-module.
