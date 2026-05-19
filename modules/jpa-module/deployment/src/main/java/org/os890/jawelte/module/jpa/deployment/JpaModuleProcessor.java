@@ -16,6 +16,7 @@
 package org.os890.jawelte.module.jpa.deployment;
 
 import java.util.List;
+import java.util.Set;
 
 import org.jboss.jandex.DotName;
 
@@ -35,26 +36,38 @@ public class JpaModuleProcessor {
 
     private static final DotName READ_ONLY_DOT =
             DotName.createSimple("org.os890.jawelte.module.jpa.api.ReadOnly");
+    private static final DotName TRANSACTIONAL_DOT =
+            DotName.createSimple("jakarta.transaction.Transactional");
 
     /** No-arg constructor required by Quarkus's reflective discovery. */
     public JpaModuleProcessor() {
     }
 
     /**
-     * Register {@code @ReadOnly} as an interceptor binding so
-     * {@code ReadOnlyInterceptor} is discoverable under
-     * {@code @QuarkusTest}. The annotation itself already carries
-     * {@code @InterceptorBinding}, but Quarkus's ArC only picks it
+     * Register {@code @ReadOnly} and {@code jakarta.transaction.Transactional}
+     * as interceptor bindings so {@code ReadOnlyInterceptor} and
+     * {@code TransactionalInterceptor} are discoverable under
+     * {@code @QuarkusTest}. The annotations themselves already carry
+     * {@code @InterceptorBinding}, but Quarkus's ArC only picks them
      * up when the annotation type sits in the bean archive index;
-     * jpa-module/api isn't always indexed automatically, so we
-     * register it explicitly.
+     * jpa-module/api and jakarta-transaction-api aren't always
+     * indexed automatically, so we register them explicitly. The
+     * {@code @Transactional} {@code value} / {@code rollbackOn} /
+     * {@code dontRollbackOn} members are flagged
+     * {@code @Nonbinding} so the interceptor matches across all
+     * {@code TxType} values (the impl handles
+     * {@code REQUIRES_NEW} via JTA suspend/resume rather than via
+     * matcher dispatch).
      */
     @BuildStep
-    public InterceptorBindingRegistrarBuildItem registerReadOnlyBinding() {
+    public InterceptorBindingRegistrarBuildItem registerInterceptorBindings() {
         return new InterceptorBindingRegistrarBuildItem(new InterceptorBindingRegistrar() {
             @Override
             public List<InterceptorBinding> getAdditionalBindings() {
-                return List.of(InterceptorBinding.of(READ_ONLY_DOT));
+                return List.of(
+                        InterceptorBinding.of(READ_ONLY_DOT),
+                        InterceptorBinding.of(TRANSACTIONAL_DOT,
+                                Set.of("value", "rollbackOn", "dontRollbackOn")));
             }
         });
     }

@@ -5462,3 +5462,6 @@ Per-module impl-arc/ submodules contain the ArC-native variants of the cdi-modul
 
 ticket-015 triple-runtime layout: -Pquarkus profile in cdi-module tests
 Scenario01 demonstrates the subclass pattern under -Pquarkus. EnableTestBeans.Proxy now defers to invocation.proceed() when @QuarkusTest is present so Quarkus's interceptor can take over construction. Root pom adds quarkus-bom and the *-deployment depMgmt entries; tests/cdi-module/pom.xml gates impl vs impl-arc by profile and configures compile/surefire excludes (-Powb/-Pweld skip *QuarkusTest, -Pquarkus runs only those).
+
+ticket-015 triple-runtime layout: profile machinery across modules + scope-01 subclass
+Migrated 8 tests/{module}/pom.xml to the same -Powb/-Pweld/-Pquarkus profile split as cdi-module: impl deps move into owb+weld profiles, impl-arc + deployment + quarkus-junit5 in the quarkus profile, surefire/compiler filter *QuarkusTest.java per profile. JpaModuleProcessor now also registers @Transactional as a nonbinding interceptor binding (mirrors JpaArcContextContributor). docs/triple-runtime-architecture.md updated with per-module status — jpa/jta/db-testdata require Quarkus first-party extensions for end-to-end @QuarkusTest support; cdi-module + scope-module are self-contained. scope-module/scenario-01 verified passing under -Pquarkus.

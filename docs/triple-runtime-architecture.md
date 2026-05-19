@@ -211,6 +211,47 @@ OWB/Weld-only:
     SPI is the path forward — tests should use those rather than the
     legacy portable surface.
 
+## Per-module status under `-Pquarkus`
+
+The triple-runtime layout differentiates between modules whose Quarkus
+support is *self-contained* (jawelte's own ArC plumbing covers
+everything the test exercises) and those that require *first-party
+Quarkus extensions* on the classpath because Quarkus already ships
+the same primitives (EntityManager, JTA, JAX-RS, …) and would conflict
+with a parallel jawelte registration.
+
+  - **cdi-module**: self-contained. Every scenario runnable under
+    `-Pquarkus` with the thin `*QuarkusTest extends *Test` companion;
+    `cdi-module/deployment` is the only deployment artefact needed.
+  - **scope-module**: self-contained. Same as cdi-module;
+    `scope-module/deployment` registers `@TestClassScoped` and
+    `@TestMethodScoped` with ArC's build pipeline.
+  - **jpa-module, jta-module, db-testdata-module, spring-data-module**:
+    require Quarkus first-party extensions
+    (`quarkus-hibernate-orm`, `quarkus-narayana-jta`, `quarkus-jdbc-h2`,
+    …) under `-Pquarkus`. EntityManager / UserTransaction come from
+    Quarkus's own build steps; jawelte's
+    `JpaArcContextContributor` no-ops (its synthetic-bean registrar
+    backs off when a producer for the same type is already present).
+    The thin subclass works, but each scenario's pom needs the
+    `quarkus-*` deps in its `-Pquarkus`-specific dependency block.
+    Not all scenarios translate — those that probe Hibernate
+    internals via the standalone `PersistenceXmlParser` path don't
+    have a one-line Quarkus equivalent.
+  - **wiremock-module, ejb-module, testcontrol-module**: pending.
+    Tests in these modules rely on lifecycle hooks that the
+    contributor SPI implements; under `-Pquarkus` the contributors
+    won't run, so the hooks need either a build-step bridge (like
+    `JpaModuleProcessor`'s interceptor-binding registration) or a
+    Quarkus-side-effect equivalent. Designed but not yet wired
+    end-to-end on this branch.
+
+`cdi-module/scenario-01` and `scope-module/scenario-01` are the
+verified examples; remaining modules ship the impl-arc and (where
+applicable) deployment artefacts so the *infrastructure* exists, but
+each per-scenario `*QuarkusTest` companion is opt-in work as
+described above.
+
 ## Working reference
 
 The full implementation across all modules — every contributor, every
