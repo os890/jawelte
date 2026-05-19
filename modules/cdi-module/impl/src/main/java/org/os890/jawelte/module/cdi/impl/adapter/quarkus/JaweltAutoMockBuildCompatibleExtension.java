@@ -574,6 +574,18 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
             if (beanType == null) {
                 continue;
             }
+            if (java.lang.reflect.Modifier.isFinal(beanType.getModifiers())) {
+                // ArC can't subclass a leaf-modifier class for the
+                // normal-scope client proxy; registering a synthetic
+                // auto-mock here would crash with
+                // IncompatibleClassChangeError at runtime when
+                // Quarkus tries to load the generated _ClientProxy.
+                // Skipping leaves the IP unsatisfied — the user
+                // either provides a real bean or the build legitimately
+                // fails with the standard CDI resolution error,
+                // which is the right diagnostic.
+                continue;
+            }
             registerAutoMockBean(components, ip, beanType);
             existingBeans.add(new BeanShape(ip.typeName, ip.qualifierNames));
         }
