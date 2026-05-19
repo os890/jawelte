@@ -7056,3 +7056,92 @@ Current code is already structured so that extraction is mechanical:
 Nothing in the current implementation prevents this extraction; the
 boundary is a clean cut along the `adapter/quarkus/` and
 `adapter/event/` packages.
+
+## 2026-05-19: end-of-session state — 60 scenarios green, clean
+
+Full sweep across all 60 migrated scenarios confirms `pass=60 fail=0`.
+
+### Per-module green count
+
+| Module | Green | Total | % |
+|--------|-------|-------|---|
+| cdi-module | 40 | 56 | 71% |
+| scope-module | 16 | 19 | 84% |
+| testcontrol-module | 4 | 9 | 44% |
+| **TOTAL** | **60** | **84** | **71%** |
+
+### Deferred (with reasons)
+
+- **cdi-module 16 remaining**: 21/53 (Quarkus skips annotation-literal
+  generation for synthetic beans with user qualifiers on JDK targets);
+  27/28/29/55/56 (EngineTestKit subjects can't compose with
+  @QuarkusTest's FacadeClassLoader); 32 (manage-container=false SE
+  shim); 38/41/42/44/45 (framework unit tests, not @EnableTestBeans-
+  driven); 39/40 (portable-extension BeforeBeanDiscovery doesn't
+  fire under @QuarkusTest); 46 (ContainerStarted timing — cross-
+  classloader state visibility).
+- **scope-module 3 remaining**: 08/16 (exception aggregation
+  depends on jawelte-owned lifecycle); 15 (EngineTestKit subject);
+  18/19 (adapter ordering).
+- **testcontrol-module 5 remaining**: 01/02/08/08a/28 (need
+  jpa-module + EntityManager bootstrap).
+
+### Modules still entirely on standalone-ArC
+
+- jpa-module (64 scenarios)
+- jaxrs-module (19 scenarios)
+- jta-module (36 scenarios)
+- ejb-module (28 scenarios — Quarkus rejects @jakarta.ejb.Singleton)
+- spring-data-module (14 scenarios — needs jpa)
+- batch-module (15 scenarios)
+- wiremock-module (9 scenarios — OWB CDIProvider on classpath wins)
+- db-testdata-module (mostly pure-JDBC, no migration needed)
+- content-diff-module (pure utility, no migration needed)
+- lnp-module (9 scenarios — full integration, blocked on jpa/jaxrs)
+
+### Net architecture deltas this session
+
+- `cdi-module/impl/adapter/quarkus/JaweltAutoMockBuildCompatibleExtension`
+  (CDI 4.0 BCE — auto-mock, @TestBean static fields, @TestBean(bean=…)
+  and @TestBean(beanProducer=…) class-level synthesis, binding-
+  qualifier-member dedup, JDK-vs-user scope split, Provider/Instance
+  unwrap, observer-method-parameter handling).
+- `cdi-module/impl/adapter/event/ContainerStartedBridgeBean` +
+  `ContainerStartedGuard` (re-fires ContainerStarted from the Quarkus
+  runtime classloader via @Initialized(ApplicationScoped) with a
+  double-fire guard for the managed path).
+- `cdi-module/deployment` Quarkus extension (registerConfigBeans +
+  honorLimitToTestBeans, the latter loading user-supplied
+  WhitelistFilter implementations at augmentation time).
+- `scope-module/deployment` Quarkus extension (context configurators
+  + bean-archive registration for @TestClassScoped /
+  @TestMethodScoped).
+- Defensive @TestBean shape validation in
+  `CdiTestBeanContainer.postProcessTestInstance` (runs on both
+  paths).
+- Architectural commitment honored: @EnableTestBeans + @QuarkusTest
+  stay as **separate annotations** so a future
+  `jawelte-quarkus-adapter` extraction is a clean cut.
+
+### Commits in this session
+
+- WORKING: scope-module — 2 more scenarios green (21, 30)
+- WORKING: testcontrol-module — 4 scenarios green
+- WORKING: cdi-module/deployment Quarkus extension — config-bean
+  stereotype (47, 48, 49)
+- WORKING: cdi scenarios 37, 43 green
+- WORKING: limitToTestBeans honored (18, 19, 36)
+- WORKING: custom WhitelistFilter loaded at build time (43)
+- WORKING: 13 more CDI scenarios green
+- WORKING: binding-qualifier-member dedup (54)
+- WORKING: scope-module — 13 more scenarios green
+- WORKING: auto-mock parity — scenarios 01-12 green
+- WORKING: @TestBean(bean=X) class-level activation (13, 16, 17, 35)
+- WORKING: @TestBean(beanProducer=Y) class-level activation (14)
+- WORKING: defensive @TestBean shape validations
+- UNTESTED (known issues): nonbinding-qualifier Class-based path
+- UNTESTED (known issues): ContainerStarted bridge bean
+- UNTESTED: ejb-module migration spike deferred
+- FIXED: revert scenarios 21, 53 to standalone-ArC
+- DOC: summary of TICKET-015 state
+- DOC: extraction path for the future quarkus-adapter
