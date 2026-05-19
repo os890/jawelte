@@ -7445,3 +7445,36 @@ All 9 testcontrol-module scenarios are now passing:
 
   Counts are file-level, not scenario-level. testcontrol-module and jpa-module
   fully verified green this session.
+
+## 2026-05-19 — module-wide verification snapshot
+
+Ran the four core module aggregators with skip-flags. Result:
+  - jpa-module:         65 / 65 SUCCESS
+  - scope-module:       31 / 31 SUCCESS
+  - testcontrol-module:  9 / 9  SUCCESS
+  - cdi-module:         31 / 32 → scenario-32 (`manage-container-false`)
+                        fails with "Expecting actual not to be null" — the
+                        test boots an external `SeContainerInitializer.newInstance().initialize()`
+                        but the standalone-ArC bootstrap path doesn't surface
+                        a `BeanManager`. Pre-existing; unrelated to this
+                        session's edits.
+  - jta-module:         27 / 28 → scenario-45 (`vendor-bean-veto`)
+                        fails the "com.arjuna.ats.jta.cdi.* must NOT be
+                        blanket-vetoed" assertion. Pre-existing.
+  - ejb-module:          0 / N  → scenario-01 fails ("Null contextual instance
+                        was produced by a normal scoped synthetic bean"). The
+                        BCE's `@Registration` runs after standalone-ArC's
+                        portable-extension chain skips `ProcessAnnotatedType`,
+                        so `EjbAnnotationExtension` never adds
+                        `@ApplicationScoped` to `@jakarta.ejb.Singleton`
+                        beans. With the EJB annotation alone the type is
+                        unsatisfied at IP time → auto-mock wins → Mockito
+                        either can't mock the leaf class or the mock
+                        producer returns null because of the BCE's
+                        "Mockito refuses → null" branch. Resolving this is
+                        TICKET-015 follow-up work; needs either dispatching
+                        `ProcessAnnotatedType` to portable extensions before
+                        BCE's REGISTRATION, or a build step in an
+                        `ejb-module/deployment` that pre-registers
+                        @Singleton/@Stateless mappings via
+                        `AnnotationsTransformerBuildItem`.
