@@ -7553,3 +7553,33 @@ was stale `target/` and a half-installed impl jar — a clean
 `rm -rf tests/ejb-module/scenario-*/target` + `mvn -pl modules/ejb-module/impl install`
 restored the expected behaviour. Worth keeping in mind for future
 contributor work: rebuild + clean before iterating on the aggregator.
+
+## 2026-05-19 — wiremock-module: 13 / 25 green by inlining endpoint discovery
+
+WireMockLifecycleAdapter.beforeAll was crashing every scenario in
+beforeAll with `UnsupportedOperationException` from
+`BeanManager.getExtension(WireMockCdiExtension.class)` — ArC rejects
+the legacy portable-extension lookup outright.
+
+The endpoint-discovery logic the adapter reads off the extension is
+pure reflection (walk the test class hierarchy for `@Inject`-able
+WireMock fields, follow each field's qualifier ancestors looking
+for an `@WireMockEndpoint`-rooted root). Inlined the same walk into
+the adapter so it no longer needs CDI to reach the result.
+
+  13 / 25 wiremock scenarios pass after the inline:
+    01, 02, 03 (default endpoint + stub register / reset)
+    09, 11, 16 (default-only resolution / ambiguity)
+    10, 12 (lifecycle stop / per-class isolation)
+    14, 15 (HTTPS-off / `@EnableWireMock` meta)
+    19, 21, 23, 25 (scope mapper SL / `WireMockRuntimeInfo` default
+                    / `@Inherited` / ambiguous resolution)
+
+  12 scenarios still fail: every "two or more endpoints" case
+  (04–08, 13, 17, 18, 20, 22, 24). They rely on
+  `WireMockCdiExtension.onAfterBeanDiscovery` registering one
+  synthetic bean per discovered endpoint via `event.addBean()` —
+  ArC returns `null` from that builder, so nothing is wired and
+  qualified injections fall back to the auto-mock path. Closing
+  these needs a `WireMockArcContextContributor` that registers the
+  same synthetic beans through ArC's `BeanRegistrar` surface.
