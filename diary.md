@@ -5485,3 +5485,24 @@ reproduces the pattern (production `Greeter` with
 `@Inject Translator`, Mockito `when(translator.translate(...))` to
 prove the SAME mock is shared). All 57 cdi-module scenarios green
 under both `-Powb` (default) and `-Pweld`.
+
+## 2026-05-20 — ticket-016 scaffold: listings/ root
+
+Created `listings/pom.xml` and `listings/README.md` to seed the
+documentation-listings folder backing the upcoming `docs/core.html`.
+
+- `listings/pom.xml` is a thin aggregator: no `<parent>`, no shared
+  `<dependencyManagement>`, no shared `<dependencies>`. Lists the 16
+  child listing modules for batch-running via
+  `mvn -f listings/pom.xml test`. Not wired into the jawelte root
+  reactor (root `pom.xml`'s `<modules>` stays at `core` + `modules`).
+- `listings/README.md` explains the standalone-copy promise — each
+  child listing is an independent Maven project that does NOT declare
+  this aggregator as its parent; readers can copy any single
+  listing folder anywhere and run `mvn test` on it. Documents the
+  one-time `mvn -DskipTests install` step from the repo root needed
+  to put jawelte's `0.1.0-SNAPSHOT` artefacts in the local m2.
+
+The 16 child listings are listed up-front in `listings/pom.xml`'s
+`<modules>` section so the aggregator's scope is visible at a glance.
+Children land one (or in small batches) per follow-up commit.
