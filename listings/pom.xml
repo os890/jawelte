@@ -66,5 +66,6 @@
         <module>17-test-method-scoped</module>
         <module>18-test-class-scoped</module>
         <module>19-jpa-hello-world</module>
+        <module>20-jta-hello-world</module>
     </modules>
 </project>
