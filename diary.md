@@ -5750,3 +5750,13 @@ corresponding `listings/<nn>-<name>/` sub-folder. Cross-references
 verified: all 18 listing-folder links resolve to extant paths; all
 22 in-page anchors resolve to declared `id`s. Visual rendering will
 be verified at the user-side checkpoint.
+
+## 2026-05-20 — ticket-016 docs/core.html scope tweak
+
+Removed the forward-looking "a future quarkus-module ships an ArC
+adapter" sentence from section 3.1. Per the ticket-016 scope, the
+docs target the OWB + Weld baseline on `main`; quarkus references
+belong in the docs update that lands once the quarkus work merges.
+The `TestBeanContainerPort` description now reads
+`cdi-module ships the OWB/Weld SE adapter (CdiTestBeanContainer).
+The user does not usually implement this port.`

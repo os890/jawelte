@@ -529,7 +529,7 @@ example.metadata.BootstrapTimestampLifecyclePort</pre>
 <p>core defines the entire jawelte port surface. Each port is either <strong>single-impl</strong> (exactly one implementation must be on the classpath; multiple-impl raises an error) or <strong>multi-impl</strong> (any number; the active <code>ServicePriorityResolver</code> orders them). Some are discovered via <code>ServiceLoader</code>; <code>ConfigResolver</code> is a CDI bean.</p>
 
 <h2 id="spi-container-port">3.1 TestBeanContainerPort</h2>
-<p><strong>Single-impl, ServiceLoader.</strong> The CDI runtime adapter. The delegating JUnit extension forwards every test-lifecycle callback to this port. <code>cdi-module</code> ships the OWB/Weld SE adapter (<code>CdiTestBeanContainer</code>); a future <code>quarkus-module</code> ships an ArC adapter. The user does not usually implement this port.</p>
+<p><strong>Single-impl, ServiceLoader.</strong> The CDI runtime adapter. The delegating JUnit extension forwards every test-lifecycle callback to this port. <code>cdi-module</code> ships the OWB/Weld SE adapter (<code>CdiTestBeanContainer</code>). The user does not usually implement this port.</p>
 
 <h2 id="spi-lifecycle-port">3.2 TestModuleLifecyclePort</h2>
 <p><strong>Multi-impl, ServiceLoader.</strong> The way feature modules participate in the test lifecycle. All methods default to no-ops; an implementation overrides only the callbacks it cares about. Sorted by <code>@Priority</code> ascending for <code>before*</code>, reverse for <code>after*</code>.</p>
