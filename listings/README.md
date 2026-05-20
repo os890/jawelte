@@ -63,6 +63,8 @@ mvn -f listings/pom.xml test
 | 14 | `14-bean-scope-mapper` | SPI &rarr; `BeanScopeMapper` |
 | 15 | `15-config-resolver` | SPI &rarr; `ConfigResolver` |
 | 16 | `16-priority-resolver` | SPI &rarr; `ServicePriorityResolver` |
+| 17 | `17-test-method-scoped` | scope-module &rarr; `@TestMethodScoped` |
+| 18 | `18-test-class-scoped` | scope-module &rarr; `@TestClassScoped` |
 
 ## CDI runtime
 

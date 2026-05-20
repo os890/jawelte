@@ -6463,3 +6463,42 @@ Four spots reworded:
 The remaining "profile" mention in 2.5 is intentional — the
 listings DO ship owb/weld profiles as a user-facing convenience,
 and reading the listings still teaches the pattern.
+
+## 2026-05-20 — docs/scope-module.html + listings 17 & 18
+
+First module-page fan-out following ticket-016's 3-section
+template. scope-module is the simplest of the modules so it's a
+good template-validation candidate.
+
+New listings:
+- listings/17-test-method-scoped — @TestMethodScoped Counter,
+  two @Test methods both increment to 1, proves state resets
+  between methods.
+- listings/18-test-class-scoped — @TestClassScoped Counter,
+  @TestMethodOrder pinned, first method increments to 1, second
+  increments to 2 (same instance survives the boundary).
+- Both pass under -Powb (default) and -Pweld; the aggregator now
+  runs 20 test classes total (was 18; +2 from the two new
+  listings).
+
+docs/scope-module.html structure follows ticket-016 strictly:
+- Section 1 quick-start: purpose, hello-world (listing 17),
+  @TestClassScoped use-case (listing 18), maven setup.
+- Section 2 detailed: scope lifetime walk-through; declarative
+  remaps shipped (SessionScoped→TestMethodScoped,
+  ConfigBean→TestClassScoped, TestBean→TestClassScoped); MP
+  Config defaults table (the three keys scope-module sets at
+  ordinal 100).
+- Section 3 SPI / port reference: scope-module ships no SPI of
+  its own — it consumes core's BeanScopeMapper port and
+  contributes ServiceLoader-registered providers. Points readers
+  back to core docs for the customization story.
+
+Listing aggregator (listings/pom.xml + README.md) updated with
+the two new modules. modules.html scope-module overview card
+now links to docs/scope-module.html ("Read the details →") and
+the card's heading is a clickable link.
+
+Same hybrid card chrome and theme toggle as core.html /
+modules.html; matches the same palette + monospace look and the
+same light/dark localStorage behaviour.
