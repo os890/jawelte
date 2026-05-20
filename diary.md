@@ -5540,3 +5540,13 @@ file selects `mock-maker-subclass` so the auto-mock can be a real
 subclass instance that the CDI proxy delegates to.
 
 Total runtime: 0.5s.
+
+## 2026-05-20 — ticket-016 listing 03: test-bean-alternative
+
+Demonstrates `@TestBean(bean=...)`. Production `SmtpEmailService`
+(`@ApplicationScoped`, `EmailService` impl) lives in `src/main`;
+`StubEmailService` (also `@ApplicationScoped`, also implements
+`EmailService`, additionally `@Alternative`) lives in `src/test`. The
+test class carries `@EnableTestBeans @TestBean(bean=StubEmailService.class)`;
+`@Inject EmailService` resolves to the stub. Assertion runs against
+the stub's `"stub:" + to` payload, not SMTP's `"smtp:" + to`. 0.2s.
