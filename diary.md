@@ -6347,3 +6347,27 @@ No new listings — every code reference in the new page either
 links into the existing core-docs listings or shows a Maven
 fragment with a link to the corresponding listing's full pom.
 The full aggregator sweep is unaffected.
+
+## 2026-05-20 — docs/modules.html — jpa-module EMF lifecycle correction
+
+User flagged: I'd claimed the EntityManagerFactory is bootstrapped
+per test class. Verified the source:
+
+  `modules/jpa-module/impl/src/main/java/org/os890/jawelte/module/jpa/impl/util/EmfCache.java`
+
+The class is a `JVM-wide cache of EntityManagerFactory instances
+keyed by persistence unit name` — `private static final
+ConcurrentHashMap<String, EntityManagerFactory>` plus a JVM
+shutdown hook registered on first use. The class comment makes
+the intent explicit: "reusing the same instance across every test
+class is the main jpa-module performance win."
+
+`JpaLifecycleAdapter` reads through this cache (line 292:
+`EmfCache.getCached(persistenceUnitName).orElse(null)`), not via
+fresh factory creation per test class.
+
+Fixed `docs/modules.html` jpa-module card to say "bootstrapped
+once per JVM per persistence unit (JVM-wide `EmfCache` with a
+shutdown hook); each test class gets a fresh `EntityManager`
+drawn from that cached factory." The EM is what's per-test, not
+the EMF.

@@ -324,7 +324,7 @@
 
 <div class="module-card">
   <span class="name">jpa-module</span><span class="status">opt-in</span>
-  <p class="desc">JPA testing primitives. Ships <code>@PersistenceConfig</code>, <code>@ReadOnly</code>, the prioritised SPIs (<code>TransactionStrategy</code>, <code>DbCleanupStrategy</code>, <code>TableNameResolver</code>, <code>EntityScanner</code>, <code>PersistenceUnitConnectionResolver</code>, <code>PersistencePropertyResolver</code>) and four JPA-specific CDI events. Bootstraps the <code>EntityManagerFactory</code> per test class, owns the active-PU stack, drives per-test cleanup.</p>
+  <p class="desc">JPA testing primitives. Ships <code>@PersistenceConfig</code>, <code>@ReadOnly</code>, the prioritised SPIs (<code>TransactionStrategy</code>, <code>DbCleanupStrategy</code>, <code>TableNameResolver</code>, <code>EntityScanner</code>, <code>PersistenceUnitConnectionResolver</code>, <code>PersistencePropertyResolver</code>) and four JPA-specific CDI events. The <code>EntityManagerFactory</code> is bootstrapped <em>once per JVM</em> per persistence unit (JVM-wide <code>EmfCache</code> with a shutdown hook); each test class gets a fresh <code>EntityManager</code> drawn from that cached factory. jpa-module also owns the active-PU stack and drives per-test cleanup.</p>
 </div>
 
 <div class="module-card">
