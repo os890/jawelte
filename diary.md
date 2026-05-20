@@ -5638,3 +5638,15 @@ its `beforeAll` binds a `StartupRecord` on the context, its
 `beforeEach` value equals the `beforeAll` value. Demonstrates the
 "per-test-class state carried by jawelte's hexagonal port boundary"
 pattern modules use for things like JPA's active-PU stack. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 11: before-scope-veto
+
+Demonstrates the `BeforeScopeStarted` veto hook. The vetoer is an
+`@ApplicationScoped` CDI bean observing `BeforeScopeStarted`; when
+the event scope is `RequestScoped.class` it calls `event.veto()`
+and mirrors that into a static `AtomicBoolean VETOED`. The test
+asserts the flag is true — proving the observer ran inside
+cdi-module's `beforeEach` and asked for the veto. (When jawelte sees
+`isVetoed()` it returns early without calling
+`RequestContextController.activate()` and without binding the
+controller on the `TestContext`.) 0.2s.
