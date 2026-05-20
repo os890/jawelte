@@ -36,11 +36,6 @@
             forPersistenceUnit() call, which is exactly what the
             scenario asserts.
         -->
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-jpa-module-impl</artifactId>
-            <scope>test</scope>
-        </dependency>
         <!--
             jpa-module-impl transitively references jakarta.transaction
             classes; the api jar must be on the test classpath so
@@ -53,4 +48,38 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation><activeByDefault>true</activeByDefault></activation>
+            <dependencies>
+                <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-jpa-module-impl</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-jpa-module-impl</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>quarkus</id>
+            <dependencies>
+                <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-jpa-module-impl-arc</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
 </project>

@@ -254,7 +254,15 @@
         </profile>
         <profile>
             <id>quarkus</id>
-            <dependencies>
+            <properties>
+                <!--
+                    Quarkus 3.35.3 ships hibernate-orm 7.3.2.Final;
+                    keep hibernate-core aligned so quarkus-hibernate-
+                    orm's deployment processor sees its expected API.
+                -->
+                <hibernate.orm.version>7.3.2.Final</hibernate.orm.version>
+            </properties>
+                        <dependencies>
                 <dependency>
                     <groupId>${project.groupId}</groupId>
                     <artifactId>jawelte-cdi-module-impl-arc</artifactId>
@@ -275,6 +283,30 @@
                     <artifactId>quarkus-junit5</artifactId>
                     <scope>test</scope>
                 </dependency>
+                <!--
+                    Quarkus first-party extensions for tests that
+                    drive JPA / JTA / JDBC under @QuarkusTest. Quarkus
+                    provides EntityManager / UserTransaction; jawelte's
+                    JpaArcContextContributor no-ops (synthetic-bean
+                    registrar backs off when a producer for the same
+                    type already exists).
+                -->
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-hibernate-orm</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-jdbc-h2</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-narayana-jta</artifactId>
+                    <scope>test</scope>
+                </dependency>
+
             </dependencies>
             <build>
                 <plugins>
