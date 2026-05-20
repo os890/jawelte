@@ -5625,3 +5625,16 @@ test classes apply `@WithStubEmail` instead of repeating the
 `AnotherSendingTest`) prove the meta-annotation works identically
 across them. Idiomatic for sharing a stub registration across a
 larger test suite. 2 tests pass, 0.3s total.
+
+## 2026-05-20 — ticket-016 listing 10: test-context-metadata
+
+Demonstrates `TestContext.bindMetadata` / `getMetadata`.
+`BootstrapTimestampLifecyclePort` implements
+`TestModuleLifecyclePort` (ServiceLoader-registered via
+`META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort`);
+its `beforeAll` binds a `StartupRecord` on the context, its
+`beforeEach` reads it back. Both values land in static
+`AtomicReference`s the test can inspect — the test asserts the
+`beforeEach` value equals the `beforeAll` value. Demonstrates the
+"per-test-class state carried by jawelte's hexagonal port boundary"
+pattern modules use for things like JPA's active-PU stack. 0.2s.
