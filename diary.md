@@ -6371,3 +6371,48 @@ once per JVM per persistence unit (JVM-wide `EmfCache` with a
 shutdown hook); each test class gets a fresh `EntityManager`
 drawn from that cached factory." The EM is what's per-test, not
 the EMF.
+
+## 2026-05-20 — docs/modules.html overview: marketing tone + EM-per-transaction
+
+Two corrections rolled into one pass:
+
+1. User flagged that my earlier "EntityManager per test class"
+   note was also wrong — the EM is `@TransactionScoped`, not
+   per-test. Verified:
+   `modules/jpa-module/impl/src/main/java/.../adapter/context/TransactionScopedContext.java`
+   implements `AlterableContext` for `jakarta.transaction.TransactionScoped`,
+   and `JpaLauncherSessionListener` mentions
+   `TransactionScopedEmHolder` clearing per-thread state.
+   So:
+     - EMF lifetime: per JVM (per persistence unit, `EmfCache`).
+     - EM lifetime: per transaction (the test's @Transactional /
+       JTA transaction).
+   Card now says "EntityManager itself is transaction-scoped".
+
+2. User asked the overview catalog to read less like
+   internals-documentation and more like a user-facing pitch —
+   short, plain-language, "here's what you get". Rewrote all
+   twelve cards in that register. Internal port names,
+   classes, and SPIs are gone from the overview (they live in
+   each module's own section); the cards now read like a
+   feature catalog the reader can scan to figure out which
+   modules they want to pull in.
+
+   Examples of the tone shift:
+     - cdi-module: "default partner of core ... full
+       @EnableTestBeans experience: CDI container around every
+       test, automatic mocks for anything you forget to wire,
+       clean shutdown when the test finishes."
+     - jpa-module: "Inject an EntityManager into your code,
+       save and query entities, let jawelte clean up between
+       methods. EMF boots once per JVM (no slow per-test ramp);
+       the EntityManager itself is transaction-scoped, table
+       cleanup runs automatically, and read-only data marking
+       is one annotation away."
+     - jaxrs-module: "Test your REST endpoints with a real HTTP
+       server inside the test JVM. Annotate, @Inject the live
+       base URL, hit your endpoints over the wire like a client
+       would."
+
+   The cdi-module deep-dive section (2.x) keeps its technical
+   detail; the overview only has to entice the reader.

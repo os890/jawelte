@@ -310,66 +310,66 @@
 
 <h1 id="overview">1. modules overview</h1>
 
-<p>Twelve modules ship with jawelte today. Most are <em>opt-in</em>: leaving them off the classpath is the equivalent of saying "I don't need that integration." A handful are foundational and pair tightly with core — <code>cdi-module</code> chief among them.</p>
+<p>Twelve modules ship with jawelte today. Pick the ones that match your stack; the rest stay off the classpath and out of your test runtime entirely. <code>cdi-module</code> is the one foundational pairing — everything else is optional.</p>
 
 <div class="module-card">
   <span class="name">cdi-module</span><span class="status">foundational</span>
-  <p class="desc">The CDI SE adapter for jawelte's <code>TestBeanContainerPort</code> — boots OpenWebBeans or Weld around each test class, ships the auto-mock CDI extension, the default <code>MockFactory</code> (Mockito), the framework-allowlist that keeps internal beans out of user-visible discovery, and the pluggable <code>ExcludedPackageFilter</code> / <code>WhitelistFilter</code> ports. The de-facto pairing with core; every example in <a href="core.html">docs/core.html</a> assumes it's on the classpath. Detailed below.</p>
+  <p class="desc">The default partner of core. Gives you the full <code>@EnableTestBeans</code> experience: a CDI container around every test class, automatic Mockito mocks for anything you forget to wire, and clean shutdown when the test finishes. Every example in the <a href="core.html">core docs</a> assumes it's on your classpath. Details below.</p>
 </div>
 
 <div class="module-card">
   <span class="name">scope-module</span><span class="status">opt-in</span>
-  <p class="desc">Adds two test-lifecycle CDI scopes — <code>@TestMethodScoped</code> and <code>@TestClassScoped</code> — with the matching <code>Context</code> implementations, lifecycle adapter, and CDI extension that wires them in. Used by cdi-module's auto-mock default-scope when present, and by <code>testcontrol-module</code> for the <code>@ConfigBean</code> remap.</p>
+  <p class="desc">Two new CDI scopes tuned for tests — <code>@TestMethodScoped</code> (lives for one <code>@Test</code> method) and <code>@TestClassScoped</code> (lives for one test class). Drop them on your beans and stop worrying about state bleeding between tests.</p>
 </div>
 
 <div class="module-card">
   <span class="name">jpa-module</span><span class="status">opt-in</span>
-  <p class="desc">JPA testing primitives. Ships <code>@PersistenceConfig</code>, <code>@ReadOnly</code>, the prioritised SPIs (<code>TransactionStrategy</code>, <code>DbCleanupStrategy</code>, <code>TableNameResolver</code>, <code>EntityScanner</code>, <code>PersistenceUnitConnectionResolver</code>, <code>PersistencePropertyResolver</code>) and four JPA-specific CDI events. The <code>EntityManagerFactory</code> is bootstrapped <em>once per JVM</em> per persistence unit (JVM-wide <code>EmfCache</code> with a shutdown hook); each test class gets a fresh <code>EntityManager</code> drawn from that cached factory. jpa-module also owns the active-PU stack and drives per-test cleanup.</p>
+  <p class="desc">Inject an <code>EntityManager</code> into your code, save and query entities, let jawelte clean up between methods. The <code>EntityManagerFactory</code> boots once per JVM (so there's no slow per-test ramp); the <code>EntityManager</code> itself is transaction-scoped, table cleanup runs automatically, and read-only data marking is one annotation away.</p>
 </div>
 
 <div class="module-card">
   <span class="name">jta-module</span><span class="status">opt-in</span>
-  <p class="desc">JTA-backed transactions for jawelte tests. <code>TransactionManagerProvider</code> port lets the test pick its TM (defaults to Geronimo; profiles for Narayana and Atomikos). The <code>JtaTransactionStrategy</code> wins over jpa-module's RESOURCE_LOCAL default by <code>@Priority</code> so any code that calls <code>@Transactional</code> automatically gets a JTA transaction once jta-module is on the classpath.</p>
+  <p class="desc">Add this and your <code>@Transactional</code> code starts running inside a real JTA transaction. Geronimo out of the box; Narayana or Atomikos via profile. The right pick for multi-resource setups or anything that won't work under plain JPA <code>RESOURCE_LOCAL</code>.</p>
 </div>
 
 <div class="module-card">
   <span class="name">ejb-module</span><span class="status">opt-in</span>
-  <p class="desc">EJB session-bean annotation adapter: maps <code>@jakarta.ejb.Singleton</code> / <code>@jakarta.ejb.Stateless</code> onto CDI scopes plus an implicit <code>@jakarta.transaction.Transactional</code>, so EJB-annotated production classes work in CDI SE tests without an application server. Pluggable via <code>EjbAnnotationMapper</code> for projects that need custom mappings.</p>
+  <p class="desc">Test EJB-annotated production code without standing up an application server. <code>@Stateless</code> and <code>@Singleton</code> beans get mapped to CDI scopes plus an implicit transaction — you keep writing tests as if a full EE container were running.</p>
 </div>
 
 <div class="module-card">
   <span class="name">jaxrs-module</span><span class="status">opt-in</span>
-  <p class="desc">Embedded Jakarta REST 4.0 <code>SeBootstrap</code> container for testing REST endpoints inside the per-test-class CDI SE container. Ships <code>@EnableJaxRs</code>, the <code>TestUrl</code> injection point (<code>Supplier&lt;String&gt;</code> returning the live base URL), and <code>ResponseDiff</code> for asserting JAX-RS <code>Response</code> bodies. Profiles for CXF (default) and RESTEasy.</p>
+  <p class="desc">Test your REST endpoints with a real HTTP server inside the test JVM. Annotate the class with <code>@EnableJaxRs</code>, inject the live base URL, hit your endpoints over the wire just like a client would. CXF by default, RESTEasy via profile.</p>
 </div>
 
 <div class="module-card">
   <span class="name">testcontrol-module</span><span class="status">opt-in</span>
-  <p class="desc">Convenience annotation <code>@TestControl</code> that binds per-method scope filtering (<code>startScopes</code>) and database-fixture handling (<code>testData = dbIn/ + dbUpdate/ + dbExpected/</code>) into a single annotation. Also unconditionally remaps <code>@ConfigBean</code> from <code>@ApplicationScoped</code> to <code>@TestClassScoped</code> so config can drift per test class without cross-pollution.</p>
+  <p class="desc">One annotation per test method that wires the whole fixture in: load these datasets, scope these beans, expect this end-state. <code>@TestControl</code> turns what would be a noisy setup block into a single declarative line.</p>
 </div>
 
 <div class="module-card">
   <span class="name">db-testdata-module</span><span class="status">opt-in</span>
-  <p class="desc">Fluent DB fixture loader (<code>DbSeed</code>) and verifier (<code>DbDiff</code>). <code>DbSeed.forConnection(...)</code> / <code>forPersistenceUnit(...)</code> drive DbUnit-backed clean-insert / insert / update / refresh modes; <code>DbDiff.assertEquals()</code> reports cell- and row-level differences with 1-based line numbers from the expected document.</p>
+  <p class="desc">Load database fixtures in one fluent call and assert the end-state with a diff that names the exact row and column that changed. Built on DbUnit, accepts both raw JDBC connections and JPA persistence units.</p>
 </div>
 
 <div class="module-card">
   <span class="name">content-diff-module</span><span class="status">opt-in</span>
-  <p class="desc">Semantic diff for JSON and XML payloads. <code>ContentDiff.forJson(...)</code> / <code>forXml(...)</code> return typed <code>JsonBuilder</code> / <code>XmlBuilder</code>; <code>assertEquals()</code> throws an <code>AssertionError</code> listing every <code>Difference</code> with its path and the expected document's line number. <code>DiffEngine</code> is the pluggable SPI; built-in JSON / XML engines ship with the impl.</p>
+  <p class="desc">Compare JSON and XML payloads by meaning, not byte-for-byte. When the assertion fails you get a list of every mismatched path with the line number of the expected document — no more squinting at giant string diffs.</p>
 </div>
 
 <div class="module-card">
   <span class="name">wiremock-module</span><span class="status">opt-in</span>
-  <p class="desc">WireMock CDI integration for jawelte. Ships <code>@EnableWireMock</code> and the <code>@WireMockEndpoint</code> meta-qualifier, the <code>WireMockLifecycleAdapter</code> (<code>TestModuleLifecyclePort</code> at <code>@Priority(75)</code>), and a CDI extension that registers per-endpoint <code>WireMockServer</code> / <code>WireMock</code> / <code>WireMockRuntimeInfo</code> CDI beans the test class can inject.</p>
+  <p class="desc">WireMock servers as injectable CDI beans. Annotate the test with <code>@EnableWireMock</code>, <code>@Inject</code> a <code>WireMockServer</code>, stub the upstream HTTP your code calls. One qualifier per endpoint when you have several to mock at once.</p>
 </div>
 
 <div class="module-card">
   <span class="name">spring-data-module</span><span class="status">opt-in</span>
-  <p class="desc">Single-jar CDI side-car that auto-discovers Spring Data repository interfaces on the test classpath at CDI bootstrap and registers real Spring Data implementations as <code>@ApplicationScoped</code> CDI beans, dispatching to jpa-module's transaction-scoped <code>EntityManager</code>. No api/impl split; one dependency, repositories light up.</p>
+  <p class="desc">Use Spring Data repositories in a CDI test without a Spring context. Add the dependency and your repository interfaces become CDI beans backed by the same <code>EntityManager</code> jpa-module hands out.</p>
 </div>
 
 <div class="module-card">
   <span class="name">batch-module</span><span class="status">opt-in</span>
-  <p class="desc">Jakarta Batch (jBatch) integration. <code>BatchExecution</code> event class with a fluent builder + typed accessors (backed by <code>jakarta.batch-api</code> types); the synchronous CDI observer in <code>batch-module/impl</code> drives every fired <code>BatchExecution</code> to a terminal status before the observer returns.</p>
+  <p class="desc">Run a Jakarta Batch (jBatch) job from your test and assert on the outcome. Fire one event, jawelte drives the job to completion synchronously, and your test sees the final status — no polling, no threading dance.</p>
 </div>
 
 <h1 id="cdi-module">2. cdi-module</h1>
