@@ -55,7 +55,15 @@ MVN="$REPO_ROOT/mvnw"
 # `forkCount > 1` / `threadCount` surefire configuration in the
 # poms, every phase is fully sequential: one module at a time,
 # one test class at a time, one test method at a time.
-MVN_ARGS=(-B -ntp -T 1)
+#
+# -fae (--fail-at-end) lets the reactor keep walking the remaining
+# scenario modules after one fails. The phase still exits non-zero
+# (so verify-all detects the failure and the EXIT trap renders the
+# partial report) but the report covers every scenario the mvn
+# invocation reached, not just the modules before the first failure.
+# Important for the quarkus pass where many scenarios may fail in
+# parallel and we want the matrix-shape view of which pass / fail.
+MVN_ARGS=(-B -ntp -T 1 -fae)
 
 WIP_MODE=false
 LNP_MODE=false
