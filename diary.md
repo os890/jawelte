@@ -5593,3 +5593,14 @@ sit in `src/main` carrying `@ApplicationScoped` but are NOT in a
 
 Auto-mocking is also disabled in this mode; the listing demonstrates
 the "exactly-what-I-declared" stance. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 07: external-container
+
+Demonstrates `@EnableTestBeans(manageContainer=false)`. The test
+class owns the SE container lifecycle itself via
+`SeContainerInitializer.newInstance().initialize()` in `@BeforeAll`
+and `container.close()` in `@AfterAll`; jawelte skips
+`TestBeanContainerPort.beforeAll` / `afterAll` but still activates
+the per-method request scope and injects test-class fields. Test
+asserts request-scope active + injection works (Counter
+@ApplicationScoped, .increment() yields 1). 0.2s.
