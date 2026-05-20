@@ -466,13 +466,37 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
         if (testBeanType == null) {
             return;
         }
-        for (java.lang.annotation.Annotation a : klass.getDeclaredAnnotations()) {
-            if (a.annotationType().getName().equals(testBeanType.getName())) {
+        Set<String> visitedAnnotations = new HashSet<>();
+        walkReflectiveAnnotations(klass.getDeclaredAnnotations(),
+                testBeanType, testBeansType, visitedAnnotations);
+    }
+
+    private void walkReflectiveAnnotations(
+            java.lang.annotation.Annotation[] annotations,
+            Class<?> testBeanType, Class<?> testBeansType,
+            Set<String> visitedAnnotations) {
+        for (java.lang.annotation.Annotation a : annotations) {
+            Class<? extends java.lang.annotation.Annotation> annotationType = a.annotationType();
+            String annotationName = annotationType.getName();
+            if (annotationName.equals(testBeanType.getName())) {
                 collectFromReflectiveTestBean(a);
-            } else if (testBeansType != null
-                    && a.annotationType().getName().equals(testBeansType.getName())) {
-                collectFromReflectiveTestBeans(a, testBeanType);
+                continue;
             }
+            if (testBeansType != null && annotationName.equals(testBeansType.getName())) {
+                collectFromReflectiveTestBeans(a, testBeanType);
+                continue;
+            }
+            if (!visitedAnnotations.add(annotationName)) {
+                continue;
+            }
+            if (annotationName.startsWith("java.") || annotationName.startsWith("jakarta.")) {
+                continue;
+            }
+            // Follow the meta-annotation chain so a custom marker like
+            // @WithStubEmail (which carries @TestBean) is found on a
+            // parent class even when the @TestBean lives one level deep.
+            walkReflectiveAnnotations(annotationType.getDeclaredAnnotations(),
+                    testBeanType, testBeansType, visitedAnnotations);
         }
     }
 
