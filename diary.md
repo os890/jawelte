@@ -6528,3 +6528,11 @@ Wrote `docs/db-testdata-module.html`. Section 2 details DbSeed (CLEAN_INSERT / I
 Listing 24 (`listings/24-db-testdata-hello-world/`) standalone-pom: one `@Entity Product`, one `@Test @Transactional` method that seeds three rows via `DbSeed.forPersistenceUnit().dataset(...).cleanInsert().execute()` then asserts via `DbDiff.forPersistenceUnit().expected(...).assertEquals()`. Same JUnit-version exclusion as listing 23 since this listing pulls in db-testdata-module-impl directly. Both OWB and Weld profiles pass.
 
 Aggregator updates: `listings/pom.xml` and `listings/README.md` gained the row. `docs/modules.html` db-testdata-module card now links to the detail page.
+
+## 2026-05-20 — docs/content-diff-module.html + listing 25
+
+Wrote `docs/content-diff-module.html` (3-section template). Section 2 details `forJson` / `forXml` factories, the dialect difference for `ignoring(...)` patterns (JSON-path vs XPath), `unorderedArrays(...)` for multiset comparison, EL interpolation in expected payloads, and the three MP Config keys for JVM-wide defaults (`json.ignore`, `xml.ignore`, `json.unordered-arrays`). SPI section enumerates the four ports: `DiffEngine` (per content-type), `JsonPatternDialect`, `XmlPatternDialect`, `ELInterpolator`.
+
+Listing 25 (`listings/25-content-diff-hello-world/`) standalone-pom, no `<parent>`, no `owb/weld` profile split because content-diff-module is utility-only (no CDI bootstrap). Three test methods: equal-passes-silently, mismatch-raises-AssertionError-with-path, and ignoring-pattern-skips-noisy-field. All three pass on first run.
+
+Aggregator updates: `listings/pom.xml` and `listings/README.md` gained the row. `docs/modules.html` content-diff-module card now links to the detail page.

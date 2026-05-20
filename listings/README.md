@@ -71,6 +71,7 @@ mvn -f listings/pom.xml test
 | 22 | `22-jaxrs-hello-world` | jaxrs-module &rarr; `@EnableJaxRs` + `TestUrl` |
 | 23 | `23-testcontrol-hello-world` | testcontrol-module &rarr; `@TestControl(testData)` seed pipeline |
 | 24 | `24-db-testdata-hello-world` | db-testdata-module &rarr; `DbSeed` + `DbDiff` direct API |
+| 25 | `25-content-diff-hello-world` | content-diff-module &rarr; `ContentDiff.forJson` happy/mismatch/ignoring |
 
 ## CDI runtime
 

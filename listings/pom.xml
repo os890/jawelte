@@ -71,5 +71,6 @@
         <module>22-jaxrs-hello-world</module>
         <module>23-testcontrol-hello-world</module>
         <module>24-db-testdata-hello-world</module>
+        <module>25-content-diff-hello-world</module>
     </modules>
 </project>
