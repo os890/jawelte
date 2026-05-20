@@ -5650,3 +5650,13 @@ cdi-module's `beforeEach` and asked for the veto. (When jawelte sees
 `isVetoed()` it returns early without calling
 `RequestContextController.activate()` and without binding the
 controller on the `TestContext`.) 0.2s.
+
+## 2026-05-20 — ticket-016 listing 12: container-started
+
+Demonstrates the `ContainerStarted` event. `StartupRecorder` is an
+`@ApplicationScoped` bean observing `ContainerStarted`; jawelte's
+`TestBeanContainerPort` impl fires the event after the CDI container
+is up but before module `beforeAll`s run. The observer mirrors
+`event.getTestClass()` into a static `AtomicReference` the test
+can verify. Useful pattern for module-style one-time setup that
+needs CDI but must run before any lifecycle ports. 0.2s.
