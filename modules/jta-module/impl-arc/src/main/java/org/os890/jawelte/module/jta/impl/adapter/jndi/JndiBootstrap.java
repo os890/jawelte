@@ -86,6 +86,19 @@ public abstract class JndiBootstrap {
                 }
             }
         }
+        // Under @QuarkusTest, javax.naming.InitialContext routes through
+        // Quarkus's DisabledInitialContext (controlled by
+        // quarkus.naming.enable-jndi which defaults to false) and throws
+        // "JNDI has been disabled". jta-module's binder only needs the
+        // xbean WritableContext directly — never the JVM-level
+        // InitialContext — so when Quarkus is on the classpath, return
+        // the xbean root directly. JtaArtifactBinder.xbeanWritableRoot()
+        // uses this same path; consumers that need the legacy
+        // InitialContext can still flip quarkus.naming.enable-jndi=true.
+        Context direct = xbeanWritableRootOrNull();
+        if (direct != null && isQuarkusRuntime()) {
+            return direct;
+        }
         try {
             return new InitialContext();
         } catch (NamingException factoryAbsent) {
@@ -96,11 +109,53 @@ public abstract class JndiBootstrap {
             // runtime exception — silent JNDI failure would surface
             // much later as obscure "tm not found" errors.
             initialized = false;
+            if (direct != null) {
+                // Under any other runtime that lacks an InitialContext
+                // provider but still has xbean on the classpath
+                // (unlikely in practice), prefer the direct root over
+                // surfacing an error.
+                return direct;
+            }
             throw new IllegalStateException(
                     "No JNDI InitialContextFactory on the classpath. jta-module's JndiArtifactBinder "
                             + "needs one (xbean-naming on the test classpath, or any other provider "
                             + "registered via java.naming.factory.initial).",
                     factoryAbsent);
+        }
+    }
+
+    private static boolean isQuarkusRuntime() {
+        // Probe by FQN string so jta-module-impl-arc has no compile-time
+        // dependency on Quarkus. The class is loaded by quarkus-arc's
+        // runtime jar; its presence is a reliable signal that
+        // InitialContext goes through Quarkus's DisabledInitialContext.
+        try {
+            Class.forName("io.quarkus.bootstrap.naming.DisabledInitialContext",
+                    false, Thread.currentThread().getContextClassLoader());
+            return true;
+        } catch (ClassNotFoundException notQuarkus) {
+            return false;
+        }
+    }
+
+    /**
+     * Fetch the xbean WritableContext directly via reflection. Returns
+     * {@code null} if xbean-naming isn't on the classpath or the global
+     * context hasn't been installed yet (callers in that order need
+     * {@link #ensureInitialized()} to run installXbeanGlobalContext
+     * first).
+     */
+    static Context xbeanWritableRootOrNull() {
+        try {
+            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+            Class<?> globalContextManager = Class.forName(
+                    "org.apache.xbean.naming.global.GlobalContextManager", true, tccl);
+            Object root = globalContextManager.getMethod("getGlobalContext").invoke(null);
+            return root instanceof Context ? (Context) root : null;
+        } catch (ClassNotFoundException notXbean) {
+            return null;
+        } catch (ReflectiveOperationException unexpected) {
+            return null;
         }
     }
 
