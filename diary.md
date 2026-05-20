@@ -5550,3 +5550,16 @@ Demonstrates `@TestBean(bean=...)`. Production `SmtpEmailService`
 test class carries `@EnableTestBeans @TestBean(bean=StubEmailService.class)`;
 `@Inject EmailService` resolves to the stub. Assertion runs against
 the stub's `"stub:" + to` payload, not SMTP's `"smtp:" + to`. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 04: test-bean-static-field
+
+Demonstrates the field-mode of `@TestBean`. The test class declares
+`@TestBean public static final Greeting FIXTURE = new Greeting(...)`
+and the field VALUE becomes the bean instance — no `@Alternative`
+class needed. Assertion `assertThat(greeting).isSameAs(FIXTURE)`
+proves the injected reference IS the static field's value.
+
+Greeting is a plain `record` in `src/main` (no CDI annotations on
+the type itself). Idiomatic for "just give me this object as the
+bean" scenarios — e.g., a pre-populated map, a stubbed config
+record, a hand-built fake. 0.2s.
