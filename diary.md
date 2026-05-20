@@ -5696,3 +5696,27 @@ it win over the framework default (the `ConfigResolverAdapter` in
 is unchanged — it still `@Inject`s `ConfigResolver` and calls
 `resolve("app.greeting")`. The injected resolver is now ours; the
 test asserts `config.greeting()` returns the fixture value. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 16: priority-resolver
+
+Demonstrates swapping the active `ServicePriorityResolver` via the
+MP Config bootstrap key
+`org.os890.jawelte.core.api.port.ServicePriorityResolver`.
+`ReversePriorityResolver` is the user-supplied impl (public no-arg
+constructor — jawelte instantiates it reflectively). Surefire passes
+the key as `-D...=example.priorityresolver.ReversePriorityResolver`
+via its `<argLine>` — system properties carry MP Config ordinal
+400, beating the ordinal-100 META-INF/microprofile-config.properties
+default that core/impl ships. Test calls
+`TestContext.loadService(ServicePriorityResolver.class)` and asserts
+the returned instance is the reverse resolver. 0.2s.
+
+Note: jawelte's `core/impl/DelegatingJUnitExtension` actually sorts
+its `TestModuleLifecyclePort` list via a hardcoded
+`PriorityComparator` (in `core/impl/loader`), not via the active
+`ServicePriorityResolver`. So this listing focuses on the bootstrap
+mechanism itself — the resolver instance you get back — rather than
+on a side-effect of changing the order. Modules that consume
+prioritized SPIs (cdi-module's mock-factory, content-diff's
+matchers) do route through `TestContext.loadService(Class)` and
+inherit the user's resolver choice.
