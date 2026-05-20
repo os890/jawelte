@@ -314,7 +314,7 @@
 
 <div class="module-card">
   <span class="name">cdi-module</span><span class="status">foundational</span>
-  <p class="desc">The default partner of core. Gives you the full <code>@EnableTestBeans</code> experience: a CDI container around every test class, automatic Mockito mocks for anything you forget to wire, and clean shutdown when the test finishes. Every example in the <a href="core.html">core docs</a> assumes it's on your classpath. Details below.</p>
+  <p class="desc">The default partner of core. Gives you the full <code>@EnableTestBeans</code> experience: a CDI container around every test class, automatic Mockito mocks for collaborators that live outside your module's boundary (the contract is on your classpath, the implementation isn't — jawelte fills the gap), and a clean shutdown when the test finishes. Every example in the <a href="core.html">core docs</a> assumes cdi-module is on your classpath. Details below.</p>
 </div>
 
 <div class="module-card">

@@ -6416,3 +6416,19 @@ Two corrections rolled into one pass:
 
    The cdi-module deep-dive section (2.x) keeps its technical
    detail; the overview only has to entice the reader.
+
+## 2026-05-20 — docs/modules.html — reframe auto-mock as cross-boundary
+
+User: the cdi-module card's "automatic mocks for anything you
+forget to wire" is wrong framing. Auto-mock is about beans
+outside the module-under-test's boundary — jawelte knows the
+contract (the interface on your classpath) but the
+implementation lives outside the unit under test. That's the
+case where a mock makes sense; "forgot to wire" carries an
+accusatory tone and misses the architectural point.
+
+Rewrote the cdi-module overview-card line to:
+
+  "automatic Mockito mocks for collaborators that live outside
+   your module's boundary (the contract is on your classpath,
+   the implementation isn't — jawelte fills the gap)"
