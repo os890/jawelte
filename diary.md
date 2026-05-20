@@ -5506,3 +5506,20 @@ documentation-listings folder backing the upcoming `docs/core.html`.
 The 16 child listings are listed up-front in `listings/pom.xml`'s
 `<modules>` section so the aggregator's scope is visible at a glance.
 Children land one (or in small batches) per follow-up commit.
+
+## 2026-05-20 — ticket-016 listing 01: hello-world
+
+First runnable documentation listing. Proves the standalone-pom
+recipe: `listings/01-hello-world/pom.xml` has no `<parent>`, pins all
+versions inline, and `mvn -f listings/01-hello-world/pom.xml test`
+exits clean (1 test pass, 0.7s) against the jawelte
+`0.1.0-SNAPSHOT` artefacts installed in the local m2.
+
+Layout: `src/main/java/example/hello/HelloService.java` (the
+`@ApplicationScoped` bean a real user would write),
+`src/main/resources/META-INF/beans.xml` (CDI 4 explicit bean archive,
+`bean-discovery-mode="annotated"`),
+`src/test/java/example/hello/HelloServiceTest.java` (the test class
+carrying `@EnableTestBeans` and one `@Test` method).
+
+Confirms the recipe to reuse for listings 02-16.
