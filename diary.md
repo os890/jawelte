@@ -6544,3 +6544,15 @@ Wrote `docs/wiremock-module.html`. Quick-start covers the no-attribute `@EnableW
 Listing 26 (`listings/26-wiremock-hello-world/`) standalone-pom: single `@EnableWireMock` test, stubs `GET /hello` via the injected `WireMock` client, calls `server.baseUrl() + "/hello"` with the JDK `HttpClient`, asserts status 200 + body "hi". Both OWB and Weld profiles pass.
 
 Aggregator updates: `listings/pom.xml` + `listings/README.md` gained the row. `docs/modules.html` wiremock-module card now links to the detail page.
+
+## 2026-05-20 — docs/spring-data-module.html + listing 27
+
+Wrote `docs/spring-data-module.html`. Section 2 details the three-phase CDI extension lifecycle (`ProcessInjectionPoint` discovers repository interfaces by type, `ProcessBean` accumulates existing beans for back-off detection, `AfterBeanDiscovery` registers synthetic `@RequestScoped` beans). Covers `@NoRepositoryBean` opt-out for shared base interfaces, the user-`@Produces` back-off rule, why `@RequestScoped` over `@ApplicationScoped` (fresh factory per test method via cdi-module's `RequestContextController`), and the default-EM-only multi-PU caveat (mitigated by writing a hand-written `@Produces` per repository).
+
+Listing 27 (`listings/27-spring-data-hello-world/`) standalone-pom: `@Entity Customer`, `CustomerRepository extends JpaRepository<Customer, Long>`, a single `@Test @Transactional` that saves an entity and reads it back via `findById` + `count`. Repository interface lives in `src/test/java` so `spring-data-jpa` can stay scope=test.
+
+Two non-obvious fixes:
+1. The installed `jawelte-spring-data-module` POM had a stale `dependencyManagement` block referencing `${quarkus.version}` (a previous source revision). Rebuilt with `mvn -pl modules/spring-data-module install -DskipTests -Drat.skip=true`; the regenerated POM no longer leaks that placeholder.
+2. RAT plugin flagged 17 license-headerless XML files across listings 21–27. Added the standard Apache header (XML-comment form) to every `beans.xml`, `persistence.xml`, and dataset XML.
+
+Aggregator updates: `listings/pom.xml`, `listings/README.md`, and `docs/modules.html` updated as usual.

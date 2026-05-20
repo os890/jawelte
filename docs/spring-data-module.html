@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jawelte / spring-data-module</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #4ade80; --green-bright: #86efac; --green-dark: #15803d;
+    --green-dim: #166534; --green-deep: #071a0b; --amber: #fbbf24;
+    --teal: #5eead4; --red: #ef4444;
+    --bg: #1a1a1a; --bg-soft: #1f1f1f; --bg2: #232323; --bg3: #2c2c2c;
+    --bg-code: #141414;
+    --text: #f4f4f6; --text-soft: #ececef; --soft: #c4c4c7;
+    --muted: #8b8b92; --border: #2e2e2e; --border-soft: #3a3a3a;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  }
+  html[data-theme="light"] {
+    --green: #15803d; --green-bright: #16a34a; --green-dark: #14532d;
+    --green-dim: #86efac; --green-deep: #f0fdf4; --amber: #b45309;
+    --teal: #0d9488; --red: #b91c1c;
+    --bg: #fbfbfc; --bg-soft: #ffffff; --bg2: #f4f4f5; --bg3: #e7e7e8;
+    --bg-code: #f5f5f7;
+    --text: #18181b; --text-soft: #27272a; --soft: #3f3f46;
+    --muted: #6b6b75; --border: #dcdce0; --border-soft: #c5c5c9;
+  }
+  html { background: var(--bg); color: var(--text); font-family: var(--font-mono); scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; transition: background .2s ease, color .2s ease; }
+  .listing, .listing pre, .toc, .cfg-entry, code { transition: background .2s ease, color .2s ease, border-color .2s ease; }
+  body { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
+  a { color: var(--green); text-decoration: none; border-bottom: 1px dotted var(--green-dim); transition: color .15s ease, border-color .15s ease; }
+  a:hover { color: var(--green-bright); border-bottom-color: var(--green); }
+  code { font-family: var(--font-mono); color: var(--teal); background: var(--bg-code); padding: 2px 6px; border-radius: 3px; font-size: 13.5px; border: 1px solid var(--border); }
+  strong { color: var(--text); font-weight: 600; }
+  em { font-style: normal; color: var(--text); }
+  #theme-toggle { position: fixed; top: 18px; right: 18px; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg2); color: var(--green); font-family: var(--font-mono); font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 100; transition: background .2s ease, border-color .2s ease, color .2s ease; }
+  #theme-toggle:hover { color: var(--green-bright); border-color: var(--green-dim); }
+  #theme-toggle:focus { outline: 1px solid var(--green); outline-offset: 2px; }
+  header { display: flex; flex-direction: column; align-items: center; padding: 64px 0 48px; border-bottom: 1px solid var(--border); margin-bottom: 56px; }
+  .logo-mark { margin-bottom: 14px; }
+  .wordmark { font-size: 44px; font-family: var(--font-mono); font-weight: 500; letter-spacing: 4px; color: var(--text); line-height: 1; margin-bottom: 8px; }
+  .wordmark .g { color: var(--green); }
+  .segment { font-size: 14px; letter-spacing: 4px; color: var(--green); margin-top: 10px; font-family: var(--font-mono); }
+  .tagline { font-size: 11px; letter-spacing: 3px; color: var(--muted); margin-top: 8px; font-family: var(--font-mono); }
+  .meta { font-size: 12px; color: var(--muted); margin-bottom: 48px; letter-spacing: 1px; text-align: center; font-family: var(--font-mono); }
+  h1, h2, h3, h4 { font-family: var(--font-mono); }
+  h1 { font-size: 28px; letter-spacing: 2px; color: var(--green); text-transform: lowercase; font-weight: 500; margin: 88px 0 32px; padding-bottom: 18px; border-bottom: 1px solid var(--green-dim); }
+  h2 { font-size: 19px; letter-spacing: 1.5px; color: var(--green); text-transform: lowercase; font-weight: 500; margin: 56px 0 20px; }
+  h3 { font-size: 15px; letter-spacing: 0.5px; color: var(--text); font-weight: 600; margin: 36px 0 14px; }
+  h4 { font-size: 13px; letter-spacing: 0.5px; color: var(--text); font-weight: 600; margin: 28px 0 10px; }
+  p { font-size: 15px; line-height: 1.9; color: var(--text-soft); margin-bottom: 18px; }
+  ul, ol { margin: 0 0 20px 28px; }
+  li { font-size: 15px; line-height: 1.85; color: var(--text-soft); margin-bottom: 8px; }
+  li::marker { color: var(--green-dim); }
+  li code, p code { font-size: 13.5px; }
+  .toc { border: 1px solid var(--border); background: var(--bg2); border-radius: 8px; padding: 20px 24px; margin-bottom: 56px; }
+  .toc-title { font-size: 11px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; }
+  .toc-list { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 32px; }
+  .toc-list li { margin-bottom: 6px; font-size: 12.5px; line-height: 1.6; }
+  .toc-list li.depth-2 { padding-left: 18px; color: var(--muted); }
+  .toc-list a { border-bottom: none; }
+  .toc-list a:hover { border-bottom: 1px dotted var(--green); }
+  .cfg-entry { margin: 14px 0; padding: 16px 20px; border: 1px solid var(--border); border-left: 3px solid var(--green-dim); border-radius: 6px; background: var(--bg2); }
+  .cfg-entry .key, .cfg-entry .default { display: block; font-family: var(--font-mono); word-break: break-all; line-height: 1.55; }
+  .cfg-entry .key { color: var(--green); font-size: 13.5px; margin-bottom: 6px; }
+  .cfg-entry .default { color: var(--text-soft); font-size: 12.5px; margin-bottom: 12px; }
+  .cfg-entry .default::before { content: 'default · '; color: var(--muted); letter-spacing: 1px; }
+  .cfg-entry .desc { font-size: 14px; line-height: 1.75; color: var(--text-soft); margin: 0; }
+  .listing { margin: 24px 0 28px; border: 1px solid var(--border); border-left: 3px solid var(--green-dim); border-radius: 6px; overflow: hidden; background: var(--bg-code); }
+  .listing-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: var(--bg3); border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 1.5px; color: var(--muted); }
+  .listing-bar .label { color: var(--green); text-transform: uppercase; }
+  .listing-bar a { color: var(--text-soft); border-bottom: 1px dotted var(--border-soft); font-size: 11.5px; }
+  .listing-bar a:hover { color: var(--green); border-bottom-color: var(--green); }
+  .listing pre { padding: 18px 22px; overflow-x: auto; background: var(--bg-code); font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: var(--text-soft); }
+  .listing pre .kw { color: var(--green); }
+  .listing pre .an { color: var(--amber); }
+  .listing pre .st { color: #b3e0a0; }
+  .listing pre .cm { color: #888a90; font-style: italic; }
+  .listing pre .ty { color: var(--text); }
+  .closing { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); letter-spacing: 1px; text-align: center; }
+  .closing strong { color: var(--green); font-weight: 500; }
+  .closing a { color: var(--green); border-bottom: 1px dotted var(--green-dim); }
+</style>
+</head>
+<body>
+
+<button id="theme-toggle" type="button" aria-label="Toggle light / dark theme" title="Toggle light / dark theme">☾</button>
+
+<header>
+  <svg class="logo-mark" width="100" viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="200,20 298,184 102,184" fill="#071a0b"/>
+    <polygon points="200,20 298,184 102,184" fill="none" stroke="#4ade80" stroke-width="1.8"/>
+    <polygon points="200,38 282,176 118,176" fill="none" stroke="#166534" stroke-width="0.9"/>
+    <line x1="148" y1="128" x2="252" y2="128" stroke="#166534" stroke-width="0.7"/>
+    <line x1="187" y1="83" x2="213" y2="109" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
+    <line x1="213" y1="83" x2="187" y2="109" stroke="#4ade80" stroke-width="6" stroke-linecap="round"/>
+    <line x1="164" y1="153" x2="181" y2="162" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="181" y1="162" x2="200" y2="141" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="236" y1="153" x2="219" y2="162" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+    <line x1="219" y1="162" x2="200" y2="141" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+  </svg>
+  <div class="wordmark">ja<span class="g">we</span>lte</div>
+  <div class="tagline">the test-framework</div>
+  <div class="segment">// spring-data-module</div>
+</header>
+
+<div class="meta">// may 2026 &nbsp;&middot;&nbsp; module documentation &nbsp;&middot;&nbsp; jakarta 11 &nbsp;&middot;&nbsp; junit 6</div>
+
+<nav class="toc">
+  <div class="toc-title">on this page</div>
+  <ol class="toc-list">
+    <li><a href="#quick-start">1. quick-start</a></li>
+    <li class="depth-2"><a href="#qs-purpose">1.1 purpose</a></li>
+    <li class="depth-2"><a href="#qs-hello">1.2 hello-world</a></li>
+    <li class="depth-2"><a href="#qs-maven">1.3 maven setup</a></li>
+    <li><a href="#detailed">2. detailed</a></li>
+    <li class="depth-2"><a href="#dt-discovery">2.1 discovery model</a></li>
+    <li class="depth-2"><a href="#dt-norepo">2.2 @NoRepositoryBean opt-out</a></li>
+    <li class="depth-2"><a href="#dt-backoff">2.3 user @Produces back-off</a></li>
+    <li class="depth-2"><a href="#dt-scope">2.4 @RequestScoped lifetime</a></li>
+    <li class="depth-2"><a href="#dt-em">2.5 EntityManager dispatch &amp; multi-PU caveat</a></li>
+    <li><a href="#spi">3. spi / port reference</a></li>
+  </ol>
+</nav>
+
+<p>spring-data-module is a single-jar CDI side-car. With it on the classpath, every interface that extends Spring Data's <code>Repository</code> (typically <code>JpaRepository</code>) becomes an injectable CDI bean &mdash; backed by the real Spring Data implementation, dispatching to <a href="jpa-module.html">jpa-module</a>'s transaction-scoped <code>EntityManager</code>. No Spring context, no <code>@EnableJpaRepositories</code>, no boilerplate per repository &mdash; the CDI extension does the wiring automatically.</p>
+
+<h1 id="quick-start">1. quick-start</h1>
+
+<h2 id="qs-purpose">1.1 purpose</h2>
+<p>Spring Data is great at code-free repositories &mdash; declare an interface, get all the CRUD + query-derivation goodies. The problem is that Spring's own infrastructure for activating those interfaces assumes a Spring <code>ApplicationContext</code>. In a CDI test that's pure overhead. spring-data-module reads Spring Data's repository metadata, builds the real implementation through <code>JpaRepositoryFactory</code>, and registers it as a CDI bean &mdash; you get repository injection in a CDI test with no Spring boot infrastructure.</p>
+
+<h2 id="qs-hello">1.2 hello-world</h2>
+<p>One <code>@Entity</code>, one interface extending <code>JpaRepository</code>, one <code>@Inject</code>-and-use test method.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 27 &middot; spring-data-hello-world</span><a href="../listings/27-spring-data-hello-world/">listings/27-spring-data-hello-world/</a></div>
+<pre><span class="cm">// CustomerRepository.java</span>
+<span class="kw">public interface</span> <span class="ty">CustomerRepository</span> <span class="kw">extends</span> <span class="ty">JpaRepository</span>&lt;<span class="ty">Customer</span>, <span class="ty">Long</span>&gt; {
+}
+
+<span class="cm">// CustomerRepositoryTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"customersPU"</span>)
+<span class="kw">class</span> <span class="ty">CustomerRepositoryTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">CustomerRepository</span> customerRepository;
+
+    <span class="an">@Test</span>
+    <span class="an">@Transactional</span>
+    <span class="kw">void</span> savedCustomerIsRetrievable() {
+        <span class="ty">Customer</span> saved = customerRepository.save(<span class="kw">new</span> <span class="ty">Customer</span>(<span class="st">"Alice"</span>));
+
+        assertThat(saved.getId()).isNotNull();
+        assertThat(customerRepository.findById(saved.getId()))
+                .hasValueSatisfying(found -&gt; assertThat(found.getName()).isEqualTo(<span class="st">"Alice"</span>));
+        assertThat(customerRepository.count()).isEqualTo(1);
+    }
+}</pre>
+</div>
+
+<p>No <code>@EnableSpringData</code> annotation, no <code>@EnableJpaRepositories</code>, no scan packages. Adding <code>jawelte-spring-data-module</code> to the test classpath is the entire opt-in.</p>
+
+<h2 id="qs-maven">1.3 maven setup</h2>
+<p>The single jar plus <code>spring-data-jpa</code> (consumers bring their own Spring Data version), on top of the usual jpa-module + CDI runtime stack.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/27-spring-data-hello-world/pom.xml">listings/27-spring-data-hello-world/pom.xml</a></div>
+<pre>&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-spring-data-module&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.springframework.data&lt;/groupId&gt;
+  &lt;artifactId&gt;spring-data-jpa&lt;/artifactId&gt;
+  &lt;version&gt;${spring.data.jpa.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;!-- jpa-module already on the classpath supplies the EntityManager --&gt;</pre>
+</div>
+
+<h1 id="detailed">2. detailed</h1>
+
+<h2 id="dt-discovery">2.1 discovery model</h2>
+<p><code>SpringDataRepositoryExtension</code> is a CDI <code>Extension</code> discovered via <code>META-INF/services/jakarta.enterprise.inject.spi.Extension</code>. Its lifecycle phases:</p>
+<ol>
+  <li><strong><code>ProcessInjectionPoint</code></strong> &mdash; for every injection point in the deployment, the extension inspects the IP's declared type. If the type is an interface that transitively extends <code>Repository</code> and is not <code>@NoRepositoryBean</code>, it's added to the discovery set. (Using <code>ProcessInjectionPoint</code> rather than <code>ProcessAnnotatedType</code> is the right callback because repository interfaces are typically not in a bean archive under <code>bean-discovery-mode="annotated"</code> — <code>ProcessAnnotatedType</code> would never fire for them.)</li>
+  <li><strong><code>ProcessBean</code></strong> &mdash; accumulates every bean type the container processes, so the next phase can detect user-supplied producers and back off.</li>
+  <li><strong><code>AfterBeanDiscovery</code></strong> &mdash; for each discovered repository interface with no existing bean, registers a synthetic <code>@RequestScoped</code> CDI bean whose <code>produceWith</code> callback constructs <code>JpaRepositoryFactory</code> and returns <code>factory.getRepository(repositoryInterface)</code> &mdash; the same real implementation Spring Data ships.</li>
+</ol>
+<p>The synthetic bean's types are exactly the discovered interface + <code>Object</code>. Framework super-interfaces (<code>JpaRepository</code>, <code>CrudRepository</code>, &hellip;) are <em>not</em> added as bean types, so the synthetic beans never compete on framework super-types when multiple repositories ship together.</p>
+
+<h2 id="dt-norepo">2.2 @NoRepositoryBean opt-out</h2>
+<p>An interface annotated <code>@org.springframework.data.repository.NoRepositoryBean</code> is excluded from discovery. Use this for shared base interfaces:</p>
+<pre>@NoRepositoryBean
+public interface AuditableRepository&lt;T extends Auditable, ID&gt; extends JpaRepository&lt;T, ID&gt; {
+    List&lt;T&gt; findAllCreatedAfter(Instant cutoff);
+}
+
+public interface CustomerRepository extends AuditableRepository&lt;Customer, Long&gt; { }
+// CustomerRepository is auto-discovered; AuditableRepository is not.</pre>
+
+<h2 id="dt-backoff">2.3 user @Produces back-off</h2>
+<p>If your test code (or another module) declares <code>@Produces CustomerRepository</code> &mdash; perhaps a Mockito mock for a unit test, or a custom factory for a multi-PU scenario &mdash; the extension's <code>ProcessBean</code> pass observes that bean and the <code>AfterBeanDiscovery</code> pass skips the synthetic registration for that interface. The user's producer wins. There is no on/off switch; it's pure observation.</p>
+
+<h2 id="dt-scope">2.4 @RequestScoped lifetime</h2>
+<p>The synthetic bean is <code>@RequestScoped</code>, which means consumers receive a CDI client proxy and the underlying <code>JpaRepositoryFactory</code> is materialised lazily on first method call &mdash; always inside a <code>@Transactional</code> or programmatic-transaction boundary where the EM proxy can resolve a live <code>EntityManager</code>.</p>
+<p>Why request-scope, not application-scope: cdi-module's <code>CdiTestBeanContainer</code> activates a <code>RequestContextController</code> per test method, so each test gets a fresh factory. Any (theoretical) Spring Data metadata-cache mutation cannot leak between tests.</p>
+
+<h2 id="dt-em">2.5 EntityManager dispatch &amp; multi-PU caveat</h2>
+<p>The <code>produceWith</code> callback resolves the <code>@Default EntityManager</code> via <code>CDI.current().select(EntityManager.class).get()</code> &mdash; the per-call routing proxy registered by jpa-module-impl. Repository methods therefore participate in the caller's <code>@Transactional</code> boundary automatically.</p>
+<p><strong>Caveat &mdash; the default EM is always used.</strong> Multi-persistence-unit routing is <em>not</em> built in. Consumers with multiple PUs must supply their own <code>@Produces CustomerRepository</code> per repository, with a <code>@PersistenceContext(unitName = "...")</code> field for the right EM. The extension's <code>@Produces</code>-back-off rule then keeps your hand-written producer instead of registering a synthetic.</p>
+
+<h1 id="spi">3. spi / port reference</h1>
+<p>spring-data-module ships <strong>no SPI / port of its own</strong> and <strong>no annotation surface</strong>. The user-facing api is exactly "extend <code>JpaRepository</code> and inject the interface". Customization happens through standard CDI:</p>
+<ul>
+  <li><strong>Excluding an interface</strong> &mdash; annotate it <code>@NoRepositoryBean</code>.</li>
+  <li><strong>Overriding a synthetic bean</strong> &mdash; declare your own <code>@Produces CustomerRepository</code>. The extension observes the user producer and skips the synthetic registration for that interface.</li>
+  <li><strong>Targeting a non-default persistence unit</strong> &mdash; combine the above two: <code>@NoRepositoryBean</code> on the interface plus a hand-written producer with <code>@PersistenceContext(unitName = "...")</code>.</li>
+</ul>
+<p>The module does ship a <code>ConfigKeyAliasProvider</code> service for the unsatisfied-injection-point auto-mock filter &mdash; <code>spring-data-module</code>'s framework-internal package prefixes are excluded so they don't show up as candidates for synthetic mocking. That's transparent to users; there's no knob to turn.</p>
+
+<div class="closing">
+  <strong>jawelte / spring-data-module</strong> &nbsp;&middot;&nbsp; <a href="modules.html">modules</a> &nbsp;&middot;&nbsp; <a href="core.html">core</a> &nbsp;&middot;&nbsp; back to <a href="index.html">overview</a>
+</div>
+
+<script>
+  (function () {
+    const root = document.documentElement;
+    const btn = document.getElementById('theme-toggle');
+    const STORAGE_KEY = 'jawelte-docs-theme';
+    function applyTheme(theme) {
+      if (theme === 'light') { root.setAttribute('data-theme', 'light'); btn.textContent = '☀'; btn.title = 'Switch to dark theme'; }
+      else { root.removeAttribute('data-theme'); btn.textContent = '☾'; btn.title = 'Switch to light theme'; }
+    }
+    let stored = null;
+    try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) { }
+    applyTheme(stored === 'light' ? 'light' : 'dark');
+    btn.addEventListener('click', function () {
+      const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      applyTheme(next);
+      try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { }
+    });
+  })();
+</script>
+
+</body>
+</html>

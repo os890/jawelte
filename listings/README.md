@@ -73,6 +73,7 @@ mvn -f listings/pom.xml test
 | 24 | `24-db-testdata-hello-world` | db-testdata-module &rarr; `DbSeed` + `DbDiff` direct API |
 | 25 | `25-content-diff-hello-world` | content-diff-module &rarr; `ContentDiff.forJson` happy/mismatch/ignoring |
 | 26 | `26-wiremock-hello-world` | wiremock-module &rarr; `@EnableWireMock` + injectable `WireMockServer` |
+| 27 | `27-spring-data-hello-world` | spring-data-module &rarr; auto-discovered `JpaRepository` |
 
 ## CDI runtime
 
