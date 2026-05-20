@@ -5786,3 +5786,42 @@ User feedback: (1) annotations need to be on their own line in
   Skipped in `wip` and `lnp` modes by design (the listings are
   documentation-correctness, not iteration speed / perf). All 17
   test runs across the 16 listings still pass after the rewrites.
+
+## 2026-05-20 — ticket-016 docs/core.html readability pass
+
+User feedback: TOC styling is correct; everything else needs better
+readability while keeping the existing palette / monospace
+direction.
+
+Style adjustments in the single `<style>` block:
+
+- **Palette extended**: added `--green-bright` (`#86efac` for hover
+  states), `--amber` (`#fbbf24` for annotations in code blocks),
+  `--teal` (`#5eead4` for inline `<code>`), `--bg-code` (`#141414`,
+  darker than the page so code blocks sit visually distinct), plus
+  `--text-soft` (`#d4d4d8`, brighter than the previous `--soft`
+  for prose-body contrast).
+- **Body text** bumped to 15px / 1.9 line-height matching
+  `docs/index.html`'s readability rhythm; colour brightened from
+  `#c4c4c7` to `#d4d4d8`. Bullet markers in `<ul>` / `<ol>` now use
+  the dim green so list nesting is visible.
+- **Heading hierarchy** widened: h1 28px, h2 19px, h3 15px (was
+  22/15/13). Less aggressive letter-spacing — readable at a glance
+  while still feeling like the index.html brand.
+- **Code blocks**: 3px green left-border accent + darker background
+  separates them clearly from prose. Annotations switched to amber
+  (`--amber`); strings slightly brighter (`#b3e0a0`); comments
+  bumped from full muted to `#888a90` so they're still secondary
+  but no longer disappearing.
+- **Inline `<code>`** now uses the teal so it doesn't compete
+  visually with code-block keyword green; carries a 1px border on
+  the dark code background to feel like a chip.
+- **Config table** widened cells, slight zebra striping
+  (`rgba(255,255,255,0.012)`), header in green-lowercase to match
+  h2 vibe.
+- **Body width** narrowed 920 &rarr; 880px for line-length
+  readability; the listing code blocks set their own width via
+  `overflow-x: auto`.
+
+TOC, header, listing-bar, and closing footer unchanged in
+structure — only the new variable values flow through them.
