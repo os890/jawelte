@@ -90,6 +90,7 @@
         <module>scenario-54-binding-qualifier-member</module>
         <module>scenario-55-deltaspike-partial-bean-binding-skip</module>
         <module>scenario-56-deltaspike-whitelist-allow</module>
+        <module>scenario-57-auto-mock-consumer-and-test-inject</module>
     </modules>
 
     <dependencies>

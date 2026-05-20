@@ -5453,3 +5453,35 @@ scope so both `.class` literals (narayana + geronimo) resolve under
 every `jta-*` profile the script sweeps. Pre-existing scenario-56 bug —
 not a TICKET-016 regression — surfaced now because the wider sweep
 finally exercised the failing combo.
+
+## 2026-05-20 — FIXED: cdi-module IpKey @Default normalisation
+
+Surfaced while writing the auto-mock listing for ticket-016's
+documentation. Pattern: production `@ApplicationScoped` bean with
+`@Inject SomeUnsatisfiedThing` + test class with `@Inject
+SomeUnsatisfiedThing` of the same type. Two synthetic auto-mock
+beans got registered for the same `@Default` IP and OWB raised
+`AmbiguousResolutionException` on container start.
+
+Root cause: `TestBeansCdiExtension.addTestClassInjectionPoints`
+walks the test class's `@Inject` fields manually and collects
+qualifiers from `field.getAnnotations()` — an unqualified field
+yields an empty qualifier set. The parallel path
+`onProcessInjectionPoint` (firing for the production bean's
+`@Inject`) gets `{@Default}` from CDI which normalises unqualified
+IPs. The two IpKey instances were therefore not equal, the dedup
+`Set` kept both, and the synthetic-bean loop produced two beans
+matching the same `(@Default, T)` resolution target.
+
+Fix: normalise the empty qualifier set in
+`addTestClassInjectionPoints` to
+`{Default.Literal.INSTANCE}` before constructing the IpKey.
+Documented inline why.
+
+Regression scenario:
+`tests/cdi-module/scenario-57-auto-mock-consumer-and-test-inject`
+reproduces the pattern (production `Greeter` with
+`@Inject Translator`, test class with `@Inject Greeter` and
+`@Inject Translator`, Mockito `when(translator.translate(...))` to
+prove the SAME mock is shared). All 57 cdi-module scenarios green
+under both `-Powb` (default) and `-Pweld`.

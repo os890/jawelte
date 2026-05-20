@@ -426,6 +426,19 @@ public class TestBeansCdiExtension implements Extension {
                     qualifiers.add(annotation);
                 }
             }
+            // Normalise unqualified IPs to {@Default}. ProcessInjectionPoint
+            // on CDI-discovered beans receives qualifiers already populated
+            // with @Default by the runtime; this manual walk over the test
+            // class's fields does not, so without this an unqualified
+            // @Inject in the test class produces an IpKey({}) that does
+            // not equal the IpKey({@Default}) collected from a production
+            // bean's @Inject of the same type. Two distinct keys then
+            // register two synthetic auto-mock beans matching the same
+            // @Default IP and bean validation raises
+            // AmbiguousResolutionException.
+            if (qualifiers.isEmpty()) {
+                qualifiers.add(Default.Literal.INSTANCE);
+            }
             unsatisfiedCandidateIps.add(new IpKey(targetType, qualifiers));
         }
     }
