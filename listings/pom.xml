@@ -70,5 +70,6 @@
         <module>21-ejb-singleton</module>
         <module>22-jaxrs-hello-world</module>
         <module>23-testcontrol-hello-world</module>
+        <module>24-db-testdata-hello-world</module>
     </modules>
 </project>

@@ -6520,3 +6520,11 @@ Listing 23 (`listings/23-testcontrol-hello-world/`) standalone-pom: `@Entity Gre
 Hit a JUnit-version mismatch on first run: db-testdata-module-impl pulls in dbunit 3.0.0, which transitively brings `junit-platform-suite-engine:1.10.1` → `junit-platform-launcher:1.10.1`. That clashes with junit-jupiter 6.0.0 and crashes test discovery with "OutputDirectoryCreator not available". Fixed by adding an `<exclusion>` for `junit-platform-suite-engine` on the `db-testdata-module-impl` dependency; comment in the pom explains why. Both OWB and Weld profiles pass.
 
 Aggregator updates: `listings/pom.xml` and `listings/README.md` gained the listing 23 row. `docs/modules.html` testcontrol-module card now links to the detail page.
+
+## 2026-05-20 — docs/db-testdata-module.html + listing 24
+
+Wrote `docs/db-testdata-module.html`. Section 2 details DbSeed (CLEAN_INSERT / INSERT / UPDATE / REFRESH SeedModes), DbDiff (assertEquals + ignoring/subsetOnly/unorderedTables/assertRowCount), the four factory variants (`forConnection`, `forPersistenceUnit()`, `forCurrentPersistenceUnit`, `forPersistenceUnit(name)`), and the EL interpolation surface (values, beans, functions, predicate cells). SPI section enumerates the four ports: DbSeedEngine, DbDiffEngine, ELInterpolator, PersistenceUnitNameSupplier — all selected via ServiceLoader + ServicePriorityResolver.
+
+Listing 24 (`listings/24-db-testdata-hello-world/`) standalone-pom: one `@Entity Product`, one `@Test @Transactional` method that seeds three rows via `DbSeed.forPersistenceUnit().dataset(...).cleanInsert().execute()` then asserts via `DbDiff.forPersistenceUnit().expected(...).assertEquals()`. Same JUnit-version exclusion as listing 23 since this listing pulls in db-testdata-module-impl directly. Both OWB and Weld profiles pass.
+
+Aggregator updates: `listings/pom.xml` and `listings/README.md` gained the row. `docs/modules.html` db-testdata-module card now links to the detail page.

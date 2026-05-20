@@ -70,6 +70,7 @@ mvn -f listings/pom.xml test
 | 21 | `21-ejb-singleton` | ejb-module &rarr; `@jakarta.ejb.Singleton` injectable |
 | 22 | `22-jaxrs-hello-world` | jaxrs-module &rarr; `@EnableJaxRs` + `TestUrl` |
 | 23 | `23-testcontrol-hello-world` | testcontrol-module &rarr; `@TestControl(testData)` seed pipeline |
+| 24 | `24-db-testdata-hello-world` | db-testdata-module &rarr; `DbSeed` + `DbDiff` direct API |
 
 ## CDI runtime
 

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dataset>
+    <PRODUCT ID="1" NAME="apple"/>
+    <PRODUCT ID="2" NAME="banana"/>
+    <PRODUCT ID="3" NAME="cherry"/>
+</dataset>
