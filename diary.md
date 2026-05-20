@@ -6129,3 +6129,18 @@ Visual chrome matches the listing chrome (3px green left-border,
 panel background, border-radius). The CSS for `table.cfg` was
 replaced wholesale by `.cfg-entry` rules — only the config-bootstrap
 section used it, no other table on the page.
+
+## 2026-05-20 — docs/core.html — add the jawelte logo to the header
+
+User noticed the logo was missing. Lifted the inline SVG verbatim
+from `docs/index.html` (the WIP/v1 triangle mark with the
+two-color check / X glyph inside) and dropped it above the
+wordmark in `core.html`'s header. Scaled to `width="100"` so it
+fits the slightly tighter docs-page header without dominating;
+added a `.logo-mark { margin-bottom: 14px; }` rule matching the
+`docs/index.html` pattern.
+
+Result: `docs/core.html`'s header now reads exactly like
+`docs/index.html`'s header — logo, wordmark "ja**we**lte",
+"the test-framework" tagline — with the extra `// core` segment
+line directly below.

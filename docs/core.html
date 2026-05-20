@@ -39,6 +39,7 @@
   hr.section-rule { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
 
   header { display: flex; flex-direction: column; align-items: center; padding: 64px 0 48px; border-bottom: 1px solid var(--border); margin-bottom: 56px; }
+  .logo-mark { margin-bottom: 14px; }
   .wordmark { font-size: 44px; font-family: var(--font-mono); font-weight: 500; letter-spacing: 4px; color: var(--text); line-height: 1; margin-bottom: 8px; }
   .wordmark .g { color: var(--green); }
   .segment { font-size: 14px; letter-spacing: 4px; color: var(--green); margin-top: 10px; font-family: var(--font-mono); }
@@ -203,6 +204,18 @@
 <body>
 
 <header>
+  <svg class="logo-mark" width="100" viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="200,20 298,184 102,184" fill="#071a0b"/>
+    <polygon points="200,20 298,184 102,184" fill="none" stroke="#4ade80" stroke-width="1.8"/>
+    <polygon points="200,38 282,176 118,176" fill="none" stroke="#166534" stroke-width="0.9"/>
+    <line x1="148" y1="128" x2="252" y2="128" stroke="#166534" stroke-width="0.7"/>
+    <line x1="187" y1="83" x2="213" y2="109" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
+    <line x1="213" y1="83" x2="187" y2="109" stroke="#4ade80" stroke-width="6" stroke-linecap="round"/>
+    <line x1="164" y1="153" x2="181" y2="162" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="181" y1="162" x2="200" y2="141" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="236" y1="153" x2="219" y2="162" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+    <line x1="219" y1="162" x2="200" y2="141" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+  </svg>
   <div class="wordmark">ja<span class="g">we</span>lte</div>
   <div class="tagline">the test-framework</div>
   <div class="segment">// core</div>
