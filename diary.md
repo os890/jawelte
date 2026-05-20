@@ -6248,3 +6248,42 @@ Three user-feedback items in one pass:
 
 `mvn -f listings/pom.xml clean test` &rarr; BUILD SUCCESS, still
 18 tests across 16 listings.
+
+## 2026-05-20 — listings get owb/weld profiles + verify-all sweeps both
+
+User: each listing should advertise both runtimes via profiles
+(default owb, like the main reactor), and verify-all should sweep
+both as it does for the test modules.
+
+- One-off Python script (`/tmp/add-profiles.py`, NOT committed)
+  applied across all 16 listing `pom.xml`s. For each pom:
+  1. Added `<weld.version>6.0.4.Final</weld.version>` next to the
+     existing `<openwebbeans.version>` property.
+  2. Removed the OpenWebBeans dependency block from
+     `<dependencies>`.
+  3. Inserted a `<profiles>` section with `owb` (activeByDefault)
+     carrying the openwebbeans-se dep, and `weld` carrying
+     `org.jboss.weld.se:weld-se-shaded`. Block placed before
+     `<build>` when present (listing 16) or before `</project>`.
+- Discovered under `-Pweld` that listings splitting code
+  between `src/main` and `src/test` need a
+  `src/test/resources/META-INF/beans.xml` for Weld to treat the
+  test classpath as a proper bean archive — without it
+  `@Alternative` classes in `src/test/java` weren't registered for
+  alternative resolution (listing 03 saw the production SMTP impl
+  win) and `@Inject EmailService` in `limitToTestBeans` mode
+  failed deployment validation (listing 06). Added the
+  test-classpath beans.xml to every listing that has a
+  `src/test/java` tree (10 of the 16).
+- `verify-all.sh` listings phase swapped from a single
+  `test` invocation to a 2-profile loop, mirroring the
+  `tests/cdi-module` pattern:
+
+      for cdi in owb weld; do
+        run "listings (docs samples) [$cdi]" "$REPO_ROOT/listings" -P "$cdi" test
+      done
+
+Sanity:
+- `mvn -f listings/pom.xml test`              -> 18 tests green (owb default).
+- `mvn -f listings/pom.xml -Pweld test`       -> 18 tests green.
+- `bash -n verify-all.sh`                     -> OK.

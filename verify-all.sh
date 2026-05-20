@@ -284,7 +284,13 @@ else
     # explicitly here. A drift between docs and runtime code is a
     # correctness regression we never want to ship, so this phase is
     # part of the full sweep (skipped in wip / lnp modes by design).
-    run "listings (docs samples)" "$REPO_ROOT/listings" test
+    #
+    # Each listing's pom.xml carries owb + weld profiles so the sample
+    # advertises both runtimes; sweep both here as we do for the
+    # regular test modules.
+    for cdi in owb weld; do
+        run "listings (docs samples) [$cdi]" "$REPO_ROOT/listings" -P "$cdi" test
+    done
 
     # --- Coverage aggregation ----------------------------------------
     # Run from the verify-all aggregator (where coverage-report is a
