@@ -65,6 +65,7 @@ mvn -f listings/pom.xml test
 | 16 | `16-priority-resolver` | SPI &rarr; `ServicePriorityResolver` |
 | 17 | `17-test-method-scoped` | scope-module &rarr; `@TestMethodScoped` |
 | 18 | `18-test-class-scoped` | scope-module &rarr; `@TestClassScoped` |
+| 19 | `19-jpa-hello-world` | jpa-module &rarr; `@Inject EntityManager` hello-world |
 
 ## CDI runtime
 

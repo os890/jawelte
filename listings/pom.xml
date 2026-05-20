@@ -65,5 +65,6 @@
         <module>16-priority-resolver</module>
         <module>17-test-method-scoped</module>
         <module>18-test-class-scoped</module>
+        <module>19-jpa-hello-world</module>
     </modules>
 </project>
