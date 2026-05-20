@@ -5563,3 +5563,16 @@ Greeting is a plain `record` in `src/main` (no CDI annotations on
 the type itself). Idiomatic for "just give me this object as the
 bean" scenarios — e.g., a pre-populated map, a stubbed config
 record, a hand-built fake. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 05: config-bean
+
+Demonstrates `@ConfigBean`. `AppConfig` is the typed config facade
+a real user would write: `@Inject ConfigResolver` (the jawelte port)
+and one public method per config key with parsing + default. Two
+keys exercised — `app.greeting` (String) and `app.retries`
+(int with `.map(Integer::parseInt)`).
+
+`microprofile-config.properties` lives in `src/main/resources/META-INF/`
+so the production code carries the defaults; tests override (or not)
+via standard MP Config sources. The test simply
+`@Inject AppConfig` and reads the typed getters back. 0.2s.
