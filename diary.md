@@ -6287,3 +6287,63 @@ Sanity:
 - `mvn -f listings/pom.xml test`              -> 18 tests green (owb default).
 - `mvn -f listings/pom.xml -Pweld test`       -> 18 tests green.
 - `bash -n verify-all.sh`                     -> OK.
+
+## 2026-05-20 — docs/modules.html — overview catalog + cdi-module section
+
+Next docs page. Single page covers the entire modules layer per
+the user's request — overview catalog at top, then the cdi-module
+deep dive. Future modules add their own sections to the same page
+following the template.
+
+Page structure:
+
+- Header / TOC / theme toggle inline-copied verbatim from
+  `docs/core.html` so the two pages share visual identity (light
+  / dark palette, monospace stack, listing chrome, cfg-entry
+  cards). A new `.module-card` class for the overview catalog
+  matches the cfg-entry chrome (3px green-dim left-border, panel
+  background) but lays out as `name + status` heading + prose
+  blurb, no FQCNs.
+- Section 1 — "modules overview": one card per module
+  (12 in total: cdi, scope, jpa, jta, ejb, jaxrs,
+  testcontrol, db-testdata, content-diff, wiremock, spring-data,
+  batch). cdi-module is flagged `foundational`; the rest carry
+  `opt-in`. Each card is two to three sentences summarising what
+  the module ships and when you reach for it.
+- Section 2 — cdi-module:
+  - 2.1 purpose — the SE-CDI adapter behind the core docs;
+    `CdiTestBeanContainer` + `TestBeansCdiExtension` doing the
+    real work behind core's annotations.
+  - 2.2 already-in-core-docs — a pointer list back into
+    `docs/core.html` for the user-facing behaviours
+    (hello-world, auto-mock, @TestBean modes, limit mode,
+    manageContainer=false, events). The page does NOT repeat
+    those; it points and moves on.
+  - 2.3 ports cdi-module ships — `MockFactory`,
+    `ExcludedPackageFilter`, `WhitelistFilter`,
+    `CdiContainerPort` — one paragraph each: contract +
+    default impl + override route.
+  - 2.4 config keys — four cards (matching the bootstrap-keys
+    cards in core docs):
+    `framework-allowlist.packages`,
+    `auto-mock.exclude-owning-bean-packages`,
+    `auto-mock.exclude-packages` (logical key with alias
+    contributors), and `auto-mock.default-scope`.
+  - 2.5 maven setup — pom fragment showing
+    `cdi-module-api` + `cdi-module-impl` + Mockito + a
+    "pick one CDI runtime" comment. Links to listing 01's
+    full pom.
+
+Per the user's "don't repeat module info that belongs in the
+module docs" guideline applied earlier, cdi-module's user-facing
+behaviour stays in the core docs (where it was first introduced
+because core can't work without it); the cdi-module page only
+documents what's strictly cdi-module's own.
+
+Also: `docs/core.html` closing footer gained a `modules` link so
+the two pages cross-navigate. New `.closing a` CSS rule.
+
+No new listings — every code reference in the new page either
+links into the existing core-docs listings or shows a Maven
+fragment with a link to the corresponding listing's full pom.
+The full aggregator sweep is unaffected.
