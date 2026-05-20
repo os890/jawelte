@@ -5615,3 +5615,13 @@ backed by `Instant::now`) in `src/main`; `FixedClockProducer`
 `@TestBean(beanProducer=FixedClockProducer.class)` activates the
 fixed alternative — `@Inject Clock` resolves to it and
 `clock.now()` returns the fixed instant. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 09: test-bean-meta-annotation
+
+Demonstrates wrapping `@TestBean` in a meta-annotation for reuse.
+`@WithStubEmail` carries `@TestBean(bean=StubEmailService.class)` —
+test classes apply `@WithStubEmail` instead of repeating the
+`@TestBean` line. Two test classes (`SendingTest`,
+`AnotherSendingTest`) prove the meta-annotation works identically
+across them. Idiomatic for sharing a stub registration across a
+larger test suite. 2 tests pass, 0.3s total.
