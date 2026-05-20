@@ -6103,3 +6103,29 @@ were over-promoting other modules:
 
 All 18 tests across the 16 listings still pass via the aggregator
 sweep. All in-page anchors and all 19 listing cross-links resolve.
+
+## 2026-05-20 — docs/core.html — config table -> stacked cards
+
+User: the config table breaks the layout because the FQCN values
+are too wide for table columns.
+
+Replaced the `<table class="cfg">` block in section 3.10 with a
+stacked-card layout — one `<div class="cfg-entry">` per config key.
+Each card lays the key, the default value, and the prose
+description out vertically so the long FQCNs can wrap freely
+(`word-break: break-all`) without forcing horizontal scroll on the
+whole page.
+
+Card structure:
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ org.os890.jawelte.core.api.port.TestContext             │ <- key   (green)
+  │ default · org.os890.jawelte.core.impl…TestContextImpl   │ <- default (muted)
+  │                                                          │
+  │ The accessor returned by TestContext.get() — sec 3.1.   │ <- desc  (text-soft)
+  └─────────────────────────────────────────────────────────┘
+
+Visual chrome matches the listing chrome (3px green left-border,
+panel background, border-radius). The CSS for `table.cfg` was
+replaced wholesale by `.cfg-entry` rules — only the config-bootstrap
+section used it, no other table on the page.

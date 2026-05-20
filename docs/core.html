@@ -147,41 +147,46 @@
   .listing pre .cm { color: #888a90; font-style: italic; }
   .listing pre .ty { color: var(--text); }
 
-  table.cfg {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 18px 0 28px;
-    font-size: 13.5px;
+  /* Stacked-card layout for the config bootstrap keys — every value
+     in this concept space (FQCNs) is too long for table columns,
+     so we lay each entry out vertically: key on top, default line
+     below, prose description last. */
+  .cfg-entry {
+    margin: 14px 0;
+    padding: 16px 20px;
     border: 1px solid var(--border);
+    border-left: 3px solid var(--green-dim);
     border-radius: 6px;
-    overflow: hidden;
+    background: var(--bg2);
   }
-  table.cfg th {
-    text-align: left;
-    padding: 12px 16px;
-    background: var(--bg3);
+  .cfg-entry .key,
+  .cfg-entry .default {
+    display: block;
+    font-family: var(--font-mono);
+    word-break: break-all;
+    line-height: 1.55;
+  }
+  .cfg-entry .key {
     color: var(--green);
-    font-weight: 500;
-    letter-spacing: 1.5px;
-    text-transform: lowercase;
-    border-bottom: 1px solid var(--green-dim);
+    font-size: 13.5px;
+    margin-bottom: 6px;
   }
-  table.cfg td {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
+  .cfg-entry .default {
     color: var(--text-soft);
-    vertical-align: top;
-    line-height: 1.75;
-    font-size: 13px;
-  }
-  table.cfg td:first-child {
-    color: var(--text);
-    white-space: nowrap;
     font-size: 12.5px;
+    margin-bottom: 12px;
   }
-  table.cfg td code { font-size: 12.5px; }
-  table.cfg tr:last-child td { border-bottom: none; }
-  table.cfg tr:nth-child(even) td { background: rgba(255, 255, 255, 0.012); }
+  .cfg-entry .default::before {
+    content: 'default · ';
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  .cfg-entry .desc {
+    font-size: 14px;
+    line-height: 1.75;
+    color: var(--text-soft);
+    margin: 0;
+  }
 
   .closing {
     margin-top: 80px;
@@ -870,23 +875,17 @@ example.scopemap.RequestToApplicationScoped</pre>
 <h2 id="spi-config-keys">3.10 config bootstrap keys</h2>
 <p>core reads exactly two MicroProfile Config keys; both name the FQCN of a port impl with a public no-arg constructor. Both accept the underscore variant as a fallback (per MP Config's environment-variable mapping rule).</p>
 
-<table class="cfg">
-  <thead>
-    <tr><th>Key</th><th>Default</th><th>Selects</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>org.os890.jawelte.core.api.port.TestContext</code></td>
-      <td><code>org.os890.jawelte.core.impl.adapter.context.TestContextImpl</code></td>
-      <td>The accessor returned by <code>TestContext.get()</code> — section <a href="#spi-test-context">3.1</a>.</td>
-    </tr>
-    <tr>
-      <td><code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code></td>
-      <td><code>org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver</code></td>
-      <td>The resolver behind every <code>TestContext.loadService(Class)</code> call — section <a href="#spi-priority-resolver">3.8</a>.</td>
-    </tr>
-  </tbody>
-</table>
+<div class="cfg-entry">
+  <span class="key">org.os890.jawelte.core.api.port.TestContext</span>
+  <span class="default">org.os890.jawelte.core.impl.adapter.context.TestContextImpl</span>
+  <p class="desc">The accessor returned by <code>TestContext.get()</code> — section <a href="#spi-test-context">3.1</a>.</p>
+</div>
+
+<div class="cfg-entry">
+  <span class="key">org.os890.jawelte.core.api.port.ServicePriorityResolver</span>
+  <span class="default">org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver</span>
+  <p class="desc">The resolver behind every <code>TestContext.loadService(Class)</code> call — section <a href="#spi-priority-resolver">3.8</a>.</p>
+</div>
 
 <p>Both defaults ship in <code>core/impl</code>'s own <code>META-INF/microprofile-config.properties</code> at MP Config ordinal 100; user overrides at any higher ordinal (system properties, env vars, application <code>.properties</code>) win.</p>
 
