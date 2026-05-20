@@ -5884,3 +5884,52 @@ common shapes in one place).
 
 All 16 listing modules still pass via the aggregator (18 tests
 total now; listing 04 contributes 2).
+
+## 2026-05-20 — Mockito MockMaker explanation — JDK regression actually verified
+
+User flagged the previous explanation as suspect ("we never used the
+subclass-config back then with JDK 17"). Built a throwaway probe
+project (`/tmp/mockito-jdk-check`, NOT committed) — just
+`mockito-core 5.14.2`, JUnit, and one test calling
+`Mockito.mock(SomeInterface.class)`. No MockMaker config, no CDI.
+
+Result on JDK 25.0.2:
+
+  java.lang.IllegalArgumentException: Java 25 (69) is not supported by
+  the current version of Byte Buddy which officially supports Java 24
+  (68) - update Byte Buddy or set net.bytebuddy.experimental as a VM
+  property
+    at net.bytebuddy.utility.OpenedClassReader.of(OpenedClassReader.java:120)
+    at ... InlineBytecodeGenerator.transform(InlineBytecodeGenerator.java:402)
+    at java.instrument/sun.instrument.InstrumentationImpl.retransformClasses0(Native Method)
+
+Re-ran with `-DargLine=-Dnet.bytebuddy.experimental=true` &rarr; BUILD
+SUCCESS.
+
+Conclusions:
+
+- The actual cause is **Byte Buddy library version lag**, not a
+  Java agent / self-attach restriction (my earlier framing).
+  Mockito 5.14.2 bundles a Byte Buddy that tops out at Java 24
+  class files (major version 68); under JDK 25 (major 69) the
+  class reader rejects the bytecode of the type being mocked
+  before any retransformation happens.
+- It's temporary: when Mockito ships with a Byte Buddy that knows
+  Java 25 class files, the workaround can be removed.
+- Three valid workarounds for the gap:
+    (a) the `mock-maker-subclass` config we ship (subclassing
+        never reads the original bytecode).
+    (b) `-Dnet.bytebuddy.experimental=true` on the JVM.
+    (c) wait for a Mockito with a newer Byte Buddy.
+- The user was right that earlier jawelte versions ran on JDK 17
+  with no `MockMaker` file — the inline maker worked because the
+  Byte Buddy of the day understood Java 17 bytecode.
+
+Corrected both `listings/02-auto-mock/.../org.mockito.plugins.MockMaker`
+and `listings/04-test-bean-static-field/.../org.mockito.plugins.MockMaker`
+comment blocks, and the corresponding section in
+`docs/core.html` ("why the Mockito MockMaker file?") — now leads
+with the correct Byte Buddy class-file-version diagnosis, lists
+all three workarounds, and explicitly calls out that this goes
+away once Mockito ships with a JDK 25-aware Byte Buddy. Probe
+project deleted from `/tmp/`.

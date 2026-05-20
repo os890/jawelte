@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# See listings/02-auto-mock/.../org.mockito.plugins.MockMaker for the
-# full rationale. Mockito 5's default "inline" mock maker installs a
-# runtime Java agent via Byte Buddy's self-attach, which is
-# restricted on JDK 24+. The subclass maker selected below works
-# without an agent and handles every interface or non-final class
-# we mock in this listing.
+# See listings/02-auto-mock/.../org.mockito.plugins.MockMaker for
+# the full rationale. Short version: Mockito 5.14.2's bundled Byte
+# Buddy doesn't yet support Java 25 class files (major 69), so
+# Mockito.mock(...) throws on JDK 25 unless we either select the
+# subclass maker (this file) or pass
+# -Dnet.bytebuddy.experimental=true to the JVM. Temporary; goes
+# away once Mockito ships with a Java-25-aware Byte Buddy.
 
 mock-maker-subclass
