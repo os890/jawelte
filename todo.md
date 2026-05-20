@@ -221,3 +221,38 @@ the contract is locked in.
 - Add a `@DisableAutoMock` annotation (cdi-module/api) that switches off cdi-module's auto-mock layer for the annotated test class or injection point, so consumers can opt out without going through the existing exclude-package config list.
 - Provide a general MicroProfile Config option (e.g. `org.os890.jawelte.module.cdi.auto-mock.disabled=true`) that disables auto-mocking JVM-wide. Useful for scenarios that already declare every dependency via `@TestBean` and want the cleanest container possible.
 - Both must compose with the existing `DefaultExcludedPackageFilter` / `framework-exclude-packages` infrastructure — annotation/config wins over the prefix list.
+
+## Support `@TestBean` on methods
+
+`@TestBean`'s current `@Target` is `{TYPE, ANNOTATION_TYPE, FIELD}`.
+Add `METHOD` so a test class can declare a producer-method directly:
+
+```java
+@EnableTestBeans
+class MyTest {
+    @TestBean
+    @Produces
+    public static Greeting greeting() { return new Greeting("…"); }
+
+    @Inject Greeting greeting;
+    …
+}
+```
+
+Today the only producer-method route is the producer-class indirection
+(`@TestBean(beanProducer = ProducerClass.class)` — listings/08).
+Direct-on-method placement would let users skip the extra class.
+
+Touch points:
+- `core/api/.../TestBean.java` — add `ElementType.METHOD` to `@Target`.
+- `modules/cdi-module/impl/.../TestBeanScanner.java` — add a `collectStaticMethods`
+  walker parallel to `collectStaticFields` so the scanner registers the
+  method as a producer.
+- `modules/cdi-module/impl/.../TestBeansCdiExtension.onAfterBeanDiscovery` —
+  synthesise the producer-method bean (capture method handle, invoke at
+  injection time, scope precedence matching the field-mode path).
+- New regression scenario in `tests/cdi-module/` exercising the
+  pattern.
+- `docs/core.html` section 2.2 `@TestBean modes` — drop the "cannot be
+  placed directly on a @Produces method" caveat, add a fourth bullet,
+  and add a new listing demonstrating it.

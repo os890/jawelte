@@ -379,7 +379,7 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
     <span class="ty">EmailService</span> emailService;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> picksTheStub() {
+    <span class="kw">void</span> testBeanSelectsTheStubAlternativeForThisTestClass() {
         assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
     }
 }</pre>
@@ -419,6 +419,7 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
     <span class="an">@Test</span>
     <span class="kw">void</span> staticFieldLiteralBecomesTheBeanInstance() {
         assertThat(greeting).isSameAs(WELCOME_GREETING);
+        assertThat(greeting.text()).isEqualTo(<span class="st">"hello-from-static-field"</span>);
     }
 
     <span class="an">@Test</span>
@@ -560,7 +561,9 @@ app.retries  = 5</pre>
 
     <span class="an">@AfterAll</span>
     <span class="kw">static void</span> shutdownCdi() {
-        container.close();
+        <span class="kw">if</span> (container != <span class="kw">null</span>) {
+            container.close();
+        }
     }
 
     <span class="an">@Inject</span>
@@ -570,9 +573,10 @@ app.retries  = 5</pre>
     <span class="ty">BeanManager</span> beanManager;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> requestScopeStillActive() {
+    <span class="kw">void</span> jaweltaStillActivatesRequestScopeAndInjectsFieldsWhenContainerIsExternal() {
         assertThat(beanManager.getContext(<span class="ty">RequestScoped</span>.<span class="kw">class</span>).isActive()).isTrue();
         assertThat(counter.increment()).isEqualTo(<span class="kw">1</span>);
+        assertThat(counter.value()).isEqualTo(<span class="kw">1</span>);
     }
 }</pre>
 </div>
@@ -615,7 +619,7 @@ app.retries  = 5</pre>
     <span class="ty">Clock</span> clock;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> yieldsTheFixedInstant() {
+    <span class="kw">void</span> beanProducerAlternativeYieldsTheFixedInstant() {
         assertThat(clock.now()).isEqualTo(<span class="ty">FixedClockProducer</span>.FIXED_INSTANT);
     }
 }</pre>
@@ -701,9 +705,13 @@ app.retries  = 5</pre>
   <div class="listing-bar"><span class="label">listing 11 · before-scope-veto</span><a href="../listings/11-before-scope-veto/">listings/11-before-scope-veto/</a></div>
 <pre><span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">RequestScopeVetoer</span> {
+
+    <span class="kw">public static final</span> <span class="ty">AtomicBoolean</span> VETOED = <span class="kw">new</span> <span class="ty">AtomicBoolean</span>(<span class="kw">false</span>);
+
     <span class="kw">public void</span> onBeforeScopeStarted(<span class="an">@Observes</span> <span class="ty">BeforeScopeStarted</span> event) {
         <span class="kw">if</span> (event.getScope() == <span class="ty">RequestScoped</span>.<span class="kw">class</span>) {
             event.veto();
+            VETOED.set(<span class="kw">true</span>);
         }
     }
 }</pre>

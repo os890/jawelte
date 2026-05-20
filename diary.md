@@ -6144,3 +6144,36 @@ Result: `docs/core.html`'s header now reads exactly like
 `docs/index.html`'s header — logo, wordmark "ja**we**lte",
 "the test-framework" tagline — with the extra `// core` segment
 line directly below.
+
+## 2026-05-20 — todo entry + docs<->listings cross-check pass
+
+Two requests:
+
+1. Recorded a follow-up todo for `@TestBean` on methods. Today
+   `@TestBean`'s `@Target` is `{TYPE, ANNOTATION_TYPE, FIELD}`;
+   the todo lays out the source-level touch points (annotation,
+   scanner, CDI extension, regression scenario, docs).
+
+2. Cross-checked every code block in `docs/core.html` against the
+   actual source files of its listing. Found five places where the
+   doc snippet drifted from the source and fixed them in the
+   doc so it now mirrors what `mvn test` runs:
+   - **listing 03**: test method was shown as `picksTheStub`,
+     source has `testBeanSelectsTheStubAlternativeForThisTestClass`.
+   - **listing 04**: first `@Test` was missing
+     `assertThat(greeting.text()).isEqualTo("hello-from-static-field")`.
+   - **listing 07**: `shutdownCdi()` body in the doc dropped the
+     `if (container != null)` guard the source carries; also the
+     test method name `requestScopeStillActive` vs source's
+     `jaweltaStillActivatesRequestScopeAndInjectsFieldsWhenContainerIsExternal`,
+     and a missing `counter.value()` assertion.
+   - **listing 08**: `yieldsTheFixedInstant` vs source's
+     `beanProducerAlternativeYieldsTheFixedInstant`.
+   - **listing 11**: the `RequestScopeVetoer` snippet was missing
+     the `public static final AtomicBoolean VETOED` field and the
+     `VETOED.set(true)` line — both load-bearing for the test
+     class assertion in the listing.
+
+Aggregator sweep clean: `mvn -f listings/pom.xml clean test` &rarr;
+BUILD SUCCESS, 18 tests across 16 listings. All 19 listing
+cross-links resolve. All in-page anchors resolve.
