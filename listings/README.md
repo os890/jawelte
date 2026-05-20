@@ -67,6 +67,7 @@ mvn -f listings/pom.xml test
 | 18 | `18-test-class-scoped` | scope-module &rarr; `@TestClassScoped` |
 | 19 | `19-jpa-hello-world` | jpa-module &rarr; `@Inject EntityManager` hello-world |
 | 20 | `20-jta-hello-world` | jta-module &rarr; JTA strategy auto-active |
+| 21 | `21-ejb-singleton` | ejb-module &rarr; `@jakarta.ejb.Singleton` injectable |
 
 ## CDI runtime
 

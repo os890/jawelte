@@ -67,5 +67,6 @@
         <module>18-test-class-scoped</module>
         <module>19-jpa-hello-world</module>
         <module>20-jta-hello-world</module>
+        <module>21-ejb-singleton</module>
     </modules>
 </project>
