@@ -40,7 +40,7 @@ class FullStubBackendTest {
     Clock clock;
 
     @Test
-    void aggregatingMetaAnnotationActivatesBothStubs() {
+    void bothStubsActivated() {
         assertThat(emailService.send("alice@example.com")).isEqualTo("stub:alice@example.com");
         assertThat(clock.now()).isEqualTo(StubClock.PINNED);
     }

@@ -31,7 +31,7 @@ class EmailServiceTest {
     EmailService emailService;
 
     @Test
-    void testBeanSelectsTheStubAlternativeForThisTestClass() {
+    void stubAlternativeWins() {
         assertThat(emailService.send("alice@example.com")).isEqualTo("stub:alice@example.com");
     }
 }

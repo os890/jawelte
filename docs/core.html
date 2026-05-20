@@ -29,7 +29,56 @@
 
     --font-mono:  ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   }
-  html { background: var(--bg); color: var(--text); font-family: var(--font-mono); scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  /* Light theme palette — opt-in via data-theme="light" on <html>;
+     toggle in the top-right corner. Greens stay close to the brand
+     but darken so they read on a near-white background. */
+  html[data-theme="light"] {
+    --green:        #15803d;
+    --green-bright: #16a34a;
+    --green-dark:   #14532d;
+    --green-dim:    #86efac;
+    --green-deep:   #f0fdf4;
+    --amber:        #b45309;
+    --teal:         #0d9488;
+    --red:          #b91c1c;
+    --bg:           #fbfbfc;
+    --bg-soft:      #ffffff;
+    --bg2:          #f4f4f5;
+    --bg3:          #e7e7e8;
+    --bg-code:      #f5f5f7;
+    --text:         #18181b;
+    --text-soft:    #27272a;
+    --soft:         #3f3f46;
+    --muted:        #6b6b75;
+    --border:       #dcdce0;
+    --border-soft:  #c5c5c9;
+  }
+  html { background: var(--bg); color: var(--text); font-family: var(--font-mono); scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; transition: background .2s ease, color .2s ease; }
+  .listing, .listing pre, .toc, .cfg-entry, code { transition: background .2s ease, color .2s ease, border-color .2s ease; }
+
+  /* Theme-toggle button — top-right of the viewport. */
+  #theme-toggle {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    color: var(--green);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    transition: background .2s ease, border-color .2s ease, color .2s ease;
+  }
+  #theme-toggle:hover { color: var(--green-bright); border-color: var(--green-dim); }
+  #theme-toggle:focus { outline: 1px solid var(--green); outline-offset: 2px; }
   body { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
   a { color: var(--green); text-decoration: none; border-bottom: 1px dotted var(--green-dim); transition: color .15s ease, border-color .15s ease; }
   a:hover { color: var(--green-bright); border-bottom-color: var(--green); }
@@ -202,6 +251,8 @@
 </style>
 </head>
 <body>
+
+<button id="theme-toggle" type="button" aria-label="Toggle light / dark theme" title="Toggle light / dark theme">☾</button>
 
 <header>
   <svg class="logo-mark" width="100" viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg">
@@ -379,7 +430,7 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
     <span class="ty">EmailService</span> emailService;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> testBeanSelectsTheStubAlternativeForThisTestClass() {
+    <span class="kw">void</span> stubAlternativeWins() {
         assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
     }
 }</pre>
@@ -417,13 +468,13 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
     <span class="ty">Clock</span> clock;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> staticFieldLiteralBecomesTheBeanInstance() {
+    <span class="kw">void</span> literalIsInjected() {
         assertThat(greeting).isSameAs(WELCOME_GREETING);
         assertThat(greeting.text()).isEqualTo(<span class="st">"hello-from-static-field"</span>);
     }
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> staticFieldMockitoMockIsInjectedAndStubbable() {
+    <span class="kw">void</span> mockitoMockIsInjected() {
         <span class="ty">Instant</span> pinned = <span class="ty">Instant</span>.parse(<span class="st">"2026-05-20T12:00:00Z"</span>);
         when(clock.now()).thenReturn(pinned);
 
@@ -535,7 +586,7 @@ app.retries  = 5</pre>
     <span class="ty">EmailService</span> emailService;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> onlyDeclaredTestBeansAreInTheContainer() {
+    <span class="kw">void</span> onlyDeclaredBeansSurvive() {
         assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
         <span class="cm">// Production @ApplicationScoped beans not in any @TestBean were vetoed at discovery.</span>
         assertThat(beanManager.getBeans(<span class="ty">SmtpEmailService</span>.<span class="kw">class</span>)).isEmpty();
@@ -573,7 +624,7 @@ app.retries  = 5</pre>
     <span class="ty">BeanManager</span> beanManager;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> jaweltaStillActivatesRequestScopeAndInjectsFieldsWhenContainerIsExternal() {
+    <span class="kw">void</span> requestScopeIsActive() {
         assertThat(beanManager.getContext(<span class="ty">RequestScoped</span>.<span class="kw">class</span>).isActive()).isTrue();
         assertThat(counter.increment()).isEqualTo(<span class="kw">1</span>);
         assertThat(counter.value()).isEqualTo(<span class="kw">1</span>);
@@ -619,7 +670,7 @@ app.retries  = 5</pre>
     <span class="ty">Clock</span> clock;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> beanProducerAlternativeYieldsTheFixedInstant() {
+    <span class="kw">void</span> yieldsTheFixedInstant() {
         assertThat(clock.now()).isEqualTo(<span class="ty">FixedClockProducer</span>.FIXED_INSTANT);
     }
 }</pre>
@@ -664,7 +715,7 @@ app.retries  = 5</pre>
     <span class="ty">Clock</span> clock;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> aggregatingMetaAnnotationActivatesBothStubs() {
+    <span class="kw">void</span> bothStubsActivated() {
         assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
         assertThat(clock.now()).isEqualTo(<span class="ty">StubClock</span>.PINNED);
     }
@@ -699,20 +750,20 @@ app.retries  = 5</pre>
 </div>
 
 <h3>BeforeScopeStarted</h3>
-<p>Fired before a per-method scope (e.g., <code>@RequestScoped</code>) is activated. Observers may call <code>event.veto()</code> to keep the scope inactive for that test method.</p>
+<p>Fired before a per-method scope (e.g., <code>@RequestScoped</code>) is activated. The most common reaction is to observe and log; <code>event.veto()</code> is also available and keeps the scope inactive for the test method, but veto is rare in practice.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 11 · before-scope-veto</span><a href="../listings/11-before-scope-veto/">listings/11-before-scope-veto/</a></div>
+  <div class="listing-bar"><span class="label">listing 11 · before-scope-observer</span><a href="../listings/11-before-scope-observer/">listings/11-before-scope-observer/</a></div>
 <pre><span class="an">@ApplicationScoped</span>
-<span class="kw">public class</span> <span class="ty">RequestScopeVetoer</span> {
+<span class="kw">public class</span> <span class="ty">ScopeStartLogger</span> {
 
-    <span class="kw">public static final</span> <span class="ty">AtomicBoolean</span> VETOED = <span class="kw">new</span> <span class="ty">AtomicBoolean</span>(<span class="kw">false</span>);
+    <span class="kw">private static final</span> <span class="ty">Logger</span> LOG = <span class="ty">Logger</span>.getLogger(<span class="ty">ScopeStartLogger</span>.<span class="kw">class</span>.getName());
+
+    <span class="kw">public static final</span> <span class="ty">List</span>&lt;<span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt;&gt; OBSERVED_SCOPES = <span class="kw">new</span> <span class="ty">CopyOnWriteArrayList</span>&lt;&gt;();
 
     <span class="kw">public void</span> onBeforeScopeStarted(<span class="an">@Observes</span> <span class="ty">BeforeScopeStarted</span> event) {
-        <span class="kw">if</span> (event.getScope() == <span class="ty">RequestScoped</span>.<span class="kw">class</span>) {
-            event.veto();
-            VETOED.set(<span class="kw">true</span>);
-        }
+        LOG.info(<span class="st">"scope about to start: "</span> + event.getScope().getSimpleName());
+        OBSERVED_SCOPES.add(event.getScope());
     }
 }</pre>
 </div>
@@ -913,6 +964,36 @@ example.scopemap.RequestToApplicationScoped</pre>
 <div class="closing">
   <strong>jawelte / core</strong> &nbsp;·&nbsp; back to <a href="index.html" style="color: var(--green); border-bottom: 1px dotted var(--green-dim);">overview</a>
 </div>
+
+<script>
+  (function () {
+    const root = document.documentElement;
+    const btn = document.getElementById('theme-toggle');
+    const STORAGE_KEY = 'jawelte-docs-theme';
+
+    function applyTheme(theme) {
+      if (theme === 'light') {
+        root.setAttribute('data-theme', 'light');
+        btn.textContent = '☀';
+        btn.title = 'Switch to dark theme';
+      } else {
+        root.removeAttribute('data-theme');
+        btn.textContent = '☾';
+        btn.title = 'Switch to light theme';
+      }
+    }
+
+    let stored = null;
+    try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) { /* private mode: ignore */ }
+    applyTheme(stored === 'light' ? 'light' : 'dark');
+
+    btn.addEventListener('click', function () {
+      const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      applyTheme(next);
+      try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { /* ignore */ }
+    });
+  })();
+</script>
 
 </body>
 </html>

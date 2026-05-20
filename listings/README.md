@@ -57,7 +57,7 @@ mvn -f listings/pom.xml test
 | 08 | `08-test-bean-producer` | Detailed &rarr; `@TestBean(beanProducer=…)` |
 | 09 | `09-test-bean-meta-annotation` | Detailed &rarr; `@TestBean` on a meta-annotation |
 | 10 | `10-test-context-metadata` | Detailed &rarr; `TestContext` metadata |
-| 11 | `11-before-scope-veto` | Detailed &rarr; `BeforeScopeStarted.veto()` |
+| 11 | `11-before-scope-observer` | Detailed &rarr; observing `BeforeScopeStarted` |
 | 12 | `12-container-started` | Detailed &rarr; observing `ContainerStarted` |
 | 13 | `13-lifecycle-port` | SPI &rarr; `TestModuleLifecyclePort` |
 | 14 | `14-bean-scope-mapper` | SPI &rarr; `BeanScopeMapper` |

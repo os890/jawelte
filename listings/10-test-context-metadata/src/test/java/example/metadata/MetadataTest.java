@@ -24,7 +24,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 class MetadataTest {
 
     @Test
-    void valueBoundInBeforeAllIsRetrievableFromBeforeEach() {
+    void metadataSurvivesAcrossCallbacks() {
         StartupRecord boundInBeforeAll = BootstrapTimestampLifecyclePort.BOUND_IN_BEFORE_ALL.get();
         StartupRecord seenInBeforeEach = BootstrapTimestampLifecyclePort.SEEN_IN_BEFORE_EACH.get();
 

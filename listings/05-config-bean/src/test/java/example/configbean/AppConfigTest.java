@@ -29,7 +29,7 @@ class AppConfigTest {
     AppConfig config;
 
     @Test
-    void configBeanReadsValuesThroughTheConfigResolver() {
+    void readsValuesViaResolver() {
         assertThat(config.greeting()).isEqualTo("hello from MicroProfile Config");
         assertThat(config.retries()).isEqualTo(5);
     }

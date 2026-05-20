@@ -24,7 +24,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 class LifecyclePortOrderTest {
 
     @Test
-    void beforeAllRunsAscendingByPriorityAndAfterAllRunsInReverse() {
+    void priorityAscendingOrder() {
         // beforeAll runs in @Priority-ascending order — early (10),
         // then late (20). afterAll runs in reverse (LIFO) — late
         // first, then early. The test method observes the beforeAll

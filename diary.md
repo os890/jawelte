@@ -6177,3 +6177,74 @@ Two requests:
 Aggregator sweep clean: `mvn -f listings/pom.xml clean test` &rarr;
 BUILD SUCCESS, 18 tests across 16 listings. All 19 listing
 cross-links resolve. All in-page anchors resolve.
+
+## 2026-05-20 — docs polish: test-method rename, veto sample dropped, theme toggle
+
+Three user-feedback items in one pass:
+
+1. **Test method names**: dropped the `test` prefix (redundant with
+   `@Test`) and shortened the long-form ones across all listings.
+
+   | listing | before | after |
+   | --- | --- | --- |
+   | 03 | testBeanSelectsTheStubAlternativeForThisTestClass | stubAlternativeWins |
+   | 04 | staticFieldLiteralBecomesTheBeanInstance | literalIsInjected |
+   | 04 | staticFieldMockitoMockIsInjectedAndStubbable | mockitoMockIsInjected |
+   | 05 | configBeanReadsValuesThroughTheConfigResolver | readsValuesViaResolver |
+   | 06 | onlyDeclaredTestBeansAreInTheContainer | onlyDeclaredBeansSurvive |
+   | 07 | jaweltaStillActivatesRequestScopeAndInjectsFieldsWhenContainerIsExternal | requestScopeIsActive |
+   | 08 | beanProducerAlternativeYieldsTheFixedInstant | yieldsTheFixedInstant |
+   | 09 SendingTest | testBeanIsReachableThroughTheMetaAnnotation | stubIsActive |
+   | 09 AnotherSendingTest | sameStubReachableFromASecondTestClassWithoutRepeatingTestBean | sameStubAcrossTestClasses |
+   | 09 FullStubBackendTest | aggregatingMetaAnnotationActivatesBothStubs | bothStubsActivated |
+   | 10 | valueBoundInBeforeAllIsRetrievableFromBeforeEach | metadataSurvivesAcrossCallbacks |
+   | 12 | observerCapturedTheTestClassFromTheContainerStartedEvent | observerCapturesTestClass |
+   | 13 | beforeAllRunsAscendingByPriorityAndAfterAllRunsInReverse | priorityAscendingOrder |
+   | 14 | counterIsApplicationScopedAfterTheMapperRewrite | counterIsApplicationScoped |
+   | 15 | appConfigReadsThroughTheCustomResolver | readsViaCustomResolver |
+   | 16 | testContextLoadServiceReturnsTheConfiguredCustomResolver | customResolverIsActive |
+
+   docs/core.html updated to match wherever the snippet showed the
+   method.
+
+2. **Listing 11 reworked — drop veto, keep observer**:
+   - Directory renamed `listings/11-before-scope-veto` &rarr;
+     `listings/11-before-scope-observer`.
+   - Package renamed `example.scopeveto` &rarr; `example.scopeobserver`.
+   - `RequestScopeVetoer` &rarr; `ScopeStartLogger` — observer no
+     longer calls `event.veto()`. Logs the scope name via
+     `java.util.logging` and mirrors every observed scope into
+     `OBSERVED_SCOPES` (a `CopyOnWriteArrayList`) so the test can
+     assert that `@RequestScoped` came through.
+   - `RequestScopeVetoTest` &rarr; `ScopeStartTest`. Single test
+     method `observerSawTheRequestScopeStarting` asserts
+     `OBSERVED_SCOPES.contains(RequestScoped.class)`.
+   - `listings/pom.xml` `<modules>` updated, `listings/README.md`
+     table row updated. `pom.xml` inside the listing now carries
+     the new `artifactId` `jawelte-listing-11-before-scope-observer`
+     and a description that says "observer pattern; veto is
+     mentioned in the docs as a less-common alternative".
+   - `docs/core.html` section 2.4 events `BeforeScopeStarted`:
+     code block rewritten to show `ScopeStartLogger`; prose
+     reframed to "most common reaction is observe and log;
+     `event.veto()` is also available but rare".
+
+3. **Light / dark theme toggle**:
+   - Added a `html[data-theme="light"]` palette override block to
+     the existing CSS variable system. Greens darken for contrast
+     on a near-white background; other tokens flip accordingly
+     (background &rarr; near-white, text &rarr; near-black,
+     borders &rarr; light gray, code-block bg &rarr; very light
+     gray).
+   - Fixed-position `<button id="theme-toggle">` in the top-right
+     corner; circular, monospace, themed accent.
+   - Inline `<script>` at the end of `<body>` reads the saved
+     preference from `localStorage` (`jawelte-docs-theme`), applies
+     it on load, and writes it back on every click. Defaults to
+     dark when no preference is set; gracefully ignores
+     `localStorage` failures (private-mode browsers).
+   - Smooth `.2s` transitions on background / colour / border so
+     the swap doesn't jar.
+
+`mvn -f listings/pom.xml clean test` &rarr; BUILD SUCCESS, still
+18 tests across 16 listings.

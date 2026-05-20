@@ -57,7 +57,7 @@
         <module>08-test-bean-producer</module>
         <module>09-test-bean-meta-annotation</module>
         <module>10-test-context-metadata</module>
-        <module>11-before-scope-veto</module>
+        <module>11-before-scope-observer</module>
         <module>12-container-started</module>
         <module>13-lifecycle-port</module>
         <module>14-bean-scope-mapper</module>

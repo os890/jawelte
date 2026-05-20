@@ -29,7 +29,7 @@ class CustomConfigResolverTest {
     AppConfig config;
 
     @Test
-    void appConfigReadsThroughTheCustomResolver() {
+    void readsViaCustomResolver() {
         assertThat(config.greeting()).isEqualTo("hello-from-test-resolver");
     }
 }

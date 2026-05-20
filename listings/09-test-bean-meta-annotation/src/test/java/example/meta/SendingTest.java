@@ -30,7 +30,7 @@ class SendingTest {
     EmailService emailService;
 
     @Test
-    void testBeanIsReachableThroughTheMetaAnnotation() {
+    void stubIsActive() {
         assertThat(emailService.send("alice@example.com")).isEqualTo("stub:alice@example.com");
     }
 }

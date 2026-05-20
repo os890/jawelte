@@ -26,7 +26,7 @@ import org.os890.jawelte.core.api.port.TestContext;
 class ReversePriorityResolverTest {
 
     @Test
-    void testContextLoadServiceReturnsTheConfiguredCustomResolver() {
+    void customResolverIsActive() {
         // TestContext.loadService(ServicePriorityResolver.class) reads
         // the MP Config bootstrap key
         //   org.os890.jawelte.core.api.port.ServicePriorityResolver

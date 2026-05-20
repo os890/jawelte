@@ -35,7 +35,7 @@ class AnotherSendingTest {
     EmailService emailService;
 
     @Test
-    void sameStubReachableFromASecondTestClassWithoutRepeatingTestBean() {
+    void sameStubAcrossTestClasses() {
         assertThat(emailService.send("bob@example.com")).isEqualTo("stub:bob@example.com");
     }
 }

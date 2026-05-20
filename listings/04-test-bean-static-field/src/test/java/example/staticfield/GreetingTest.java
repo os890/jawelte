@@ -58,13 +58,13 @@ class GreetingTest {
     Clock clock;
 
     @Test
-    void staticFieldLiteralBecomesTheBeanInstance() {
+    void literalIsInjected() {
         assertThat(greeting).isSameAs(WELCOME_GREETING);
         assertThat(greeting.text()).isEqualTo("hello-from-static-field");
     }
 
     @Test
-    void staticFieldMockitoMockIsInjectedAndStubbable() {
+    void mockitoMockIsInjected() {
         Instant pinned = Instant.parse("2026-05-20T12:00:00Z");
         when(clock.now()).thenReturn(pinned);
 

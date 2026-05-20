@@ -52,7 +52,7 @@ class ExternalContainerTest {
     BeanManager beanManager;
 
     @Test
-    void jaweltaStillActivatesRequestScopeAndInjectsFieldsWhenContainerIsExternal() {
+    void requestScopeIsActive() {
         assertThat(beanManager.getContext(RequestScoped.class).isActive()).isTrue();
         assertThat(counter.increment()).isEqualTo(1);
         assertThat(counter.value()).isEqualTo(1);

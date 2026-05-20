@@ -35,7 +35,7 @@ class LimitToTestBeansTest {
     EmailService emailService;
 
     @Test
-    void onlyDeclaredTestBeansAreInTheContainer() {
+    void onlyDeclaredBeansSurvive() {
         assertThat(emailService.send("alice@example.com")).isEqualTo("stub:alice@example.com");
 
         // Production beans NOT named in a @TestBean declaration are

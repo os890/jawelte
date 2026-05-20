@@ -24,7 +24,7 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 class ContainerStartedTest {
 
     @Test
-    void observerCapturedTheTestClassFromTheContainerStartedEvent() {
+    void observerCapturesTestClass() {
         assertThat(StartupRecorder.OBSERVED_TEST_CLASS.get())
                 .isEqualTo(ContainerStartedTest.class);
     }

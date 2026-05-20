@@ -31,7 +31,7 @@ class ClockTest {
     Clock clock;
 
     @Test
-    void beanProducerAlternativeYieldsTheFixedInstant() {
+    void yieldsTheFixedInstant() {
         assertThat(clock.now()).isEqualTo(FixedClockProducer.FIXED_INSTANT);
     }
 }

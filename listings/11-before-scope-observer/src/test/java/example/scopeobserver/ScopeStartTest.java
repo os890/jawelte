@@ -13,23 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package example.scopeveto;
+package example.scopeobserver;
 
 import static org.assertj.core.api.Assertions.assertThat;
+
+import jakarta.enterprise.context.RequestScoped;
 
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 @EnableTestBeans
-class RequestScopeVetoTest {
+class ScopeStartTest {
 
     @Test
-    void vetoerObservedBeforeScopeStartedAndCalledVeto() {
-        // The observer fires inside cdi-module's beforeEach right
-        // before it would call RequestContextController.activate();
-        // when isVetoed() comes back true, the activate() + bind
-        // pair is skipped. The flag below confirms our observer ran
-        // and asked for the veto.
-        assertThat(RequestScopeVetoer.VETOED).isTrue();
+    void observerSawTheRequestScopeStarting() {
+        assertThat(ScopeStartLogger.OBSERVED_SCOPES).contains(RequestScoped.class);
     }
 }

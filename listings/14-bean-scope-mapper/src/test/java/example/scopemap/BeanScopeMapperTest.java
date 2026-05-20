@@ -34,7 +34,7 @@ class BeanScopeMapperTest {
     BeanManager beanManager;
 
     @Test
-    void counterIsApplicationScopedAfterTheMapperRewrite() {
+    void counterIsApplicationScoped() {
         Set<Bean<?>> beans = beanManager.getBeans(Counter.class);
         assertThat(beans).hasSize(1);
         assertThat(beans.iterator().next().getScope()).isEqualTo(ApplicationScoped.class);

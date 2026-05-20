@@ -16,7 +16,7 @@
 -->
 <!--
     Stand-alone Maven project for jawelte documentation listing 11:
-    BeforeScopeStarted.veto() — observe + block scope activation.
+    BeforeScopeStarted observer — react to scope-start events.
 
     NO <parent>. Copy this folder anywhere on your machine, run
     `mvn test` from inside it, and the listing builds and runs.
@@ -28,12 +28,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.os890.jawelte.listings</groupId>
-    <artifactId>jawelte-listing-11-before-scope-veto</artifactId>
+    <artifactId>jawelte-listing-11-before-scope-observer</artifactId>
     <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>jawelte listing 11: before-scope-veto</name>
-    <description>Observe BeforeScopeStarted and call event.veto() to keep the @RequestScoped context inactive for the test method.</description>
+    <name>jawelte listing 11: before-scope-observer</name>
+    <description>Observe BeforeScopeStarted and log the scope that's about to be activated. Demonstrates the observer pattern; event.veto() is mentioned in the docs as a less-common alternative reaction.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
