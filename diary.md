@@ -6432,3 +6432,34 @@ Rewrote the cdi-module overview-card line to:
   "automatic Mockito mocks for collaborators that live outside
    your module's boundary (the contract is on your classpath,
    the implementation isn't — jawelte fills the gap)"
+
+## 2026-05-20 — docs/modules.html — drop jawelte-internal profile references
+
+User: when I say "Narayana via profile" / "RESTEasy via profile",
+those are jawelte's internal verify-all test-sweep profiles —
+NOT something users have to activate. Users pick the
+implementation by adding the matching dependency to their test
+classpath; no `-P...` involved.
+
+Four spots reworded:
+
+- jta-module card: "Geronimo, Narayana, or Atomikos — pick
+  whichever fits your project by putting the matching
+  transaction-manager on the test classpath."
+- jaxrs-module card: "Works with CXF or RESTEasy — pick
+  whichever JAX-RS implementation your project already uses."
+- cdi-module section 2.1 purpose: "The runtime under the hood
+  is OpenWebBeans or Weld — whichever SE container artifact is
+  on your test classpath; the rest of jawelte never sees that
+  choice." (Was: "OpenWebBeans by default and Weld via the
+  `-Pweld` profile".)
+- cdi-module section 2.5 Maven setup: "either
+  `org.apache.openwebbeans:openwebbeans-se` or
+  `org.jboss.weld.se:weld-se-shaded`; pick the one your
+  project already standardises on. The listings ship both as
+  optional Maven profiles so you can see the pattern, but a
+  single fixed dependency works equally well."
+
+The remaining "profile" mention in 2.5 is intentional — the
+listings DO ship owb/weld profiles as a user-facing convenience,
+and reading the listings still teaches the pattern.

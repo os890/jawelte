@@ -329,7 +329,7 @@
 
 <div class="module-card">
   <span class="name">jta-module</span><span class="status">opt-in</span>
-  <p class="desc">Add this and your <code>@Transactional</code> code starts running inside a real JTA transaction. Geronimo out of the box; Narayana or Atomikos via profile. The right pick for multi-resource setups or anything that won't work under plain JPA <code>RESOURCE_LOCAL</code>.</p>
+  <p class="desc">Add this and your <code>@Transactional</code> code starts running inside a real JTA transaction. Geronimo, Narayana, or Atomikos — pick whichever fits your project by putting the matching transaction-manager on the test classpath. The right module for multi-resource setups or anything that won't work under plain JPA <code>RESOURCE_LOCAL</code>.</p>
 </div>
 
 <div class="module-card">
@@ -339,7 +339,7 @@
 
 <div class="module-card">
   <span class="name">jaxrs-module</span><span class="status">opt-in</span>
-  <p class="desc">Test your REST endpoints with a real HTTP server inside the test JVM. Annotate the class with <code>@EnableJaxRs</code>, inject the live base URL, hit your endpoints over the wire just like a client would. CXF by default, RESTEasy via profile.</p>
+  <p class="desc">Test your REST endpoints with a real HTTP server inside the test JVM. Annotate the class with <code>@EnableJaxRs</code>, inject the live base URL, hit your endpoints over the wire just like a client would. Works with CXF or RESTEasy — pick whichever JAX-RS implementation your project already uses.</p>
 </div>
 
 <div class="module-card">
@@ -375,7 +375,7 @@
 <h1 id="cdi-module">2. cdi-module</h1>
 
 <h2 id="cdi-purpose">2.1 purpose</h2>
-<p><code>cdi-module</code> is the SE-CDI adapter behind every example in <a href="core.html">docs/core.html</a>. It implements core's single-impl <code>TestBeanContainerPort</code> with <code>CdiTestBeanContainer</code> — that's the class that boots the SE container in <code>beforeAll</code>, populates <code>@Inject</code> fields in <code>postProcessTestInstance</code>, activates the request scope in <code>beforeEach</code>, and shuts the container down in <code>afterAll</code>. The runtime under the hood is OpenWebBeans by default and Weld via the <code>-Pweld</code> profile; the rest of jawelte never sees that choice.</p>
+<p><code>cdi-module</code> is the SE-CDI adapter behind every example in <a href="core.html">docs/core.html</a>. It implements core's single-impl <code>TestBeanContainerPort</code> with <code>CdiTestBeanContainer</code> — that's the class that boots the SE container in <code>beforeAll</code>, populates <code>@Inject</code> fields in <code>postProcessTestInstance</code>, activates the request scope in <code>beforeEach</code>, and shuts the container down in <code>afterAll</code>. The runtime under the hood is OpenWebBeans or Weld — whichever SE container artifact is on your test classpath; the rest of jawelte never sees that choice.</p>
 
 <p>On top of the container lifecycle, cdi-module ships a CDI extension (<code>TestBeansCdiExtension</code>) that scans the test class for <code>@TestBean</code> declarations, synthesises CDI beans for inline-mock fields and unsatisfied injection points, and wires the result into the bean archive. The user surface is the trio of annotations defined in core (<code>@EnableTestBeans</code>, <code>@TestBean</code>, <code>@ConfigBean</code>); cdi-module is what makes them DO something.</p>
 
@@ -434,7 +434,7 @@
 </div>
 
 <h2 id="cdi-maven">2.5 maven setup</h2>
-<p>Add cdi-module-api + cdi-module-impl to your test scope alongside core. A CDI runtime is needed too — OpenWebBeans by default; swap for Weld via the <code>-Pweld</code> profile pattern shown in the listings.</p>
+<p>Add cdi-module-api + cdi-module-impl to your test scope alongside core. A CDI runtime is needed too — either <code>org.apache.openwebbeans:openwebbeans-se</code> or <code>org.jboss.weld.se:weld-se-shaded</code>; pick the one your project already standardises on. The <a href="../listings/">listings</a> ship both as optional Maven profiles so you can see the pattern, but a single fixed dependency works equally well.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/01-hello-world/pom.xml">listings/01-hello-world/pom.xml</a></div>
