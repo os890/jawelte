@@ -5971,3 +5971,40 @@ Changes:
 All 16 listings still pass via the aggregator (18 tests total;
 listing 04 contributes 2). No MockMaker config files anywhere
 under `listings/` now.
+
+## 2026-05-20 — docs/core.html readability — hybrid font + tighter prose
+
+Second readability pass after the user said "still hard to read".
+Bigger change this time: monospace prose at length is hard to scan
+regardless of palette tweaks. Switched to a hybrid approach.
+
+- Two CSS font families:
+  - `--font-mono`: `ui-monospace, 'SF Mono', 'Cascadia Mono',
+    'JetBrains Mono', Menlo, Consolas, monospace` (better than
+    the generic `monospace` fallback to Courier).
+  - `--font-prose`: `-apple-system, BlinkMacSystemFont, 'Segoe UI',
+    Roboto, ...` (system humanist sans-serif).
+- Brand chrome stays monospace: header, h1/h2/h3/h4, meta,
+  closing footer, TOC, code blocks, listing-bar, inline `<code>`,
+  config-table key column.
+- Prose switches to proportional sans-serif: `<p>`, `<li>`, the
+  description cells of `table.cfg`. 16px / 1.7 line-height —
+  reads at a glance instead of as a glyph parade.
+- `--text` brightened slightly (`#e4e4e7 -> #ececef`) and
+  `--muted` brightened (`#71717a -> #8b8b92`) for better
+  contrast in the new mixed-typography layout.
+- Body width tightened from 880 to 780px (sane line length for
+  16px proportional prose). Code blocks set their own width via
+  the existing `overflow-x: auto`.
+- More breathing: h1 margin-top 80 → 88px, h2 56 → 56 (kept),
+  p margin-bottom 18 → 20px, li 8 → 10px.
+- Antialiased text smoothing turned on (`-webkit-font-smoothing`,
+  `-moz-osx-font-smoothing`).
+- `em` kept at `font-style: normal` (brand convention from
+  `docs/index.html`); emphasis stays color-only.
+
+TOC structure unchanged per prior feedback ("the toc at the top
+is perfect"). The visual brand still reads as "jawelte" — the
+"//"-prefixed meta line, the lowercase letter-spaced section
+headers, and the green-accent code blocks all stay monospace
+exactly as in `docs/index.html`. Only the body prose changed font.
