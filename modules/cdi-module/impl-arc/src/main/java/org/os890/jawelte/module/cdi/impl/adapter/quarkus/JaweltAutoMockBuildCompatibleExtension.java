@@ -324,6 +324,15 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                 // Quarkus build failure.
                 continue;
             }
+            // Smallrye Jandex 3.x's `ClassInfo.fields()` includes
+            // inherited fields. We need the field's actual declaring
+            // class (where it physically lives) — runtime lookup uses
+            // Class.getDeclaredField, which only sees direct fields.
+            // The superclass walk below records the inherited fields
+            // under the parent's class name; skip them here.
+            if (!field.declaringClass().equals(declaringClass)) {
+                continue;
+            }
             String typeName = typeName(field.type());
             if (typeName == null) {
                 continue;
@@ -337,6 +346,79 @@ public class JaweltAutoMockBuildCompatibleExtension implements BuildCompatibleEx
                     qualifierNames,
                     userScopeFqn));
         }
+        // Walk the superclass chain so *QuarkusTest extends *Test
+        // subclasses pick up inline @TestBean static fields declared
+        // on the parent. Jandex's ClassInfo doesn't expose inherited
+        // fields, and the BCE has no IndexView handle — reflect
+        // through Class.forName instead (the test class is on the
+        // runtime classpath by the time @Registration fires).
+        collectInlineFieldsFromSuperclasses(declaringClass.name().toString());
+    }
+
+    private void collectInlineFieldsFromSuperclasses(String fqn) {
+        Class<?> klass;
+        try {
+            klass = Class.forName(fqn, false, Thread.currentThread().getContextClassLoader());
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return;
+        }
+        Class<?> testBeanType = loadCoreAnnotation("org.os890.jawelte.core.api.TestBean");
+        if (testBeanType == null) {
+            return;
+        }
+        Class<?> superClass = klass.getSuperclass();
+        while (superClass != null && superClass != Object.class) {
+            for (java.lang.reflect.Field f : superClass.getDeclaredFields()) {
+                if (!java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                    continue;
+                }
+                if (!hasReflectiveAnnotation(f, testBeanType.getName())) {
+                    continue;
+                }
+                Set<String> qualifierNames = reflectiveQualifierFqnSet(f);
+                String userScopeFqn = reflectiveUserScopeFqn(f);
+                inlineFields.add(new InlineFieldRecord(
+                        superClass.getName(),
+                        f.getName(),
+                        f.getType().getName(),
+                        qualifierNames,
+                        userScopeFqn));
+            }
+            superClass = superClass.getSuperclass();
+        }
+    }
+
+    private static boolean hasReflectiveAnnotation(
+            java.lang.reflect.Field f, String annotationFqn) {
+        for (java.lang.annotation.Annotation a : f.getDeclaredAnnotations()) {
+            if (a.annotationType().getName().equals(annotationFqn)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<String> reflectiveQualifierFqnSet(java.lang.reflect.Field f) {
+        Set<String> out = new LinkedHashSet<>();
+        for (java.lang.annotation.Annotation a : f.getDeclaredAnnotations()) {
+            Class<? extends java.lang.annotation.Annotation> at = a.annotationType();
+            if (at.isAnnotationPresent(jakarta.inject.Qualifier.class)) {
+                out.add(at.getName());
+            }
+        }
+        return out;
+    }
+
+    private static String reflectiveUserScopeFqn(java.lang.reflect.Field f) {
+        for (java.lang.annotation.Annotation a : f.getDeclaredAnnotations()) {
+            Class<? extends java.lang.annotation.Annotation> at = a.annotationType();
+            if (at.isAnnotationPresent(jakarta.enterprise.context.NormalScope.class)
+                    || at.getName().equals(jakarta.inject.Singleton.class.getName())
+                    || at.getName().equals(jakarta.enterprise.context.Dependent.class.getName())) {
+                return at.getName();
+            }
+        }
+        return null;
     }
 
     /**
