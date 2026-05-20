@@ -6037,3 +6037,69 @@ the real issue is that the prose colour is too dark.
 The page now reads as the brand intended — green-on-dark monospace
 end to end — with the main prose finally bright enough to be
 comfortable.
+
+## 2026-05-20 — docs/core.html — TestContext + config table to SPI, listing 09 aggregation, trim module-specific drift
+
+Three pieces of user feedback addressed together:
+
+1. **TestContext belongs in the SPI/port section, not the detailed
+   section.** It's only useful to port implementors; test authors
+   never directly construct or pass one.
+   - Removed `2.4 TestContext` from the detailed section
+     (including listing 10's code block).
+   - Re-inserted at the top of section 3 as new `3.1 TestContext`
+     so the SPI reader sees the per-call argument before the ports
+     that receive it. Listing 10 moved with the prose.
+   - Renumbered detailed: `2.5 events` -> `2.4`, `2.6 lifecycle
+     ordering` -> `2.5`.
+
+2. **`2.6 config overview` is also more SPI than detailed** — both
+   MP Config keys it lists are port-selection bootstrap keys.
+   - Moved to section 3 as new `3.10 config bootstrap keys`.
+   - Renumbered the SPI sections 3.1–3.8 to 3.2–3.9.
+
+3. **Listing 09 should also show meta-annotation aggregation** —
+   meta-annotations annotated with meta-annotations to build
+   composable reusable units.
+   - Added `Clock` interface + `SystemClock` to listing 09's
+     `src/main`, and a `StubClock @Alternative` impl.
+   - New `WithStubClock` meta-annotation
+     (`@TestBean(bean=StubClock.class)`), parallel to `WithStubEmail`.
+   - New `WithFullStubBackend` meta-annotation carrying both
+     `@WithStubEmail` and `@WithStubClock` — no `@TestBean` of
+     its own; aggregates them.
+   - New `FullStubBackendTest` applies `@WithFullStubBackend`
+     alone and `@Inject`s BOTH the stubbed email service and the
+     stubbed clock. Verified jawelte's `TestBeanScanner` walks the
+     annotation graph recursively (cycle-safe; skips
+     `java.` / `jakarta.` packages — line 123 of
+     `TestBeanScanner.recordTestBeanDeclarations`).
+   - docs/core.html section 2.2 listing 09 code block expanded
+     to show the three meta-annotation files + the
+     aggregating test class, with a trailing paragraph about the
+     "small units / named scenarios" pattern.
+
+Also clarified the `@TestBean modes` paragraph: `@TestBean`'s
+`@Target` does not include `METHOD`, so the producer-method route
+always goes through a producer-class indirection (the
+`beanProducer=` form). Sentence added right under the three-mode
+list.
+
+Per the user's separate "don't pull in too much that's only useful
+with other modules" note, trimmed three places where the core docs
+were over-promoting other modules:
+
+- Lifecycle paragraph for auto-mocks: removed the specific
+  `scope-module` MP Config key + `@TestMethodScoped` rebinding
+  detail (those belong in the scope-module docs); kept the
+  factual "default scope is configurable" line.
+- `AfterTestTransaction` section: shrunk to a contract pointer —
+  the event is defined in core, fired by transaction-managing
+  modules, see those modules' docs for semantics.
+- `ConfigKeyAliasProvider`: removed the
+  `auto-mock.exclude-packages` / jpa-module / spring-data-module
+  example; replaced with "the concrete cross-module wiring lives
+  in the docs of the contributing modules."
+
+All 18 tests across the 16 listings still pass via the aggregator
+sweep. All in-page anchors and all 19 listing cross-links resolve.

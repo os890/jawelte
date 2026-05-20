@@ -217,19 +217,19 @@
     <li class="depth-2"><a href="#dt-enable">2.1 @EnableTestBeans</a></li>
     <li class="depth-2"><a href="#dt-test-bean">2.2 @TestBean modes</a></li>
     <li class="depth-2"><a href="#dt-config-bean">2.3 @ConfigBean</a></li>
-    <li class="depth-2"><a href="#dt-test-context">2.4 TestContext</a></li>
-    <li class="depth-2"><a href="#dt-events">2.5 events</a></li>
-    <li class="depth-2"><a href="#dt-ordering">2.6 lifecycle ordering</a></li>
-    <li class="depth-2"><a href="#dt-config">2.7 config overview</a></li>
+    <li class="depth-2"><a href="#dt-events">2.4 events</a></li>
+    <li class="depth-2"><a href="#dt-ordering">2.5 lifecycle ordering</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
-    <li class="depth-2"><a href="#spi-container-port">3.1 TestBeanContainerPort</a></li>
-    <li class="depth-2"><a href="#spi-lifecycle-port">3.2 TestModuleLifecyclePort</a></li>
-    <li class="depth-2"><a href="#spi-instance-factory">3.3 TestInstanceFactoryPort</a></li>
-    <li class="depth-2"><a href="#spi-scope-mapper">3.4 BeanScopeMapper</a></li>
-    <li class="depth-2"><a href="#spi-config-resolver">3.5 ConfigResolver</a></li>
-    <li class="depth-2"><a href="#spi-alias-provider">3.6 ConfigKeyAliasProvider</a></li>
-    <li class="depth-2"><a href="#spi-priority-resolver">3.7 ServicePriorityResolver</a></li>
-    <li class="depth-2"><a href="#spi-bootstrap">3.8 TestBeansExtension</a></li>
+    <li class="depth-2"><a href="#spi-test-context">3.1 TestContext</a></li>
+    <li class="depth-2"><a href="#spi-container-port">3.2 TestBeanContainerPort</a></li>
+    <li class="depth-2"><a href="#spi-lifecycle-port">3.3 TestModuleLifecyclePort</a></li>
+    <li class="depth-2"><a href="#spi-instance-factory">3.4 TestInstanceFactoryPort</a></li>
+    <li class="depth-2"><a href="#spi-scope-mapper">3.5 BeanScopeMapper</a></li>
+    <li class="depth-2"><a href="#spi-config-resolver">3.6 ConfigResolver</a></li>
+    <li class="depth-2"><a href="#spi-alias-provider">3.7 ConfigKeyAliasProvider</a></li>
+    <li class="depth-2"><a href="#spi-priority-resolver">3.8 ServicePriorityResolver</a></li>
+    <li class="depth-2"><a href="#spi-bootstrap">3.9 TestBeansExtension</a></li>
+    <li class="depth-2"><a href="#spi-config-keys">3.10 config bootstrap keys</a></li>
   </ol>
 </nav>
 
@@ -327,7 +327,7 @@
 <h4>lifecycle &amp; sharing of auto-mocks</h4>
 <p>Auto-mocks are <code>@RequestScoped</code> by default. jawelte registers exactly one synthetic bean per <code>(target-type, qualifier-set)</code> shape — every injection point matching that shape resolves to the <strong>same</strong> mock instance for the duration of the current test method. So <code>Greeter.translator</code> (held by the application-scoped production bean) and <code>GreeterTest.translator</code> (the test class field) point at the identical mock; <code>when(translator…)</code> on the test side stubs exactly what <code>greeter.greet(…)</code> reads on the production side.</p>
 <p>The request scope is freshly activated in <code>beforeEach</code> and torn down in <code>afterEach</code>, so each test method gets its own fresh mock. Stubs you set up in one method never bleed into the next — Mockito state resets implicitly with the scope. Add a second <code>@Test</code> method that doesn't call <code>when(…)</code> and <code>translator.translate(…)</code> returns Mockito's default <code>null</code> again.</p>
-<p>The default scope is configurable via the MP Config key <code>org.os890.jawelte.module.cdi.auto-mock.default-scope</code>; pairing the test with <code>scope-module</code> rebinds it to <code>@TestMethodScoped</code> for the same per-method semantics expressed in scope-module's vocabulary. JDK types (<code>String</code>, primitives, the final classes mocking can't subclass…) are auto-mocked at <code>@Dependent</code> scope so each injection point gets its own instance — the framework can't put a normal-scope proxy on a final class.</p>
+<p>The default scope is configurable; the exact MP Config key and what each module rebinds it to is covered in the cdi-module / scope-module documentation. JDK types (<code>String</code>, primitives, the final classes mocking can't subclass…) are auto-mocked at <code>@Dependent</code> scope so each injection point gets its own instance — the framework can't put a normal-scope proxy on a final class.</p>
 
 <h4>Mockito version on JDK 25</h4>
 <p>The listing pins <code>mockito-core 5.23.0</code> deliberately. Mockito's default <em>inline</em> mock maker rewrites bytecode at runtime via Byte Buddy; older Mockito releases (e.g.&nbsp;<code>5.14.2</code>) bundled Byte Buddy <code>1.15.4</code>, which only knows class files up to Java 24 (major version 68). Under JDK 25 (major 69), <code>Mockito.mock(...)</code> throws</p>
@@ -563,9 +563,11 @@ app.retries  = 5</pre>
 <p><code>@TestBean</code> declares per-test-class bean replacements. Three modes, mutually exclusive within a single declaration:</p>
 <ul>
   <li><code>@TestBean(bean = X.class)</code> — activate the <code>@Alternative</code> class <code>X</code> for this test class. See <a href="#qs-use-cases">listing 03</a> in the quick-start.</li>
-  <li><code>@TestBean(beanProducer = P.class)</code> — activate the producer-method <code>@Alternative</code> class <code>P</code>. Listing 08 below.</li>
+  <li><code>@TestBean(beanProducer = P.class)</code> — activate the producer-method <code>@Alternative</code> class <code>P</code>. The <code>@Produces</code> methods live on <code>P</code>; <code>@TestBean</code> points at the producer class as a whole. Listing 08 below.</li>
   <li><code>@TestBean</code> on a static field — the field VALUE becomes the bean instance, scope <code>@Singleton</code>, qualifiers from the field. See <a href="#qs-use-cases">listing 04</a>.</li>
 </ul>
+
+<p><code>@TestBean</code>'s <code>@Target</code> is <code>{TYPE, ANNOTATION_TYPE, FIELD}</code> — it cannot be placed directly on a <code>@Produces</code> method; the producer-method route always goes through a producer-class indirection (the <code>beanProducer=</code> form above).</p>
 
 <p><code>@TestBean</code> is <code>@Repeatable</code> via the <code>@TestBeans</code> container annotation. Multiple <code>@TestBean</code>s on a class are aggregated automatically; no need to write the container by hand.</p>
 
@@ -602,31 +604,52 @@ app.retries  = 5</pre>
 </div>
 
 <h3>@TestBean on a meta-annotation</h3>
-<p>Wrap a <code>@TestBean</code> in your own annotation and apply that annotation across many test classes. jawelte walks the meta-annotation chain and picks up the wrapped declarations.</p>
+<p>Wrap a <code>@TestBean</code> in your own annotation and apply that annotation across many test classes. jawelte's scanner walks the annotation graph recursively (cycle-safe; <code>java.</code> / <code>jakarta.</code> packages are skipped), so the trick composes: a meta-annotation can itself carry other meta-annotations and they ALL contribute their <code>@TestBean</code>s to the test class.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 09 · test-bean-meta-annotation</span><a href="../listings/09-test-bean-meta-annotation/">listings/09-test-bean-meta-annotation/</a></div>
-<pre><span class="cm">// src/test/java/example/meta/WithStubEmail.java</span>
+<pre><span class="cm">// src/test/java/example/meta/WithStubEmail.java — one small reusable unit</span>
 <span class="an">@Target</span>(<span class="ty">ElementType</span>.TYPE)
 <span class="an">@Retention</span>(<span class="ty">RetentionPolicy</span>.RUNTIME)
 <span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
 <span class="kw">public @interface</span> <span class="ty">WithStubEmail</span> {
 }
 
-<span class="cm">// src/test/java/example/meta/SendingTest.java</span>
-<span class="an">@EnableTestBeans</span>
+<span class="cm">// src/test/java/example/meta/WithStubClock.java — another small reusable unit</span>
+<span class="an">@Target</span>(<span class="ty">ElementType</span>.TYPE)
+<span class="an">@Retention</span>(<span class="ty">RetentionPolicy</span>.RUNTIME)
+<span class="an">@TestBean</span>(bean = <span class="ty">StubClock</span>.<span class="kw">class</span>)
+<span class="kw">public @interface</span> <span class="ty">WithStubClock</span> {
+}
+
+<span class="cm">// src/test/java/example/meta/WithFullStubBackend.java — composes the two</span>
+<span class="an">@Target</span>(<span class="ty">ElementType</span>.TYPE)
+<span class="an">@Retention</span>(<span class="ty">RetentionPolicy</span>.RUNTIME)
 <span class="an">@WithStubEmail</span>
-<span class="kw">class</span> <span class="ty">SendingTest</span> {
+<span class="an">@WithStubClock</span>
+<span class="kw">public @interface</span> <span class="ty">WithFullStubBackend</span> {
+}
+
+<span class="cm">// src/test/java/example/meta/FullStubBackendTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@WithFullStubBackend</span>      <span class="cm">// one label, both stubs activated</span>
+<span class="kw">class</span> <span class="ty">FullStubBackendTest</span> {
 
     <span class="an">@Inject</span>
     <span class="ty">EmailService</span> emailService;
 
+    <span class="an">@Inject</span>
+    <span class="ty">Clock</span> clock;
+
     <span class="an">@Test</span>
-    <span class="kw">void</span> stubIsActive() {
+    <span class="kw">void</span> aggregatingMetaAnnotationActivatesBothStubs() {
         assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
+        assertThat(clock.now()).isEqualTo(<span class="ty">StubClock</span>.PINNED);
     }
 }</pre>
 </div>
+
+<p>Pattern for larger test suites: keep one tiny meta-annotation per fixture (one stub each, one job each), then assemble them into named scenarios — <code>@WithFullStubBackend</code> here, but realistic suites grow concepts like <code>@WithSmtpAndAuditOff</code>, <code>@WithFrozenClockUtc</code>, <code>@WithReadOnlyDatabase</code>. The test classes apply exactly one such label and stay free of <code>@TestBean</code> wiring noise.</p>
 
 <h2 id="dt-config-bean">2.3 @ConfigBean</h2>
 <p><code>@ConfigBean</code> is a CDI <code>@Stereotype</code> that meta-applies <code>@ApplicationScoped</code>. A class annotated <code>@ConfigBean</code> is therefore a regular CDI bean with application scope; the user does not declare <code>@ApplicationScoped</code> explicitly.</p>
@@ -635,42 +658,7 @@ app.retries  = 5</pre>
 
 <p>The annotation defines no interceptors and no additional behavior beyond the stereotype's scope contribution. It also serves as a discovery marker so that, for example, <code>limitToTestBeans</code> can identify config beans.</p>
 
-<h2 id="dt-test-context">2.4 TestContext</h2>
-<p><code>TestContext</code> is the per-test-class facade every non-JUnit jawelte port receives. It carries:</p>
-<ul>
-  <li><code>getTestClass()</code> — the JUnit test class.</li>
-  <li><code>bindMetadata(Class&lt;T&gt; key, T value)</code> / <code>getMetadata(Class&lt;T&gt;)</code> / <code>unbindMetadata(Class&lt;T&gt;)</code> — typed per-test-class state. The <code>Class&lt;T&gt;</code> token is both key and type witness.</li>
-  <li>Two static helpers: <code>TestContext.get()</code> (the active context on the calling thread, usable only inside the bootstrap window of <code>core/impl</code>'s delegating extension); <code>TestContext.loadService(Class)</code> (the project-wide canonical priority-resolved SPI lookup).</li>
-</ul>
-
-<p>Modules use metadata to carry their own per-class state — jpa-module keeps the active-PU stack there, cdi-module stashes the <code>RequestContextController</code> across <code>beforeEach</code> / <code>afterEach</code>. User code can do the same from a custom lifecycle port.</p>
-
-<div class="listing">
-  <div class="listing-bar"><span class="label">listing 10 · test-context-metadata</span><a href="../listings/10-test-context-metadata/">listings/10-test-context-metadata/</a></div>
-<pre><span class="cm">// src/test/java/example/metadata/BootstrapTimestampLifecyclePort.java</span>
-<span class="kw">public class</span> <span class="ty">BootstrapTimestampLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
-
-    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; BOUND_IN_BEFORE_ALL = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
-    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; SEEN_IN_BEFORE_EACH = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
-
-    <span class="an">@Override</span>
-    <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> testContext) {
-        <span class="ty">StartupRecord</span> record = <span class="kw">new</span> <span class="ty">StartupRecord</span>(<span class="ty">System</span>.currentTimeMillis());
-        testContext.bindMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>, record);
-        BOUND_IN_BEFORE_ALL.set(record);
-    }
-
-    <span class="an">@Override</span>
-    <span class="kw">public void</span> beforeEach(<span class="ty">TestContext</span> testContext) {
-        SEEN_IN_BEFORE_EACH.set(testContext.getMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>).orElse(<span class="kw">null</span>));
-    }
-}
-
-<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort</span>
-example.metadata.BootstrapTimestampLifecyclePort</pre>
-</div>
-
-<h2 id="dt-events">2.5 events</h2>
+<h2 id="dt-events">2.4 events</h2>
 <p>jawelte fires three CDI events at well-defined lifecycle points. Module code observes them with plain <code>@Observes</code>.</p>
 
 <h3>ContainerStarted</h3>
@@ -704,9 +692,9 @@ example.metadata.BootstrapTimestampLifecyclePort</pre>
 </div>
 
 <h3>AfterTestTransaction</h3>
-<p>Fired by the JPA-aware module after a per-test transaction completes (committed or rolled back). Carries the test-method name and the committed flag. Not fired if no transaction-managing module is on the classpath. Defined here for the contract; users typically observe it in jpa-module-aware code rather than from core itself.</p>
+<p>Defined in core as a contract; fired only when a transaction-managing module is on the classpath. See that module's documentation for when it fires and what the <code>committed</code> flag means in that context.</p>
 
-<h2 id="dt-ordering">2.6 lifecycle ordering</h2>
+<h2 id="dt-ordering">2.5 lifecycle ordering</h2>
 <p>jawelte invokes lifecycle callbacks in a specific order across the active ports:</p>
 <ul>
   <li><code>beforeAll</code> — <code>TestBeanContainerPort.beforeAll</code> first; then each <code>TestModuleLifecyclePort.beforeAll</code> in ascending <code>@Priority</code> order. Ports without <code>@Priority</code> get an effective priority of <code>Integer.MAX_VALUE</code> (run last).</li>
@@ -718,37 +706,47 @@ example.metadata.BootstrapTimestampLifecyclePort</pre>
 
 <p>Cleanup guarantee: only ports that completed their <code>before*</code> receive the matching <code>after*</code>. If <code>before*</code> on some port threw, ports earlier in the chain still get their <code>after*</code>; the thrown exception is the primary and the rest are attached via <code>Throwable.addSuppressed</code>.</p>
 
-<h2 id="dt-config">2.7 config overview</h2>
-<p>core itself reads exactly two configuration keys from MicroProfile Config. Both are <strong>bootstrap keys</strong> — they select the FQCN of an implementation class with a public no-arg constructor. Both accept the underscore variant as a fallback (per MP Config's environment-variable mapping rule).</p>
-
-<table class="cfg">
-  <thead>
-    <tr><th>Key</th><th>Default value</th><th>Purpose</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><code>org.os890.jawelte.core.api.port.TestContext</code></td>
-      <td><code>org.os890.jawelte.core.impl.adapter.context.TestContextImpl</code></td>
-      <td>The active <code>TestContext</code> accessor. Reflectively instantiated by <code>TestContext.get()</code>. Replace it to plug a custom per-thread-context binding mechanism.</td>
-    </tr>
-    <tr>
-      <td><code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code></td>
-      <td><code>org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver</code></td>
-      <td>The active <code>ServicePriorityResolver</code>. Heads every <code>TestContext.loadService(Class)</code>-based SPI lookup. Replace it to install a project-wide alternative ordering rule (see <a href="#spi-priority-resolver">listing 16</a>).</td>
-    </tr>
-  </tbody>
-</table>
-
-<p>Both defaults are shipped in <code>core/impl</code>'s own <code>META-INF/microprofile-config.properties</code> (MP Config ordinal 100); user overrides at any higher ordinal (system properties, env vars, application <code>.properties</code>) win.</p>
-
 <h1 id="spi">3. spi / port reference</h1>
 
 <p>core defines the entire jawelte port surface. Each port is either <strong>single-impl</strong> (exactly one implementation must be on the classpath; multiple-impl raises an error) or <strong>multi-impl</strong> (any number; the active <code>ServicePriorityResolver</code> orders them). Some are discovered via <code>ServiceLoader</code>; <code>ConfigResolver</code> is a CDI bean.</p>
 
-<h2 id="spi-container-port">3.1 TestBeanContainerPort</h2>
+<h2 id="spi-test-context">3.1 TestContext</h2>
+<p><code>TestContext</code> is the per-test-class facade every non-JUnit jawelte port receives — every method on every port below takes a <code>TestContext</code> argument. It carries:</p>
+<ul>
+  <li><code>getTestClass()</code> — the JUnit test class.</li>
+  <li><code>bindMetadata(Class&lt;T&gt; key, T value)</code> / <code>getMetadata(Class&lt;T&gt;)</code> / <code>unbindMetadata(Class&lt;T&gt;)</code> — typed per-test-class state. The <code>Class&lt;T&gt;</code> token is both the key and the type witness. Port implementations that need state across their own callbacks bind it here rather than holding instance fields.</li>
+  <li>Two static helpers: <code>TestContext.get()</code> (the active context on the calling thread, usable only inside the bootstrap window of <code>core/impl</code>'s delegating extension); <code>TestContext.loadService(Class)</code> (the project-wide canonical priority-resolved SPI lookup).</li>
+</ul>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 10 · test-context-metadata</span><a href="../listings/10-test-context-metadata/">listings/10-test-context-metadata/</a></div>
+<pre><span class="cm">// src/test/java/example/metadata/BootstrapTimestampLifecyclePort.java</span>
+<span class="kw">public class</span> <span class="ty">BootstrapTimestampLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
+
+    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; BOUND_IN_BEFORE_ALL = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
+    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; SEEN_IN_BEFORE_EACH = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
+
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> testContext) {
+        <span class="ty">StartupRecord</span> record = <span class="kw">new</span> <span class="ty">StartupRecord</span>(<span class="ty">System</span>.currentTimeMillis());
+        testContext.bindMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>, record);
+        BOUND_IN_BEFORE_ALL.set(record);
+    }
+
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> beforeEach(<span class="ty">TestContext</span> testContext) {
+        SEEN_IN_BEFORE_EACH.set(testContext.getMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>).orElse(<span class="kw">null</span>));
+    }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort</span>
+example.metadata.BootstrapTimestampLifecyclePort</pre>
+</div>
+
+<h2 id="spi-container-port">3.2 TestBeanContainerPort</h2>
 <p><strong>Single-impl, ServiceLoader.</strong> The CDI runtime adapter. The delegating JUnit extension forwards every test-lifecycle callback to this port. <code>cdi-module</code> ships the OWB/Weld SE adapter (<code>CdiTestBeanContainer</code>). The user does not usually implement this port.</p>
 
-<h2 id="spi-lifecycle-port">3.2 TestModuleLifecyclePort</h2>
+<h2 id="spi-lifecycle-port">3.3 TestModuleLifecyclePort</h2>
 <p><strong>Multi-impl, ServiceLoader.</strong> The way feature modules participate in the test lifecycle. All methods default to no-ops; an implementation overrides only the callbacks it cares about. Sorted by <code>@Priority</code> ascending for <code>before*</code>, reverse for <code>after*</code>.</p>
 
 <div class="listing">
@@ -776,10 +774,10 @@ example.lifecycle.EarlyLifecyclePort
 example.lifecycle.LateLifecyclePort</pre>
 </div>
 
-<h2 id="spi-instance-factory">3.3 TestInstanceFactoryPort</h2>
+<h2 id="spi-instance-factory">3.4 TestInstanceFactoryPort</h2>
 <p><strong>Single-impl (optional), ServiceLoader.</strong> Produces the test-instance JUnit will use. When present, JUnit receives the bean instance the implementation produces; when absent, jawelte falls back to <code>testClass.getDeclaredConstructor().newInstance()</code>. <code>cdi-module</code> ships an impl that does <code>CDI.current().select(testClass).get()</code> so test classes participate in CDI-managed lifecycle (private fields, package-private classes, JUnit's <code>PER_METHOD</code> all keep working).</p>
 
-<h2 id="spi-scope-mapper">3.4 BeanScopeMapper + BeanScopeMapperPort</h2>
+<h2 id="spi-scope-mapper">3.5 BeanScopeMapper + BeanScopeMapperPort</h2>
 <p>Two related ports for declarative CDI scope rewriting at <code>ProcessAnnotatedType</code> time.</p>
 
 <ul>
@@ -806,7 +804,7 @@ example.lifecycle.LateLifecyclePort</pre>
 example.scopemap.RequestToApplicationScoped</pre>
 </div>
 
-<h2 id="spi-config-resolver">3.5 ConfigResolver</h2>
+<h2 id="spi-config-resolver">3.6 ConfigResolver</h2>
 <p><strong>Single active impl, CDI bean (NOT ServiceLoader).</strong> Resolves config keys to their raw <code>String</code> values. <code>@ConfigBean</code> classes inject it and call <code>resolve(dotKey)</code>. The default impl in <code>core/impl</code> looks up via MicroProfile Config with the documented two-step fallback (<code>dotKey</code> first, then the underscore variant if and only if <code>dotKey</code> contained at least one <code>.</code>).</p>
 
 <p>Users override with an <code>@Alternative @Priority(...)</code> CDI bean — CDI 4's globally-enabled alternative rule selects the highest-priority alternative over the framework default (which carries no <code>@Alternative</code>).</p>
@@ -838,10 +836,10 @@ example.scopemap.RequestToApplicationScoped</pre>
 }</pre>
 </div>
 
-<h2 id="spi-alias-provider">3.6 ConfigKeyAliasProvider</h2>
-<p><strong>Multi-impl, ServiceLoader.</strong> The way a non-owning module contributes module-specific MP Config keys to a logical configuration key owned by another module. The owning module reads its own key directly and merges the contributor keys this port returns into the final value. Example: <code>cdi-module</code> owns <code>auto-mock.exclude-packages</code>; <code>jpa-module</code> and <code>spring-data-module</code> each ship a <code>ConfigKeyAliasProvider</code> mapping that logical key to their own contributor keys.</p>
+<h2 id="spi-alias-provider">3.7 ConfigKeyAliasProvider</h2>
+<p><strong>Multi-impl, ServiceLoader.</strong> The way a non-owning module contributes module-specific MP Config keys to a logical configuration key owned by another module. The owning module reads its own key directly and merges the contributor keys this port returns into the final value. The concrete cross-module wiring lives in the docs of the contributing modules.</p>
 
-<h2 id="spi-priority-resolver">3.7 ServicePriorityResolver</h2>
+<h2 id="spi-priority-resolver">3.8 ServicePriorityResolver</h2>
 <p><strong>Single active impl, bootstrap via MP Config.</strong> The project-wide canonical mechanism for ordering provider lists. Replace it via the MP Config bootstrap key <code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code> — value is the FQCN of an impl class with a public no-arg constructor. Every <code>TestContext.loadService(Class)</code> SPI selection routes through the active resolver.</p>
 
 <div class="listing">
@@ -866,8 +864,31 @@ example.scopemap.RequestToApplicationScoped</pre>
 
 <p><strong>Caveat.</strong> core's own <code>DelegatingJUnitExtension</code> sorts <code>TestModuleLifecyclePort</code> via a hardcoded <code>PriorityComparator</code> rather than the resolver. The resolver applies to ports loaded through <code>TestContext.loadService(...)</code> (cdi-module's <code>MockFactory</code> / <code>WhitelistFilter</code>, content-diff's matchers, …) — that's where swapping the resolver shifts the active provider.</p>
 
-<h2 id="spi-bootstrap">3.8 TestBeansExtension</h2>
+<h2 id="spi-bootstrap">3.9 TestBeansExtension</h2>
 <p><strong>Single-impl, ServiceLoader. You almost never touch this.</strong> The bootstrap SPI <code>EnableTestBeans.Proxy</code> loads to delegate every JUnit callback to. Implemented once by <code>core/impl</code> (<code>DelegatingJUnitExtension</code>); shipping a second implementation breaks bootstrap (zero / multiple impls raise <code>IllegalStateException</code> on first callback). Listed here for completeness — replace it only to fork the JUnit-side glue itself.</p>
+
+<h2 id="spi-config-keys">3.10 config bootstrap keys</h2>
+<p>core reads exactly two MicroProfile Config keys; both name the FQCN of a port impl with a public no-arg constructor. Both accept the underscore variant as a fallback (per MP Config's environment-variable mapping rule).</p>
+
+<table class="cfg">
+  <thead>
+    <tr><th>Key</th><th>Default</th><th>Selects</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>org.os890.jawelte.core.api.port.TestContext</code></td>
+      <td><code>org.os890.jawelte.core.impl.adapter.context.TestContextImpl</code></td>
+      <td>The accessor returned by <code>TestContext.get()</code> — section <a href="#spi-test-context">3.1</a>.</td>
+    </tr>
+    <tr>
+      <td><code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code></td>
+      <td><code>org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver</code></td>
+      <td>The resolver behind every <code>TestContext.loadService(Class)</code> call — section <a href="#spi-priority-resolver">3.8</a>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Both defaults ship in <code>core/impl</code>'s own <code>META-INF/microprofile-config.properties</code> at MP Config ordinal 100; user overrides at any higher ordinal (system properties, env vars, application <code>.properties</code>) win.</p>
 
 <div class="closing">
   <strong>jawelte / core</strong> &nbsp;·&nbsp; back to <a href="index.html" style="color: var(--green); border-bottom: 1px dotted var(--green-dim);">overview</a>
