@@ -5720,3 +5720,33 @@ on a side-effect of changing the order. Modules that consume
 prioritized SPIs (cdi-module's mock-factory, content-diff's
 matchers) do route through `TestContext.loadService(Class)` and
 inherit the user's resolver choice.
+
+## 2026-05-20 — ticket-016 docs/core.html
+
+Single-page HTML segment documentation for `core`, matching the
+visual style of the existing `docs/index.html` (same palette tokens,
+monospace typography, green-on-dark theme — widened to 920px to
+accommodate code blocks).
+
+Structure (three sections + intro + TOC):
+
+1. **Quick-start** — purpose, hello-world (listing 01), the four
+   most-common use-cases (listings 02-05), Maven setup fragment.
+2. **Detailed** — `@EnableTestBeans` options (listings 06-07),
+   `@TestBean` modes (listings 03/04/08/09), `@ConfigBean`,
+   `TestContext` (listing 10), the three events (listings 11-12),
+   lifecycle ordering walk-through, and a config-overview table
+   listing the two MP Config bootstrap keys core ships with their
+   defaults.
+3. **SPI / port reference** — one entry per port:
+   `TestBeanContainerPort`, `TestModuleLifecyclePort` (listing 13),
+   `TestInstanceFactoryPort`, `BeanScopeMapper` /
+   `BeanScopeMapperPort` (listing 14), `ConfigResolver`
+   (listing 15), `ConfigKeyAliasProvider`,
+   `ServicePriorityResolver` (listing 16), `TestBeansExtension`.
+
+Every code block on the page carries a relative link to the
+corresponding `listings/<nn>-<name>/` sub-folder. Cross-references
+verified: all 18 listing-folder links resolve to extant paths; all
+22 in-page anchors resolve to declared `id`s. Visual rendering will
+be verified at the user-side checkpoint.

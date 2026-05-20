@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jawelte / core</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green:      #4ade80;
+    --green-dark: #15803d;
+    --green-dim:  #166534;
+    --green-deep: #071a0b;
+    --red:        #ef4444;
+    --bg:         #1a1a1a;
+    --bg2:        #222222;
+    --bg3:        #2a2a2a;
+    --text:       #e4e4e7;
+    --muted:      #71717a;
+    --soft:       #c4c4c7;
+    --border:     #2e2e2e;
+  }
+  html { background: var(--bg); color: var(--text); font-family: monospace; scroll-behavior: smooth; }
+  body { max-width: 920px; margin: 0 auto; padding: 0 24px 80px; }
+  a { color: var(--green); text-decoration: none; border-bottom: 1px dotted var(--green-dim); }
+  a:hover { color: #6ee897; border-bottom-color: var(--green); }
+  code { font-family: monospace; color: var(--green); background: var(--bg2); padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+
+  header { display: flex; flex-direction: column; align-items: center; padding: 56px 0 40px; border-bottom: 1px solid var(--border); margin-bottom: 48px; }
+  .wordmark { font-size: 40px; font-family: monospace; font-weight: 500; letter-spacing: 4px; color: var(--text); line-height: 1; margin-bottom: 6px; }
+  .wordmark .g { color: var(--green); }
+  .segment { font-size: 14px; letter-spacing: 4px; color: var(--green); margin-top: 8px; }
+  .tagline { font-size: 11px; letter-spacing: 3px; color: var(--muted); margin-top: 6px; }
+
+  .meta { font-size: 12px; color: var(--muted); margin-bottom: 40px; letter-spacing: 1px; text-align: center; }
+
+  h1 { font-size: 22px; letter-spacing: 3px; color: var(--green); text-transform: lowercase; margin: 56px 0 16px; padding-bottom: 12px; border-bottom: 1px solid var(--green-dim); font-weight: 500; }
+  h2 { font-size: 15px; letter-spacing: 2px; color: var(--green); text-transform: lowercase; margin: 36px 0 14px; font-weight: 500; }
+  h3 { font-size: 13px; letter-spacing: 1px; color: var(--text); text-transform: lowercase; margin: 24px 0 10px; font-weight: 500; }
+  p { font-size: 14px; line-height: 1.75; color: var(--soft); margin-bottom: 14px; }
+  strong { color: var(--text); font-weight: 500; }
+  em { font-style: normal; color: var(--text); }
+
+  ul, ol { margin: 0 0 14px 28px; }
+  li { font-size: 14px; line-height: 1.75; color: var(--soft); margin-bottom: 4px; }
+  li code, p code { font-size: 12.5px; }
+
+  .toc { border: 1px solid var(--border); background: var(--bg2); border-radius: 8px; padding: 20px 24px; margin-bottom: 48px; }
+  .toc-title { font-size: 11px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; }
+  .toc-list { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 32px; }
+  .toc-list li { margin-bottom: 6px; font-size: 12.5px; }
+  .toc-list li.depth-2 { padding-left: 18px; color: var(--muted); }
+  .toc-list a { border-bottom: none; }
+  .toc-list a:hover { border-bottom: 1px dotted var(--green); }
+
+  .listing { margin: 18px 0 22px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg2); }
+  .listing-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; background: var(--bg3); border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 1px; color: var(--muted); }
+  .listing-bar .label { color: var(--green); }
+  .listing-bar a { color: var(--muted); border-bottom: 1px dotted var(--border); font-size: 11px; }
+  .listing-bar a:hover { color: var(--green); border-bottom-color: var(--green-dim); }
+  .listing pre { padding: 16px 20px; overflow-x: auto; background: var(--bg2); font-family: monospace; font-size: 12.5px; line-height: 1.6; color: var(--soft); }
+  .listing pre .kw { color: var(--green); }
+  .listing pre .an { color: #d9b56f; }
+  .listing pre .st { color: #a0c0a0; }
+  .listing pre .cm { color: var(--muted); font-style: italic; }
+  .listing pre .ty { color: var(--text); }
+
+  .panel { border: 1px solid var(--border); background: var(--bg2); border-radius: 8px; padding: 18px 22px; margin: 18px 0 22px; font-size: 13px; line-height: 1.7; color: var(--soft); }
+  .panel-label { display: inline-block; font-size: 10px; letter-spacing: 2px; color: var(--green); text-transform: uppercase; padding: 2px 8px; border: 1px solid var(--green-dim); border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+
+  table.cfg { width: 100%; border-collapse: collapse; margin: 12px 0 24px; font-size: 12.5px; }
+  table.cfg th { text-align: left; padding: 8px 12px; background: var(--bg3); color: var(--green); font-weight: 500; letter-spacing: 1px; border-bottom: 1px solid var(--green-dim); }
+  table.cfg td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--soft); vertical-align: top; line-height: 1.6; }
+  table.cfg td:first-child { color: var(--text); white-space: nowrap; }
+  table.cfg td code { font-size: 11.5px; }
+  table.cfg tr:last-child td { border-bottom: none; }
+
+  .closing { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); letter-spacing: 1px; text-align: center; }
+  .closing strong { color: var(--green); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">ja<span class="g">we</span>lte</div>
+  <div class="tagline">the test-framework</div>
+  <div class="segment">// core</div>
+</header>
+
+<div class="meta">// may 2026 &nbsp;·&nbsp; segment documentation &nbsp;·&nbsp; jakarta 11 &nbsp;·&nbsp; junit 6</div>
+
+<nav class="toc">
+  <div class="toc-title">on this page</div>
+  <ol class="toc-list">
+    <li><a href="#quick-start">1. quick-start</a></li>
+    <li class="depth-2"><a href="#qs-purpose">1.1 purpose</a></li>
+    <li class="depth-2"><a href="#qs-hello-world">1.2 hello-world</a></li>
+    <li class="depth-2"><a href="#qs-use-cases">1.3 common use-cases</a></li>
+    <li class="depth-2"><a href="#qs-maven">1.4 maven setup</a></li>
+    <li><a href="#detailed">2. detailed</a></li>
+    <li class="depth-2"><a href="#dt-enable">2.1 @EnableTestBeans</a></li>
+    <li class="depth-2"><a href="#dt-test-bean">2.2 @TestBean modes</a></li>
+    <li class="depth-2"><a href="#dt-config-bean">2.3 @ConfigBean</a></li>
+    <li class="depth-2"><a href="#dt-test-context">2.4 TestContext</a></li>
+    <li class="depth-2"><a href="#dt-events">2.5 events</a></li>
+    <li class="depth-2"><a href="#dt-ordering">2.6 lifecycle ordering</a></li>
+    <li class="depth-2"><a href="#dt-config">2.7 config overview</a></li>
+    <li><a href="#spi">3. spi / port reference</a></li>
+    <li class="depth-2"><a href="#spi-container-port">3.1 TestBeanContainerPort</a></li>
+    <li class="depth-2"><a href="#spi-lifecycle-port">3.2 TestModuleLifecyclePort</a></li>
+    <li class="depth-2"><a href="#spi-instance-factory">3.3 TestInstanceFactoryPort</a></li>
+    <li class="depth-2"><a href="#spi-scope-mapper">3.4 BeanScopeMapper</a></li>
+    <li class="depth-2"><a href="#spi-config-resolver">3.5 ConfigResolver</a></li>
+    <li class="depth-2"><a href="#spi-alias-provider">3.6 ConfigKeyAliasProvider</a></li>
+    <li class="depth-2"><a href="#spi-priority-resolver">3.7 ServicePriorityResolver</a></li>
+    <li class="depth-2"><a href="#spi-bootstrap">3.8 TestBeansExtension</a></li>
+  </ol>
+</nav>
+
+<p><strong>core</strong> is jawelte's contract layer. It turns JUnit 5 lifecycle hooks into your CDI container's lifecycle, defines the annotations test authors actually use (<code>@EnableTestBeans</code>, <code>@TestBean</code>, <code>@ConfigBean</code>), and ships the ports every other module plugs into. <em>core does not ship a container.</em> Pair it with <code>cdi-module</code> (the default adapter for OpenWebBeans / Weld SE) — every example on this page assumes that pairing.</p>
+
+<p>Every code block on this page links to a runnable sample under <a href="../listings/">listings/</a>. Each sample is a stand-alone Maven project — copy a folder out of the repository and run <code>mvn test</code> on it without any other setup.</p>
+
+<h1 id="quick-start">1. quick-start</h1>
+
+<h2 id="qs-purpose">1.1 purpose</h2>
+<p><strong>core</strong> exposes a JUnit 5 extension (<code>@EnableTestBeans</code>) that boots a CDI container around your test class, populates <code>@Inject</code> fields on the test instance, activates the request scope around each test method, and tears everything down afterwards. The test author writes plain JUnit; jawelte does the wiring.</p>
+
+<p>On top of the lifecycle, core defines three annotations the test author touches directly:</p>
+<ul>
+  <li><code>@EnableTestBeans</code> — switches the extension on for a class; carries two options (<code>limitToTestBeans</code>, <code>manageContainer</code>) covered in section 2.1.</li>
+  <li><code>@TestBean</code> — picks per-test-class bean replacements (alternative class, producer-method class, or a pre-built value via a static field). Covered in 2.2.</li>
+  <li><code>@ConfigBean</code> — declares a typed configuration facade backed by jawelte's <code>ConfigResolver</code>. Covered in 2.3.</li>
+</ul>
+
+<p>Two more layers sit underneath the annotations and matter once you're past hello-world:</p>
+<ul>
+  <li><strong>Events</strong> — <code>ContainerStarted</code>, <code>BeforeScopeStarted</code>, <code>AfterTestTransaction</code> — fire at well-defined points and let module code react to the lifecycle.</li>
+  <li><strong>Ports</strong> — the SPI surface every adapter plugs into (<code>TestBeanContainerPort</code>, <code>TestModuleLifecyclePort</code>, <code>ConfigResolver</code>, <code>BeanScopeMapper</code>, …). Section 3 walks them.</li>
+</ul>
+
+<h2 id="qs-hello-world">1.2 hello-world</h2>
+<p>A plain <code>@ApplicationScoped</code> bean in <code>src/main</code>, a JUnit test in <code>src/test</code> annotated <code>@EnableTestBeans</code>, one <code>@Inject</code> field, one assertion. That's the whole shape.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 01 · hello-world</span><a href="../listings/01-hello-world/">listings/01-hello-world/</a></div>
+<pre><span class="cm">// src/main/java/example/hello/HelloService.java</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">HelloService</span> {
+    <span class="kw">public</span> <span class="ty">String</span> greet(<span class="ty">String</span> name) {
+        <span class="kw">return</span> <span class="st">"hello, "</span> + name + <span class="st">"!"</span>;
+    }
+}
+
+<span class="cm">// src/test/java/example/hello/HelloServiceTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">HelloServiceTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">HelloService</span> helloService;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> greetsByName() {
+        assertThat(helloService.greet(<span class="st">"jawelte"</span>)).isEqualTo(<span class="st">"hello, jawelte!"</span>);
+    }
+}</pre>
+</div>
+
+<p>Run <code>mvn test</code> from inside the listing folder; one test passes in under a second. The CDI container booted by jawelte discovered <code>HelloService</code>, injected it into the test instance, ran the test method inside an active request scope, and shut down.</p>
+
+<h2 id="qs-use-cases">1.3 common use-cases</h2>
+
+<h3>auto-mocked dependency</h3>
+<p>Production code <code>@Inject</code>s a collaborator with no implementation on the classpath. jawelte's default <code>MockFactory</code> (a Mockito wrapper) supplies a mock; the test stubs it with plain Mockito.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 02 · auto-mock</span><a href="../listings/02-auto-mock/">listings/02-auto-mock/</a></div>
+<pre><span class="cm">// src/main/java/example/automock/Translator.java</span>
+<span class="kw">public interface</span> <span class="ty">Translator</span> { <span class="ty">String</span> translate(<span class="ty">String</span> value); }
+
+<span class="cm">// src/main/java/example/automock/Greeter.java</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">Greeter</span> {
+    <span class="an">@Inject</span> <span class="ty">Translator</span> translator;
+    <span class="kw">public</span> <span class="ty">String</span> greet(<span class="ty">String</span> name) { <span class="kw">return</span> <span class="st">"hello, "</span> + translator.translate(name) + <span class="st">"!"</span>; }
+}
+
+<span class="cm">// src/test/java/example/automock/GreeterTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">GreeterTest</span> {
+    <span class="an">@Inject</span> <span class="ty">Greeter</span>     greeter;
+    <span class="an">@Inject</span> <span class="ty">Translator</span>  translator;  <span class="cm">// SAME auto-mock Greeter sees</span>
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> unsatisfiedDependencyIsAutoMocked() {
+        when(translator.translate(<span class="st">"jawelte"</span>)).thenReturn(<span class="st">"JAWELTE"</span>);
+        assertThat(greeter.greet(<span class="st">"jawelte"</span>)).isEqualTo(<span class="st">"hello, JAWELTE!"</span>);
+    }
+}</pre>
+</div>
+
+<h3>@TestBean — pick an alternative</h3>
+<p>A test-only <code>@Alternative</code> class wins over the production impl when its class is named in <code>@TestBean(bean=…)</code> on the test class.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 03 · test-bean-alternative</span><a href="../listings/03-test-bean-alternative/">listings/03-test-bean-alternative/</a></div>
+<pre><span class="cm">// src/test/java/example/alt/StubEmailService.java</span>
+<span class="an">@Alternative</span> <span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">StubEmailService</span> <span class="kw">implements</span> <span class="ty">EmailService</span> {
+    <span class="kw">public</span> <span class="ty">String</span> send(<span class="ty">String</span> to) { <span class="kw">return</span> <span class="st">"stub:"</span> + to; }
+}
+
+<span class="cm">// src/test/java/example/alt/EmailServiceTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">EmailServiceTest</span> {
+    <span class="an">@Inject</span> <span class="ty">EmailService</span> emailService;
+
+    <span class="an">@Test</span> <span class="kw">void</span> picksTheStub() {
+        assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
+    }
+}</pre>
+</div>
+
+<h3>@TestBean — pre-built value on a static field</h3>
+<p>Put <code>@TestBean</code> on a <code>static final</code> field whose initialiser yields the bean instance. No <code>@Alternative</code>, no producer — the field value IS the bean. Idiomatic for "register this exact object as the bean".</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 04 · test-bean-static-field</span><a href="../listings/04-test-bean-static-field/">listings/04-test-bean-static-field/</a></div>
+<pre><span class="cm">// src/main/java/example/staticfield/Greeting.java</span>
+<span class="kw">public record</span> <span class="ty">Greeting</span>(<span class="ty">String</span> text) {}
+
+<span class="cm">// src/test/java/example/staticfield/GreetingTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">GreetingTest</span> {
+    <span class="an">@TestBean</span>
+    <span class="kw">public static final</span> <span class="ty">Greeting</span> FIXTURE = <span class="kw">new</span> <span class="ty">Greeting</span>(<span class="st">"hello-from-static-field"</span>);
+
+    <span class="an">@Inject</span> <span class="ty">Greeting</span> greeting;
+
+    <span class="an">@Test</span> <span class="kw">void</span> staticFieldBecomesTheBean() {
+        assertThat(greeting).isSameAs(FIXTURE);
+    }
+}</pre>
+</div>
+
+<h3>@ConfigBean — typed config facade</h3>
+<p>A <code>@ConfigBean</code>-annotated class is an <code>@ApplicationScoped</code> CDI bean (the annotation is a stereotype that contributes the scope). <code>@Inject</code> <code>ConfigResolver</code> and expose one public method per config key with parsing + default.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 05 · config-bean</span><a href="../listings/05-config-bean/">listings/05-config-bean/</a></div>
+<pre><span class="cm">// src/main/java/example/configbean/AppConfig.java</span>
+<span class="an">@ConfigBean</span>
+<span class="kw">public class</span> <span class="ty">AppConfig</span> {
+    <span class="an">@Inject</span> <span class="ty">ConfigResolver</span> resolver;
+
+    <span class="kw">public</span> <span class="ty">String</span> greeting() { <span class="kw">return</span> resolver.resolve(<span class="st">"app.greeting"</span>).orElse(<span class="st">"hi"</span>); }
+    <span class="kw">public int</span>    retries()  { <span class="kw">return</span> resolver.resolve(<span class="st">"app.retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElse(<span class="kw">3</span>); }
+}
+
+<span class="cm">// src/main/resources/META-INF/microprofile-config.properties</span>
+app.greeting = hello from MicroProfile Config
+app.retries  = 5</pre>
+</div>
+
+<h2 id="qs-maven">1.4 maven setup</h2>
+<p>Drop these dependencies into your test project. <code>jawelte-core-api</code> is a compile-time dep (your test source code references its annotations); everything else is test-scoped. Pick a CDI runtime — <code>openwebbeans-se</code> is the listing default; swap for <code>org.jboss.weld.se:weld-se-shaded</code> to use Weld.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/01-hello-world/pom.xml">listings/01-hello-world/pom.xml</a></div>
+<pre>&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-core-api&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-core-impl&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-cdi-module-api&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-cdi-module-impl&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;io.smallrye.config&lt;/groupId&gt;
+  &lt;artifactId&gt;smallrye-config&lt;/artifactId&gt;
+  &lt;version&gt;${smallrye.config.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.apache.openwebbeans&lt;/groupId&gt;
+  &lt;artifactId&gt;openwebbeans-se&lt;/artifactId&gt;
+  &lt;version&gt;${openwebbeans.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;!-- jakarta.cdi-api, jakarta.inject-api, jakarta.annotation-api,
+     microprofile-config-api, junit-jupiter, assertj-core, mockito-core --&gt;</pre>
+</div>
+
+<p>You also need a <code>META-INF/beans.xml</code> in <code>src/main/resources</code> (and/or <code>src/test/resources</code>) so the CDI runtime discovers your beans. Any CDI 4 archive descriptor works — listing 01's beans.xml is the minimum:</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">beans.xml</span><a href="../listings/01-hello-world/src/main/resources/META-INF/beans.xml">listings/01-hello-world/src/main/resources/META-INF/beans.xml</a></div>
+<pre>&lt;beans xmlns="https://jakarta.ee/xml/ns/jakartaee"
+       version="4.0"
+       bean-discovery-mode="annotated"/&gt;</pre>
+</div>
+
+<h1 id="detailed">2. detailed</h1>
+
+<h2 id="dt-enable">2.1 @EnableTestBeans</h2>
+<p><code>@EnableTestBeans</code> is the one annotation that turns jawelte on for a JUnit 5 test class. It carries two options:</p>
+
+<h3>limitToTestBeans (default false)</h3>
+<p>When <code>true</code>, CDI bean discovery is restricted to classes named in a <code>@TestBean</code> declaration on the test class (or one of its superclasses, directly or via meta-annotation) plus framework internals. Auto-mocking is disabled. Production beans not whitelisted are vetoed at discovery time.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 06 · limit-to-test-beans</span><a href="../listings/06-limit-to-test-beans/">listings/06-limit-to-test-beans/</a></div>
+<pre><span class="an">@EnableTestBeans</span>(limitToTestBeans = <span class="kw">true</span>)
+<span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">LimitToTestBeansTest</span> {
+    <span class="an">@Inject</span> <span class="ty">BeanManager</span>  beanManager;
+    <span class="an">@Inject</span> <span class="ty">EmailService</span> emailService;
+
+    <span class="an">@Test</span> <span class="kw">void</span> onlyDeclaredTestBeansAreInTheContainer() {
+        assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
+        <span class="cm">// Production @ApplicationScoped beans not in any @TestBean were vetoed at discovery.</span>
+        assertThat(beanManager.getBeans(<span class="ty">SmtpEmailService</span>.<span class="kw">class</span>)).isEmpty();
+        assertThat(beanManager.getBeans(<span class="ty">AuditService</span>.<span class="kw">class</span>)).isEmpty();
+    }
+}</pre>
+</div>
+
+<h3>manageContainer (default true)</h3>
+<p>When <code>true</code>, jawelte calls <code>TestBeanContainerPort.beforeAll</code> and <code>afterAll</code> to boot and shut down the CDI container. When <code>false</code>, those calls are skipped — the test owns the container lifecycle (e.g., via <code>SeContainerInitializer</code>). The per-method scope activation and field injection still happen.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 07 · external-container</span><a href="../listings/07-external-container/">listings/07-external-container/</a></div>
+<pre><span class="an">@EnableTestBeans</span>(manageContainer = <span class="kw">false</span>)
+<span class="kw">class</span> <span class="ty">ExternalContainerTest</span> {
+    <span class="kw">private static</span> <span class="ty">SeContainer</span> container;
+
+    <span class="an">@BeforeAll</span> <span class="kw">static void</span> bootCdi()    { container = <span class="ty">SeContainerInitializer</span>.newInstance().initialize(); }
+    <span class="an">@AfterAll</span>  <span class="kw">static void</span> shutdownCdi() { container.close(); }
+
+    <span class="an">@Inject</span> <span class="ty">Counter</span>     counter;
+    <span class="an">@Inject</span> <span class="ty">BeanManager</span> beanManager;
+
+    <span class="an">@Test</span> <span class="kw">void</span> requestScopeStillActive() {
+        assertThat(beanManager.getContext(<span class="ty">RequestScoped</span>.<span class="kw">class</span>).isActive()).isTrue();
+        assertThat(counter.increment()).isEqualTo(<span class="kw">1</span>);
+    }
+}</pre>
+</div>
+
+<h2 id="dt-test-bean">2.2 @TestBean modes</h2>
+<p><code>@TestBean</code> declares per-test-class bean replacements. Three modes, mutually exclusive within a single declaration:</p>
+<ul>
+  <li><code>@TestBean(bean = X.class)</code> — activate the <code>@Alternative</code> class <code>X</code> for this test class. See <a href="#qs-use-cases">listing 03</a> in the quick-start.</li>
+  <li><code>@TestBean(beanProducer = P.class)</code> — activate the producer-method <code>@Alternative</code> class <code>P</code>. Listing 08 below.</li>
+  <li><code>@TestBean</code> on a static field — the field VALUE becomes the bean instance, scope <code>@Singleton</code>, qualifiers from the field. See <a href="#qs-use-cases">listing 04</a>.</li>
+</ul>
+
+<p><code>@TestBean</code> is <code>@Repeatable</code> via the <code>@TestBeans</code> container annotation. Multiple <code>@TestBean</code>s on a class are aggregated automatically; no need to write the container by hand.</p>
+
+<h3>beanProducer mode</h3>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 08 · test-bean-producer</span><a href="../listings/08-test-bean-producer/">listings/08-test-bean-producer/</a></div>
+<pre><span class="cm">// src/test/java/example/producer/FixedClockProducer.java</span>
+<span class="an">@Dependent</span> <span class="an">@Alternative</span>
+<span class="kw">public class</span> <span class="ty">FixedClockProducer</span> {
+    <span class="kw">static final</span> <span class="ty">Instant</span> FIXED = <span class="ty">Instant</span>.parse(<span class="st">"2026-05-20T12:00:00Z"</span>);
+    <span class="an">@Produces</span> <span class="kw">public</span> <span class="ty">Clock</span> fixedClock() { <span class="kw">return</span> () -&gt; FIXED; }
+}
+
+<span class="cm">// src/test/java/example/producer/ClockTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(beanProducer = <span class="ty">FixedClockProducer</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">ClockTest</span> {
+    <span class="an">@Inject</span> <span class="ty">Clock</span> clock;
+
+    <span class="an">@Test</span> <span class="kw">void</span> yieldsTheFixedInstant() {
+        assertThat(clock.now()).isEqualTo(<span class="ty">FixedClockProducer</span>.FIXED);
+    }
+}</pre>
+</div>
+
+<h3>@TestBean on a meta-annotation</h3>
+<p>Wrap a <code>@TestBean</code> in your own annotation and apply that annotation across many test classes. jawelte walks the meta-annotation chain and picks up the wrapped declarations.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 09 · test-bean-meta-annotation</span><a href="../listings/09-test-bean-meta-annotation/">listings/09-test-bean-meta-annotation/</a></div>
+<pre><span class="cm">// src/test/java/example/meta/WithStubEmail.java</span>
+<span class="an">@Target</span>(<span class="ty">ElementType</span>.TYPE) <span class="an">@Retention</span>(<span class="ty">RetentionPolicy</span>.RUNTIME)
+<span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
+<span class="kw">public @interface</span> <span class="ty">WithStubEmail</span> {}
+
+<span class="cm">// src/test/java/example/meta/SendingTest.java</span>
+<span class="an">@EnableTestBeans</span> <span class="an">@WithStubEmail</span>
+<span class="kw">class</span> <span class="ty">SendingTest</span> {
+    <span class="an">@Inject</span> <span class="ty">EmailService</span> emailService;
+    <span class="an">@Test</span> <span class="kw">void</span> stubIsActive() { assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>); }
+}</pre>
+</div>
+
+<h2 id="dt-config-bean">2.3 @ConfigBean</h2>
+<p><code>@ConfigBean</code> is a CDI <code>@Stereotype</code> that meta-applies <code>@ApplicationScoped</code>. A class annotated <code>@ConfigBean</code> is therefore a regular CDI bean with application scope; the user does not declare <code>@ApplicationScoped</code> explicitly.</p>
+
+<p>The intended usage pattern is to <code>@Inject</code> the <code>ConfigResolver</code> port into a <code>@ConfigBean</code> class and expose one public method per config key. Each method delegates the raw lookup to the resolver and is responsible for parsing / converting the <code>String</code> value and supplying a meaningful default. See <a href="#qs-use-cases">listing 05</a> in the quick-start for the canonical shape.</p>
+
+<p>The annotation defines no interceptors and no additional behavior beyond the stereotype's scope contribution. It also serves as a discovery marker so that, for example, <code>limitToTestBeans</code> can identify config beans.</p>
+
+<h2 id="dt-test-context">2.4 TestContext</h2>
+<p><code>TestContext</code> is the per-test-class facade every non-JUnit jawelte port receives. It carries:</p>
+<ul>
+  <li><code>getTestClass()</code> — the JUnit test class.</li>
+  <li><code>bindMetadata(Class&lt;T&gt; key, T value)</code> / <code>getMetadata(Class&lt;T&gt;)</code> / <code>unbindMetadata(Class&lt;T&gt;)</code> — typed per-test-class state. The <code>Class&lt;T&gt;</code> token is both key and type witness.</li>
+  <li>Two static helpers: <code>TestContext.get()</code> (the active context on the calling thread, usable only inside the bootstrap window of <code>core/impl</code>'s delegating extension); <code>TestContext.loadService(Class)</code> (the project-wide canonical priority-resolved SPI lookup).</li>
+</ul>
+
+<p>Modules use metadata to carry their own per-class state — jpa-module keeps the active-PU stack there, cdi-module stashes the <code>RequestContextController</code> across <code>beforeEach</code> / <code>afterEach</code>. User code can do the same from a custom lifecycle port.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 10 · test-context-metadata</span><a href="../listings/10-test-context-metadata/">listings/10-test-context-metadata/</a></div>
+<pre><span class="cm">// src/test/java/example/metadata/BootstrapTimestampLifecyclePort.java</span>
+<span class="kw">public class</span> <span class="ty">BootstrapTimestampLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
+
+    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; BOUND_IN_BEFORE_ALL = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
+    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; SEEN_IN_BEFORE_EACH = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
+
+    <span class="an">@Override</span> <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> testContext) {
+        <span class="ty">StartupRecord</span> record = <span class="kw">new</span> <span class="ty">StartupRecord</span>(<span class="ty">System</span>.currentTimeMillis());
+        testContext.bindMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>, record);
+        BOUND_IN_BEFORE_ALL.set(record);
+    }
+    <span class="an">@Override</span> <span class="kw">public void</span> beforeEach(<span class="ty">TestContext</span> testContext) {
+        SEEN_IN_BEFORE_EACH.set(testContext.getMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>).orElse(<span class="kw">null</span>));
+    }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort</span>
+example.metadata.BootstrapTimestampLifecyclePort</pre>
+</div>
+
+<h2 id="dt-events">2.5 events</h2>
+<p>jawelte fires three CDI events at well-defined lifecycle points. Module code observes them with plain <code>@Observes</code>.</p>
+
+<h3>ContainerStarted</h3>
+<p>Fired by the <code>TestBeanContainerPort</code> implementation inside its <code>beforeAll</code>, after the CDI container is ready but before any <code>TestModuleLifecyclePort.beforeAll</code> runs. Useful for module-style one-time setup that needs CDI but must complete before lifecycle ports run.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 12 · container-started</span><a href="../listings/12-container-started/">listings/12-container-started/</a></div>
+<pre><span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">StartupRecorder</span> {
+    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">Class</span>&lt;?&gt;&gt; OBSERVED_TEST_CLASS = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
+
+    <span class="kw">public void</span> onContainerStarted(<span class="an">@Observes</span> <span class="ty">ContainerStarted</span> event) {
+        OBSERVED_TEST_CLASS.set(event.getTestClass());
+    }
+}</pre>
+</div>
+
+<h3>BeforeScopeStarted</h3>
+<p>Fired before a per-method scope (e.g., <code>@RequestScoped</code>) is activated. Observers may call <code>event.veto()</code> to keep the scope inactive for that test method.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 11 · before-scope-veto</span><a href="../listings/11-before-scope-veto/">listings/11-before-scope-veto/</a></div>
+<pre><span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">RequestScopeVetoer</span> {
+    <span class="kw">public void</span> onBeforeScopeStarted(<span class="an">@Observes</span> <span class="ty">BeforeScopeStarted</span> event) {
+        <span class="kw">if</span> (event.getScope() == <span class="ty">RequestScoped</span>.<span class="kw">class</span>) {
+            event.veto();
+        }
+    }
+}</pre>
+</div>
+
+<h3>AfterTestTransaction</h3>
+<p>Fired by the JPA-aware module after a per-test transaction completes (committed or rolled back). Carries the test-method name and the committed flag. Not fired if no transaction-managing module is on the classpath. Defined here for the contract; users typically observe it in jpa-module-aware code rather than from core itself.</p>
+
+<h2 id="dt-ordering">2.6 lifecycle ordering</h2>
+<p>jawelte invokes lifecycle callbacks in a specific order across the active ports:</p>
+<ul>
+  <li><code>beforeAll</code> — <code>TestBeanContainerPort.beforeAll</code> first; then each <code>TestModuleLifecyclePort.beforeAll</code> in ascending <code>@Priority</code> order. Ports without <code>@Priority</code> get an effective priority of <code>Integer.MAX_VALUE</code> (run last).</li>
+  <li><code>postProcessTestInstance</code> — <code>TestBeanContainerPort.postProcessTestInstance</code> once after the test class constructor.</li>
+  <li><code>beforeEach</code> — <code>TestBeanContainerPort.beforeEach</code> first; then each <code>TestModuleLifecyclePort.beforeEach</code> in ascending priority.</li>
+  <li><code>afterEach</code> — each <code>TestModuleLifecyclePort.afterEach</code> in reverse (LIFO) order; then <code>TestBeanContainerPort.afterEach</code>.</li>
+  <li><code>afterAll</code> — each <code>TestModuleLifecyclePort.afterAll</code> in reverse order; then <code>TestBeanContainerPort.afterAll</code> if <code>manageContainer=true</code>.</li>
+</ul>
+
+<p>Cleanup guarantee: only ports that completed their <code>before*</code> receive the matching <code>after*</code>. If <code>before*</code> on some port threw, ports earlier in the chain still get their <code>after*</code>; the thrown exception is the primary and the rest are attached via <code>Throwable.addSuppressed</code>.</p>
+
+<h2 id="dt-config">2.7 config overview</h2>
+<p>core itself reads exactly two configuration keys from MicroProfile Config. Both are <strong>bootstrap keys</strong> — they select the FQCN of an implementation class with a public no-arg constructor. Both accept the underscore variant as a fallback (per MP Config's environment-variable mapping rule).</p>
+
+<table class="cfg">
+  <thead>
+    <tr><th>Key</th><th>Default value</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>org.os890.jawelte.core.api.port.TestContext</code></td>
+      <td><code>org.os890.jawelte.core.impl.adapter.context.TestContextImpl</code></td>
+      <td>The active <code>TestContext</code> accessor. Reflectively instantiated by <code>TestContext.get()</code>. Replace it to plug a custom per-thread-context binding mechanism.</td>
+    </tr>
+    <tr>
+      <td><code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code></td>
+      <td><code>org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver</code></td>
+      <td>The active <code>ServicePriorityResolver</code>. Heads every <code>TestContext.loadService(Class)</code>-based SPI lookup. Replace it to install a project-wide alternative ordering rule (see <a href="#spi-priority-resolver">listing 16</a>).</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Both defaults are shipped in <code>core/impl</code>'s own <code>META-INF/microprofile-config.properties</code> (MP Config ordinal 100); user overrides at any higher ordinal (system properties, env vars, application <code>.properties</code>) win.</p>
+
+<h1 id="spi">3. spi / port reference</h1>
+
+<p>core defines the entire jawelte port surface. Each port is either <strong>single-impl</strong> (exactly one implementation must be on the classpath; multiple-impl raises an error) or <strong>multi-impl</strong> (any number; the active <code>ServicePriorityResolver</code> orders them). Some are discovered via <code>ServiceLoader</code>; <code>ConfigResolver</code> is a CDI bean.</p>
+
+<h2 id="spi-container-port">3.1 TestBeanContainerPort</h2>
+<p><strong>Single-impl, ServiceLoader.</strong> The CDI runtime adapter. The delegating JUnit extension forwards every test-lifecycle callback to this port. <code>cdi-module</code> ships the OWB/Weld SE adapter (<code>CdiTestBeanContainer</code>); a future <code>quarkus-module</code> ships an ArC adapter. The user does not usually implement this port.</p>
+
+<h2 id="spi-lifecycle-port">3.2 TestModuleLifecyclePort</h2>
+<p><strong>Multi-impl, ServiceLoader.</strong> The way feature modules participate in the test lifecycle. All methods default to no-ops; an implementation overrides only the callbacks it cares about. Sorted by <code>@Priority</code> ascending for <code>before*</code>, reverse for <code>after*</code>.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 13 · lifecycle-port</span><a href="../listings/13-lifecycle-port/">listings/13-lifecycle-port/</a></div>
+<pre><span class="an">@Priority</span>(<span class="kw">10</span>)
+<span class="kw">public class</span> <span class="ty">EarlyLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
+    <span class="an">@Override</span> <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> ctx) { <span class="ty">LifecycleLog</span>.EVENTS.add(<span class="st">"early.beforeAll"</span>); }
+}
+
+<span class="an">@Priority</span>(<span class="kw">20</span>)
+<span class="kw">public class</span> <span class="ty">LateLifecyclePort</span>  <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
+    <span class="an">@Override</span> <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> ctx) { <span class="ty">LifecycleLog</span>.EVENTS.add(<span class="st">"late.beforeAll"</span>); }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort</span>
+example.lifecycle.EarlyLifecyclePort
+example.lifecycle.LateLifecyclePort</pre>
+</div>
+
+<h2 id="spi-instance-factory">3.3 TestInstanceFactoryPort</h2>
+<p><strong>Single-impl (optional), ServiceLoader.</strong> Produces the test-instance JUnit will use. When present, JUnit receives the bean instance the implementation produces; when absent, jawelte falls back to <code>testClass.getDeclaredConstructor().newInstance()</code>. <code>cdi-module</code> ships an impl that does <code>CDI.current().select(testClass).get()</code> so test classes participate in CDI-managed lifecycle (private fields, package-private classes, JUnit's <code>PER_METHOD</code> all keep working).</p>
+
+<h2 id="spi-scope-mapper">3.4 BeanScopeMapper + BeanScopeMapperPort</h2>
+<p>Two related ports for declarative CDI scope rewriting at <code>ProcessAnnotatedType</code> time.</p>
+
+<ul>
+  <li><strong><code>BeanScopeMapper</code></strong> — <strong>multi-impl, ServiceLoader.</strong> Each provider names a trigger annotation (<code>trigger()</code>) and a target scope (<code>targetScope()</code>). The fixed CDI extension in <code>core/impl</code> walks the providers for every type the CDI runtime delivers and, on the first whose trigger is directly present, removes the type's directly-declared CDI scopes and adds the target.</li>
+  <li><strong><code>BeanScopeMapperPort</code></strong> — <strong>single-impl, loaded via <code>TestContext.loadService</code>.</strong> The driven port that the fixed CDI extension delegates to. Default impl iterates the <code>BeanScopeMapper</code> providers; replace this port to install an entirely custom remap policy.</li>
+</ul>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 14 · bean-scope-mapper</span><a href="../listings/14-bean-scope-mapper/">listings/14-bean-scope-mapper/</a></div>
+<pre><span class="kw">public class</span> <span class="ty">RequestToApplicationScoped</span> <span class="kw">implements</span> <span class="ty">BeanScopeMapper</span> {
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; trigger()     { <span class="kw">return</span> <span class="ty">RequestScoped</span>.<span class="kw">class</span>; }
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; targetScope() { <span class="kw">return</span> <span class="ty">ApplicationScoped</span>.<span class="kw">class</span>; }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper</span>
+example.scopemap.RequestToApplicationScoped</pre>
+</div>
+
+<h2 id="spi-config-resolver">3.5 ConfigResolver</h2>
+<p><strong>Single active impl, CDI bean (NOT ServiceLoader).</strong> Resolves config keys to their raw <code>String</code> values. <code>@ConfigBean</code> classes inject it and call <code>resolve(dotKey)</code>. The default impl in <code>core/impl</code> looks up via MicroProfile Config with the documented two-step fallback (<code>dotKey</code> first, then the underscore variant if and only if <code>dotKey</code> contained at least one <code>.</code>).</p>
+
+<p>Users override with an <code>@Alternative @Priority(...)</code> CDI bean — CDI 4's globally-enabled alternative rule selects the highest-priority alternative over the framework default (which carries no <code>@Alternative</code>).</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 15 · config-resolver</span><a href="../listings/15-config-resolver/">listings/15-config-resolver/</a></div>
+<pre><span class="an">@ApplicationScoped</span> <span class="an">@Alternative</span> <span class="an">@Priority</span>(<span class="kw">100</span>)
+<span class="kw">public class</span> <span class="ty">FixedConfigResolver</span> <span class="kw">implements</span> <span class="ty">ConfigResolver</span> {
+    <span class="kw">private static final</span> <span class="ty">Map</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; FIXTURE = <span class="ty">Map</span>.of(<span class="st">"app.greeting"</span>, <span class="st">"hello-from-test-resolver"</span>);
+
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Optional</span>&lt;<span class="ty">String</span>&gt; resolve(<span class="ty">String</span> dotKey)        { <span class="kw">return</span> <span class="ty">Optional</span>.ofNullable(FIXTURE.get(dotKey)); }
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Iterable</span>&lt;<span class="ty">String</span>&gt; resolveKeys()           { <span class="kw">return</span> FIXTURE.keySet(); }
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; resolveAliasKeysFor(<span class="ty">String</span> k) { <span class="kw">return</span> <span class="ty">List</span>.of(); }
+}</pre>
+</div>
+
+<h2 id="spi-alias-provider">3.6 ConfigKeyAliasProvider</h2>
+<p><strong>Multi-impl, ServiceLoader.</strong> The way a non-owning module contributes module-specific MP Config keys to a logical configuration key owned by another module. The owning module reads its own key directly and merges the contributor keys this port returns into the final value. Example: <code>cdi-module</code> owns <code>auto-mock.exclude-packages</code>; <code>jpa-module</code> and <code>spring-data-module</code> each ship a <code>ConfigKeyAliasProvider</code> mapping that logical key to their own contributor keys.</p>
+
+<h2 id="spi-priority-resolver">3.7 ServicePriorityResolver</h2>
+<p><strong>Single active impl, bootstrap via MP Config.</strong> The project-wide canonical mechanism for ordering provider lists. Replace it via the MP Config bootstrap key <code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code> — value is the FQCN of an impl class with a public no-arg constructor. Every <code>TestContext.loadService(Class)</code> SPI selection routes through the active resolver.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 16 · priority-resolver</span><a href="../listings/16-priority-resolver/">listings/16-priority-resolver/</a></div>
+<pre><span class="kw">public class</span> <span class="ty">ReversePriorityResolver</span> <span class="kw">implements</span> <span class="ty">ServicePriorityResolver</span> {
+    <span class="an">@Override</span> <span class="kw">public</span> &lt;T&gt; <span class="ty">List</span>&lt;T&gt; sort(<span class="ty">List</span>&lt;T&gt; providers) {
+        <span class="ty">List</span>&lt;T&gt; copy = <span class="kw">new</span> <span class="ty">ArrayList</span>&lt;&gt;(providers);
+        copy.sort(<span class="ty">Comparator</span>.comparingInt(<span class="ty">ReversePriorityResolver</span>::priorityOf).reversed());
+        <span class="kw">return</span> copy;
+    }
+    <span class="kw">private static int</span> priorityOf(<span class="ty">Object</span> p) {
+        <span class="ty">Priority</span> a = p.getClass().getAnnotation(<span class="ty">Priority</span>.<span class="kw">class</span>);
+        <span class="kw">return</span> a == <span class="kw">null</span> ? <span class="ty">Integer</span>.MIN_VALUE : a.value();
+    }
+}
+
+<span class="cm">// surefire argLine: -Dorg.os890.jawelte.core.api.port.ServicePriorityResolver=...ReversePriorityResolver</span></pre>
+</div>
+
+<p><strong>Caveat.</strong> core's own <code>DelegatingJUnitExtension</code> sorts <code>TestModuleLifecyclePort</code> via a hardcoded <code>PriorityComparator</code> rather than the resolver. The resolver applies to ports loaded through <code>TestContext.loadService(...)</code> (cdi-module's <code>MockFactory</code> / <code>WhitelistFilter</code>, content-diff's matchers, …) — that's where swapping the resolver shifts the active provider.</p>
+
+<h2 id="spi-bootstrap">3.8 TestBeansExtension</h2>
+<p><strong>Single-impl, ServiceLoader. You almost never touch this.</strong> The bootstrap SPI <code>EnableTestBeans.Proxy</code> loads to delegate every JUnit callback to. Implemented once by <code>core/impl</code> (<code>DelegatingJUnitExtension</code>); shipping a second implementation breaks bootstrap (zero / multiple impls raise <code>IllegalStateException</code> on first callback). Listed here for completeness — replace it only to fork the JUnit-side glue itself.</p>
+
+<div class="closing">
+  <strong>jawelte / core</strong> &nbsp;·&nbsp; back to <a href="index.html" style="color: var(--green); border-bottom: 1px dotted var(--green-dim);">overview</a>
+</div>
+
+</body>
+</html>
