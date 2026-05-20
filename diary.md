@@ -5523,3 +5523,20 @@ Layout: `src/main/java/example/hello/HelloService.java` (the
 carrying `@EnableTestBeans` and one `@Test` method).
 
 Confirms the recipe to reuse for listings 02-16.
+
+## 2026-05-20 — ticket-016 listing 02: auto-mock
+
+Demonstrates jawelte's auto-mocking. Production `Greeter`
+(`@ApplicationScoped`, `@Inject Translator`) depends on an
+unsatisfied `Translator` interface; the test injects both `Greeter`
+and `Translator`, stubs the latter via Mockito `when(...)`, and
+asserts the greeting includes the stubbed translation. The exact
+pattern that surfaced the IpKey normalisation bug fixed in the
+previous commit — now passes naturally without any workaround.
+
+Layout: production code in `src/main/java/example/automock/`,
+test + Mockito MockMaker config in `src/test/`. mockito-extensions
+file selects `mock-maker-subclass` so the auto-mock can be a real
+subclass instance that the CDI proxy delegates to.
+
+Total runtime: 0.5s.
