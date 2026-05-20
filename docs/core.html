@@ -181,15 +181,24 @@
 <span class="cm">// src/main/java/example/automock/Greeter.java</span>
 <span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">Greeter</span> {
-    <span class="an">@Inject</span> <span class="ty">Translator</span> translator;
-    <span class="kw">public</span> <span class="ty">String</span> greet(<span class="ty">String</span> name) { <span class="kw">return</span> <span class="st">"hello, "</span> + translator.translate(name) + <span class="st">"!"</span>; }
+
+    <span class="an">@Inject</span>
+    <span class="ty">Translator</span> translator;
+
+    <span class="kw">public</span> <span class="ty">String</span> greet(<span class="ty">String</span> name) {
+        <span class="kw">return</span> <span class="st">"hello, "</span> + translator.translate(name) + <span class="st">"!"</span>;
+    }
 }
 
 <span class="cm">// src/test/java/example/automock/GreeterTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">GreeterTest</span> {
-    <span class="an">@Inject</span> <span class="ty">Greeter</span>     greeter;
-    <span class="an">@Inject</span> <span class="ty">Translator</span>  translator;  <span class="cm">// SAME auto-mock Greeter sees</span>
+
+    <span class="an">@Inject</span>
+    <span class="ty">Greeter</span> greeter;
+
+    <span class="an">@Inject</span>
+    <span class="ty">Translator</span> translator;  <span class="cm">// SAME auto-mock Greeter sees</span>
 
     <span class="an">@Test</span>
     <span class="kw">void</span> unsatisfiedDependencyIsAutoMocked() {
@@ -205,18 +214,26 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 03 · test-bean-alternative</span><a href="../listings/03-test-bean-alternative/">listings/03-test-bean-alternative/</a></div>
 <pre><span class="cm">// src/test/java/example/alt/StubEmailService.java</span>
-<span class="an">@Alternative</span> <span class="an">@ApplicationScoped</span>
+<span class="an">@Alternative</span>
+<span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">StubEmailService</span> <span class="kw">implements</span> <span class="ty">EmailService</span> {
-    <span class="kw">public</span> <span class="ty">String</span> send(<span class="ty">String</span> to) { <span class="kw">return</span> <span class="st">"stub:"</span> + to; }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">String</span> send(<span class="ty">String</span> to) {
+        <span class="kw">return</span> <span class="st">"stub:"</span> + to;
+    }
 }
 
 <span class="cm">// src/test/java/example/alt/EmailServiceTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
 <span class="kw">class</span> <span class="ty">EmailServiceTest</span> {
-    <span class="an">@Inject</span> <span class="ty">EmailService</span> emailService;
 
-    <span class="an">@Test</span> <span class="kw">void</span> picksTheStub() {
+    <span class="an">@Inject</span>
+    <span class="ty">EmailService</span> emailService;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> picksTheStub() {
         assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
     }
 }</pre>
@@ -233,13 +250,16 @@
 <span class="cm">// src/test/java/example/staticfield/GreetingTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">GreetingTest</span> {
+
     <span class="an">@TestBean</span>
-    <span class="kw">public static final</span> <span class="ty">Greeting</span> FIXTURE = <span class="kw">new</span> <span class="ty">Greeting</span>(<span class="st">"hello-from-static-field"</span>);
+    <span class="kw">public static final</span> <span class="ty">Greeting</span> WELCOME_GREETING = <span class="kw">new</span> <span class="ty">Greeting</span>(<span class="st">"hello-from-static-field"</span>);
 
-    <span class="an">@Inject</span> <span class="ty">Greeting</span> greeting;
+    <span class="an">@Inject</span>
+    <span class="ty">Greeting</span> greeting;
 
-    <span class="an">@Test</span> <span class="kw">void</span> staticFieldBecomesTheBean() {
-        assertThat(greeting).isSameAs(FIXTURE);
+    <span class="an">@Test</span>
+    <span class="kw">void</span> staticFieldBecomesTheBean() {
+        assertThat(greeting).isSameAs(WELCOME_GREETING);
     }
 }</pre>
 </div>
@@ -252,10 +272,17 @@
 <pre><span class="cm">// src/main/java/example/configbean/AppConfig.java</span>
 <span class="an">@ConfigBean</span>
 <span class="kw">public class</span> <span class="ty">AppConfig</span> {
-    <span class="an">@Inject</span> <span class="ty">ConfigResolver</span> resolver;
 
-    <span class="kw">public</span> <span class="ty">String</span> greeting() { <span class="kw">return</span> resolver.resolve(<span class="st">"app.greeting"</span>).orElse(<span class="st">"hi"</span>); }
-    <span class="kw">public int</span>    retries()  { <span class="kw">return</span> resolver.resolve(<span class="st">"app.retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElse(<span class="kw">3</span>); }
+    <span class="an">@Inject</span>
+    <span class="ty">ConfigResolver</span> resolver;
+
+    <span class="kw">public</span> <span class="ty">String</span> greeting() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.greeting"</span>).orElse(<span class="st">"hi"</span>);
+    }
+
+    <span class="kw">public int</span> retries() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElse(<span class="kw">3</span>);
+    }
 }
 
 <span class="cm">// src/main/resources/META-INF/microprofile-config.properties</span>
@@ -329,10 +356,15 @@ app.retries  = 5</pre>
 <pre><span class="an">@EnableTestBeans</span>(limitToTestBeans = <span class="kw">true</span>)
 <span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
 <span class="kw">class</span> <span class="ty">LimitToTestBeansTest</span> {
-    <span class="an">@Inject</span> <span class="ty">BeanManager</span>  beanManager;
-    <span class="an">@Inject</span> <span class="ty">EmailService</span> emailService;
 
-    <span class="an">@Test</span> <span class="kw">void</span> onlyDeclaredTestBeansAreInTheContainer() {
+    <span class="an">@Inject</span>
+    <span class="ty">BeanManager</span> beanManager;
+
+    <span class="an">@Inject</span>
+    <span class="ty">EmailService</span> emailService;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> onlyDeclaredTestBeansAreInTheContainer() {
         assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
         <span class="cm">// Production @ApplicationScoped beans not in any @TestBean were vetoed at discovery.</span>
         assertThat(beanManager.getBeans(<span class="ty">SmtpEmailService</span>.<span class="kw">class</span>)).isEmpty();
@@ -348,15 +380,27 @@ app.retries  = 5</pre>
   <div class="listing-bar"><span class="label">listing 07 · external-container</span><a href="../listings/07-external-container/">listings/07-external-container/</a></div>
 <pre><span class="an">@EnableTestBeans</span>(manageContainer = <span class="kw">false</span>)
 <span class="kw">class</span> <span class="ty">ExternalContainerTest</span> {
+
     <span class="kw">private static</span> <span class="ty">SeContainer</span> container;
 
-    <span class="an">@BeforeAll</span> <span class="kw">static void</span> bootCdi()    { container = <span class="ty">SeContainerInitializer</span>.newInstance().initialize(); }
-    <span class="an">@AfterAll</span>  <span class="kw">static void</span> shutdownCdi() { container.close(); }
+    <span class="an">@BeforeAll</span>
+    <span class="kw">static void</span> bootCdi() {
+        container = <span class="ty">SeContainerInitializer</span>.newInstance().initialize();
+    }
 
-    <span class="an">@Inject</span> <span class="ty">Counter</span>     counter;
-    <span class="an">@Inject</span> <span class="ty">BeanManager</span> beanManager;
+    <span class="an">@AfterAll</span>
+    <span class="kw">static void</span> shutdownCdi() {
+        container.close();
+    }
 
-    <span class="an">@Test</span> <span class="kw">void</span> requestScopeStillActive() {
+    <span class="an">@Inject</span>
+    <span class="ty">Counter</span> counter;
+
+    <span class="an">@Inject</span>
+    <span class="ty">BeanManager</span> beanManager;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> requestScopeStillActive() {
         assertThat(beanManager.getContext(<span class="ty">RequestScoped</span>.<span class="kw">class</span>).isActive()).isTrue();
         assertThat(counter.increment()).isEqualTo(<span class="kw">1</span>);
     }
@@ -378,20 +422,29 @@ app.retries  = 5</pre>
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 08 · test-bean-producer</span><a href="../listings/08-test-bean-producer/">listings/08-test-bean-producer/</a></div>
 <pre><span class="cm">// src/test/java/example/producer/FixedClockProducer.java</span>
-<span class="an">@Dependent</span> <span class="an">@Alternative</span>
+<span class="an">@Dependent</span>
+<span class="an">@Alternative</span>
 <span class="kw">public class</span> <span class="ty">FixedClockProducer</span> {
-    <span class="kw">static final</span> <span class="ty">Instant</span> FIXED = <span class="ty">Instant</span>.parse(<span class="st">"2026-05-20T12:00:00Z"</span>);
-    <span class="an">@Produces</span> <span class="kw">public</span> <span class="ty">Clock</span> fixedClock() { <span class="kw">return</span> () -&gt; FIXED; }
+
+    <span class="kw">static final</span> <span class="ty">Instant</span> FIXED_INSTANT = <span class="ty">Instant</span>.parse(<span class="st">"2026-05-20T12:00:00Z"</span>);
+
+    <span class="an">@Produces</span>
+    <span class="kw">public</span> <span class="ty">Clock</span> fixedClock() {
+        <span class="kw">return</span> () -&gt; FIXED_INSTANT;
+    }
 }
 
 <span class="cm">// src/test/java/example/producer/ClockTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="an">@TestBean</span>(beanProducer = <span class="ty">FixedClockProducer</span>.<span class="kw">class</span>)
 <span class="kw">class</span> <span class="ty">ClockTest</span> {
-    <span class="an">@Inject</span> <span class="ty">Clock</span> clock;
 
-    <span class="an">@Test</span> <span class="kw">void</span> yieldsTheFixedInstant() {
-        assertThat(clock.now()).isEqualTo(<span class="ty">FixedClockProducer</span>.FIXED);
+    <span class="an">@Inject</span>
+    <span class="ty">Clock</span> clock;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> yieldsTheFixedInstant() {
+        assertThat(clock.now()).isEqualTo(<span class="ty">FixedClockProducer</span>.FIXED_INSTANT);
     }
 }</pre>
 </div>
@@ -402,15 +455,24 @@ app.retries  = 5</pre>
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 09 · test-bean-meta-annotation</span><a href="../listings/09-test-bean-meta-annotation/">listings/09-test-bean-meta-annotation/</a></div>
 <pre><span class="cm">// src/test/java/example/meta/WithStubEmail.java</span>
-<span class="an">@Target</span>(<span class="ty">ElementType</span>.TYPE) <span class="an">@Retention</span>(<span class="ty">RetentionPolicy</span>.RUNTIME)
+<span class="an">@Target</span>(<span class="ty">ElementType</span>.TYPE)
+<span class="an">@Retention</span>(<span class="ty">RetentionPolicy</span>.RUNTIME)
 <span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
-<span class="kw">public @interface</span> <span class="ty">WithStubEmail</span> {}
+<span class="kw">public @interface</span> <span class="ty">WithStubEmail</span> {
+}
 
 <span class="cm">// src/test/java/example/meta/SendingTest.java</span>
-<span class="an">@EnableTestBeans</span> <span class="an">@WithStubEmail</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@WithStubEmail</span>
 <span class="kw">class</span> <span class="ty">SendingTest</span> {
-    <span class="an">@Inject</span> <span class="ty">EmailService</span> emailService;
-    <span class="an">@Test</span> <span class="kw">void</span> stubIsActive() { assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>); }
+
+    <span class="an">@Inject</span>
+    <span class="ty">EmailService</span> emailService;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> stubIsActive() {
+        assertThat(emailService.send(<span class="st">"alice@example.com"</span>)).isEqualTo(<span class="st">"stub:alice@example.com"</span>);
+    }
 }</pre>
 </div>
 
@@ -439,12 +501,15 @@ app.retries  = 5</pre>
     <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; BOUND_IN_BEFORE_ALL = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
     <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">StartupRecord</span>&gt; SEEN_IN_BEFORE_EACH = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
 
-    <span class="an">@Override</span> <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> testContext) {
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> testContext) {
         <span class="ty">StartupRecord</span> record = <span class="kw">new</span> <span class="ty">StartupRecord</span>(<span class="ty">System</span>.currentTimeMillis());
         testContext.bindMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>, record);
         BOUND_IN_BEFORE_ALL.set(record);
     }
-    <span class="an">@Override</span> <span class="kw">public void</span> beforeEach(<span class="ty">TestContext</span> testContext) {
+
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> beforeEach(<span class="ty">TestContext</span> testContext) {
         SEEN_IN_BEFORE_EACH.set(testContext.getMetadata(<span class="ty">StartupRecord</span>.<span class="kw">class</span>).orElse(<span class="kw">null</span>));
     }
 }
@@ -538,12 +603,20 @@ example.metadata.BootstrapTimestampLifecyclePort</pre>
   <div class="listing-bar"><span class="label">listing 13 · lifecycle-port</span><a href="../listings/13-lifecycle-port/">listings/13-lifecycle-port/</a></div>
 <pre><span class="an">@Priority</span>(<span class="kw">10</span>)
 <span class="kw">public class</span> <span class="ty">EarlyLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
-    <span class="an">@Override</span> <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> ctx) { <span class="ty">LifecycleLog</span>.EVENTS.add(<span class="st">"early.beforeAll"</span>); }
+
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> testContext) {
+        <span class="ty">LifecycleLog</span>.EVENTS.add(<span class="st">"early.beforeAll"</span>);
+    }
 }
 
 <span class="an">@Priority</span>(<span class="kw">20</span>)
-<span class="kw">public class</span> <span class="ty">LateLifecyclePort</span>  <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
-    <span class="an">@Override</span> <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> ctx) { <span class="ty">LifecycleLog</span>.EVENTS.add(<span class="st">"late.beforeAll"</span>); }
+<span class="kw">public class</span> <span class="ty">LateLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
+
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> beforeAll(<span class="ty">TestContext</span> testContext) {
+        <span class="ty">LifecycleLog</span>.EVENTS.add(<span class="st">"late.beforeAll"</span>);
+    }
 }
 
 <span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.TestModuleLifecyclePort</span>
@@ -565,8 +638,16 @@ example.lifecycle.LateLifecyclePort</pre>
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 14 · bean-scope-mapper</span><a href="../listings/14-bean-scope-mapper/">listings/14-bean-scope-mapper/</a></div>
 <pre><span class="kw">public class</span> <span class="ty">RequestToApplicationScoped</span> <span class="kw">implements</span> <span class="ty">BeanScopeMapper</span> {
-    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; trigger()     { <span class="kw">return</span> <span class="ty">RequestScoped</span>.<span class="kw">class</span>; }
-    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; targetScope() { <span class="kw">return</span> <span class="ty">ApplicationScoped</span>.<span class="kw">class</span>; }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; trigger() {
+        <span class="kw">return</span> <span class="ty">RequestScoped</span>.<span class="kw">class</span>;
+    }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; targetScope() {
+        <span class="kw">return</span> <span class="ty">ApplicationScoped</span>.<span class="kw">class</span>;
+    }
 }
 
 <span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper</span>
@@ -580,13 +661,28 @@ example.scopemap.RequestToApplicationScoped</pre>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 15 · config-resolver</span><a href="../listings/15-config-resolver/">listings/15-config-resolver/</a></div>
-<pre><span class="an">@ApplicationScoped</span> <span class="an">@Alternative</span> <span class="an">@Priority</span>(<span class="kw">100</span>)
+<pre><span class="an">@ApplicationScoped</span>
+<span class="an">@Alternative</span>
+<span class="an">@Priority</span>(<span class="kw">100</span>)
 <span class="kw">public class</span> <span class="ty">FixedConfigResolver</span> <span class="kw">implements</span> <span class="ty">ConfigResolver</span> {
-    <span class="kw">private static final</span> <span class="ty">Map</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; FIXTURE = <span class="ty">Map</span>.of(<span class="st">"app.greeting"</span>, <span class="st">"hello-from-test-resolver"</span>);
 
-    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Optional</span>&lt;<span class="ty">String</span>&gt; resolve(<span class="ty">String</span> dotKey)        { <span class="kw">return</span> <span class="ty">Optional</span>.ofNullable(FIXTURE.get(dotKey)); }
-    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">Iterable</span>&lt;<span class="ty">String</span>&gt; resolveKeys()           { <span class="kw">return</span> FIXTURE.keySet(); }
-    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; resolveAliasKeysFor(<span class="ty">String</span> k) { <span class="kw">return</span> <span class="ty">List</span>.of(); }
+    <span class="kw">private static final</span> <span class="ty">Map</span>&lt;<span class="ty">String</span>, <span class="ty">String</span>&gt; FIXED_VALUES = <span class="ty">Map</span>.of(
+            <span class="st">"app.greeting"</span>, <span class="st">"hello-from-test-resolver"</span>);
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">Optional</span>&lt;<span class="ty">String</span>&gt; resolve(<span class="ty">String</span> dotKey) {
+        <span class="kw">return</span> <span class="ty">Optional</span>.ofNullable(FIXED_VALUES.get(dotKey));
+    }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">Iterable</span>&lt;<span class="ty">String</span>&gt; resolveKeys() {
+        <span class="kw">return</span> FIXED_VALUES.keySet();
+    }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; resolveAliasKeysFor(<span class="ty">String</span> logicalKey) {
+        <span class="kw">return</span> <span class="ty">List</span>.of();
+    }
 }</pre>
 </div>
 
@@ -599,14 +695,17 @@ example.scopemap.RequestToApplicationScoped</pre>
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 16 · priority-resolver</span><a href="../listings/16-priority-resolver/">listings/16-priority-resolver/</a></div>
 <pre><span class="kw">public class</span> <span class="ty">ReversePriorityResolver</span> <span class="kw">implements</span> <span class="ty">ServicePriorityResolver</span> {
-    <span class="an">@Override</span> <span class="kw">public</span> &lt;T&gt; <span class="ty">List</span>&lt;T&gt; sort(<span class="ty">List</span>&lt;T&gt; providers) {
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> &lt;T&gt; <span class="ty">List</span>&lt;T&gt; sort(<span class="ty">List</span>&lt;T&gt; providers) {
         <span class="ty">List</span>&lt;T&gt; copy = <span class="kw">new</span> <span class="ty">ArrayList</span>&lt;&gt;(providers);
         copy.sort(<span class="ty">Comparator</span>.comparingInt(<span class="ty">ReversePriorityResolver</span>::priorityOf).reversed());
         <span class="kw">return</span> copy;
     }
-    <span class="kw">private static int</span> priorityOf(<span class="ty">Object</span> p) {
-        <span class="ty">Priority</span> a = p.getClass().getAnnotation(<span class="ty">Priority</span>.<span class="kw">class</span>);
-        <span class="kw">return</span> a == <span class="kw">null</span> ? <span class="ty">Integer</span>.MIN_VALUE : a.value();
+
+    <span class="kw">private static int</span> priorityOf(<span class="ty">Object</span> provider) {
+        <span class="ty">Priority</span> priority = provider.getClass().getAnnotation(<span class="ty">Priority</span>.<span class="kw">class</span>);
+        <span class="kw">return</span> priority == <span class="kw">null</span> ? <span class="ty">Integer</span>.MIN_VALUE : priority.value();
     }
 }
 

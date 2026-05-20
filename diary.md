@@ -5760,3 +5760,29 @@ belong in the docs update that lands once the quarkus work merges.
 The `TestBeanContainerPort` description now reads
 `cdi-module ships the OWB/Weld SE adapter (CdiTestBeanContainer).
 The user does not usually implement this port.`
+
+## 2026-05-20 — ticket-016 docs/listings polish
+
+User feedback: (1) annotations need to be on their own line in
+`docs/core.html` (Java convention), (2) variable names like
+`FIXTURE` aren't descriptive enough, (3) add the listings to
+`verify-all.sh` so they can't be silently forgotten.
+
+- **Variable renames** propagated through listings + the
+  corresponding code blocks in `docs/core.html`:
+  - listing 04: `FIXTURE` &rarr; `WELCOME_GREETING`.
+  - listing 08: `FIXED` &rarr; `FIXED_INSTANT` (`FixedClockProducer`).
+  - listing 15: `FIXTURE` &rarr; `FIXED_VALUES` (the lookup map in
+    `FixedConfigResolver`).
+- **HTML formatting** in `docs/core.html`: every code block now
+  places each annotation on its own line — class-level, field-level,
+  and method-level. Method bodies expanded across multiple lines
+  where they previously sat as inline one-liners. `@Observes`
+  annotations on method parameters stay inline (parameter
+  annotations are conventionally on the same line as the parameter).
+  No more "Annotation+Annotation" or "@Inject Type field;" patterns.
+- **`verify-all.sh`**: added a phase between the JTA sweep and the
+  coverage-aggregation phase that runs `mvn -f listings/pom.xml test`.
+  Skipped in `wip` and `lnp` modes by design (the listings are
+  documentation-correctness, not iteration speed / perf). All 17
+  test runs across the 16 listings still pass after the rewrites.

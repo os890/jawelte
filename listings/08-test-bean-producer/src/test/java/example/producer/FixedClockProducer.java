@@ -25,10 +25,10 @@ import jakarta.enterprise.inject.Produces;
 @Alternative
 public class FixedClockProducer {
 
-    static final Instant FIXED = Instant.parse("2026-05-20T12:00:00Z");
+    static final Instant FIXED_INSTANT = Instant.parse("2026-05-20T12:00:00Z");
 
     @Produces
     public Clock fixedClock() {
-        return () -> FIXED;
+        return () -> FIXED_INSTANT;
     }
 }

@@ -38,18 +38,18 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
 @Priority(100)
 public class FixedConfigResolver implements ConfigResolver {
 
-    private static final Map<String, String> FIXTURE = Map.of(
+    private static final Map<String, String> FIXED_VALUES = Map.of(
             "app.greeting", "hello-from-test-resolver"
     );
 
     @Override
     public Optional<String> resolve(String dotKey) {
-        return Optional.ofNullable(FIXTURE.get(dotKey));
+        return Optional.ofNullable(FIXED_VALUES.get(dotKey));
     }
 
     @Override
     public Iterable<String> resolveKeys() {
-        return FIXTURE.keySet();
+        return FIXED_VALUES.keySet();
     }
 
     @Override

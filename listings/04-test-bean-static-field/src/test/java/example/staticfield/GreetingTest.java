@@ -27,14 +27,14 @@ import org.os890.jawelte.core.api.TestBean;
 class GreetingTest {
 
     @TestBean
-    public static final Greeting FIXTURE = new Greeting("hello-from-static-field");
+    public static final Greeting WELCOME_GREETING = new Greeting("hello-from-static-field");
 
     @Inject
     Greeting greeting;
 
     @Test
     void staticFieldValueBecomesTheBeanInstance() {
-        assertThat(greeting).isSameAs(FIXTURE);
+        assertThat(greeting).isSameAs(WELCOME_GREETING);
         assertThat(greeting.text()).isEqualTo("hello-from-static-field");
     }
 }

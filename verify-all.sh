@@ -275,6 +275,17 @@ else
     # general-purpose scenarios in the same phase remain on the
     # profile-active TM (Geronimo / Narayana) and are unaffected.
 
+    # --- Documentation listings --------------------------------------
+    # The runnable code samples behind docs/core.html (and, later, the
+    # per-module docs) live under listings/. Each child is a
+    # stand-alone Maven project that does NOT inherit from the
+    # jawelte root parent — so the listings folder is NOT in the root
+    # reactor and would silently never run if we didn't sweep it
+    # explicitly here. A drift between docs and runtime code is a
+    # correctness regression we never want to ship, so this phase is
+    # part of the full sweep (skipped in wip / lnp modes by design).
+    run "listings (docs samples)" "$REPO_ROOT/listings" test
+
     # --- Coverage aggregation ----------------------------------------
     # Run from the verify-all aggregator (where coverage-report is a
     # listed module) with `-pl :coverage-report -am`, not from inside
