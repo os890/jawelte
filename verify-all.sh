@@ -213,12 +213,21 @@ run() {
     # every test class before the build aborts.
     snapshot_surefire "$dir" "$combo" "$label" "$phase_elapsed" "$exit_code"
     if [ "$exit_code" -ne 0 ]; then
+        # Record the failure and keep going. The end-of-script banner
+        # surfaces every failing phase, and the trap renders the
+        # report with every combo's outcome — without this, the first
+        # failing phase masks every subsequent combo on the matrix.
         echo
-        echo ">>> FAILED at phase $phase: $label" >&2
-        exit "$exit_code"
+        echo ">>> FAILED at phase $phase: $label (exit $exit_code)" >&2
+        PHASE_FAILURES+=("$phase: $label (exit $exit_code)")
+        return 0
     fi
     printf "  ok (%ds)\n" "$phase_elapsed"
 }
+
+# Collected via run() when a phase exits non-zero. The end-of-script
+# banner reports the full list rather than only the first.
+PHASE_FAILURES=()
 
 # --- Phase 1 ---------------------------------------------------------
 # Always `clean install` (not just `install`) — without `clean`,
@@ -444,11 +453,24 @@ if [ "$LNP_MODE" = true ]; then
 elif [ "$WIP_MODE" = true ]; then
     printf "  WIP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+elif [ ${#PHASE_FAILURES[@]} -gt 0 ]; then
+    printf "  %d / %d PHASES FAILED  —  total %dm %ds\n" \
+           "${#PHASE_FAILURES[@]}" "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+    echo   "  Failing phases:"
+    for f in "${PHASE_FAILURES[@]}"; do
+        echo "    - phase $f"
+    done
+    echo   "  Inspect target/verify-report/index.html for the per-scenario detail."
 else
     printf "  ALL %d PHASES GREEN  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
 fi
 echo "=================================================================="
+# Exit non-zero if any phase failed so CI / CronCreate / callers see
+# the real outcome. The EXIT trap renders the HTML before this.
+if [ ${#PHASE_FAILURES[@]} -gt 0 ]; then
+    exit 1
+fi
 
 # LNP mode: append the final banner to the captured log so the html
 # report renders the green/fail banner, then render the html overview.
