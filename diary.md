@@ -6502,3 +6502,11 @@ the card's heading is a clickable link.
 Same hybrid card chrome and theme toggle as core.html /
 modules.html; matches the same palette + monospace look and the
 same light/dark localStorage behaviour.
+
+## 2026-05-20 — docs/jaxrs-module.html + listing 22
+
+Wrote `docs/jaxrs-module.html` using the 3-section template (quick-start → detailed → SPI). Sections cover purpose, the hello-world listing, Maven setup, `@EnableJaxRs` attributes (restResources, applicationConfig), `TestUrl` semantics, `ResponseDiff` helper, and the impl-by-classpath story (CXF vs RESTEasy). SPI section is intentionally short — jaxrs-module ships no port of its own; customization lives in JAX-RS's own `Application` extension point.
+
+Listing 22 (`listings/22-jaxrs-hello-world/`) is a standalone-pom Maven project: `@Path("/hello")` resource in src/main, an `@EnableJaxRs(restResources = {HelloResource.class})` test that injects `TestUrl` and asserts the server booted on an OS-assigned `http://localhost:{port}`. Skipped a real HTTP-client round trip to keep the dependency footprint small — matches scenario-01's smoke-test pattern.
+
+Aggregator updates: `listings/pom.xml` and `listings/README.md` both gained the `22-jaxrs-hello-world` row. `docs/modules.html` jaxrs-module card now links to the detail page.

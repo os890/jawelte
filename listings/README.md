@@ -68,6 +68,7 @@ mvn -f listings/pom.xml test
 | 19 | `19-jpa-hello-world` | jpa-module &rarr; `@Inject EntityManager` hello-world |
 | 20 | `20-jta-hello-world` | jta-module &rarr; JTA strategy auto-active |
 | 21 | `21-ejb-singleton` | ejb-module &rarr; `@jakarta.ejb.Singleton` injectable |
+| 22 | `22-jaxrs-hello-world` | jaxrs-module &rarr; `@EnableJaxRs` + `TestUrl` |
 
 ## CDI runtime
 
