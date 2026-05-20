@@ -5576,3 +5576,20 @@ keys exercised — `app.greeting` (String) and `app.retries`
 so the production code carries the defaults; tests override (or not)
 via standard MP Config sources. The test simply
 `@Inject AppConfig` and reads the typed getters back. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 06: limit-to-test-beans
+
+Demonstrates `@EnableTestBeans(limitToTestBeans=true)`. The test
+class names exactly one `@TestBean(bean=StubEmailService.class)`;
+two unrelated production beans (`SmtpEmailService`, `AuditService`)
+sit in `src/main` carrying `@ApplicationScoped` but are NOT in a
+`@TestBean` declaration. Test asserts:
+
+- `EmailService` resolves to the stub (the only declared replacement).
+- `beanManager.getBeans(SmtpEmailService.class).isEmpty()` and
+  `beanManager.getBeans(AuditService.class).isEmpty()` — production
+  beans were vetoed at discovery time, exactly as documented for
+  whitelist mode.
+
+Auto-mocking is also disabled in this mode; the listing demonstrates
+the "exactly-what-I-declared" stance. 0.2s.
