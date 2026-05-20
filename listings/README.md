@@ -72,6 +72,7 @@ mvn -f listings/pom.xml test
 | 23 | `23-testcontrol-hello-world` | testcontrol-module &rarr; `@TestControl(testData)` seed pipeline |
 | 24 | `24-db-testdata-hello-world` | db-testdata-module &rarr; `DbSeed` + `DbDiff` direct API |
 | 25 | `25-content-diff-hello-world` | content-diff-module &rarr; `ContentDiff.forJson` happy/mismatch/ignoring |
+| 26 | `26-wiremock-hello-world` | wiremock-module &rarr; `@EnableWireMock` + injectable `WireMockServer` |
 
 ## CDI runtime
 

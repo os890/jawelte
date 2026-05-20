@@ -6536,3 +6536,11 @@ Wrote `docs/content-diff-module.html` (3-section template). Section 2 details `f
 Listing 25 (`listings/25-content-diff-hello-world/`) standalone-pom, no `<parent>`, no `owb/weld` profile split because content-diff-module is utility-only (no CDI bootstrap). Three test methods: equal-passes-silently, mismatch-raises-AssertionError-with-path, and ignoring-pattern-skips-noisy-field. All three pass on first run.
 
 Aggregator updates: `listings/pom.xml` and `listings/README.md` gained the row. `docs/modules.html` content-diff-module card now links to the detail page.
+
+## 2026-05-20 — docs/wiremock-module.html + listing 26
+
+Wrote `docs/wiremock-module.html`. Quick-start covers the no-attribute `@EnableWireMock` activator + the injectable `WireMockServer` and `WireMock` beans. Section 2 details: meta-annotated `@EnableTestBeans` + `@Inherited` semantics, the `@WireMockEndpoint(port = N)` qualifier model for multi-endpoint tests, `@Priority` as the implicit-default tiebreaker, and `resetAll()` between methods (independent of CDI scope destruction). SPI section is explicit that wiremock-module ships no port of its own; extension flows through declaring more `@WireMockEndpoint`-meta-annotated qualifiers, WireMock's own `WireMockConfiguration`, and scope-module's `BeanScopeMapper` (which wiremock-module's own provider already uses for the registry-marker → @TestClassScoped remap).
+
+Listing 26 (`listings/26-wiremock-hello-world/`) standalone-pom: single `@EnableWireMock` test, stubs `GET /hello` via the injected `WireMock` client, calls `server.baseUrl() + "/hello"` with the JDK `HttpClient`, asserts status 200 + body "hi". Both OWB and Weld profiles pass.
+
+Aggregator updates: `listings/pom.xml` + `listings/README.md` gained the row. `docs/modules.html` wiremock-module card now links to the detail page.

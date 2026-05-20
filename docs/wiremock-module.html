@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>jawelte / wiremock-module</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #4ade80; --green-bright: #86efac; --green-dark: #15803d;
+    --green-dim: #166534; --green-deep: #071a0b; --amber: #fbbf24;
+    --teal: #5eead4; --red: #ef4444;
+    --bg: #1a1a1a; --bg-soft: #1f1f1f; --bg2: #232323; --bg3: #2c2c2c;
+    --bg-code: #141414;
+    --text: #f4f4f6; --text-soft: #ececef; --soft: #c4c4c7;
+    --muted: #8b8b92; --border: #2e2e2e; --border-soft: #3a3a3a;
+    --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  }
+  html[data-theme="light"] {
+    --green: #15803d; --green-bright: #16a34a; --green-dark: #14532d;
+    --green-dim: #86efac; --green-deep: #f0fdf4; --amber: #b45309;
+    --teal: #0d9488; --red: #b91c1c;
+    --bg: #fbfbfc; --bg-soft: #ffffff; --bg2: #f4f4f5; --bg3: #e7e7e8;
+    --bg-code: #f5f5f7;
+    --text: #18181b; --text-soft: #27272a; --soft: #3f3f46;
+    --muted: #6b6b75; --border: #dcdce0; --border-soft: #c5c5c9;
+  }
+  html { background: var(--bg); color: var(--text); font-family: var(--font-mono); scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; transition: background .2s ease, color .2s ease; }
+  .listing, .listing pre, .toc, .cfg-entry, code { transition: background .2s ease, color .2s ease, border-color .2s ease; }
+  body { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
+  a { color: var(--green); text-decoration: none; border-bottom: 1px dotted var(--green-dim); transition: color .15s ease, border-color .15s ease; }
+  a:hover { color: var(--green-bright); border-bottom-color: var(--green); }
+  code { font-family: var(--font-mono); color: var(--teal); background: var(--bg-code); padding: 2px 6px; border-radius: 3px; font-size: 13.5px; border: 1px solid var(--border); }
+  strong { color: var(--text); font-weight: 600; }
+  em { font-style: normal; color: var(--text); }
+  #theme-toggle { position: fixed; top: 18px; right: 18px; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--border); background: var(--bg2); color: var(--green); font-family: var(--font-mono); font-size: 15px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 100; transition: background .2s ease, border-color .2s ease, color .2s ease; }
+  #theme-toggle:hover { color: var(--green-bright); border-color: var(--green-dim); }
+  #theme-toggle:focus { outline: 1px solid var(--green); outline-offset: 2px; }
+  header { display: flex; flex-direction: column; align-items: center; padding: 64px 0 48px; border-bottom: 1px solid var(--border); margin-bottom: 56px; }
+  .logo-mark { margin-bottom: 14px; }
+  .wordmark { font-size: 44px; font-family: var(--font-mono); font-weight: 500; letter-spacing: 4px; color: var(--text); line-height: 1; margin-bottom: 8px; }
+  .wordmark .g { color: var(--green); }
+  .segment { font-size: 14px; letter-spacing: 4px; color: var(--green); margin-top: 10px; font-family: var(--font-mono); }
+  .tagline { font-size: 11px; letter-spacing: 3px; color: var(--muted); margin-top: 8px; font-family: var(--font-mono); }
+  .meta { font-size: 12px; color: var(--muted); margin-bottom: 48px; letter-spacing: 1px; text-align: center; font-family: var(--font-mono); }
+  h1, h2, h3, h4 { font-family: var(--font-mono); }
+  h1 { font-size: 28px; letter-spacing: 2px; color: var(--green); text-transform: lowercase; font-weight: 500; margin: 88px 0 32px; padding-bottom: 18px; border-bottom: 1px solid var(--green-dim); }
+  h2 { font-size: 19px; letter-spacing: 1.5px; color: var(--green); text-transform: lowercase; font-weight: 500; margin: 56px 0 20px; }
+  h3 { font-size: 15px; letter-spacing: 0.5px; color: var(--text); font-weight: 600; margin: 36px 0 14px; }
+  h4 { font-size: 13px; letter-spacing: 0.5px; color: var(--text); font-weight: 600; margin: 28px 0 10px; }
+  p { font-size: 15px; line-height: 1.9; color: var(--text-soft); margin-bottom: 18px; }
+  ul, ol { margin: 0 0 20px 28px; }
+  li { font-size: 15px; line-height: 1.85; color: var(--text-soft); margin-bottom: 8px; }
+  li::marker { color: var(--green-dim); }
+  li code, p code { font-size: 13.5px; }
+  .toc { border: 1px solid var(--border); background: var(--bg2); border-radius: 8px; padding: 20px 24px; margin-bottom: 56px; }
+  .toc-title { font-size: 11px; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-bottom: 12px; }
+  .toc-list { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 32px; }
+  .toc-list li { margin-bottom: 6px; font-size: 12.5px; line-height: 1.6; }
+  .toc-list li.depth-2 { padding-left: 18px; color: var(--muted); }
+  .toc-list a { border-bottom: none; }
+  .toc-list a:hover { border-bottom: 1px dotted var(--green); }
+  .cfg-entry { margin: 14px 0; padding: 16px 20px; border: 1px solid var(--border); border-left: 3px solid var(--green-dim); border-radius: 6px; background: var(--bg2); }
+  .cfg-entry .key, .cfg-entry .default { display: block; font-family: var(--font-mono); word-break: break-all; line-height: 1.55; }
+  .cfg-entry .key { color: var(--green); font-size: 13.5px; margin-bottom: 6px; }
+  .cfg-entry .default { color: var(--text-soft); font-size: 12.5px; margin-bottom: 12px; }
+  .cfg-entry .default::before { content: 'default · '; color: var(--muted); letter-spacing: 1px; }
+  .cfg-entry .desc { font-size: 14px; line-height: 1.75; color: var(--text-soft); margin: 0; }
+  .listing { margin: 24px 0 28px; border: 1px solid var(--border); border-left: 3px solid var(--green-dim); border-radius: 6px; overflow: hidden; background: var(--bg-code); }
+  .listing-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: var(--bg3); border-bottom: 1px solid var(--border); font-size: 11px; letter-spacing: 1.5px; color: var(--muted); }
+  .listing-bar .label { color: var(--green); text-transform: uppercase; }
+  .listing-bar a { color: var(--text-soft); border-bottom: 1px dotted var(--border-soft); font-size: 11.5px; }
+  .listing-bar a:hover { color: var(--green); border-bottom-color: var(--green); }
+  .listing pre { padding: 18px 22px; overflow-x: auto; background: var(--bg-code); font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: var(--text-soft); }
+  .listing pre .kw { color: var(--green); }
+  .listing pre .an { color: var(--amber); }
+  .listing pre .st { color: #b3e0a0; }
+  .listing pre .cm { color: #888a90; font-style: italic; }
+  .listing pre .ty { color: var(--text); }
+  .closing { margin-top: 80px; padding-top: 28px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); letter-spacing: 1px; text-align: center; }
+  .closing strong { color: var(--green); font-weight: 500; }
+  .closing a { color: var(--green); border-bottom: 1px dotted var(--green-dim); }
+</style>
+</head>
+<body>
+
+<button id="theme-toggle" type="button" aria-label="Toggle light / dark theme" title="Toggle light / dark theme">☾</button>
+
+<header>
+  <svg class="logo-mark" width="100" viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="200,20 298,184 102,184" fill="#071a0b"/>
+    <polygon points="200,20 298,184 102,184" fill="none" stroke="#4ade80" stroke-width="1.8"/>
+    <polygon points="200,38 282,176 118,176" fill="none" stroke="#166534" stroke-width="0.9"/>
+    <line x1="148" y1="128" x2="252" y2="128" stroke="#166534" stroke-width="0.7"/>
+    <line x1="187" y1="83" x2="213" y2="109" stroke="#ef4444" stroke-width="6" stroke-linecap="round"/>
+    <line x1="213" y1="83" x2="187" y2="109" stroke="#4ade80" stroke-width="6" stroke-linecap="round"/>
+    <line x1="164" y1="153" x2="181" y2="162" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="181" y1="162" x2="200" y2="141" stroke="#ef4444" stroke-width="7" stroke-linecap="round"/>
+    <line x1="236" y1="153" x2="219" y2="162" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+    <line x1="219" y1="162" x2="200" y2="141" stroke="#4ade80" stroke-width="7" stroke-linecap="round"/>
+  </svg>
+  <div class="wordmark">ja<span class="g">we</span>lte</div>
+  <div class="tagline">the test-framework</div>
+  <div class="segment">// wiremock-module</div>
+</header>
+
+<div class="meta">// may 2026 &nbsp;&middot;&nbsp; module documentation &nbsp;&middot;&nbsp; jakarta 11 &nbsp;&middot;&nbsp; junit 6</div>
+
+<nav class="toc">
+  <div class="toc-title">on this page</div>
+  <ol class="toc-list">
+    <li><a href="#quick-start">1. quick-start</a></li>
+    <li class="depth-2"><a href="#qs-purpose">1.1 purpose</a></li>
+    <li class="depth-2"><a href="#qs-hello">1.2 hello-world</a></li>
+    <li class="depth-2"><a href="#qs-maven">1.3 maven setup</a></li>
+    <li><a href="#detailed">2. detailed</a></li>
+    <li class="depth-2"><a href="#dt-enable">2.1 @EnableWireMock</a></li>
+    <li class="depth-2"><a href="#dt-endpoint">2.2 @WireMockEndpoint &mdash; per-endpoint qualifiers</a></li>
+    <li class="depth-2"><a href="#dt-priority">2.3 @Priority &mdash; the implicit default</a></li>
+    <li class="depth-2"><a href="#dt-reset">2.4 stubs reset between methods</a></li>
+    <li><a href="#spi">3. spi / port reference</a></li>
+  </ol>
+</nav>
+
+<p>wiremock-module wraps WireMock's stub server in a CDI lifecycle so you can <code>@Inject WireMockServer</code> and <code>@Inject WireMock</code> directly into a test. <code>@EnableWireMock</code> on the test class boots one server per declared endpoint, resets the stubs between methods, and tears the servers down in <code>afterAll</code>. Multi-endpoint tests get one CDI qualifier per upstream &mdash; type-safe and compile-time-checked.</p>
+
+<h1 id="quick-start">1. quick-start</h1>
+
+<h2 id="qs-purpose">1.1 purpose</h2>
+<p>The standard WireMock setup &mdash; build a <code>WireMockServer</code>, start it in <code>@BeforeAll</code>, stop it in <code>@AfterAll</code>, reset stubs in <code>@BeforeEach</code>, propagate the port to the system under test &mdash; is the same scaffolding every time. wiremock-module collapses it into one annotation: <code>@EnableWireMock</code> handles the lifecycle, a CDI producer injects the server / stub-registration client, the lifecycle adapter resets stubs between test methods.</p>
+
+<h2 id="qs-hello">1.2 hello-world</h2>
+<p>One annotation on the test class, two <code>@Inject</code> fields, a real HTTP round-trip in the test body.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing 26 &middot; wiremock-hello-world</span><a href="../listings/26-wiremock-hello-world/">listings/26-wiremock-hello-world/</a></div>
+<pre><span class="cm">// src/test/java/example/wiremock/HelloWireMockTest.java</span>
+<span class="an">@EnableWireMock</span>
+<span class="kw">class</span> <span class="ty">HelloWireMockTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">WireMockServer</span> server;
+
+    <span class="an">@Inject</span>
+    <span class="ty">WireMock</span> stubs;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> getReturnsStubbedBody() <span class="kw">throws</span> <span class="ty">Exception</span> {
+        stubs.register(get(urlEqualTo(<span class="st">"/hello"</span>))
+                .willReturn(aResponse().withStatus(200).withBody(<span class="st">"hi"</span>)));
+
+        <span class="ty">HttpResponse</span>&lt;<span class="ty">String</span>&gt; response;
+        <span class="kw">try</span> (<span class="ty">HttpClient</span> client = <span class="ty">HttpClient</span>.newHttpClient()) {
+            <span class="ty">HttpRequest</span> request = <span class="ty">HttpRequest</span>.newBuilder()
+                    .uri(<span class="ty">URI</span>.create(server.baseUrl() + <span class="st">"/hello"</span>))
+                    .GET()
+                    .build();
+            response = client.send(request, <span class="ty">HttpResponse</span>.<span class="ty">BodyHandlers</span>.ofString());
+        }
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).isEqualTo(<span class="st">"hi"</span>);
+    }
+}</pre>
+</div>
+
+<p><code>@EnableWireMock</code> is meta-annotated <code>@EnableTestBeans</code>, so the test class doesn't need to write both annotations. The default OS-assigned port comes from the implicit no-qualifier endpoint.</p>
+
+<h2 id="qs-maven">1.3 maven setup</h2>
+<p>wiremock-module's api / impl plus the standard CDI runtime (cdi-module + scope-module). The WireMock library itself is brought in transitively via <code>jawelte-wiremock-module-impl</code> &mdash; no need to add the upstream dep yourself.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/26-wiremock-hello-world/pom.xml">listings/26-wiremock-hello-world/pom.xml</a></div>
+<pre>&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-wiremock-module-api&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-wiremock-module-impl&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;!-- cdi + scope-module supply the CDI runtime --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-cdi-module-api&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
+  &lt;artifactId&gt;jawelte-cdi-module-impl&lt;/artifactId&gt;
+  &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;</pre>
+</div>
+
+<h1 id="detailed">2. detailed</h1>
+
+<h2 id="dt-enable">2.1 @EnableWireMock</h2>
+<p><code>@EnableWireMock</code> is a class-level marker with <em>no attributes</em>. Endpoint configuration (port, qualifier) lives on the <code>@WireMockEndpoint</code> meta-qualifier &mdash; not on the activator. The annotation is meta-annotated with <code>@Inherited</code>, so a test class that extends a base class carrying <code>@EnableWireMock</code> picks up the activation automatically.</p>
+<p>The lifecycle hook runs at JUnit Jupiter <code>@Priority(75)</code> &mdash; same band as <a href="jaxrs-module.html">jaxrs-module</a>, between testcontrol-module (50) and scope-module (100). It reads the annotation off the test class in <code>beforeAll</code>, boots one <code>WireMockServer</code> per discovered <code>@WireMockEndpoint</code> qualifier (or a single default server when no qualifier was found), and shuts them down in <code>afterAll</code>.</p>
+
+<h2 id="dt-endpoint">2.2 @WireMockEndpoint &mdash; per-endpoint qualifiers</h2>
+<p>Multi-upstream tests declare one user <code>@Qualifier</code> annotation per endpoint, each meta-annotated <code>@WireMockEndpoint</code>:</p>
+
+<pre>@WireMockEndpoint(port = 0)
+@Qualifier
+@Retention(RUNTIME)
+@Target({FIELD, METHOD, PARAMETER, TYPE})
+public @interface PaymentApi { }
+
+@WireMockEndpoint(port = 0)
+@Qualifier
+@Retention(RUNTIME)
+@Target({FIELD, METHOD, PARAMETER, TYPE})
+public @interface InventoryApi { }</pre>
+
+<p>The qualifier doubles as the lookup key: <code>@Inject @PaymentApi WireMockServer paymentServer</code>, <code>@Inject @InventoryApi WireMock inventoryStubs</code>. Endpoint identity is a compile-time CDI qualifier, not a string name &mdash; typos are caught by the compiler.</p>
+<p><strong>port = 0</strong> &mdash; OS-assigned ephemeral port (recommended; no port-conflict flakiness when multiple suites run on the same host). The resolved port is then readable via <code>server.port()</code>.<br>
+<strong>port = N (N &gt; 0)</strong> &mdash; bind to a specific port. If already in use, <code>beforeAll</code> fails with a <code>BindException</code>.</p>
+
+<h2 id="dt-priority">2.3 @Priority &mdash; the implicit default</h2>
+<p>In multi-endpoint mode, an unqualified <code>@Inject WireMockServer</code> is ambiguous by default. Add <code>@jakarta.annotation.Priority</code> to one of the qualifiers and that qualifier's server becomes the implicit default:</p>
+
+<pre>@WireMockEndpoint(port = 0)
+@jakarta.annotation.Priority(1)        <span class="cm">// lowest value wins</span>
+@Qualifier @Retention(RUNTIME) @Target({FIELD, ...})
+public @interface PaymentApi {}
+
+@WireMockEndpoint(port = 0)
+@Qualifier @Retention(RUNTIME) @Target({FIELD, ...})
+public @interface InventoryApi {}
+
+@EnableWireMock
+class MyTest {
+    @Inject WireMockServer server;             <span class="cm">// → @PaymentApi (lowest priority)</span>
+    @Inject @PaymentApi   WireMockServer p;
+    @Inject @InventoryApi WireMockServer i;
+}</pre>
+
+<p>Without <code>@Priority</code> &mdash; or with a tie on the lowest value &mdash; every synthetic bean keeps <code>@Default</code>, and unqualified injection raises the standard CDI <code>AmbiguousResolutionException</code> at deployment.</p>
+
+<h2 id="dt-reset">2.4 stubs reset between methods</h2>
+<p>The lifecycle adapter calls <code>WireMockServer.resetAll()</code> in its <code>beforeEach</code>, so stubs you register in one method don't leak into the next. This is independent of CDI scope destruction &mdash; even if <a href="testcontrol-module.html">testcontrol-module</a> vetoes scopes for a method, stubs are still reset.</p>
+
+<h1 id="spi">3. spi / port reference</h1>
+<p>wiremock-module ships <strong>no SPI / port of its own</strong>. The api jar contains exactly two annotations: <code>@EnableWireMock</code> and <code>@WireMockEndpoint</code>. Customization happens through:</p>
+<ul>
+  <li><strong>Endpoint configuration</strong> &mdash; declare additional <code>@WireMockEndpoint</code>-meta-annotated qualifiers; the CDI extension picks them up at <code>BeforeBeanDiscovery</code>.</li>
+  <li><strong>WireMock library settings</strong> &mdash; whatever <code>WireMockConfiguration</code> exposes is reachable through the injected <code>WireMockServer</code> handle. For deeper configuration (HTTPS, file-based mappings, listeners), inject the server and call its configuration API directly before the first request.</li>
+  <li><strong>Scope handling</strong> &mdash; wiremock-module ships a <code>BeanScopeMapper</code> provider that remaps WireMock's registry markers to <code>@TestClassScoped</code>. See <a href="scope-module.html">scope-module</a>'s SPI section for how to write additional mappers.</li>
+</ul>
+<p>There's no MP Config key wiremock-module reads directly. Port-pinning lives on the <code>@WireMockEndpoint(port = ...)</code> attribute, which is compile-time typed.</p>
+
+<div class="closing">
+  <strong>jawelte / wiremock-module</strong> &nbsp;&middot;&nbsp; <a href="modules.html">modules</a> &nbsp;&middot;&nbsp; <a href="core.html">core</a> &nbsp;&middot;&nbsp; back to <a href="index.html">overview</a>
+</div>
+
+<script>
+  (function () {
+    const root = document.documentElement;
+    const btn = document.getElementById('theme-toggle');
+    const STORAGE_KEY = 'jawelte-docs-theme';
+    function applyTheme(theme) {
+      if (theme === 'light') { root.setAttribute('data-theme', 'light'); btn.textContent = '☀'; btn.title = 'Switch to dark theme'; }
+      else { root.removeAttribute('data-theme'); btn.textContent = '☾'; btn.title = 'Switch to light theme'; }
+    }
+    let stored = null;
+    try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) { }
+    applyTheme(stored === 'light' ? 'light' : 'dark');
+    btn.addEventListener('click', function () {
+      const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      applyTheme(next);
+      try { localStorage.setItem(STORAGE_KEY, next); } catch (e) { }
+    });
+  })();
+</script>
+
+</body>
+</html>
