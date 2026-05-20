@@ -373,6 +373,11 @@
                 <artifactId>jawelte-ejb-module-impl-arc</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-ejb-module-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal content-diff-module cross-references -->
             <dependency>
