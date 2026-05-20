@@ -6510,3 +6510,13 @@ Wrote `docs/jaxrs-module.html` using the 3-section template (quick-start → det
 Listing 22 (`listings/22-jaxrs-hello-world/`) is a standalone-pom Maven project: `@Path("/hello")` resource in src/main, an `@EnableJaxRs(restResources = {HelloResource.class})` test that injects `TestUrl` and asserts the server booted on an OS-assigned `http://localhost:{port}`. Skipped a real HTTP-client round trip to keep the dependency footprint small — matches scenario-01's smoke-test pattern.
 
 Aggregator updates: `listings/pom.xml` and `listings/README.md` both gained the `22-jaxrs-hello-world` row. `docs/modules.html` jaxrs-module card now links to the detail page.
+
+## 2026-05-20 — docs/testcontrol-module.html + listing 23
+
+Wrote `docs/testcontrol-module.html` (3-section template). Quick-start covers the four-phase pipeline (seed → update → commit → verify) over a single classpath folder; detailed section breaks out the `dbIn/` / `dbUpdate/` / `dbExpected/` sub-directories, the `testDataBasePath` MP Config override, the `startScopes` allow-list for scope-module scopes, the `requireDbExpected` silent-pass guard, and the multi-PU routing prefix syntax. SPI section is explicit that testcontrol-module ships no port of its own — extension flows through db-testdata-module's `DbSeedDataSetReader` / `DbDiffEngine`, jpa-module's `TransactionStrategy`, and scope-module's `BeforeScopeStarted` event.
+
+Listing 23 (`listings/23-testcontrol-hello-world/`) standalone-pom: `@Entity Greeting`, a `@PersistenceConfig(persistenceUnitName = "greetingsPU")` test, single `@Test` with `@TestControl(testData = "testdata/greetings", requireDbExpected = false)`. `dbIn/greetings.xml` seeds two GREETING rows; an `@Transactional` counter service asserts the count.
+
+Hit a JUnit-version mismatch on first run: db-testdata-module-impl pulls in dbunit 3.0.0, which transitively brings `junit-platform-suite-engine:1.10.1` → `junit-platform-launcher:1.10.1`. That clashes with junit-jupiter 6.0.0 and crashes test discovery with "OutputDirectoryCreator not available". Fixed by adding an `<exclusion>` for `junit-platform-suite-engine` on the `db-testdata-module-impl` dependency; comment in the pom explains why. Both OWB and Weld profiles pass.
+
+Aggregator updates: `listings/pom.xml` and `listings/README.md` gained the listing 23 row. `docs/modules.html` testcontrol-module card now links to the detail page.
