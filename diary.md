@@ -6008,3 +6008,32 @@ is perfect"). The visual brand still reads as "jawelte" — the
 "//"-prefixed meta line, the lowercase letter-spaced section
 headers, and the green-accent code blocks all stay monospace
 exactly as in `docs/index.html`. Only the body prose changed font.
+
+## 2026-05-20 — docs/core.html — revert hybrid font, brighten prose
+
+User feedback: previous (all-monospace) version read better, and
+the real issue is that the prose colour is too dark.
+
+- Reverted the hybrid `--font-prose` font split. All text is back
+  on `--font-mono` (the improved system stack:
+  `ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono',
+  Menlo, Consolas, 'Liberation Mono', monospace`).
+- Brightened the prose colour:
+  - `--text-soft` (used on `<p>`, `<li>`, table description cells):
+    `#d4d4d8` &rarr; `#ececef` — significantly closer to white.
+  - `--text` (used on `<strong>`, `<em>`, headings, inline code,
+    table key cells): `#e4e4e7` &rarr; `#f4f4f6`.
+- `<p>` / `<li>` font-size restored to 15px / line-height 1.9 / 1.85
+  (the values from before the hybrid pass — what the user said
+  read better).
+- Body width restored to 880px from the 780px the hybrid pass
+  imposed for sans-serif prose.
+- Table `<td>` font-size back to 13 / 12.5 (was 14 in the hybrid).
+- Kept the improvements that were truly font-independent: better
+  monospace stack, antialiased text smoothing, brighter `--muted`,
+  the readability-pass heading sizes, the listing chrome accents,
+  the config-table zebra striping.
+
+The page now reads as the brand intended — green-on-dark monospace
+end to end — with the main prose finally bright enough to be
+comfortable.

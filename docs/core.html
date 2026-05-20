@@ -20,18 +20,17 @@
     --bg2:          #232323;
     --bg3:          #2c2c2c;
     --bg-code:      #141414;
-    --text:         #ececef;
-    --text-soft:    #d4d4d8;
+    --text:         #f4f4f6;
+    --text-soft:    #ececef;
     --soft:         #c4c4c7;
     --muted:        #8b8b92;
     --border:       #2e2e2e;
     --border-soft:  #3a3a3a;
 
-    --font-prose: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, sans-serif;
     --font-mono:  ui-monospace, 'SF Mono', 'Cascadia Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   }
   html { background: var(--bg); color: var(--text); font-family: var(--font-mono); scroll-behavior: smooth; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-  body { max-width: 780px; margin: 0 auto; padding: 0 24px 96px; }
+  body { max-width: 880px; margin: 0 auto; padding: 0 24px 96px; }
   a { color: var(--green); text-decoration: none; border-bottom: 1px dotted var(--green-dim); transition: color .15s ease, border-color .15s ease; }
   a:hover { color: var(--green-bright); border-bottom-color: var(--green); }
   code { font-family: var(--font-mono); color: var(--teal); background: var(--bg-code); padding: 2px 6px; border-radius: 3px; font-size: 13.5px; border: 1px solid var(--border); }
@@ -82,24 +81,19 @@
     margin: 28px 0 10px;
   }
 
-  /* Prose: proportional sans-serif for readability. The monospace
-     brand stays in headings, code, TOC, listing chrome, meta. */
   p {
-    font-family: var(--font-prose);
-    font-size: 16px;
-    line-height: 1.7;
-    color: var(--text);
-    margin-bottom: 20px;
+    font-size: 15px;
+    line-height: 1.9;
+    color: var(--text-soft);
+    margin-bottom: 18px;
   }
 
-  ul, ol { margin: 4px 0 22px 28px; font-family: var(--font-prose); }
+  ul, ol { margin: 0 0 20px 28px; }
   li {
-    font-family: var(--font-prose);
-    font-size: 16px;
-    line-height: 1.7;
-    color: var(--text);
-    margin-bottom: 10px;
-    padding-left: 4px;
+    font-size: 15px;
+    line-height: 1.85;
+    color: var(--text-soft);
+    margin-bottom: 8px;
   }
   li::marker { color: var(--green-dim); }
   li code, p code { font-size: 13.5px; }
@@ -175,16 +169,14 @@
   table.cfg td {
     padding: 14px 16px;
     border-bottom: 1px solid var(--border);
-    color: var(--text);
+    color: var(--text-soft);
     vertical-align: top;
-    line-height: 1.7;
-    font-family: var(--font-prose);
-    font-size: 14px;
+    line-height: 1.75;
+    font-size: 13px;
   }
   table.cfg td:first-child {
     color: var(--text);
     white-space: nowrap;
-    font-family: var(--font-mono);
     font-size: 12.5px;
   }
   table.cfg td code { font-size: 12.5px; }
