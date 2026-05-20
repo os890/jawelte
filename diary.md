@@ -5685,3 +5685,14 @@ At `ProcessAnnotatedType` time the SL-discovered mapper strips
 `@RequestScoped` from `Counter` and adds `@ApplicationScoped`.
 Test asserts `beanManager.getBeans(Counter.class)` returns a single
 bean whose `.getScope()` equals `ApplicationScoped.class`. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 15: config-resolver
+
+Demonstrates the `ConfigResolver` SPI as a CDI-bean override.
+`FixedConfigResolver` is `@ApplicationScoped @Alternative
+@Priority(100)`; CDI 4's globally-enabled `@Alternative` rule lets
+it win over the framework default (the `ConfigResolverAdapter` in
+`core/impl` that delegates to MP Config). `AppConfig` in `src/main`
+is unchanged — it still `@Inject`s `ConfigResolver` and calls
+`resolve("app.greeting")`. The injected resolver is now ours; the
+test asserts `config.greeting()` returns the fixture value. 0.2s.
