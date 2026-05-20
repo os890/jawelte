@@ -5673,3 +5673,15 @@ callback. Test asserts the log starts with
 before callbacks). The afterAll-LIFO claim is documented but
 unverifiable from inside the test method itself (afterAll fires
 after the assertion returns). 0.2s.
+
+## 2026-05-20 — ticket-016 listing 14: bean-scope-mapper
+
+Demonstrates `BeanScopeMapper`. Production `Counter` carries
+`@RequestScoped` in `src/main`. `RequestToApplicationScoped`
+(`BeanScopeMapper` impl, ServiceLoader-registered via
+`META-INF/services/...BeanScopeMapper`) declares `trigger() =
+RequestScoped.class` and `targetScope() = ApplicationScoped.class`.
+At `ProcessAnnotatedType` time the SL-discovered mapper strips
+`@RequestScoped` from `Counter` and adds `@ApplicationScoped`.
+Test asserts `beanManager.getBeans(Counter.class)` returns a single
+bean whose `.getScope()` equals `ApplicationScoped.class`. 0.2s.
