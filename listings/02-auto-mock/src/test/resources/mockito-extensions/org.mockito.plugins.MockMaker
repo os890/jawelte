@@ -12,4 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Mockito 5's default "inline" mock maker installs a Java agent at
+# runtime via Byte Buddy's self-attach. Under JDK 24+ that
+# self-attach is restricted, so Mockito.mock(...) can throw without
+# -javaagent being passed to the JVM — and jawelte's
+# MockitoMockFactory catches that exception and returns null, so
+# the auto-mock synthetic bean is never registered and the
+# @Inject site fails with UnsatisfiedResolutionException at
+# container boot.
+#
+# Selecting the subclass mock maker below sidesteps that: Byte
+# Buddy generates a subclass for each mocked type — no agent
+# needed. It mocks interfaces and any non-final class, which
+# covers every target jawelte's auto-mock layer hands to Mockito
+# (final JDK classes like String / Integer / Class are filtered out
+# upstream and never reach the mock factory).
+
 mock-maker-subclass

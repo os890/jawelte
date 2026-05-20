@@ -5825,3 +5825,35 @@ Style adjustments in the single `<style>` block:
 
 TOC, header, listing-bar, and closing footer unchanged in
 structure — only the new variable values flow through them.
+
+## 2026-05-20 — ticket-016 listing 02 — auto-mock lifecycle + MockMaker rationale
+
+User feedback on listing 02: (a) `org.mockito.plugins.MockMaker`
+ships in the listing but the docs never explain what it's for, and
+(b) the docs don't address the lifecycle / sharing semantics of
+auto-mocked instances.
+
+Verified the MockMaker file is in fact required under JDK 25:
+removing it makes `Mockito.mock(Translator.class)` throw (Mockito 5's
+inline maker uses Byte Buddy self-attach, restricted on JDK 24+),
+which `MockitoMockFactory` catches and returns `null` from — so the
+auto-mock synthetic bean is never registered and `@Inject Translator`
+fails with `UnsatisfiedResolutionException` at container boot.
+
+Changes:
+
+- Inline `org.mockito.plugins.MockMaker` gets a paragraph-long
+  comment block before the `mock-maker-subclass` line explaining
+  what the file does, why the inline maker is unreliable here, and
+  what types the subclass maker can mock.
+- `docs/core.html` section 1.3 grows two `<h4>` subsections after
+  listing 02's code block. One walks the lifecycle: auto-mocks are
+  `@RequestScoped` by default, one synthetic bean per
+  `(target-type, qualifier-set)` shape so all matching injection
+  points share the same mock for the duration of the current test
+  method; the request scope resets between methods so Mockito state
+  resets implicitly; JDK final classes drop to `@Dependent`. The
+  other explains the MockMaker file (mirror of what the file's
+  comment block says) and links to it.
+- New `h4` selector added to the CSS so subheadings inside `<h3>`
+  sections get consistent typography.

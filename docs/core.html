@@ -69,6 +69,13 @@
     font-weight: 600;
     margin: 32px 0 14px;
   }
+  h4 {
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    font-weight: 600;
+    margin: 24px 0 10px;
+  }
   p {
     font-size: 15px;
     line-height: 1.9;
@@ -301,6 +308,14 @@
     }
 }</pre>
 </div>
+
+<h4>lifecycle &amp; sharing of auto-mocks</h4>
+<p>Auto-mocks are <code>@RequestScoped</code> by default. jawelte registers exactly one synthetic bean per <code>(target-type, qualifier-set)</code> shape — every injection point matching that shape resolves to the <strong>same</strong> mock instance for the duration of the current test method. So <code>Greeter.translator</code> (held by the application-scoped production bean) and <code>GreeterTest.translator</code> (the test class field) point at the identical mock; <code>when(translator…)</code> on the test side stubs exactly what <code>greeter.greet(…)</code> reads on the production side.</p>
+<p>The request scope is freshly activated in <code>beforeEach</code> and torn down in <code>afterEach</code>, so each test method gets its own fresh mock. Stubs you set up in one method never bleed into the next — Mockito state resets implicitly with the scope. Add a second <code>@Test</code> method that doesn't call <code>when(…)</code> and <code>translator.translate(…)</code> returns Mockito's default <code>null</code> again.</p>
+<p>The default scope is configurable via the MP Config key <code>org.os890.jawelte.module.cdi.auto-mock.default-scope</code>; pairing the test with <code>scope-module</code> rebinds it to <code>@TestMethodScoped</code> for the same per-method semantics expressed in scope-module's vocabulary. JDK types (<code>String</code>, primitives, the final classes mocking can't subclass…) are auto-mocked at <code>@Dependent</code> scope so each injection point gets its own instance — the framework can't put a normal-scope proxy on a final class.</p>
+
+<h4>why the Mockito MockMaker file?</h4>
+<p>The listing ships a one-line <a href="../listings/02-auto-mock/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker"><code>src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker</code></a> file that selects Mockito's <code>mock-maker-subclass</code> strategy. Mockito 5's default <em>inline</em> mock maker installs a Java agent at runtime via Byte Buddy's self-attach; on JDK 24+ that self-attach is restricted, so <code>Mockito.mock(…)</code> can throw — at which point jawelte's <code>MockitoMockFactory</code> returns <code>null</code> and the auto-mock synthetic bean is never registered, so <code>@Inject Translator</code> fails with <code>UnsatisfiedResolutionException</code>. The subclass maker uses Byte Buddy's classic subclassing instead, needs no agent, and mocks interfaces or any non-final class — which covers every target jawelte hands to Mockito (final JDK classes are filtered upstream and never reach the mock factory).</p>
 
 <h3>@TestBean — pick an alternative</h3>
 <p>A test-only <code>@Alternative</code> class wins over the production impl when its class is named in <code>@TestBean(bean=…)</code> on the test class.</p>
