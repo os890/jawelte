@@ -5604,3 +5604,14 @@ and `container.close()` in `@AfterAll`; jawelte skips
 the per-method request scope and injects test-class fields. Test
 asserts request-scope active + injection works (Counter
 @ApplicationScoped, .increment() yields 1). 0.2s.
+
+## 2026-05-20 — ticket-016 listing 08: test-bean-producer
+
+Demonstrates `@TestBean(beanProducer=...)`. Production
+`SystemClockProducer` (`@ApplicationScoped` with `@Produces Clock`
+backed by `Instant::now`) in `src/main`; `FixedClockProducer`
+(`@Dependent @Alternative` with `@Produces Clock` returning a fixed
+`Instant`) in `src/test`. Test class
+`@TestBean(beanProducer=FixedClockProducer.class)` activates the
+fixed alternative — `@Inject Clock` resolves to it and
+`clock.now()` returns the fixed instant. 0.2s.
