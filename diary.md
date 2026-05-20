@@ -5660,3 +5660,16 @@ is up but before module `beforeAll`s run. The observer mirrors
 `event.getTestClass()` into a static `AtomicReference` the test
 can verify. Useful pattern for module-style one-time setup that
 needs CDI but must run before any lifecycle ports. 0.2s.
+
+## 2026-05-20 — ticket-016 listing 13: lifecycle-port
+
+Demonstrates multi-impl `TestModuleLifecyclePort` with `@Priority`
+ordering. Two ports (`EarlyLifecyclePort` `@Priority(10)`,
+`LateLifecyclePort` `@Priority(20)`) both ServiceLoader-registered
+via the same `META-INF/services/...TestModuleLifecyclePort` file.
+Each appends an entry to a shared `CopyOnWriteArrayList` per
+callback. Test asserts the log starts with
+`early.beforeAll, late.beforeAll` (priority-ascending order for
+before callbacks). The afterAll-LIFO claim is documented but
+unverifiable from inside the test method itself (afterAll fires
+after the assertion returns). 0.2s.
