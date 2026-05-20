@@ -46,7 +46,7 @@
         <microprofile.config.version>3.1</microprofile.config.version>
         <smallrye.config.version>3.10.0</smallrye.config.version>
         <openwebbeans.version>4.1.0</openwebbeans.version>
-        <mockito.version>5.14.2</mockito.version>
+        <mockito.version>5.23.0</mockito.version>
         <junit.version>6.0.0</junit.version>
         <assertj.version>3.27.3</assertj.version>
     </properties>

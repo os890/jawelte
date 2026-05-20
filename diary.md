@@ -5933,3 +5933,41 @@ with the correct Byte Buddy class-file-version diagnosis, lists
 all three workarounds, and explicitly calls out that this goes
 away once Mockito ships with a JDK 25-aware Byte Buddy. Probe
 project deleted from `/tmp/`.
+
+## 2026-05-20 — drop MockMaker config — bump Mockito to 5.23.0
+
+User pushback: "if it's just a Byte Buddy version in Mockito it
+should be possible to exclude it and use a newer version; I don't
+think Mockito requires all users to add such a config with the JDK
+upgrade." Correct.
+
+Verified the actual versions:
+
+  Mockito 5.14.2 -> byte-buddy 1.15.4  (caps at Java 24, major 68)
+  Mockito 5.23.0 -> byte-buddy 1.17.7  (knows Java 26, major 70)
+
+Re-tested listing 02 with Mockito bumped to 5.23.0 and the
+`mockito-extensions/org.mockito.plugins.MockMaker` file deleted -
+BUILD SUCCESS. Same for listing 04.
+
+Changes:
+
+- `listings/02-auto-mock/pom.xml`: `mockito.version` 5.14.2 -> 5.23.0.
+- `listings/02-auto-mock/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker`
+  removed (whole `mockito-extensions/` directory gone).
+- `listings/04-test-bean-static-field/pom.xml`: same Mockito bump.
+- `listings/04-test-bean-static-field/src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker`
+  removed.
+- `docs/core.html` section 1.3: replaced "why the Mockito MockMaker
+  file?" with "Mockito version on JDK 25". Doc now explains the
+  Byte Buddy class-file-version constraint, captures the actual
+  exception text, and states the clean fix (pin Mockito 5.23.0+
+  which already ships Byte Buddy 1.17.7+). Notes the fallback
+  paths: (a) override only `net.bytebuddy:byte-buddy` /
+  `byte-buddy-agent` in `<dependencyManagement>` if you can't move
+  Mockito itself, or (b) the `mock-maker-subclass` config as a
+  last resort.
+
+All 16 listings still pass via the aggregator (18 tests total;
+listing 04 contributes 2). No MockMaker config files anywhere
+under `listings/` now.
