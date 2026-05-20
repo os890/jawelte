@@ -6556,3 +6556,11 @@ Two non-obvious fixes:
 2. RAT plugin flagged 17 license-headerless XML files across listings 21–27. Added the standard Apache header (XML-comment form) to every `beans.xml`, `persistence.xml`, and dataset XML.
 
 Aggregator updates: `listings/pom.xml`, `listings/README.md`, and `docs/modules.html` updated as usual.
+
+## 2026-05-20 — docs/batch-module.html + listing 28
+
+Wrote `docs/batch-module.html`. Section 2 details `BatchExecution` as both request (jobName + .param + .timeout) and result carrier (.getStatus / .getExitStatus / .getJobExecution / .getExecutionId), the deliberately blocking `Event<BatchExecution>.fire(...)` (synchronous observer, exponential backoff 50 ms → 5 s cap), default-60-s timeout behaviour (throws by default; the in-impl `PopulateLatestSnapshotTimeoutHandler` alternative populates the latest snapshot and returns), and the impl-by-classpath jBatch runtime choice (BatchEE vs JBeret). SPI section enumerates the single port `TimeoutHandler`, default `ThrowOnTimeoutTimeoutHandler @Priority(Integer.MAX_VALUE)`, swap by shipping a META-INF/services file with a lower priority.
+
+Listing 28 (`listings/28-batch-hello-world/`) standalone-pom: JSL job file with one batchlet step, `@Named("simpleBatchlet") @Dependent` batchlet returning "COMPLETED", a single `@Test` that `batchEvent.fire(new BatchExecution("simple-job"))` and asserts `BatchStatus.COMPLETED`. Both OWB and Weld profiles pass with BatchEE.
+
+This completes the module fan-out for ticket-016. Every catalog entry in `docs/modules.html` (12 modules) now has a corresponding detail page; every detail page links to a runnable listing in `listings/`.
