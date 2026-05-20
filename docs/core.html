@@ -349,12 +349,19 @@
 </div>
 
 <h3>@TestBean — pre-built value on a static field</h3>
-<p>Put <code>@TestBean</code> on a <code>static final</code> field whose initialiser yields the bean instance. No <code>@Alternative</code>, no producer — the field value IS the bean. Idiomatic for "register this exact object as the bean".</p>
+<p>Put <code>@TestBean</code> on a <code>static final</code> field whose initialiser yields the bean instance. No <code>@Alternative</code>, no producer — the field value IS the bean. Idiomatic for "register this exact object as the bean". The two static fields below show the two most common shapes side by side: a literal value (<code>new Greeting(…)</code>) and a Mockito mock (<code>Mockito.mock(Clock.class)</code>) wired in via the same static-field recipe.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing 04 · test-bean-static-field</span><a href="../listings/04-test-bean-static-field/">listings/04-test-bean-static-field/</a></div>
 <pre><span class="cm">// src/main/java/example/staticfield/Greeting.java</span>
-<span class="kw">public record</span> <span class="ty">Greeting</span>(<span class="ty">String</span> text) {}
+<span class="kw">public record</span> <span class="ty">Greeting</span>(<span class="ty">String</span> text) {
+}
+
+<span class="cm">// src/main/java/example/staticfield/Clock.java</span>
+<span class="an">@FunctionalInterface</span>
+<span class="kw">public interface</span> <span class="ty">Clock</span> {
+    <span class="ty">Instant</span> now();
+}
 
 <span class="cm">// src/test/java/example/staticfield/GreetingTest.java</span>
 <span class="an">@EnableTestBeans</span>
@@ -363,15 +370,32 @@
     <span class="an">@TestBean</span>
     <span class="kw">public static final</span> <span class="ty">Greeting</span> WELCOME_GREETING = <span class="kw">new</span> <span class="ty">Greeting</span>(<span class="st">"hello-from-static-field"</span>);
 
+    <span class="an">@TestBean</span>
+    <span class="kw">public static final</span> <span class="ty">Clock</span> CLOCK = mock(<span class="ty">Clock</span>.<span class="kw">class</span>);
+
     <span class="an">@Inject</span>
     <span class="ty">Greeting</span> greeting;
 
+    <span class="an">@Inject</span>
+    <span class="ty">Clock</span> clock;
+
     <span class="an">@Test</span>
-    <span class="kw">void</span> staticFieldBecomesTheBean() {
+    <span class="kw">void</span> staticFieldLiteralBecomesTheBeanInstance() {
         assertThat(greeting).isSameAs(WELCOME_GREETING);
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> staticFieldMockitoMockIsInjectedAndStubbable() {
+        <span class="ty">Instant</span> pinned = <span class="ty">Instant</span>.parse(<span class="st">"2026-05-20T12:00:00Z"</span>);
+        when(clock.now()).thenReturn(pinned);
+
+        assertThat(clock).isSameAs(CLOCK);
+        assertThat(clock.now()).isEqualTo(pinned);
     }
 }</pre>
 </div>
+
+<p>Both static-field declarations register their respective values once at class-load time — <code>WELCOME_GREETING</code> stays the same literal record across the whole test class; <code>CLOCK</code> stays the same Mockito mock instance, with stubs reset between methods by Mockito's <code>@Singleton</code>-scoped instance receiving fresh <code>when(…)</code> wiring at the top of each <code>@Test</code>. Because the field VALUE is the bean, there is no scope proxying — <code>@Singleton</code> by default; the test asserting <code>.isSameAs(WELCOME_GREETING)</code> proves it.</p>
 
 <h3>@ConfigBean — typed config facade</h3>
 <p>A <code>@ConfigBean</code>-annotated class is an <code>@ApplicationScoped</code> CDI bean (the annotation is a stereotype that contributes the scope). <code>@Inject</code> <code>ConfigResolver</code> and expose one public method per config key with parsing + default.</p>

@@ -16,6 +16,10 @@
 package example.staticfield;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.time.Instant;
 
 import jakarta.inject.Inject;
 
@@ -26,15 +30,45 @@ import org.os890.jawelte.core.api.TestBean;
 @EnableTestBeans
 class GreetingTest {
 
+    /**
+     * Literal value held on a static field — {@code @TestBean} on
+     * a static field registers the field's value as the bean
+     * instance with scope {@code @Singleton}, bean types of the
+     * declared field type plus {@code Object}, and the field's
+     * CDI qualifiers.
+     */
     @TestBean
     public static final Greeting WELCOME_GREETING = new Greeting("hello-from-static-field");
+
+    /**
+     * Same recipe, but the field value comes from
+     * {@code Mockito.mock(...)} — the synthetic bean is a fully
+     * stubbable Mockito mock that the test method below configures
+     * with {@code when(...)}. Idiomatic for sticking a hand-built
+     * mock into the container without needing an
+     * {@code @Alternative} class or a producer-method class.
+     */
+    @TestBean
+    public static final Clock CLOCK = mock(Clock.class);
 
     @Inject
     Greeting greeting;
 
+    @Inject
+    Clock clock;
+
     @Test
-    void staticFieldValueBecomesTheBeanInstance() {
+    void staticFieldLiteralBecomesTheBeanInstance() {
         assertThat(greeting).isSameAs(WELCOME_GREETING);
         assertThat(greeting.text()).isEqualTo("hello-from-static-field");
+    }
+
+    @Test
+    void staticFieldMockitoMockIsInjectedAndStubbable() {
+        Instant pinned = Instant.parse("2026-05-20T12:00:00Z");
+        when(clock.now()).thenReturn(pinned);
+
+        assertThat(clock).isSameAs(CLOCK);
+        assertThat(clock.now()).isEqualTo(pinned);
     }
 }

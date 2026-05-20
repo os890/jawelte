@@ -47,6 +47,7 @@
         <microprofile.config.version>3.1</microprofile.config.version>
         <smallrye.config.version>3.10.0</smallrye.config.version>
         <openwebbeans.version>4.1.0</openwebbeans.version>
+        <mockito.version>5.14.2</mockito.version>
         <junit.version>6.0.0</junit.version>
         <assertj.version>3.27.3</assertj.version>
     </properties>
@@ -108,6 +109,14 @@
             <groupId>org.apache.openwebbeans</groupId>
             <artifactId>openwebbeans-se</artifactId>
             <version>${openwebbeans.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Mockito so a @TestBean static field can hold a Mockito.mock(...) instance. -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
 

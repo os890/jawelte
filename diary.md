@@ -5857,3 +5857,30 @@ Changes:
   comment block says) and links to it.
 - New `h4` selector added to the CSS so subheadings inside `<h3>`
   sections get consistent typography.
+
+## 2026-05-20 — ticket-016 listing 04 expansion — second @TestBean field
+
+User feedback: listing 04 should also show the Mockito-mock variant
+of `@TestBean` on a static field (a single sample covering both
+common shapes in one place).
+
+- `listings/04-test-bean-static-field/src/main/java/example/staticfield/Clock.java`
+  new — minimal `@FunctionalInterface` with `Instant now()`, the
+  type the second `@TestBean` mocks.
+- `GreetingTest.java` now declares **two** `@TestBean` fields:
+  - `WELCOME_GREETING = new Greeting(...)` — literal value, existing.
+  - `CLOCK = mock(Clock.class)` — Mockito mock created at
+    class-load time.
+  Two `@Test` methods — one per field — assert each is injected
+  and (for the mock) stubbable.
+- `pom.xml` gains `mockito-core` (test scope).
+- `src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker`
+  added so the Mockito call works on JDK 25 (same rationale as
+  listing 02; cross-references that file in its comment block).
+- `docs/core.html` section 1.3 listing 04 rewritten to show both
+  fields and both tests. A short paragraph after the code block
+  highlights that `@TestBean` static-field registration carries
+  `@Singleton` scope — the field VALUE is the bean, no proxy.
+
+All 16 listing modules still pass via the aggregator (18 tests
+total now; listing 04 contributes 2).
