@@ -6738,3 +6738,12 @@ testcontrol-module up to 4 listings (was 1). Added:
 - `04-multi-pu-routing` — two PUs (customersPU + ordersPU), each fed by its own testData entry with a `"puName:path"` prefix.
 
 §3 SPI section unchanged — module ships no port of its own.
+
+## 2026-05-21 — docs/db-testdata-module.html: three follow-up listings
+
+db-testdata-module up to 4 listings (was 1). Added:
+- `02-seed-modes` — chains `.cleanInsert()` (2 rows) then `.refresh()` (renames one, inserts a new one); ends with 3 rows. Demonstrates the upsert behaviour of refresh.
+- `03-dbdiff-ignoring` — seeds rows with real LAST_MODIFIED timestamps; dbExpected uses sentinel "9999-01-01..." values. `DbDiff.ignoring("ORDER_ROW.LAST_MODIFIED")` skips the column so the comparison passes on the other cells.
+- `04-el-interpolation` — `dbIn.xml` carries `${customerId}` / `${customerName}` placeholders. `DbSeed.withValues(Map.of(...))` resolves them at seed-time. Adds jakarta.el-api + tomcat-embed-el to the listing's test classpath.
+
+Doc snippets added in §2.1 (seed modes), §2.2 (DbDiff ignoring), §2.4 (EL interpolation). §3 SPI section unchanged.

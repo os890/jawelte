@@ -201,6 +201,21 @@
 </table>
 <p>Builders are single-use. The dataset is either a classpath path (<code>.dataset("path/to/file.xml")</code>) or an inline string (<code>.datasetContent("...")</code>); the two are mutually exclusive. <code>.withValues(Map)</code> attaches EL bindings (see <a href="#dt-el">2.4</a>).</p>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing db-testdata-module/02 · seed-modes</span><a href="../listings/db-testdata-module/02-seed-modes/">listings/db-testdata-module/02-seed-modes/</a></div>
+<pre><span class="cm">// src/test/java/example/seedmodes/SeedModesTest.java</span>
+<span class="an">@Test</span>
+<span class="an">@Transactional</span>
+<span class="kw">void</span> cleanInsertThenRefreshUpserts() {
+    <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/initial.xml"</span>).cleanInsert().execute();
+    <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/refresh.xml"</span>).refresh().execute();
+
+    <span class="cm">// refresh upserts: id=1 untouched, id=2 renamed, id=3 inserted -> 3 rows total.</span>
+    <span class="ty">Long</span> count = entityManager.createQuery(<span class="st">"SELECT COUNT(p) FROM Product p"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
+    assertThat(count).isEqualTo(3L);
+}</pre>
+</div>
+
 <h2 id="dt-dbdiff">2.2 DbDiff</h2>
 <p><code>DbDiff</code> reads the current database state, reads the expected dataset, compares both row-by-row + column-by-column, and either passes silently or raises an <code>AssertionError</code> that names the exact diverging cell.</p>
 <table class="config">
@@ -214,6 +229,20 @@
     <tr><td><code>.assertEquals()</code></td><td>Run the comparison. Use <code>.assertRowCount(table, n)</code> for a quick count-only check.</td></tr>
   </tbody>
 </table>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing db-testdata-module/03 · dbdiff-ignoring</span><a href="../listings/db-testdata-module/03-dbdiff-ignoring/">listings/db-testdata-module/03-dbdiff-ignoring/</a></div>
+<pre><span class="cm">// dbIn.xml seeds real timestamps; dbExpected.xml has sentinel "9999-01-01..." timestamps.</span>
+<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="kw">void</span> ignoringSkipsTheNoisyColumn() {
+    <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"orders/dbIn.xml"</span>).cleanInsert().execute();
+
+    <span class="ty">DbDiff</span>.forPersistenceUnit()
+            .ignoring(<span class="st">"ORDER_ROW.LAST_MODIFIED"</span>)
+            .expected(<span class="st">"orders/dbExpected.xml"</span>)
+            .assertEquals();
+}</pre>
+</div>
 
 <h2 id="dt-factories">2.3 factory choice</h2>
 <p>Both <code>DbSeed</code> and <code>DbDiff</code> ship four entry-point factories. Pick the one that matches how the calling test resolves its database connection:</p>
@@ -235,6 +264,29 @@
   <li><strong>Functions</strong> passed via <code>.withFunction(prefix, name, sourceClass, methodName)</code> &mdash; called as <code>${prefix:name(args)}</code>. The source class is reflected for a public-static method with that name; missing or non-static raises an explicit error before the dataset runs.</li>
 </ul>
 <p>Predicate cells in <code>DbDiff</code>'s expected file (e.g. <code>${value &gt; 0}</code>) evaluate the expression against the actual cell from the database and pass when the predicate returns <code>true</code>; <code>NULL</code> handling mirrors EL's standard semantics.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing db-testdata-module/04 · el-interpolation</span><a href="../listings/db-testdata-module/04-el-interpolation/">listings/db-testdata-module/04-el-interpolation/</a></div>
+<pre><span class="cm">// src/test/resources/customers/dbIn.xml</span>
+&lt;dataset&gt;
+    &lt;<span class="ty">CUSTOMER</span> ID=<span class="st">"${customerId}"</span> NAME=<span class="st">"${customerName}"</span>/&gt;
+&lt;/dataset&gt;
+
+<span class="cm">// src/test/java/example/elinterp/InterpolationTest.java</span>
+<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="kw">void</span> elPlaceholdersAreResolvedAtSeedTime() {
+    <span class="ty">DbSeed</span>.forPersistenceUnit()
+            .dataset(<span class="st">"customers/dbIn.xml"</span>)
+            .withValues(<span class="ty">Map</span>.of(<span class="st">"customerId"</span>, 42, <span class="st">"customerName"</span>, <span class="st">"Alice"</span>))
+            .cleanInsert()
+            .execute();
+
+    <span class="ty">Object</span> name = entityManager.createNativeQuery(<span class="st">"SELECT NAME FROM CUSTOMER WHERE ID=42"</span>).getSingleResult();
+    assertThat(name).isEqualTo(<span class="st">"Alice"</span>);
+}</pre>
+</div>
+
+<p>One dataset file, parameterised through <code>.withValues(Map)</code> — different test methods seed different concrete rows without producing new XML files. Add <code>jakarta.el-api</code> + an EL provider (Tomcat's <code>tomcat-embed-el</code> here) to the test classpath.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
 <p>db-testdata-module ships <strong>three ports</strong>, all resolved through core's <code>ServicePriorityResolver</code> + ServiceLoader chain:</p>
