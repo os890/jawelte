@@ -55,5 +55,6 @@
         <module>16-priority-resolver</module>
         <module>17-test-bean-qualified</module>
         <module>18-config-bean-multi-key</module>
+        <module>19-test-instance-factory</module>
     </modules>
 </project>

@@ -953,6 +953,44 @@ example.lifecycle.LateLifecyclePort</pre>
 <h2 id="spi-instance-factory">3.4 TestInstanceFactoryPort</h2>
 <p><strong>Single-impl (optional), ServiceLoader.</strong> Produces the test-instance JUnit will use. When present, JUnit receives the bean instance the implementation produces; when absent, jawelte falls back to <code>testClass.getDeclaredConstructor().newInstance()</code>. <code>cdi-module</code> ships an impl that does <code>CDI.current().select(testClass).get()</code> so test classes participate in CDI-managed lifecycle (private fields, package-private classes, JUnit's <code>PER_METHOD</code> all keep working).</p>
 
+<p>Custom implementations replace the default; ServiceLoader rejects multiple impls, so a listing demonstrating the port runs <em>without</em> cdi-module on the classpath and supplies its own <code>TestBeanContainerPort</code> too.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing core/19 · test-instance-factory</span><a href="../listings/core/19-test-instance-factory/">listings/core/19-test-instance-factory/</a></div>
+<pre><span class="cm">// src/test/java/example/factory/RecordingTestInstanceFactory.java</span>
+<span class="kw">public class</span> <span class="ty">RecordingTestInstanceFactory</span> <span class="kw">implements</span> <span class="ty">TestInstanceFactoryPort</span> {
+
+    <span class="kw">public static final</span> <span class="ty">List</span>&lt;<span class="ty">Class</span>&lt;?&gt;&gt; INSTANTIATED = <span class="kw">new</span> <span class="ty">CopyOnWriteArrayList</span>&lt;&gt;();
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">Object</span> createInstance(<span class="ty">Class</span>&lt;?&gt; testClass) {
+        INSTANTIATED.add(testClass);
+        <span class="kw">try</span> {
+            <span class="kw">var</span> constructor = testClass.getDeclaredConstructor();
+            constructor.setAccessible(<span class="kw">true</span>);
+            <span class="kw">return</span> constructor.newInstance();
+        } <span class="kw">catch</span> (<span class="ty">ReflectiveOperationException</span> e) {
+            <span class="kw">throw new</span> <span class="ty">RuntimeException</span>(<span class="st">"Failed to instantiate "</span> + testClass.getName(), e);
+        }
+    }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.TestInstanceFactoryPort</span>
+example.factory.RecordingTestInstanceFactory
+
+<span class="cm">// src/test/java/example/factory/CustomFactoryTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">CustomFactoryTest</span> {
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> customFactoryProducedThisTestInstance() {
+        assertThat(<span class="ty">RecordingTestInstanceFactory</span>.INSTANTIATED).contains(<span class="ty">CustomFactoryTest</span>.<span class="kw">class</span>);
+    }
+}</pre>
+</div>
+
+<p>The listing also ships a stub <code>NoopContainerPort implements TestBeanContainerPort</code> (registered in its own <code>META-INF/services</code> file) &mdash; jawelte refuses to bootstrap without exactly one container port, and we deliberately don't pull in cdi-module here. Real consumers replace this port only when they need a non-CDI test-instance source (Spring, custom DI, …).</p>
+
 <h2 id="spi-scope-mapper">3.5 BeanScopeMapper + BeanScopeMapperPort</h2>
 <p>Two related ports for declarative CDI scope rewriting at <code>ProcessAnnotatedType</code> time.</p>
 

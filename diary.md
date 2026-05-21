@@ -6665,3 +6665,9 @@ The new snippet teaches three patterns the basic listing 05 doesn't reach: typed
 The earlier scope sweep (jawelte-*-api → scope=test) made any src/main class that referenced jawelte annotations stop compiling cleanly — earlier `mvn test` runs had still succeeded only because Maven was reusing stale .class files from before the sweep. Found 5 listings with this issue: core/05-config-bean (AppConfig with @ConfigBean), core/15-config-resolver (AppConfig with @ConfigBean), core/18-config-bean-multi-key (BackoffConfig, just created with @ConfigBean), scope-module/01-test-method-scoped (Counter with @TestMethodScoped), scope-module/02-test-class-scoped (Counter with @TestClassScoped).
 
 Mirrored the project's own scenario layout: `git mv`'d all five into `src/test/java/`. Empty `src/main/java` sub-trees removed. `mvn -f listings/pom.xml clean test` now passes all 30 listings on a clean build (23.9 s).
+
+## 2026-05-21 — docs/core.html §3.4: custom TestInstanceFactoryPort
+
+Added `listings/core/19-test-instance-factory/` and the doc snippet in §3.4. The trick: `TestInstanceFactoryPort` is single-impl and cdi-module already supplies one, so a listing demonstrating a custom impl has to run **without** cdi-module — and therefore also supply a stub `TestBeanContainerPort` (jawelte refuses to bootstrap without exactly one container port).
+
+The listing ships `RecordingTestInstanceFactory` (records every instantiated test class + reflection-news the instance) and `NoopContainerPort` (empty TestBeanContainerPort), each registered via its own `META-INF/services/...` file. The test class has no `@Inject` (no CDI runtime); it just asserts the recorder saw `CustomFactoryTest.class`. Single profile (no owb/weld split — there's no CDI runtime to choose). Passes on a clean build.
