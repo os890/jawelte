@@ -63,7 +63,7 @@ global renumbering, no shifting of unrelated listings.
 | `scope-module/` | `01-test-method-scoped`, `02-test-class-scoped`, `03-pre-destroy-callback`, `04-session-scoped-remap` | `docs/scope-module.html` |
 | `jpa-module/` | `01-hello-world`, `02-multi-pu`, `03-readonly`, `04-transaction-events`, `05-table-name-resolver` | `docs/jpa-module.html` |
 | `jta-module/` | `01-hello-world`, `02-user-transaction`, `03-transaction-scoped-bean`, `04-transaction-manager-provider` | `docs/jta-module.html` |
-| `ejb-module/` | `01-singleton` | `docs/ejb-module.html` |
+| `ejb-module/` | `01-singleton`, `02-stateless`, `03-implicit-transactional`, `04-ejb-annotation-mapper` | `docs/ejb-module.html` |
 | `jaxrs-module/` | `01-hello-world` | `docs/jaxrs-module.html` |
 | `testcontrol-module/` | `01-hello-world` | `docs/testcontrol-module.html` |
 | `db-testdata-module/` | `01-hello-world` | `docs/db-testdata-module.html` |

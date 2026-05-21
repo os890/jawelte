@@ -200,8 +200,58 @@
 </ul>
 <p>The rewrite happens at <code>ProcessAnnotatedType</code> time; the source class keeps the EJB annotation, the CDI bean carries the mapped scope.</p>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing ejb-module/02 · stateless</span><a href="../listings/ejb-module/02-stateless/">listings/ejb-module/02-stateless/</a></div>
+<pre><span class="cm">// src/main/java/example/stateless/Counter.java</span>
+<span class="an">@Stateless</span>
+<span class="kw">public class</span> <span class="ty">Counter</span> {
+    <span class="kw">private int</span> value;
+    <span class="kw">public int</span> increment() { <span class="kw">return</span> ++value; }
+}
+
+<span class="cm">// src/test/java/example/stateless/CounterTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> firstMethodSeesFreshCounter() {
+    assertThat(counter.increment()).isEqualTo(1);
+}
+
+<span class="an">@Test</span>
+<span class="kw">void</span> secondMethodAlsoSeesFreshCounter() {
+    assertThat(counter.increment()).isEqualTo(1);   <span class="cm">// @RequestScoped — new instance per method</span>
+}</pre>
+</div>
+
 <h2 id="dt-tx">2.2 implicit @Transactional</h2>
 <p>EJB methods are container-managed transactional by default (<code>REQUIRED</code>). To preserve that semantic without forcing the user to re-annotate every EJB method, the mapper also adds <code>@jakarta.transaction.Transactional</code> to the class when none is present. With jta-module on the classpath that triggers the JTA strategy; with jpa-module only that triggers RESOURCE_LOCAL; either way <code>@Transactional</code> semantics hold.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing ejb-module/03 · implicit-transactional</span><a href="../listings/ejb-module/03-implicit-transactional/">listings/ejb-module/03-implicit-transactional/</a></div>
+<pre><span class="cm">// src/main/java/example/implicittx/NoteRepository.java</span>
+<span class="an">@Stateless</span>
+<span class="kw">public class</span> <span class="ty">NoteRepository</span> {
+
+    <span class="an">@Inject</span> <span class="ty">EntityManager</span> entityManager;
+
+    <span class="cm">// Note: no @Transactional anywhere; ejb-module's mapper added it.</span>
+    <span class="kw">public</span> <span class="ty">Long</span> save(<span class="ty">String</span> body) {
+        <span class="ty">Note</span> note = <span class="kw">new</span> <span class="ty">Note</span>(body);
+        entityManager.persist(note);
+        <span class="kw">return</span> note.getId();
+    }
+
+    <span class="kw">public long</span> count() {
+        <span class="kw">return</span> entityManager.createQuery(<span class="st">"SELECT COUNT(n) FROM Note n"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
+    }
+}
+
+<span class="cm">// src/test/java/example/implicittx/NoteRepositoryTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> persistCommitsWithoutExplicitTransactional() {
+    <span class="ty">Long</span> id = noteRepository.save(<span class="st">"hello"</span>);
+    assertThat(id).isNotNull();
+    assertThat(noteRepository.count()).isEqualTo(1L);
+}</pre>
+</div>
 
 <h2 id="dt-caveat">2.3 fidelity caveats</h2>
 <p>This is the part to be honest about: ejb-module is <em>not</em> a 1:1 emulation of a real EE container. What it does cover:</p>
@@ -224,6 +274,37 @@
 
 <h3>EjbAnnotationMapper</h3>
 <p><strong>Single active impl, ServiceLoader + priority.</strong> Given an EJB-annotated <code>Class&lt;?&gt;</code>, returns the CDI scope to install and (optionally) extra annotations to add. Default impl handles <code>@Stateless</code> + <code>@Singleton</code> as documented above. Override to extend the mapping to <code>@MessageDriven</code>, vendor-specific EJB-like annotations, or to flip the default scopes to something your project's testing conventions prefer.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing ejb-module/04 · ejb-annotation-mapper</span><a href="../listings/ejb-module/04-ejb-annotation-mapper/">listings/ejb-module/04-ejb-annotation-mapper/</a></div>
+<pre><span class="cm">// src/test/java/example/mapper/StatefulAsRequestScopedMapper.java</span>
+<span class="an">@Priority</span>(<span class="kw">1</span>)
+<span class="kw">public class</span> <span class="ty">StatefulAsRequestScopedMapper</span> <span class="kw">implements</span> <span class="ty">EjbAnnotationMapper</span> {
+
+    <span class="kw">private static final class</span> <span class="ty">RequestScopedLiteral</span>
+            <span class="kw">extends</span> <span class="ty">AnnotationLiteral</span>&lt;<span class="ty">RequestScoped</span>&gt; <span class="kw">implements</span> <span class="ty">RequestScoped</span> { }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">Annotation</span>&gt; mapBeanMetadata(<span class="ty">Class</span>&lt;?&gt; beanClass, <span class="ty">BeanManager</span> beanManager) {
+        <span class="kw">if</span> (beanClass.isAnnotationPresent(<span class="ty">Stateful</span>.<span class="kw">class</span>)) {
+            <span class="kw">return</span> <span class="ty">List</span>.of(<span class="kw">new</span> <span class="ty">RequestScopedLiteral</span>());
+        }
+        <span class="kw">return</span> <span class="kw">null</span>;   <span class="cm">// not handled — fall through to the next mapper / default</span>
+    }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper</span>
+example.mapper.StatefulAsRequestScopedMapper
+
+<span class="cm">// src/test/resources/META-INF/microprofile-config.properties</span>
+config_ordinal=200
+org.os890.jawelte.module.ejb.bean-defining-annotations=\
+    jakarta.ejb.Singleton,\
+    jakarta.ejb.Stateless,\
+    jakarta.ejb.Stateful</pre>
+</div>
+
+<p>Two moving pieces. <strong>The mapper</strong> claims any <code>@jakarta.ejb.Stateful</code> class and adds <code>@RequestScoped</code>. <strong>The MP Config override</strong> teaches ejb-module's classpath scan to look for <code>@Stateful</code> &mdash; without it the scan only finds <code>@Singleton</code> + <code>@Stateless</code> and your <code>@Stateful</code> classes are never even seen by the CDI extension. Both are required to make a new EJB annotation injectable.</p>
 
 <div class="closing">
   <strong>jawelte / ejb-module</strong> &nbsp;&middot;&nbsp; <a href="modules.html">modules</a> &nbsp;&middot;&nbsp; <a href="core.html">core</a> &nbsp;&middot;&nbsp; back to <a href="index.html">overview</a>

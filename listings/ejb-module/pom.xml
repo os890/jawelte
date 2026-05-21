@@ -38,5 +38,8 @@
 
     <modules>
         <module>01-singleton</module>
+        <module>02-stateless</module>
+        <module>03-implicit-transactional</module>
+        <module>04-ejb-annotation-mapper</module>
     </modules>
 </project>

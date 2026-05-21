@@ -6710,3 +6710,14 @@ jta-module up to 4 listings (was 1). Added:
 Interface had two methods I missed on the first cut: `name()` and `shutdown()` — added.
 
 Doc snippets added to §2.1 (programmatic UT + @TransactionScoped) and §3 (TransactionManagerProvider port). All listings pass on OWB and Weld.
+
+## 2026-05-21 — docs/ejb-module.html: three follow-up listings
+
+ejb-module up to 4 listings (was 1). Added:
+- `02-stateless` — `@Stateless Counter` mapped to `@RequestScoped`. Two test methods both see counter==1 because each method gets a fresh instance.
+- `03-implicit-transactional` — `@Stateless NoteRepository` with `entityManager.persist`; no `@Transactional` on user code. ejb-module's mapper adds it implicitly so the persist commits.
+- `04-ejb-annotation-mapper` — custom `StatefulAsRequestScopedMapper` claims `@jakarta.ejb.Stateful` (not handled by the default mapper) and adds `@RequestScoped`. Also ships a `microprofile-config.properties` override with `config_ordinal=200` to extend ejb-module's classpath scan list — without it the `@Stateful` class is never seen by the CDI extension and auto-mock would step in.
+
+The mapper listing surfaced an important teaching point that's now in the doc snippet: extending ejb-module to handle a new EJB annotation requires both the mapper (to map the annotation to a CDI scope) AND the MP Config override (to make the classpath scan find the annotation in the first place).
+
+Doc snippets added in §2.1 (Stateless mapping), §2.2 (implicit @Transactional), §3 (EjbAnnotationMapper SPI).
