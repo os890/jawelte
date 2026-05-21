@@ -6721,3 +6721,11 @@ ejb-module up to 4 listings (was 1). Added:
 The mapper listing surfaced an important teaching point that's now in the doc snippet: extending ejb-module to handle a new EJB annotation requires both the mapper (to map the annotation to a CDI scope) AND the MP Config override (to make the classpath scan find the annotation in the first place).
 
 Doc snippets added in §2.1 (Stateless mapping), §2.2 (implicit @Transactional), §3 (EjbAnnotationMapper SPI).
+
+## 2026-05-21 — docs/jaxrs-module.html: two follow-up listings
+
+jaxrs-module up to 3 listings (was 1). Added:
+- `02-exception-mapper` — `@Provider TeapotExceptionMapper` registered via `restResources = {BrewResource.class, TeapotExceptionMapper.class}`. Test fires GET /brew, asserts status 418 + body "I'm a teapot". Needed `cxf-rt-rs-client` for the JAX-RS Client.
+- `03-response-diff` — `ResponseDiff.forJson(response).expectedContent(...).assertEquals()`. Asserts the JSON body matches semantically regardless of key order. Pulls in content-diff-module + Jackson + Jakarta-EL.
+
+Pivoted from the proposed `02-application-config` because the project's own scenarios never use `applicationConfig` — providers ride in via `restResources`. The doc snippet in §2.1 now demonstrates that pattern instead.

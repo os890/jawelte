@@ -38,5 +38,7 @@
 
     <modules>
         <module>01-hello-world</module>
+        <module>02-exception-mapper</module>
+        <module>03-response-diff</module>
     </modules>
 </project>

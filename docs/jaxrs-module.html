@@ -211,11 +211,71 @@
 </ul>
 <p>The annotation is read once per test class; the server starts in <code>beforeAll</code> and shuts down in <code>afterAll</code>.</p>
 
+<h3>registering a provider — ExceptionMapper</h3>
+<p>The <code>restResources</code> array accepts both <code>@Path</code> resources and <code>@Provider</code> classes (exception mappers, filters, body readers/writers). Same array, no separate attribute &mdash; the JAX-RS impl scans the array and treats each class according to its annotations.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jaxrs-module/02 · exception-mapper</span><a href="../listings/jaxrs-module/02-exception-mapper/">listings/jaxrs-module/02-exception-mapper/</a></div>
+<pre><span class="cm">// src/main/java/example/excmapper/TeapotExceptionMapper.java</span>
+<span class="an">@Provider</span>
+<span class="kw">public class</span> <span class="ty">TeapotExceptionMapper</span> <span class="kw">implements</span> <span class="ty">ExceptionMapper</span>&lt;<span class="ty">TeapotException</span>&gt; {
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">Response</span> toResponse(<span class="ty">TeapotException</span> exception) {
+        <span class="kw">return</span> <span class="ty">Response</span>.status(<span class="kw">418</span>).entity(exception.getMessage()).build();
+    }
+}
+
+<span class="cm">// src/test/java/example/excmapper/BrewResourceTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@EnableJaxRs</span>(restResources = {<span class="ty">BrewResource</span>.<span class="kw">class</span>, <span class="ty">TeapotExceptionMapper</span>.<span class="kw">class</span>})
+<span class="kw">class</span> <span class="ty">BrewResourceTest</span> {
+
+    <span class="an">@Inject</span> <span class="ty">TestUrl</span> testUrl;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> mapperConvertsExceptionTo418() {
+        <span class="kw">try</span> (<span class="ty">Client</span> client = <span class="ty">ClientBuilder</span>.newClient()) {
+            <span class="kw">try</span> (<span class="ty">Response</span> response = client.target(testUrl.get() + <span class="st">"/brew"</span>).request().get()) {
+                assertThat(response.getStatus()).isEqualTo(418);
+                assertThat(response.readEntity(<span class="ty">String</span>.<span class="kw">class</span>)).isEqualTo(<span class="st">"I'm a teapot"</span>);
+            }
+        }
+    }
+}</pre>
+</div>
+
+<p>JAX-RS clients (the <code>jakarta.ws.rs.client.Client</code> family) live in <code>cxf-rt-rs-client</code> for the CXF stack; add it to the test classpath when the test makes outbound calls.</p>
+
 <h2 id="dt-testurl">2.2 TestUrl</h2>
 <p><code>TestUrl</code> is a <code>Supplier&lt;String&gt;</code> returning the base URL the embedded server bound to &mdash; typically <code>http://localhost:{port}</code> where <code>{port}</code> is OS-assigned (port 0). Inject it once per test class; concatenate with your resource paths to form the request URL.</p>
 
 <h2 id="dt-responsediff">2.3 ResponseDiff</h2>
 <p><code>ResponseDiff</code> wraps a <code>jakarta.ws.rs.core.Response</code> and gives you fluent assertions on the status code, headers, and body. Useful when the test makes a JAX-RS <code>ClientBuilder</code> call and wants to assert on the resulting <code>Response</code> without manually pulling status / entity / Content-Type apart.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jaxrs-module/03 · response-diff</span><a href="../listings/jaxrs-module/03-response-diff/">listings/jaxrs-module/03-response-diff/</a></div>
+<pre><span class="cm">// src/main/java/example/responsediff/OrderResource.java</span>
+<span class="an">@Path</span>(<span class="st">"/order"</span>)
+<span class="kw">public class</span> <span class="ty">OrderResource</span> {
+    <span class="an">@GET</span> <span class="an">@Produces</span>(<span class="ty">MediaType</span>.APPLICATION_JSON)
+    <span class="kw">public</span> <span class="ty">String</span> getOrder() { <span class="kw">return</span> <span class="st">"{\"id\":1,\"name\":\"Widget\"}"</span>; }
+}
+
+<span class="cm">// src/test/java/example/responsediff/OrderResourceTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> responseBodyMatchesExpectedJson() {
+    <span class="kw">try</span> (<span class="ty">Client</span> client = <span class="ty">ClientBuilder</span>.newClient()) {
+        <span class="kw">try</span> (<span class="ty">Response</span> response = client.target(testUrl.get() + <span class="st">"/order"</span>).request().get()) {
+            <span class="ty">ResponseDiff</span>.forJson(response)
+                    .expectedContent(<span class="st">"{\"name\":\"Widget\",\"id\":1}"</span>)   <span class="cm">// different key order</span>
+                    .assertEquals();
+        }
+    }
+}</pre>
+</div>
+
+<p><code>ResponseDiff</code> bridges to <a href="content-diff-module.html">content-diff-module</a> &mdash; same semantic-equality rules, same <code>ignoring()</code> + <code>unorderedArrays()</code> tolerance knobs. Add <code>content-diff-module-api/impl</code> + Jackson + Jakarta-EL to the test classpath.</p>
 
 <h2 id="dt-impl">2.4 picking a JAX-RS implementation</h2>
 <p>jaxrs-module talks to JAX-RS through the standard <code>SeBootstrap</code> API, so any conformant implementation works. The two impls tested in jawelte's own sweep are <strong>Apache CXF</strong> (default; <code>cxf-rt-frontend-jaxrs</code> + <code>cxf-rt-transports-http-jetty</code>) and <strong>RESTEasy</strong> (<code>resteasy-undertow</code> et al). Pick by classpath dependency, no code change in the test.</p>
