@@ -6647,3 +6647,9 @@ Previous hello-world had the full "stub registration + JDK HttpClient round-trip
 The earlier listing-pom scope sweep didn't touch the HTML pages' embedded `<pre>`-block maven snippets. Walked every `&lt;dependency&gt;` block in `docs/*.html`, inserted the missing `<scope>test</scope>` on every `jawelte-*-api` block (9 pages) and `<scope>provided</scope>` on every `jakarta.*` block (5 instances). 14 insertions across 11 doc pages. Re-scan confirms zero remaining mismatches.
 
 Also rewrote the stale narrative in `docs/core.html` § 1.4 that called `jawelte-core-api` "a compile-time dep" — replaced with a clear statement of the project-wide rule (jawelte-* = scope test, jakarta-* = scope provided).
+
+## 2026-05-21 — docs/core.html §1.3: @TestBean replacing a qualified injection point
+
+Added `listings/core/17-test-bean-qualified/` and the matching snippet in §1.3 between the "pick an alternative" and "static field" subsections. Domain: `Cache` interface, `@FastCache` qualifier, `RedisCache` production impl, `InMemoryFastCache` test alternative (carries `@Alternative` + `@FastCache`). The test activates the alternative via `@TestBean(bean = InMemoryFastCache.class)` and asserts the `@Inject @FastCache Cache` field resolves to the test impl. Both OWB and Weld profiles pass.
+
+The teaching point in the doc snippet: `@TestBean` does not name qualifiers explicitly — the qualifier travels with the alternative class declaration. A second injection point at `@Inject Cache` (unqualified) would be unaffected.

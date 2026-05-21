@@ -53,5 +53,6 @@
         <module>14-bean-scope-mapper</module>
         <module>15-config-resolver</module>
         <module>16-priority-resolver</module>
+        <module>17-test-bean-qualified</module>
     </modules>
 </project>

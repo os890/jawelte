@@ -437,6 +437,51 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
 }</pre>
 </div>
 
+<h3>@TestBean — replace a qualified injection point</h3>
+<p>When the production injection point carries a CDI qualifier (<code>@Inject @FastCache Cache</code>, <code>@Inject @Premium PaymentService</code>, …), the alternative must declare the <em>same</em> qualifier on its own class. <code>@TestBean</code> does not name qualifiers explicitly &mdash; the qualifier travels with the alternative class declaration.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing core/17 · test-bean-qualified</span><a href="../listings/core/17-test-bean-qualified/">listings/core/17-test-bean-qualified/</a></div>
+<pre><span class="cm">// src/main/java/example/qualified/FastCache.java</span>
+<span class="an">@Qualifier</span>
+<span class="an">@Retention</span>(RUNTIME)
+<span class="an">@Target</span>({FIELD, METHOD, PARAMETER, TYPE})
+<span class="kw">public</span> <span class="kw">@interface</span> <span class="ty">FastCache</span> {
+}
+
+<span class="cm">// src/main/java/example/qualified/RedisCache.java   (production impl)</span>
+<span class="an">@FastCache</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">RedisCache</span> <span class="kw">implements</span> <span class="ty">Cache</span> {
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">String</span> get(<span class="ty">String</span> key) { <span class="kw">return</span> <span class="st">"redis:"</span> + key; }
+}
+
+<span class="cm">// src/test/java/example/qualified/InMemoryFastCache.java   (test alternative, same qualifier)</span>
+<span class="an">@Alternative</span>
+<span class="an">@FastCache</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">InMemoryFastCache</span> <span class="kw">implements</span> <span class="ty">Cache</span> {
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">String</span> get(<span class="ty">String</span> key) { <span class="kw">return</span> <span class="st">"in-memory:"</span> + key; }
+}
+
+<span class="cm">// src/test/java/example/qualified/FastCacheTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@TestBean</span>(bean = <span class="ty">InMemoryFastCache</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">FastCacheTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="an">@FastCache</span>
+    <span class="ty">Cache</span> fastCache;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> qualifiedAlternativeReplacesQualifiedInjection() {
+        assertThat(fastCache.get(<span class="st">"k"</span>)).isEqualTo(<span class="st">"in-memory:k"</span>);
+    }
+}</pre>
+</div>
+
+<p>A second injection point at <code>@Inject Cache</code> (unqualified, or with a different qualifier) is unaffected &mdash; the alternative only beats out beans whose qualifier set matches.</p>
+
 <h3>@TestBean — pre-built value on a static field</h3>
 <p>Put <code>@TestBean</code> on a <code>static final</code> field whose initialiser yields the bean instance. No <code>@Alternative</code>, no producer — the field value IS the bean. Idiomatic for "register this exact object as the bean". The two static fields below show the two most common shapes side by side: a literal value (<code>new Greeting(…)</code>) and a Mockito mock (<code>Mockito.mock(Clock.class)</code>) wired in via the same static-field recipe.</p>
 
