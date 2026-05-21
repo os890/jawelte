@@ -153,7 +153,7 @@
 <p>An entity in <code>src/main</code>, a <code>persistence.xml</code> that names a PU, a test that injects an <code>EntityManager</code> and uses it inside <code>@Transactional</code>.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 19 · jpa-hello-world</span><a href="../listings/19-jpa-hello-world/">listings/19-jpa-hello-world/</a></div>
+  <div class="listing-bar"><span class="label">listing jpa-module/01 · hello-world</span><a href="../listings/jpa-module/01-hello-world/">listings/jpa-module/01-hello-world/</a></div>
 <pre><span class="cm">// src/main/java/example/jpa/Note.java</span>
 <span class="an">@Entity</span>
 <span class="kw">public class</span> <span class="ty">Note</span> {
@@ -206,7 +206,7 @@
 <p>Add jpa-module's api / impl, a JPA provider (Hibernate ORM in the listing), an H2 driver, and the xbean/asm pair jpa-module's entity scanner uses to walk the classpath without <code>Class.forName</code> side-effects.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/19-jpa-hello-world/pom.xml">listings/19-jpa-hello-world/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/jpa-module/01-hello-world/pom.xml">listings/jpa-module/01-hello-world/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-jpa-module-api&lt;/artifactId&gt;

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<!--
+    Per-module aggregator: builds every listing under core/.
+    NO <parent>: each individual listing is still a stand-alone Maven
+    project. This aggregator exists only so that the project itself
+    can verify every listing for one module in a single mvn invocation
+    (mvn -f listings/core/pom.xml test). Consumers continue to copy
+    a single listing folder and run it from inside.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.os890.jawelte.listings</groupId>
+    <artifactId>jawelte-listings-core-aggregator</artifactId>
+    <version>0.1.0</version>
+    <packaging>pom</packaging>
+
+    <name>jawelte listings (core) aggregator</name>
+    <description>Aggregator over the per-listing standalone Maven projects under listings/core/.</description>
+
+    <modules>
+        <module>01-hello-world</module>
+        <module>02-auto-mock</module>
+        <module>03-test-bean-alternative</module>
+        <module>04-test-bean-static-field</module>
+        <module>05-config-bean</module>
+        <module>06-limit-to-test-beans</module>
+        <module>07-external-container</module>
+        <module>08-test-bean-producer</module>
+        <module>09-test-bean-meta-annotation</module>
+        <module>10-test-context-metadata</module>
+        <module>11-before-scope-observer</module>
+        <module>12-container-started</module>
+        <module>13-lifecycle-port</module>
+        <module>14-bean-scope-mapper</module>
+        <module>15-config-resolver</module>
+        <module>16-priority-resolver</module>
+    </modules>
+</project>

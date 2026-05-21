@@ -133,7 +133,7 @@
 <p>One annotation on the test class, two <code>@Inject</code> fields, a real HTTP round-trip in the test body.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 26 &middot; wiremock-hello-world</span><a href="../listings/26-wiremock-hello-world/">listings/26-wiremock-hello-world/</a></div>
+  <div class="listing-bar"><span class="label">listing wiremock-module/01 &middot; hello-world</span><a href="../listings/wiremock-module/01-hello-world/">listings/wiremock-module/01-hello-world/</a></div>
 <pre><span class="cm">// src/test/java/example/wiremock/HelloWireMockTest.java</span>
 <span class="an">@EnableWireMock</span>
 <span class="kw">class</span> <span class="ty">HelloWireMockTest</span> {
@@ -170,7 +170,7 @@
 <p>wiremock-module's api / impl plus the standard CDI runtime (cdi-module + scope-module). The WireMock library itself is brought in transitively via <code>jawelte-wiremock-module-impl</code> &mdash; no need to add the upstream dep yourself.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/26-wiremock-hello-world/pom.xml">listings/26-wiremock-hello-world/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/wiremock-module/01-hello-world/pom.xml">listings/wiremock-module/01-hello-world/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-wiremock-module-api&lt;/artifactId&gt;

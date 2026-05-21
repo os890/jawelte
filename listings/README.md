@@ -31,11 +31,17 @@ project on the classpath.
 From this folder:
 
 ```
-mvn -f 01-hello-world/pom.xml test
+mvn -f core/01-hello-world/pom.xml test
 ```
 
 Or copy the folder anywhere on your machine and run `mvn test` from
 inside it.
+
+## Running every listing for one module
+
+```
+mvn -f listings/jpa-module/pom.xml test
+```
 
 ## Running every listing
 
@@ -43,38 +49,28 @@ inside it.
 mvn -f listings/pom.xml test
 ```
 
-## What's here
+## Layout
 
-| # | Folder | Documented in `docs/core.html` |
+Listings are grouped by module under `listings/<module>/`. Each
+sub-folder has its own aggregator pom and numbers its listings locally
+starting at `01`. Adding a new sample for an existing module is an
+append inside that module's folder + an entry in its aggregator — no
+global renumbering, no shifting of unrelated listings.
+
+| Module | Listings | Documented in |
 |---|---|---|
-| 01 | `01-hello-world` | Quick-start &rarr; hello-world |
-| 02 | `02-auto-mock` | Quick-start &rarr; auto-mocked dependency |
-| 03 | `03-test-bean-alternative` | Quick-start &rarr; `@TestBean` alternative |
-| 04 | `04-test-bean-static-field` | Quick-start &rarr; `@TestBean` static field |
-| 05 | `05-config-bean` | Quick-start &rarr; `@ConfigBean` |
-| 06 | `06-limit-to-test-beans` | Detailed &rarr; `@EnableTestBeans(limitToTestBeans=true)` |
-| 07 | `07-external-container` | Detailed &rarr; `manageContainer=false` |
-| 08 | `08-test-bean-producer` | Detailed &rarr; `@TestBean(beanProducer=…)` |
-| 09 | `09-test-bean-meta-annotation` | Detailed &rarr; `@TestBean` on a meta-annotation |
-| 10 | `10-test-context-metadata` | Detailed &rarr; `TestContext` metadata |
-| 11 | `11-before-scope-observer` | Detailed &rarr; observing `BeforeScopeStarted` |
-| 12 | `12-container-started` | Detailed &rarr; observing `ContainerStarted` |
-| 13 | `13-lifecycle-port` | SPI &rarr; `TestModuleLifecyclePort` |
-| 14 | `14-bean-scope-mapper` | SPI &rarr; `BeanScopeMapper` |
-| 15 | `15-config-resolver` | SPI &rarr; `ConfigResolver` |
-| 16 | `16-priority-resolver` | SPI &rarr; `ServicePriorityResolver` |
-| 17 | `17-test-method-scoped` | scope-module &rarr; `@TestMethodScoped` |
-| 18 | `18-test-class-scoped` | scope-module &rarr; `@TestClassScoped` |
-| 19 | `19-jpa-hello-world` | jpa-module &rarr; `@Inject EntityManager` hello-world |
-| 20 | `20-jta-hello-world` | jta-module &rarr; JTA strategy auto-active |
-| 21 | `21-ejb-singleton` | ejb-module &rarr; `@jakarta.ejb.Singleton` injectable |
-| 22 | `22-jaxrs-hello-world` | jaxrs-module &rarr; `@EnableJaxRs` + `TestUrl` |
-| 23 | `23-testcontrol-hello-world` | testcontrol-module &rarr; `@TestControl(testData)` seed pipeline |
-| 24 | `24-db-testdata-hello-world` | db-testdata-module &rarr; `DbSeed` + `DbDiff` direct API |
-| 25 | `25-content-diff-hello-world` | content-diff-module &rarr; `ContentDiff.forJson` happy/mismatch/ignoring |
-| 26 | `26-wiremock-hello-world` | wiremock-module &rarr; `@EnableWireMock` + injectable `WireMockServer` |
-| 27 | `27-spring-data-hello-world` | spring-data-module &rarr; auto-discovered `JpaRepository` |
-| 28 | `28-batch-hello-world` | batch-module &rarr; `Event<BatchExecution>.fire(...)` blocking |
+| `core/` | `01-hello-world`, `02-auto-mock`, `03-test-bean-alternative`, `04-test-bean-static-field`, `05-config-bean`, `06-limit-to-test-beans`, `07-external-container`, `08-test-bean-producer`, `09-test-bean-meta-annotation`, `10-test-context-metadata`, `11-before-scope-observer`, `12-container-started`, `13-lifecycle-port`, `14-bean-scope-mapper`, `15-config-resolver`, `16-priority-resolver` | `docs/core.html` |
+| `scope-module/` | `01-test-method-scoped`, `02-test-class-scoped` | `docs/scope-module.html` |
+| `jpa-module/` | `01-hello-world` | `docs/jpa-module.html` |
+| `jta-module/` | `01-hello-world` | `docs/jta-module.html` |
+| `ejb-module/` | `01-singleton` | `docs/ejb-module.html` |
+| `jaxrs-module/` | `01-hello-world` | `docs/jaxrs-module.html` |
+| `testcontrol-module/` | `01-hello-world` | `docs/testcontrol-module.html` |
+| `db-testdata-module/` | `01-hello-world` | `docs/db-testdata-module.html` |
+| `content-diff-module/` | `01-hello-world` | `docs/content-diff-module.html` |
+| `wiremock-module/` | `01-hello-world` | `docs/wiremock-module.html` |
+| `spring-data-module/` | `01-hello-world` | `docs/spring-data-module.html` |
+| `batch-module/` | `01-hello-world` | `docs/batch-module.html` |
 
 ## CDI runtime
 

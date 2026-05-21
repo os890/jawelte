@@ -134,7 +134,7 @@
 <p>One test method, one annotation, one folder. <code>testdata/greetings/dbIn/greetings.xml</code> seeds two <code>GREETING</code> rows before the method body runs; the method body counts them.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 23 &middot; testcontrol-hello-world</span><a href="../listings/23-testcontrol-hello-world/">listings/23-testcontrol-hello-world/</a></div>
+  <div class="listing-bar"><span class="label">listing testcontrol-module/01 &middot; hello-world</span><a href="../listings/testcontrol-module/01-hello-world/">listings/testcontrol-module/01-hello-world/</a></div>
 <pre><span class="cm">// src/test/resources/testdata/greetings/dbIn/greetings.xml</span>
 &lt;dataset&gt;
     &lt;<span class="ty">GREETING</span> ID=<span class="st">"1"</span> TEXT=<span class="st">"hello"</span>/&gt;
@@ -163,7 +163,7 @@
 <p>testcontrol-module is a meta-module: by itself it manipulates the lifecycle, but it relies on companion modules for the actual seeding (db-testdata-module) and persistence (jpa-module). All three are usually on the classpath together.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/23-testcontrol-hello-world/pom.xml">listings/23-testcontrol-hello-world/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/testcontrol-module/01-hello-world/pom.xml">listings/testcontrol-module/01-hello-world/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-testcontrol-module-api&lt;/artifactId&gt;

@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<!--
+    Stand-alone Maven project for jawelte documentation listing spring-data-module/01:
+    spring-data-module hello-world. A Spring Data JpaRepository
+    interface is auto-discovered by the CDI extension and injected
+    into a test; the test saves an entity and reads it back.
+
+    NO <parent>. Copy this folder anywhere on your machine, run
+    `mvn test` from inside it, and the listing builds and runs.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.os890.jawelte.listings</groupId>
+    <artifactId>jawelte-listing-spring-data-module-01-hello-world</artifactId>
+    <version>0.1.0</version>
+    <packaging>jar</packaging>
+
+    <name>jawelte listing spring-data-module/01: hello-world</name>
+    <description>spring-data-module hello-world: a JpaRepository interface is auto-discovered by the CDI extension; the test injects it and saves/reads back an entity.</description>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.release>25</maven.compiler.release>
+
+        <jawelte.version>0.1.0-SNAPSHOT</jawelte.version>
+        <jakarta.cdi.version>4.1.0</jakarta.cdi.version>
+        <jakarta.inject.version>2.0.1</jakarta.inject.version>
+        <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
+        <jakarta.persistence.version>3.2.0</jakarta.persistence.version>
+        <jakarta.transaction.version>2.0.1</jakarta.transaction.version>
+        <microprofile.config.version>3.1</microprofile.config.version>
+        <smallrye.config.version>3.10.0</smallrye.config.version>
+        <openwebbeans.version>4.1.0</openwebbeans.version>
+        <weld.version>6.0.4.Final</weld.version>
+        <hibernate.orm.version>7.0.4.Final</hibernate.orm.version>
+        <h2.version>2.3.232</h2.version>
+        <xbean.version>4.30</xbean.version>
+        <asm.version>9.8</asm.version>
+        <spring.data.jpa.version>4.0.5</spring.data.jpa.version>
+        <junit.version>6.0.0</junit.version>
+        <assertj.version>3.27.3</assertj.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.os890.jawelte</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+            <version>${jawelte.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.os890.jawelte</groupId>
+            <artifactId>jawelte-core-impl</artifactId>
+            <version>${jawelte.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.os890.jawelte</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+            <version>${jawelte.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.os890.jawelte</groupId>
+            <artifactId>jawelte-cdi-module-impl</artifactId>
+            <version>${jawelte.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.os890.jawelte</groupId>
+            <artifactId>jawelte-jpa-module-api</artifactId>
+            <version>${jawelte.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.os890.jawelte</groupId>
+            <artifactId>jawelte-jpa-module-impl</artifactId>
+            <version>${jawelte.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!--
+            Single-jar spring-data-module — no api/impl split, because
+            the entire user-facing surface is "extend JpaRepository
+            and inject the interface".
+        -->
+        <dependency>
+            <groupId>org.os890.jawelte</groupId>
+            <artifactId>jawelte-spring-data-module</artifactId>
+            <version>${jawelte.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <version>${jakarta.cdi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.inject</groupId>
+            <artifactId>jakarta.inject-api</artifactId>
+            <version>${jakarta.inject.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+            <version>${jakarta.annotation.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+            <version>${jakarta.persistence.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+            <version>${jakarta.transaction.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <version>${microprofile.config.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.smallrye.config</groupId>
+            <artifactId>smallrye-config</artifactId>
+            <version>${smallrye.config.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+            <version>${hibernate.orm.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>${h2.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-finder-shaded</artifactId>
+            <version>${xbean.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+            <version>${asm.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-jpa</artifactId>
+            <version>${spring.data.jpa.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>${assertj.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <profiles>
+        <profile>
+            <id>owb</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.apache.openwebbeans</groupId>
+                    <artifactId>openwebbeans-se</artifactId>
+                    <version>${openwebbeans.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+        <profile>
+            <id>weld</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.jboss.weld.se</groupId>
+                    <artifactId>weld-se-shaded</artifactId>
+                    <version>${weld.version}</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+        </profile>
+    </profiles>
+</project>

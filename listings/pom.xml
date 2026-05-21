@@ -46,34 +46,27 @@
     <name>jawelte (documentation listings)</name>
     <description>Aggregator for the runnable code listings that back jawelte's HTML documentation. Each child module is a stand-alone Maven project; this pom is for batch-running them locally only.</description>
 
+    <!--
+        Listings are grouped by module under listings/<module>/. Each
+        sub-folder has its own aggregator pom that lists its child
+        listings; this top-level aggregator lists those module
+        aggregators. Adding a new sample for an existing module is
+        an append inside the module folder + an entry in that
+        module's aggregator — no global renumbering, no shifting of
+        unrelated listings.
+    -->
     <modules>
-        <module>01-hello-world</module>
-        <module>02-auto-mock</module>
-        <module>03-test-bean-alternative</module>
-        <module>04-test-bean-static-field</module>
-        <module>05-config-bean</module>
-        <module>06-limit-to-test-beans</module>
-        <module>07-external-container</module>
-        <module>08-test-bean-producer</module>
-        <module>09-test-bean-meta-annotation</module>
-        <module>10-test-context-metadata</module>
-        <module>11-before-scope-observer</module>
-        <module>12-container-started</module>
-        <module>13-lifecycle-port</module>
-        <module>14-bean-scope-mapper</module>
-        <module>15-config-resolver</module>
-        <module>16-priority-resolver</module>
-        <module>17-test-method-scoped</module>
-        <module>18-test-class-scoped</module>
-        <module>19-jpa-hello-world</module>
-        <module>20-jta-hello-world</module>
-        <module>21-ejb-singleton</module>
-        <module>22-jaxrs-hello-world</module>
-        <module>23-testcontrol-hello-world</module>
-        <module>24-db-testdata-hello-world</module>
-        <module>25-content-diff-hello-world</module>
-        <module>26-wiremock-hello-world</module>
-        <module>27-spring-data-hello-world</module>
-        <module>28-batch-hello-world</module>
+        <module>core</module>
+        <module>scope-module</module>
+        <module>jpa-module</module>
+        <module>jta-module</module>
+        <module>ejb-module</module>
+        <module>jaxrs-module</module>
+        <module>testcontrol-module</module>
+        <module>db-testdata-module</module>
+        <module>content-diff-module</module>
+        <module>wiremock-module</module>
+        <module>spring-data-module</module>
+        <module>batch-module</module>
     </modules>
 </project>

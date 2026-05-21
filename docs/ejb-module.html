@@ -134,7 +134,7 @@
 <p>A production <code>@Singleton</code> EJB in <code>src/main</code>, a CDI test that injects it.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 21 &middot; ejb-singleton</span><a href="../listings/21-ejb-singleton/">listings/21-ejb-singleton/</a></div>
+  <div class="listing-bar"><span class="label">listing ejb-module/01 &middot; singleton</span><a href="../listings/ejb-module/01-singleton/">listings/ejb-module/01-singleton/</a></div>
 <pre><span class="cm">// src/main/java/example/ejb/Greeter.java</span>
 <span class="an">@Singleton</span>
 <span class="kw">public class</span> <span class="ty">Greeter</span> {
@@ -163,7 +163,7 @@
 <p>Add ejb-module's api / impl plus the EJB and JTA APIs (the extension reads those types reflectively).</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/21-ejb-singleton/pom.xml">listings/21-ejb-singleton/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/ejb-module/01-singleton/pom.xml">listings/ejb-module/01-singleton/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-ejb-module-api&lt;/artifactId&gt;

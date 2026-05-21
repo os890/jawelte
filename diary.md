@@ -6570,3 +6570,34 @@ This completes the module fan-out for ticket-016. Every catalog entry in `docs/m
 Added a dedicated subsection 2.4 "multi-PU usage" to the jpa-module page with two code blocks: (1) the canonical CDI form `@Inject @Named("puName") EntityManager` showing routing for both the EM and the EMF, and (2) the standard JPA `@PersistenceContext(unitName = "...")` form on an `@ApplicationScoped` service. Explained that `JpaCdiExtension`'s `ProcessAnnotatedType` rewrites `@PersistenceContext` to `@Inject @Named` so the two forms are runtime-equivalent — and that `@PersistenceContext` is the choice when the same source has to compile against both jawelte and a real Jakarta EE container. Closing paragraph covers `JpaActivePersistenceUnits` ThreadLocal routing + the eager-open role of `@PersistenceConfig(persistenceUnitName = ...)`.
 
 Renumbered the two subsequent subsections (transaction events: 2.4 → 2.5; EmfCache: 2.5 → 2.6) and removed the previous one-liner note in 2.3 since the new section covers it more thoroughly. The TOC was updated to match.
+
+## 2026-05-21 — listings restructured into per-module subdirectories
+
+Migrated all 28 standalone-pom listings from `listings/NN-slug/` to `listings/<module>/NN-slug/`. Local numbering restarts at `01` within each module folder, so future additions for an existing module append cleanly without shifting unrelated listings. Layout:
+
+```
+listings/
+  core/                   01..16  (16 listings, docs/core.html)
+  scope-module/           01..02
+  jpa-module/             01
+  jta-module/             01
+  ejb-module/             01
+  jaxrs-module/           01
+  testcontrol-module/     01
+  db-testdata-module/     01
+  content-diff-module/    01
+  wiremock-module/        01
+  spring-data-module/     01
+  batch-module/           01
+```
+
+Each module folder has its own thin aggregator pom (`listings/<module>/pom.xml`) so `mvn -f listings/<module>/pom.xml test` runs just one module's listings. The top-level `listings/pom.xml` now aggregates the per-module aggregators, not individual listings — adding a sample doesn't touch this file.
+
+Mechanical changes:
+- `git mv` all 28 folders (history preserved).
+- Each listing's pom.xml: artifactId rewritten from `jawelte-listing-NN-slug` to `jawelte-listing-<module>-NN-slug`; `<name>` and the leading comment block updated to the new path.
+- New per-module aggregator pom in each module folder.
+- `listings/pom.xml` now lists the 12 module folders instead of 28 individual listings.
+- `listings/README.md` rewritten: table now groups by module; the "Running every listing for one module" snippet documents the per-module aggregator.
+- All `docs/*.html` link refs and listing-bar labels rewritten (`listing 19 · jpa-hello-world` → `listing jpa-module/01 · hello-world`, `../listings/19-jpa-hello-world/` → `../listings/jpa-module/01-hello-world/`). 13 doc pages touched.
+- `mvn -f listings/pom.xml test`: 28/28 green (21 s total).

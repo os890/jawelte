@@ -124,7 +124,7 @@
 <p>Put jta-module + Geronimo's TM + a JNDI provider on the classpath. With nothing else changed, the active <code>TransactionStrategy</code> flips from jpa-module's RESOURCE_LOCAL default to JTA.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 20 · jta-hello-world</span><a href="../listings/20-jta-hello-world/">listings/20-jta-hello-world/</a></div>
+  <div class="listing-bar"><span class="label">listing jta-module/01 · hello-world</span><a href="../listings/jta-module/01-hello-world/">listings/jta-module/01-hello-world/</a></div>
 <pre><span class="cm">// src/test/java/example/jta/JtaActiveTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">JtaActiveTest</span> {
@@ -143,7 +143,7 @@
 <p>jta-module's api / impl, a JTA TM jar (Geronimo here), and a JNDI provider. xbean-naming is the lightest free JNDI implementation; any other registered <code>InitialContextFactory</code> works.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/20-jta-hello-world/pom.xml">listings/20-jta-hello-world/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/jta-module/01-hello-world/pom.xml">listings/jta-module/01-hello-world/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-jta-module-api&lt;/artifactId&gt;

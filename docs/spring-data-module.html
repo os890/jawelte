@@ -134,7 +134,7 @@
 <p>One <code>@Entity</code>, one interface extending <code>JpaRepository</code>, one <code>@Inject</code>-and-use test method.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 27 &middot; spring-data-hello-world</span><a href="../listings/27-spring-data-hello-world/">listings/27-spring-data-hello-world/</a></div>
+  <div class="listing-bar"><span class="label">listing spring-data-module/01 &middot; hello-world</span><a href="../listings/spring-data-module/01-hello-world/">listings/spring-data-module/01-hello-world/</a></div>
 <pre><span class="cm">// CustomerRepository.java</span>
 <span class="kw">public interface</span> <span class="ty">CustomerRepository</span> <span class="kw">extends</span> <span class="ty">JpaRepository</span>&lt;<span class="ty">Customer</span>, <span class="ty">Long</span>&gt; {
 }
@@ -166,7 +166,7 @@
 <p>The single jar plus <code>spring-data-jpa</code> (consumers bring their own Spring Data version), on top of the usual jpa-module + CDI runtime stack.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/27-spring-data-hello-world/pom.xml">listings/27-spring-data-hello-world/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/spring-data-module/01-hello-world/pom.xml">listings/spring-data-module/01-hello-world/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-spring-data-module&lt;/artifactId&gt;

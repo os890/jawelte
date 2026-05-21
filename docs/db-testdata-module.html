@@ -133,7 +133,7 @@
 <p>One <code>@Entity</code> in <code>src/main</code>, an <code>@Test @Transactional</code> method that calls <code>DbSeed</code> then <code>DbDiff</code>.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 24 &middot; db-testdata-hello-world</span><a href="../listings/24-db-testdata-hello-world/">listings/24-db-testdata-hello-world/</a></div>
+  <div class="listing-bar"><span class="label">listing db-testdata-module/01 &middot; hello-world</span><a href="../listings/db-testdata-module/01-hello-world/">listings/db-testdata-module/01-hello-world/</a></div>
 <pre><span class="cm">// src/test/resources/products/dbIn.xml</span>
 &lt;dataset&gt;
     &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"1"</span> NAME=<span class="st">"apple"</span>/&gt;
@@ -165,7 +165,7 @@
 <p>db-testdata-module's api / impl, plus jpa-module to supply the persistence-unit connection. The dbunit transitive pulls in an older junit-platform-suite-engine that clashes with junit-jupiter 6.0.0; exclude it (see the listing pom for the comment).</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/24-db-testdata-hello-world/pom.xml">listings/24-db-testdata-hello-world/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/db-testdata-module/01-hello-world/pom.xml">listings/db-testdata-module/01-hello-world/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-db-testdata-module-api&lt;/artifactId&gt;

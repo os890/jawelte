@@ -329,7 +329,7 @@
 <p>A plain <code>@ApplicationScoped</code> bean in <code>src/main</code>, a JUnit test in <code>src/test</code> annotated <code>@EnableTestBeans</code>, one <code>@Inject</code> field, one assertion. That's the whole shape.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 01 · hello-world</span><a href="../listings/01-hello-world/">listings/01-hello-world/</a></div>
+  <div class="listing-bar"><span class="label">listing core/01 · hello-world</span><a href="../listings/core/01-hello-world/">listings/core/01-hello-world/</a></div>
 <pre><span class="cm">// src/main/java/example/hello/HelloService.java</span>
 <span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">HelloService</span> {
@@ -360,7 +360,7 @@
 <p>Production code <code>@Inject</code>s a collaborator with no implementation on the classpath. jawelte's default <code>MockFactory</code> (a Mockito wrapper) supplies a mock; the test stubs it with plain Mockito.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 02 · auto-mock</span><a href="../listings/02-auto-mock/">listings/02-auto-mock/</a></div>
+  <div class="listing-bar"><span class="label">listing core/02 · auto-mock</span><a href="../listings/core/02-auto-mock/">listings/core/02-auto-mock/</a></div>
 <pre><span class="cm">// src/main/java/example/automock/Translator.java</span>
 <span class="kw">public interface</span> <span class="ty">Translator</span> { <span class="ty">String</span> translate(<span class="ty">String</span> value); }
 
@@ -410,7 +410,7 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
 <p>A test-only <code>@Alternative</code> class wins over the production impl when its class is named in <code>@TestBean(bean=…)</code> on the test class.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 03 · test-bean-alternative</span><a href="../listings/03-test-bean-alternative/">listings/03-test-bean-alternative/</a></div>
+  <div class="listing-bar"><span class="label">listing core/03 · test-bean-alternative</span><a href="../listings/core/03-test-bean-alternative/">listings/core/03-test-bean-alternative/</a></div>
 <pre><span class="cm">// src/test/java/example/alt/StubEmailService.java</span>
 <span class="an">@Alternative</span>
 <span class="an">@ApplicationScoped</span>
@@ -441,7 +441,7 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
 <p>Put <code>@TestBean</code> on a <code>static final</code> field whose initialiser yields the bean instance. No <code>@Alternative</code>, no producer — the field value IS the bean. Idiomatic for "register this exact object as the bean". The two static fields below show the two most common shapes side by side: a literal value (<code>new Greeting(…)</code>) and a Mockito mock (<code>Mockito.mock(Clock.class)</code>) wired in via the same static-field recipe.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 04 · test-bean-static-field</span><a href="../listings/04-test-bean-static-field/">listings/04-test-bean-static-field/</a></div>
+  <div class="listing-bar"><span class="label">listing core/04 · test-bean-static-field</span><a href="../listings/core/04-test-bean-static-field/">listings/core/04-test-bean-static-field/</a></div>
 <pre><span class="cm">// src/main/java/example/staticfield/Greeting.java</span>
 <span class="kw">public record</span> <span class="ty">Greeting</span>(<span class="ty">String</span> text) {
 }
@@ -491,7 +491,7 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
 <p>A <code>@ConfigBean</code>-annotated class is an <code>@ApplicationScoped</code> CDI bean (the annotation is a stereotype that contributes the scope). <code>@Inject</code> <code>ConfigResolver</code> and expose one public method per config key with parsing + default.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 05 · config-bean</span><a href="../listings/05-config-bean/">listings/05-config-bean/</a></div>
+  <div class="listing-bar"><span class="label">listing core/05 · config-bean</span><a href="../listings/core/05-config-bean/">listings/core/05-config-bean/</a></div>
 <pre><span class="cm">// src/main/java/example/configbean/AppConfig.java</span>
 <span class="an">@ConfigBean</span>
 <span class="kw">public class</span> <span class="ty">AppConfig</span> {
@@ -517,7 +517,7 @@ app.retries  = 5</pre>
 <p>Drop these dependencies into your test project. <code>jawelte-core-api</code> is a compile-time dep (your test source code references its annotations); everything else is test-scoped. Pick a CDI runtime — <code>openwebbeans-se</code> is the listing default; swap for <code>org.jboss.weld.se:weld-se-shaded</code> to use Weld.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/01-hello-world/pom.xml">listings/01-hello-world/pom.xml</a></div>
+  <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/core/01-hello-world/pom.xml">listings/core/01-hello-world/pom.xml</a></div>
 <pre>&lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-core-api&lt;/artifactId&gt;
@@ -560,7 +560,7 @@ app.retries  = 5</pre>
 <p>You also need a <code>META-INF/beans.xml</code> in <code>src/main/resources</code> (and/or <code>src/test/resources</code>) so the CDI runtime discovers your beans. Any CDI 4 archive descriptor works — listing 01's beans.xml is the minimum:</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">beans.xml</span><a href="../listings/01-hello-world/src/main/resources/META-INF/beans.xml">listings/01-hello-world/src/main/resources/META-INF/beans.xml</a></div>
+  <div class="listing-bar"><span class="label">beans.xml</span><a href="../listings/core/01-hello-world/src/main/resources/META-INF/beans.xml">listings/core/01-hello-world/src/main/resources/META-INF/beans.xml</a></div>
 <pre>&lt;beans xmlns="https://jakarta.ee/xml/ns/jakartaee"
        version="4.0"
        bean-discovery-mode="annotated"/&gt;</pre>
@@ -575,7 +575,7 @@ app.retries  = 5</pre>
 <p>When <code>true</code>, CDI bean discovery is restricted to classes named in a <code>@TestBean</code> declaration on the test class (or one of its superclasses, directly or via meta-annotation) plus framework internals. Auto-mocking is disabled. Production beans not whitelisted are vetoed at discovery time.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 06 · limit-to-test-beans</span><a href="../listings/06-limit-to-test-beans/">listings/06-limit-to-test-beans/</a></div>
+  <div class="listing-bar"><span class="label">listing core/06 · limit-to-test-beans</span><a href="../listings/core/06-limit-to-test-beans/">listings/core/06-limit-to-test-beans/</a></div>
 <pre><span class="an">@EnableTestBeans</span>(limitToTestBeans = <span class="kw">true</span>)
 <span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
 <span class="kw">class</span> <span class="ty">LimitToTestBeansTest</span> {
@@ -600,7 +600,7 @@ app.retries  = 5</pre>
 <p>When <code>true</code>, jawelte calls <code>TestBeanContainerPort.beforeAll</code> and <code>afterAll</code> to boot and shut down the CDI container. When <code>false</code>, those calls are skipped — the test owns the container lifecycle (e.g., via <code>SeContainerInitializer</code>). The per-method scope activation and field injection still happen.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 07 · external-container</span><a href="../listings/07-external-container/">listings/07-external-container/</a></div>
+  <div class="listing-bar"><span class="label">listing core/07 · external-container</span><a href="../listings/core/07-external-container/">listings/core/07-external-container/</a></div>
 <pre><span class="an">@EnableTestBeans</span>(manageContainer = <span class="kw">false</span>)
 <span class="kw">class</span> <span class="ty">ExternalContainerTest</span> {
 
@@ -648,7 +648,7 @@ app.retries  = 5</pre>
 <h3>beanProducer mode</h3>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 08 · test-bean-producer</span><a href="../listings/08-test-bean-producer/">listings/08-test-bean-producer/</a></div>
+  <div class="listing-bar"><span class="label">listing core/08 · test-bean-producer</span><a href="../listings/core/08-test-bean-producer/">listings/core/08-test-bean-producer/</a></div>
 <pre><span class="cm">// src/test/java/example/producer/FixedClockProducer.java</span>
 <span class="an">@Dependent</span>
 <span class="an">@Alternative</span>
@@ -681,7 +681,7 @@ app.retries  = 5</pre>
 <p>Wrap a <code>@TestBean</code> in your own annotation and apply that annotation across many test classes. jawelte's scanner walks the annotation graph recursively (cycle-safe; <code>java.</code> / <code>jakarta.</code> packages are skipped), so the trick composes: a meta-annotation can itself carry other meta-annotations and they ALL contribute their <code>@TestBean</code>s to the test class.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 09 · test-bean-meta-annotation</span><a href="../listings/09-test-bean-meta-annotation/">listings/09-test-bean-meta-annotation/</a></div>
+  <div class="listing-bar"><span class="label">listing core/09 · test-bean-meta-annotation</span><a href="../listings/core/09-test-bean-meta-annotation/">listings/core/09-test-bean-meta-annotation/</a></div>
 <pre><span class="cm">// src/test/java/example/meta/WithStubEmail.java — one small reusable unit</span>
 <span class="an">@Target</span>(<span class="ty">ElementType</span>.TYPE)
 <span class="an">@Retention</span>(<span class="ty">RetentionPolicy</span>.RUNTIME)
@@ -739,7 +739,7 @@ app.retries  = 5</pre>
 <p>Fired by the <code>TestBeanContainerPort</code> implementation inside its <code>beforeAll</code>, after the CDI container is ready but before any <code>TestModuleLifecyclePort.beforeAll</code> runs. Useful for module-style one-time setup that needs CDI but must complete before lifecycle ports run.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 12 · container-started</span><a href="../listings/12-container-started/">listings/12-container-started/</a></div>
+  <div class="listing-bar"><span class="label">listing core/12 · container-started</span><a href="../listings/core/12-container-started/">listings/core/12-container-started/</a></div>
 <pre><span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">StartupRecorder</span> {
     <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">Class</span>&lt;?&gt;&gt; OBSERVED_TEST_CLASS = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
@@ -754,7 +754,7 @@ app.retries  = 5</pre>
 <p>Fired before a per-method scope (e.g., <code>@RequestScoped</code>) is activated. The most common reaction is to observe and log; <code>event.veto()</code> is also available and keeps the scope inactive for the test method, but veto is rare in practice.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 11 · before-scope-observer</span><a href="../listings/11-before-scope-observer/">listings/11-before-scope-observer/</a></div>
+  <div class="listing-bar"><span class="label">listing core/11 · before-scope-observer</span><a href="../listings/core/11-before-scope-observer/">listings/core/11-before-scope-observer/</a></div>
 <pre><span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">ScopeStartLogger</span> {
 
@@ -797,7 +797,7 @@ app.retries  = 5</pre>
 </ul>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 10 · test-context-metadata</span><a href="../listings/10-test-context-metadata/">listings/10-test-context-metadata/</a></div>
+  <div class="listing-bar"><span class="label">listing core/10 · test-context-metadata</span><a href="../listings/core/10-test-context-metadata/">listings/core/10-test-context-metadata/</a></div>
 <pre><span class="cm">// src/test/java/example/metadata/BootstrapTimestampLifecyclePort.java</span>
 <span class="kw">public class</span> <span class="ty">BootstrapTimestampLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
 
@@ -828,7 +828,7 @@ example.metadata.BootstrapTimestampLifecyclePort</pre>
 <p><strong>Multi-impl, ServiceLoader.</strong> The way feature modules participate in the test lifecycle. All methods default to no-ops; an implementation overrides only the callbacks it cares about. Sorted by <code>@Priority</code> ascending for <code>before*</code>, reverse for <code>after*</code>.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 13 · lifecycle-port</span><a href="../listings/13-lifecycle-port/">listings/13-lifecycle-port/</a></div>
+  <div class="listing-bar"><span class="label">listing core/13 · lifecycle-port</span><a href="../listings/core/13-lifecycle-port/">listings/core/13-lifecycle-port/</a></div>
 <pre><span class="an">@Priority</span>(<span class="kw">10</span>)
 <span class="kw">public class</span> <span class="ty">EarlyLifecyclePort</span> <span class="kw">implements</span> <span class="ty">TestModuleLifecyclePort</span> {
 
@@ -864,7 +864,7 @@ example.lifecycle.LateLifecyclePort</pre>
 </ul>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 14 · bean-scope-mapper</span><a href="../listings/14-bean-scope-mapper/">listings/14-bean-scope-mapper/</a></div>
+  <div class="listing-bar"><span class="label">listing core/14 · bean-scope-mapper</span><a href="../listings/core/14-bean-scope-mapper/">listings/core/14-bean-scope-mapper/</a></div>
 <pre><span class="kw">public class</span> <span class="ty">RequestToApplicationScoped</span> <span class="kw">implements</span> <span class="ty">BeanScopeMapper</span> {
 
     <span class="an">@Override</span>
@@ -888,7 +888,7 @@ example.scopemap.RequestToApplicationScoped</pre>
 <p>Users override with an <code>@Alternative @Priority(...)</code> CDI bean — CDI 4's globally-enabled alternative rule selects the highest-priority alternative over the framework default (which carries no <code>@Alternative</code>).</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 15 · config-resolver</span><a href="../listings/15-config-resolver/">listings/15-config-resolver/</a></div>
+  <div class="listing-bar"><span class="label">listing core/15 · config-resolver</span><a href="../listings/core/15-config-resolver/">listings/core/15-config-resolver/</a></div>
 <pre><span class="an">@ApplicationScoped</span>
 <span class="an">@Alternative</span>
 <span class="an">@Priority</span>(<span class="kw">100</span>)
@@ -921,7 +921,7 @@ example.scopemap.RequestToApplicationScoped</pre>
 <p><strong>Single active impl, bootstrap via MP Config.</strong> The project-wide canonical mechanism for ordering provider lists. Replace it via the MP Config bootstrap key <code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code> — value is the FQCN of an impl class with a public no-arg constructor. Every <code>TestContext.loadService(Class)</code> SPI selection routes through the active resolver.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing 16 · priority-resolver</span><a href="../listings/16-priority-resolver/">listings/16-priority-resolver/</a></div>
+  <div class="listing-bar"><span class="label">listing core/16 · priority-resolver</span><a href="../listings/core/16-priority-resolver/">listings/core/16-priority-resolver/</a></div>
 <pre><span class="kw">public class</span> <span class="ty">ReversePriorityResolver</span> <span class="kw">implements</span> <span class="ty">ServicePriorityResolver</span> {
 
     <span class="an">@Override</span>
