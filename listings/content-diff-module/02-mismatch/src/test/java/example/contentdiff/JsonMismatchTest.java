@@ -15,18 +15,23 @@
  */
 package example.contentdiff;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.module.contentdiff.api.ContentDiff;
 
-class HelloDiffTest {
+class JsonMismatchTest {
 
     @Test
-    void semanticallyEqualJsonPassesSilently() {
+    void mismatchRaisesAssertionErrorThatNamesTheOffendingField() {
         String actual   = "{\"name\":\"Alice\",\"age\":30}";
-        String expected = "{\"age\":30,\"name\":\"Alice\"}";   // different key order
+        String expected = "{\"name\":\"Alice\",\"age\":31}";
 
-        ContentDiff.forJson(actual)
-                .expectedContent(expected)
-                .assertEquals();
+        assertThatThrownBy(() ->
+                ContentDiff.forJson(actual)
+                        .expectedContent(expected)
+                        .assertEquals())
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("age");
     }
 }

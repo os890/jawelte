@@ -6627,3 +6627,13 @@ Swept all 28 listing poms to enforce two project-wide scope rules:
 - Any `jakarta.*` API jar → `<scope>provided</scope>` (the runtime jar — openwebbeans-se, weld-se-shaded, hibernate-core, etc. — brings the Jakarta APIs in transitively; declaring them `provided` keeps them out of any artifact a user might produce from copying a listing)
 
 139 scope adjustments across 28 poms. `mvn -f listings/pom.xml test` still 28/28 green (20.5 s total).
+
+## 2026-05-21 — content-diff: split hello-world into per-feature listings
+
+The previous content-diff hello-world packed three test methods (equal-passes / mismatch-raises / ignoring-skips) into one listing — too feature-rich for a hello-world. Split into three separate standalone-pom listings:
+
+- `content-diff-module/01-hello-world/` — single test: semantically equal JSON (different key order) passes silently.
+- `content-diff-module/02-mismatch/` — a JSON mismatch raises an `AssertionError` whose message names the offending path.
+- `content-diff-module/03-ignoring-pattern/` — `ignoring("$.audit.timestamp")` skips a noisy field.
+
+Each listing has its own pom.xml (artifactIds `jawelte-listing-content-diff-module-01-hello-world` etc.); the per-module aggregator `listings/content-diff-module/pom.xml` lists all three. `docs/content-diff-module.html` quick-start now shows the minimal happy-path snippet, with two follow-up code blocks pointing at the dedicated listings for the failure and ignoring scenarios. `listings/README.md` Layout table now lists the three listings under `content-diff-module/`.

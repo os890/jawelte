@@ -18,14 +18,15 @@ package example.contentdiff;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.module.contentdiff.api.ContentDiff;
 
-class HelloDiffTest {
+class JsonIgnoringTest {
 
     @Test
-    void semanticallyEqualJsonPassesSilently() {
-        String actual   = "{\"name\":\"Alice\",\"age\":30}";
-        String expected = "{\"age\":30,\"name\":\"Alice\"}";   // different key order
+    void ignoringPatternSkipsTheNoisyField() {
+        String actual   = "{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"2026-05-20T10:00:00Z\"}}";
+        String expected = "{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"1970-01-01T00:00:00Z\"}}";
 
         ContentDiff.forJson(actual)
+                .ignoring("$.audit.timestamp")
                 .expectedContent(expected)
                 .assertEquals();
     }

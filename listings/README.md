@@ -67,7 +67,7 @@ global renumbering, no shifting of unrelated listings.
 | `jaxrs-module/` | `01-hello-world` | `docs/jaxrs-module.html` |
 | `testcontrol-module/` | `01-hello-world` | `docs/testcontrol-module.html` |
 | `db-testdata-module/` | `01-hello-world` | `docs/db-testdata-module.html` |
-| `content-diff-module/` | `01-hello-world` | `docs/content-diff-module.html` |
+| `content-diff-module/` | `01-hello-world`, `02-mismatch`, `03-ignoring-pattern` | `docs/content-diff-module.html` |
 | `wiremock-module/` | `01-hello-world` | `docs/wiremock-module.html` |
 | `spring-data-module/` | `01-hello-world` | `docs/spring-data-module.html` |
 | `batch-module/` | `01-hello-world` | `docs/batch-module.html` |

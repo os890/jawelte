@@ -15,10 +15,9 @@
    limitations under the License.
 -->
 <!--
-    Stand-alone Maven project for jawelte documentation listing content-diff-module/01:
-    content-diff-module hello-world. ContentDiff.forJson() asserts that
-    two semantically equal JSON payloads (different key order) pass
-    silently.
+    Stand-alone Maven project for jawelte documentation listing content-diff-module/02:
+    content-diff-module mismatch. A JSON value mismatch raises an
+    AssertionError whose message names the offending path.
 
     content-diff-module is a utility library — no CDI bootstrap needed,
     no owb/weld profile split.
@@ -33,12 +32,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>org.os890.jawelte.listings</groupId>
-    <artifactId>jawelte-listing-content-diff-module-01-hello-world</artifactId>
+    <artifactId>jawelte-listing-content-diff-module-02-mismatch</artifactId>
     <version>0.1.0</version>
     <packaging>jar</packaging>
 
-    <name>jawelte listing content-diff-module/01: hello-world</name>
-    <description>content-diff-module hello-world: ContentDiff.forJson() asserts semantically equal JSON (different key order) passes silently.</description>
+    <name>jawelte listing content-diff-module/02: mismatch</name>
+    <description>content-diff-module mismatch: a JSON value mismatch raises an AssertionError whose message names the offending path.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

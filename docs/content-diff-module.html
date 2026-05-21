@@ -131,7 +131,7 @@
 <p>Asserting JSON or XML responses with <code>assertThat(actual).isEqualTo(expected)</code> fails the moment the server adds a whitespace or re-orders two object keys. content-diff-module parses both sides as structured documents and compares them semantically: keys, attributes, element children, with optional tolerance for ordering, missing fields, and volatile cells.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
-<p>Three test methods cover the three shapes you'll hit most often: equal documents pass silently, mismatched documents raise an <code>AssertionError</code> that names the failing path, and an <code>ignoring(...)</code> pattern skips a noisy field.</p>
+<p>Two JSON documents with the same keys in different order. <code>ContentDiff.forJson(actual).expectedContent(expected).assertEquals()</code> passes silently &mdash; the diff is structural, not byte-level.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing content-diff-module/01 &middot; hello-world</span><a href="../listings/content-diff-module/01-hello-world/">listings/content-diff-module/01-hello-world/</a></div>
@@ -139,36 +139,46 @@
 <span class="kw">class</span> <span class="ty">HelloDiffTest</span> {
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> identicalJsonPassesSilently() {
-        <span class="ty">String</span> document = <span class="st">"{\"name\":\"Alice\",\"age\":30}"</span>;
-        <span class="ty">ContentDiff</span>.forJson(document)
-                .expectedContent(document)
-                .assertEquals();
-    }
-
-    <span class="an">@Test</span>
-    <span class="kw">void</span> mismatchRaisesAssertionErrorThatNamesTheField() {
+    <span class="kw">void</span> semanticallyEqualJsonPassesSilently() {
         <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"age\":30}"</span>;
-        <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"age\":31}"</span>;
-
-        assertThatThrownBy(() -&gt;
-                <span class="ty">ContentDiff</span>.forJson(actual)
-                        .expectedContent(expected)
-                        .assertEquals())
-                .isInstanceOf(<span class="ty">AssertionError</span>.<span class="kw">class</span>)
-                .hasMessageContaining(<span class="st">"age"</span>);
-    }
-
-    <span class="an">@Test</span>
-    <span class="kw">void</span> ignoringPatternSkipsTheNoisyField() {
-        <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"2026-05-20T10:00:00Z\"}}"</span>;
-        <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"1970-01-01T00:00:00Z\"}}"</span>;
+        <span class="ty">String</span> expected = <span class="st">"{\"age\":30,\"name\":\"Alice\"}"</span>;   <span class="cm">// different key order</span>
 
         <span class="ty">ContentDiff</span>.forJson(actual)
-                .ignoring(<span class="st">"$.audit.timestamp"</span>)
                 .expectedContent(expected)
                 .assertEquals();
     }
+}</pre>
+</div>
+
+<p>Two follow-up listings demonstrate the failure side and the ignoring-pattern feature:</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing content-diff-module/02 &middot; mismatch</span><a href="../listings/content-diff-module/02-mismatch/">listings/content-diff-module/02-mismatch/</a></div>
+<pre><span class="an">@Test</span>
+<span class="kw">void</span> mismatchRaisesAssertionErrorThatNamesTheOffendingField() {
+    <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"age\":30}"</span>;
+    <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"age\":31}"</span>;
+
+    assertThatThrownBy(() -&gt;
+            <span class="ty">ContentDiff</span>.forJson(actual)
+                    .expectedContent(expected)
+                    .assertEquals())
+            .isInstanceOf(<span class="ty">AssertionError</span>.<span class="kw">class</span>)
+            .hasMessageContaining(<span class="st">"age"</span>);
+}</pre>
+</div>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing content-diff-module/03 &middot; ignoring-pattern</span><a href="../listings/content-diff-module/03-ignoring-pattern/">listings/content-diff-module/03-ignoring-pattern/</a></div>
+<pre><span class="an">@Test</span>
+<span class="kw">void</span> ignoringPatternSkipsTheNoisyField() {
+    <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"2026-05-20T10:00:00Z\"}}"</span>;
+    <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"1970-01-01T00:00:00Z\"}}"</span>;
+
+    <span class="ty">ContentDiff</span>.forJson(actual)
+            .ignoring(<span class="st">"$.audit.timestamp"</span>)
+            .expectedContent(expected)
+            .assertEquals();
 }</pre>
 </div>
 
