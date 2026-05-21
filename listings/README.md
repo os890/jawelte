@@ -70,7 +70,7 @@ global renumbering, no shifting of unrelated listings.
 | `content-diff-module/` | `01-hello-world`, `02-mismatch`, `03-ignoring-pattern` | `docs/content-diff-module.html` |
 | `wiremock-module/` | `01-hello-world`, `02-stub-and-call` | `docs/wiremock-module.html` |
 | `spring-data-module/` | `01-hello-world`, `02-derived-query`, `03-no-repository-bean`, `04-user-produces-backoff` | `docs/spring-data-module.html` |
-| `batch-module/` | `01-hello-world` | `docs/batch-module.html` |
+| `batch-module/` | `01-hello-world`, `02-job-parameters`, `03-timeout-handler` | `docs/batch-module.html` |
 
 ## CDI runtime
 

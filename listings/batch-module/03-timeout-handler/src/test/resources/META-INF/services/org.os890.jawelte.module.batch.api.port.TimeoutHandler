@@ -1,0 +1,6 @@
+# Activates the opt-in PopulateLatestSnapshotTimeoutHandler that ships
+# in batch-module-impl. Its @Priority (Integer.MAX_VALUE - 100) is
+# numerically lower than the default ThrowingTimeoutHandler's
+# Integer.MAX_VALUE, so ServicePriorityResolver picks it whenever this
+# services file adds it to the discovered candidate set.
+org.os890.jawelte.module.batch.impl.adapter.timeout.PopulateLatestSnapshotTimeoutHandler

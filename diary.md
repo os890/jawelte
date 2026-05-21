@@ -6762,3 +6762,9 @@ spring-data-module up to 4 listings (was 1). Added:
 - `04-user-produces-backoff` — `@Produces CustomerRepository` returning a JDK proxy that records the method name; the proxy serves the injection instead of spring-data-module's synthetic bean. Uses InvocationHandler (matches scenario-08's pattern; Mockito wasn't recognized by spring-data-module's back-off detection in standalone-pom form).
 
 Doc snippets added in §2.1 (derived queries), §2.2 (@NoRepositoryBean), §2.3 (@Produces back-off).
+
+## 2026-05-21 — docs/batch-module.html: two follow-up listings
+
+batch-module up to 3 listings (was 1). Added:
+- `02-job-parameters` — `BatchExecution.param("k","v")` chain; the batchlet reads them via `jobOperator.getParameters(jobContext.getExecutionId())` (NOT `jobContext.getProperties()`, which holds JSL `<properties>`; first attempt failed with that mistake, fixed after looking at scenario-02). Asserts the round-trip via `setExitStatus()`.
+- `03-timeout-handler` — activates the bundled `PopulateLatestSnapshotTimeoutHandler` via a META-INF/services file. A 3-second batchlet vs a 500-ms timeout: with the alternative handler, fire() doesn't throw — it returns with the latest non-terminal JobExecution snapshot. The doc snippet in §2.3 shows the services-file content + the test body.

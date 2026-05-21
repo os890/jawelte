@@ -223,12 +223,75 @@
   </tbody>
 </table>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing batch-module/02 · job-parameters</span><a href="../listings/batch-module/02-job-parameters/">listings/batch-module/02-job-parameters/</a></div>
+<pre><span class="cm">// src/test/java/example/jobparams/EchoBatchlet.java</span>
+<span class="an">@Named</span>(<span class="st">"echoBatchlet"</span>)
+<span class="an">@Dependent</span>
+<span class="kw">public class</span> <span class="ty">EchoBatchlet</span> <span class="kw">implements</span> <span class="ty">Batchlet</span> {
+
+    <span class="an">@Inject</span> <span class="ty">JobContext</span> jobContext;
+    <span class="an">@Inject</span> <span class="ty">JobOperator</span> jobOperator;
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">String</span> process() {
+        <span class="cm">// BatchExecution.param() values come back through jobOperator.getParameters(),</span>
+        <span class="cm">// NOT jobContext.getProperties() (which holds JSL &lt;properties&gt;).</span>
+        <span class="ty">Properties</span> p = jobOperator.getParameters(jobContext.getExecutionId());
+        jobContext.setExitStatus(p.getProperty(<span class="st">"greeting"</span>) + <span class="st">"="</span> + p.getProperty(<span class="st">"target"</span>));
+        <span class="kw">return</span> <span class="st">"COMPLETED"</span>;
+    }
+    <span class="an">@Override</span> <span class="kw">public void</span> stop() { }
+}
+
+<span class="cm">// src/test/java/example/jobparams/JobParametersTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> parametersAreVisibleToTheBatchletViaJobContext() {
+    <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"parametrised-job"</span>)
+            .param(<span class="st">"greeting"</span>, <span class="st">"hello"</span>)
+            .param(<span class="st">"target"</span>, <span class="st">"world"</span>);
+
+    batchEvent.fire(execution);
+
+    assertThat(execution.getExitStatus()).isEqualTo(<span class="st">"hello=world"</span>);
+}</pre>
+</div>
+
 <h2 id="dt-fire">2.2 Event&lt;BatchExecution&gt;.fire &mdash; the blocking call</h2>
 <p>The CDI <code>Event.fire(...)</code> looks fire-and-forget but is observably <em>blocking</em>: the impl observer runs synchronously on the test thread, polls <code>JobOperator</code> with exponential backoff (50 ms initial, capped at 5 s) until a terminal <code>BatchStatus</code> is reached, then populates <code>BatchExecution</code> via the internal <code>markCompleted</code> hook before <code>fire(...)</code> returns. The test reads the result off the same instance that was fired.</p>
 
 <h2 id="dt-timeout">2.3 timeout</h2>
 <p>Default 60 seconds. If the job does not reach a terminal status in time, the default <code>TimeoutHandler</code> throws <code>IllegalStateException</code> &mdash; <em>the job itself is not cancelled</em>; it keeps running on the jBatch thread, just no longer observed by your test.</p>
 <p>An alternative ships in <code>batch-module-impl</code>: <code>PopulateLatestSnapshotTimeoutHandler</code> populates the event with the latest observed <code>JobExecution</code> snapshot and returns without throwing. Activate it by shipping a custom <code>META-INF/services/org.os890.jawelte.module.batch.api.port.TimeoutHandler</code> file naming that class. See the SPI section for the priority rule.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing batch-module/03 · timeout-handler</span><a href="../listings/batch-module/03-timeout-handler/">listings/batch-module/03-timeout-handler/</a></div>
+<pre><span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.module.batch.api.port.TimeoutHandler</span>
+org.os890.jawelte.module.batch.impl.adapter.timeout.PopulateLatestSnapshotTimeoutHandler
+
+<span class="cm">// src/test/java/example/timeout/LongRunningBatchlet.java</span>
+<span class="an">@Named</span>(<span class="st">"longRunningBatchlet"</span>) <span class="an">@Dependent</span>
+<span class="kw">public class</span> <span class="ty">LongRunningBatchlet</span> <span class="kw">implements</span> <span class="ty">Batchlet</span> {
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">String</span> process() <span class="kw">throws</span> <span class="ty">InterruptedException</span> {
+        <span class="ty">Thread</span>.sleep(3_000L);
+        <span class="kw">return</span> <span class="st">"COMPLETED"</span>;
+    }
+    <span class="an">@Override</span> <span class="kw">public void</span> stop() { }
+}
+
+<span class="cm">// src/test/java/example/timeout/TimeoutHandlerTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> alternativeHandlerPopulatesEventWithoutThrowing() {
+    <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"long-running-job"</span>)
+            .timeout(<span class="ty">Duration</span>.ofMillis(500L));
+
+    assertThatCode(() -&gt; batchEvent.fire(execution)).doesNotThrowAnyException();
+
+    assertThat(execution.getJobExecution()).isNotNull();
+    assertThat(execution.getStatus()).isNotEqualTo(<span class="ty">BatchStatus</span>.COMPLETED);
+}</pre>
+</div>
 
 <h2 id="dt-runtime">2.4 picking a jBatch runtime</h2>
 <p>batch-module talks to jBatch through the spec API (<code>JobOperator</code>, <code>JobExecution</code>, <code>BatchStatus</code>), so any conformant runtime works. Tested in jawelte's own sweep: <strong>Apache BatchEE</strong> (default; <code>org.apache.batchee:batchee-jbatch</code>) and <strong>JBeret</strong> (<code>org.jberet:jberet-se</code>). Pick by classpath dependency; no code change.</p>

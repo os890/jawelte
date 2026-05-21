@@ -38,5 +38,7 @@
 
     <modules>
         <module>01-hello-world</module>
+        <module>02-job-parameters</module>
+        <module>03-timeout-handler</module>
     </modules>
 </project>
