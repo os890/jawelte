@@ -6641,3 +6641,9 @@ Each listing has its own pom.xml (artifactIds `jawelte-listing-content-diff-modu
 ## 2026-05-21 — revised wiremock-module hello-world
 
 Previous hello-world had the full "stub registration + JDK HttpClient round-trip" shape — useful but not minimal. Replaced with the smallest case: inject `WireMockRuntimeInfo` and read the live port / base URL off it. That's enough to prove `@EnableWireMock` actually booted the server. The full stub+HTTP example moved to a follow-up snippet in the doc page's quick-start so users still see how to do the typical test, just not as the headline. Both OWB and Weld profiles pass.
+
+## 2026-05-21 — doc-page maven snippets caught up to the scope rules
+
+The earlier listing-pom scope sweep didn't touch the HTML pages' embedded `<pre>`-block maven snippets. Walked every `&lt;dependency&gt;` block in `docs/*.html`, inserted the missing `<scope>test</scope>` on every `jawelte-*-api` block (9 pages) and `<scope>provided</scope>` on every `jakarta.*` block (5 instances). 14 insertions across 11 doc pages. Re-scan confirms zero remaining mismatches.
+
+Also rewrote the stale narrative in `docs/core.html` § 1.4 that called `jawelte-core-api` "a compile-time dep" — replaced with a clear statement of the project-wide rule (jawelte-* = scope test, jakarta-* = scope provided).

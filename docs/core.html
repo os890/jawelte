@@ -514,7 +514,7 @@ app.retries  = 5</pre>
 </div>
 
 <h2 id="qs-maven">1.4 maven setup</h2>
-<p>Drop these dependencies into your test project. <code>jawelte-core-api</code> is a compile-time dep (your test source code references its annotations); everything else is test-scoped. Pick a CDI runtime — <code>openwebbeans-se</code> is the listing default; swap for <code>org.jboss.weld.se:weld-se-shaded</code> to use Weld.</p>
+<p>Drop these dependencies into your test project. jawelte is a test framework: every <code>jawelte-*</code> jar (api and impl alike) ships in <code>&lt;scope&gt;test&lt;/scope&gt;</code>, and every Jakarta API is <code>&lt;scope&gt;provided&lt;/scope&gt;</code> &mdash; the runtime jar brings the API in transitively, and a test framework should never push them into a downstream's production artifact. Pick a CDI runtime &mdash; <code>openwebbeans-se</code> is the listing default; swap for <code>org.jboss.weld.se:weld-se-shaded</code> to use Weld.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/core/01-hello-world/pom.xml">listings/core/01-hello-world/pom.xml</a></div>
@@ -522,6 +522,7 @@ app.retries  = 5</pre>
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
   &lt;artifactId&gt;jawelte-core-api&lt;/artifactId&gt;
   &lt;version&gt;${jawelte.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
 &lt;/dependency&gt;
 &lt;dependency&gt;
   &lt;groupId&gt;org.os890.jawelte&lt;/groupId&gt;
