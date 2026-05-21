@@ -778,6 +778,58 @@ app.retries  = 5</pre>
 
 <p>The annotation defines no interceptors and no additional behavior beyond the stereotype's scope contribution. It also serves as a discovery marker so that, for example, <code>limitToTestBeans</code> can identify config beans.</p>
 
+<h3>realistic shape — multiple typed keys + required-key validation</h3>
+<p>Production config beans usually expose several keys with mixed types (<code>Duration</code>, <code>double</code>, <code>boolean</code>, &hellip;) and fail fast at startup when a required key is missing. A <code>@PostConstruct</code> guard is the idiomatic place &mdash; it runs once per bean lifetime, before any injection-point consumer sees the config bean. The defaults belong inside each getter, kept next to their key.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing core/18 · config-bean-multi-key</span><a href="../listings/core/18-config-bean-multi-key/">listings/core/18-config-bean-multi-key/</a></div>
+<pre><span class="cm">// src/test/java/example/backoff/BackoffConfig.java</span>
+<span class="an">@ConfigBean</span>
+<span class="kw">public class</span> <span class="ty">BackoffConfig</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">ConfigResolver</span> resolver;
+
+    <span class="an">@PostConstruct</span>
+    <span class="kw">void</span> validate() {
+        <span class="kw">if</span> (resolver.resolve(<span class="st">"app.backoff.max-retries"</span>).isEmpty()) {
+            <span class="kw">throw new</span> <span class="ty">IllegalStateException</span>(
+                    <span class="st">"Required config key 'app.backoff.max-retries' is not set"</span>);
+        }
+    }
+
+    <span class="cm">/** Required — @PostConstruct throws if missing. */</span>
+    <span class="kw">public int</span> maxRetries() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.max-retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElseThrow();
+    }
+
+    <span class="cm">/** Default 100 ms. */</span>
+    <span class="kw">public</span> <span class="ty">Duration</span> initialDelay() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.initial-delay"</span>)
+                .map(<span class="ty">Duration</span>::parse)              <span class="cm">// ISO-8601: PT0.25S, PT500MS</span>
+                .orElse(<span class="ty">Duration</span>.ofMillis(<span class="kw">100</span>));
+    }
+
+    <span class="cm">/** Default 2.0. */</span>
+    <span class="kw">public double</span> factor() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.factor"</span>).map(<span class="ty">Double</span>::parseDouble).orElse(<span class="kw">2.0</span>);
+    }
+
+    <span class="cm">/** Default true (feature flag). */</span>
+    <span class="kw">public boolean</span> enabled() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.enabled"</span>).map(<span class="ty">Boolean</span>::parseBoolean).orElse(<span class="kw">true</span>);
+    }
+}
+
+<span class="cm">// src/main/resources/META-INF/microprofile-config.properties</span>
+app.backoff.max-retries   = 5
+app.backoff.initial-delay = PT0.25S
+app.backoff.factor        = 1.5
+app.backoff.enabled       = true</pre>
+</div>
+
+<p>Three patterns to notice. <strong>Typed conversion happens in the getter</strong>, not in <code>ConfigResolver</code> &mdash; the resolver always returns a raw <code>Optional&lt;String&gt;</code>. <strong>Defaults live with their key</strong>, inside the getter that uses them, so changing a default is a one-line edit. <strong>Required-key validation is concentrated in <code>@PostConstruct</code></strong>, not scattered across the getters &mdash; a missing required key fails container startup, not the first request that happens to read it.</p>
+
 <h2 id="dt-events">2.4 events</h2>
 <p>jawelte fires three CDI events at well-defined lifecycle points. Module code observes them with plain <code>@Observes</code>.</p>
 

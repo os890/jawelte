@@ -54,5 +54,6 @@
         <module>15-config-resolver</module>
         <module>16-priority-resolver</module>
         <module>17-test-bean-qualified</module>
+        <module>18-config-bean-multi-key</module>
     </modules>
 </project>

@@ -6653,3 +6653,15 @@ Also rewrote the stale narrative in `docs/core.html` § 1.4 that called `jawelte
 Added `listings/core/17-test-bean-qualified/` and the matching snippet in §1.3 between the "pick an alternative" and "static field" subsections. Domain: `Cache` interface, `@FastCache` qualifier, `RedisCache` production impl, `InMemoryFastCache` test alternative (carries `@Alternative` + `@FastCache`). The test activates the alternative via `@TestBean(bean = InMemoryFastCache.class)` and asserts the `@Inject @FastCache Cache` field resolves to the test impl. Both OWB and Weld profiles pass.
 
 The teaching point in the doc snippet: `@TestBean` does not name qualifiers explicitly — the qualifier travels with the alternative class declaration. A second injection point at `@Inject Cache` (unqualified) would be unaffected.
+
+## 2026-05-21 — docs/core.html §2.3: realistic multi-key @ConfigBean
+
+Added `listings/core/18-config-bean-multi-key/` and a follow-up snippet in §2.3 after the basic narrative. Domain: `BackoffConfig` for a retry-with-backoff feature with four keys — `app.backoff.max-retries` (required int, no default), `app.backoff.initial-delay` (Duration, defaults to 100 ms via ISO-8601 parse), `app.backoff.factor` (double, default 2.0), `app.backoff.enabled` (boolean, default true). A `@PostConstruct` guard fails the container startup if `max-retries` is missing.
+
+The new snippet teaches three patterns the basic listing 05 doesn't reach: typed conversion happens in the getter (not the resolver), defaults live next to their key, and required-key validation is concentrated in `@PostConstruct` instead of scattered across getters. Both OWB and Weld profiles pass.
+
+## 2026-05-21 — moved jawelte-annotated classes from src/main to src/test
+
+The earlier scope sweep (jawelte-*-api → scope=test) made any src/main class that referenced jawelte annotations stop compiling cleanly — earlier `mvn test` runs had still succeeded only because Maven was reusing stale .class files from before the sweep. Found 5 listings with this issue: core/05-config-bean (AppConfig with @ConfigBean), core/15-config-resolver (AppConfig with @ConfigBean), core/18-config-bean-multi-key (BackoffConfig, just created with @ConfigBean), scope-module/01-test-method-scoped (Counter with @TestMethodScoped), scope-module/02-test-class-scoped (Counter with @TestClassScoped).
+
+Mirrored the project's own scenario layout: `git mv`'d all five into `src/test/java/`. Empty `src/main/java` sub-trees removed. `mvn -f listings/pom.xml clean test` now passes all 30 listings on a clean build (23.9 s).
