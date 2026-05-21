@@ -6699,3 +6699,14 @@ jpa-module up to 5 listings (was 1). Added:
 - `05-table-name-resolver` — `SkipCleanupTableNameResolver` @Priority(1) returns an empty list; DbCleanupStrategy then has nothing to wipe, so data from method 1 survives into method 2. Backs §3 TableNameResolver port.
 
 One avoidable failure during 04: OWB rejects `public final` fields on @ApplicationScoped beans ("If bean has a public field, bean scope must be defined as @Scope"). Switched to a private field + `timeline()` accessor. Also added `@BeforeEach` reset since `@ApplicationScoped` accumulates across test methods.
+
+## 2026-05-21 — docs/jta-module.html: three follow-up listings
+
+jta-module up to 4 listings (was 1). Added:
+- `02-user-transaction` — programmatic `UserTransaction.begin/commit` against a Marker entity. Required adding `narayana-jta` to the test classpath alongside Geronimo: uber Narayana supplies the CDI `@TransactionScoped` extension that activates the EntityManager's TX-scoped context when the TM signals begin/commit (without it, `entityManager.persist` inside a programmatic UT throws `ContextNotActiveException`).
+- `03-transaction-scoped-bean` — `@TransactionScoped PerTxBean` with `@PreDestroy` counter; two `@Transactional` reader calls show two different UUIDs (per-tx instance) and `PRE_DESTROY_COUNT == 2`.
+- `04-transaction-manager-provider` — `RecordingTransactionManagerProvider @Priority(1)` wraps Geronimo's TM via reflection, increments a counter on `create()`. `@Priority(1)` beats the default AutoSelect provider's `@Priority(Integer.MAX_VALUE)`. Test injects `UserTransaction`, calls begin/commit, asserts counter > 0.
+
+Interface had two methods I missed on the first cut: `name()` and `shutdown()` — added.
+
+Doc snippets added to §2.1 (programmatic UT + @TransactionScoped) and §3 (TransactionManagerProvider port). All listings pass on OWB and Weld.

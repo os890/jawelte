@@ -38,5 +38,8 @@
 
     <modules>
         <module>01-hello-world</module>
+        <module>02-user-transaction</module>
+        <module>03-transaction-scoped-bean</module>
+        <module>04-transaction-manager-provider</module>
     </modules>
 </project>

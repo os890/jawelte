@@ -225,6 +225,75 @@
 </ul>
 <p>This is the same priority-resolver pattern documented in <a href="core.html#spi-priority-resolver">core docs section 3.8</a>; jta-module is the canonical example of one module shadowing another via priority.</p>
 
+<h3>programmatic UserTransaction</h3>
+<p>When you need a transaction boundary outside of <code>@Transactional</code> &mdash; e.g. a setup helper that has to run partially inside a tx and partially outside &mdash; inject <code>UserTransaction</code>. jta-module exposes it as a CDI bean wired to the same <code>TransactionManager</code> the <code>@Transactional</code> interceptor drives.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jta-module/02 · user-transaction</span><a href="../listings/jta-module/02-user-transaction/">listings/jta-module/02-user-transaction/</a></div>
+<pre><span class="cm">// src/test/java/example/usertx/UserTransactionTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">UserTransactionTest</span> {
+
+    <span class="an">@Inject</span> <span class="ty">UserTransaction</span> userTransaction;
+    <span class="an">@Inject</span> <span class="ty">EntityManager</span> entityManager;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> beginCommitPersistsAndIsVisibleToTheNextTransaction() <span class="kw">throws</span> <span class="ty">Exception</span> {
+        userTransaction.begin();
+        <span class="kw">try</span> {
+            entityManager.persist(<span class="kw">new</span> <span class="ty">Marker</span>());
+            userTransaction.commit();
+        } <span class="kw">catch</span> (<span class="ty">RuntimeException</span> unexpected) {
+            <span class="kw">if</span> (userTransaction.getStatus() != <span class="ty">Status</span>.STATUS_NO_TRANSACTION) {
+                userTransaction.rollback();
+            }
+            <span class="kw">throw</span> unexpected;
+        }
+
+        userTransaction.begin();
+        <span class="kw">try</span> {
+            <span class="kw">long</span> count = entityManager
+                    .createQuery(<span class="st">"SELECT COUNT(m) FROM Marker m"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
+            assertThat(count).isEqualTo(1L);
+        } <span class="kw">finally</span> {
+            userTransaction.commit();
+        }
+    }
+}</pre>
+</div>
+
+<p>The listing adds <code>narayana-jta</code> to the test classpath alongside Geronimo. Geronimo is still the TM (bound via JNDI by jta-module's <code>JndiArtifactBinder</code>); uber-Narayana supplies the CDI <code>@TransactionScoped</code> integration that activates the EntityManager's transaction-scoped context when the TM signals begin/commit.</p>
+
+<h3>@TransactionScoped CDI bean</h3>
+<p>A <code>@TransactionScoped</code> bean lives one instance per JTA transaction. The instance is created lazily on first dereference inside the transaction and destroyed (with <code>@PreDestroy</code>) when the transaction completes &mdash; on both commit and rollback. The jpa-module's <code>EntityManager</code> proxy is itself a <code>@TransactionScoped</code> bean.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jta-module/03 · transaction-scoped-bean</span><a href="../listings/jta-module/03-transaction-scoped-bean/">listings/jta-module/03-transaction-scoped-bean/</a></div>
+<pre><span class="cm">// src/test/java/example/txscoped/PerTxBean.java</span>
+<span class="an">@TransactionScoped</span>
+<span class="kw">public class</span> <span class="ty">PerTxBean</span> <span class="kw">implements</span> <span class="ty">Serializable</span> {
+
+    <span class="kw">public static final</span> <span class="ty">AtomicInteger</span> PRE_DESTROY_COUNT = <span class="kw">new</span> <span class="ty">AtomicInteger</span>();
+
+    <span class="kw">private final</span> <span class="ty">String</span> id = <span class="ty">UUID</span>.randomUUID().toString();
+
+    <span class="kw">public</span> <span class="ty">String</span> getId() { <span class="kw">return</span> id; }
+
+    <span class="an">@PreDestroy</span>
+    <span class="kw">void</span> onPreDestroy() { PRE_DESTROY_COUNT.incrementAndGet(); }
+}
+
+<span class="cm">// src/test/java/example/txscoped/PerTxBeanTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> eachJtaTransactionGetsItsOwnInstance() {
+    <span class="ty">String</span> firstTxId  = reader.readIdInsideJtaTx();   <span class="cm">// @Transactional method</span>
+    <span class="ty">String</span> secondTxId = reader.readIdInsideJtaTx();   <span class="cm">// another @Transactional method</span>
+
+    assertThat(firstTxId).isNotEqualTo(secondTxId);
+    assertThat(<span class="ty">PerTxBean</span>.PRE_DESTROY_COUNT.get()).isEqualTo(2);
+}</pre>
+</div>
+
 <h2 id="dt-tm">2.2 picking a transaction manager</h2>
 <p>jta-module doesn't ship a transaction manager itself &mdash; just the integration glue. Choose one of three based on your project:</p>
 <ul>
@@ -240,6 +309,37 @@
 
 <h3>TransactionManagerProvider</h3>
 <p><strong>Single active impl, ServiceLoader + priority.</strong> Returns the live <code>TransactionManager</code>. Default impl looks up the TM via JNDI under a set of well-known names (jta-module's <code>JndiArtifactBinder</code> publishes the TM under those names at startup). Override to short-circuit the JNDI lookup &mdash; useful when you want to share one TM across multiple jawelte test runs or feed in a pre-configured TM with custom timeouts, recovery managers, or interceptors.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jta-module/04 · transaction-manager-provider</span><a href="../listings/jta-module/04-transaction-manager-provider/">listings/jta-module/04-transaction-manager-provider/</a></div>
+<pre><span class="cm">// src/test/java/example/tmprovider/RecordingTransactionManagerProvider.java</span>
+<span class="an">@Priority</span>(<span class="kw">1</span>)
+<span class="kw">public class</span> <span class="ty">RecordingTransactionManagerProvider</span> <span class="kw">implements</span> <span class="ty">TransactionManagerProvider</span> {
+
+    <span class="kw">public static final</span> <span class="ty">AtomicInteger</span> CREATE_COUNT = <span class="kw">new</span> <span class="ty">AtomicInteger</span>();
+
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">String</span> name() { <span class="kw">return</span> <span class="st">"recording-geronimo"</span>; }
+
+    <span class="an">@Override</span>
+    <span class="kw">public boolean</span> isAvailable() {
+        <span class="kw">return</span> loadable(<span class="st">"org.apache.geronimo.transaction.manager.GeronimoTransactionManager"</span>);
+    }
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">TransactionManager</span> create() {
+        CREATE_COUNT.incrementAndGet();
+        <span class="cm">// build / cache Geronimo's TM via reflection (see listing source for the full impl)</span>
+        ...
+    }
+
+    <span class="cm">// userTransaction(), transactionSynchronizationRegistry(), shutdown() implemented the same way</span>
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.module.jta.api.port.TransactionManagerProvider</span>
+example.tmprovider.RecordingTransactionManagerProvider</pre>
+</div>
+
+<p>The default <code>AutoSelectTransactionManagerProvider</code> carries <code>@Priority(Integer.MAX_VALUE)</code>; <code>@Priority(1)</code> on the custom impl wins the sort and becomes the active provider. The test injects <code>UserTransaction</code>, calls <code>begin/commit</code>, then asserts <code>CREATE_COUNT &gt; 0</code> &mdash; proof that the custom <code>create()</code> was invoked.</p>
 
 <p>Everything else jta-module adds (the <code>JtaTransactionStrategy</code> itself, the JNDI binder, the persistence-property override that switches Hibernate to JTA mode) is internal &mdash; the user-facing customization knob is the TM choice plus this one port.</p>
 

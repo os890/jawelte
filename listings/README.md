@@ -62,7 +62,7 @@ global renumbering, no shifting of unrelated listings.
 | `core/` | `01-hello-world`, `02-auto-mock`, `03-test-bean-alternative`, `04-test-bean-static-field`, `05-config-bean`, `06-limit-to-test-beans`, `07-external-container`, `08-test-bean-producer`, `09-test-bean-meta-annotation`, `10-test-context-metadata`, `11-before-scope-observer`, `12-container-started`, `13-lifecycle-port`, `14-bean-scope-mapper`, `15-config-resolver`, `16-priority-resolver`, `17-test-bean-qualified`, `18-config-bean-multi-key`, `19-test-instance-factory`, `20-config-key-alias-provider` | `docs/core.html` |
 | `scope-module/` | `01-test-method-scoped`, `02-test-class-scoped`, `03-pre-destroy-callback`, `04-session-scoped-remap` | `docs/scope-module.html` |
 | `jpa-module/` | `01-hello-world`, `02-multi-pu`, `03-readonly`, `04-transaction-events`, `05-table-name-resolver` | `docs/jpa-module.html` |
-| `jta-module/` | `01-hello-world` | `docs/jta-module.html` |
+| `jta-module/` | `01-hello-world`, `02-user-transaction`, `03-transaction-scoped-bean`, `04-transaction-manager-provider` | `docs/jta-module.html` |
 | `ejb-module/` | `01-singleton` | `docs/ejb-module.html` |
 | `jaxrs-module/` | `01-hello-world` | `docs/jaxrs-module.html` |
 | `testcontrol-module/` | `01-hello-world` | `docs/testcontrol-module.html` |
