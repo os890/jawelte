@@ -15,48 +15,31 @@
  */
 package example.wiremock;
 
-import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
-import static com.github.tomakehurst.wiremock.client.WireMock.get;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
-
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.module.wiremock.api.EnableWireMock;
 
-import com.github.tomakehurst.wiremock.WireMockServer;
-import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 
+/**
+ * Minimal wiremock-module usage: @EnableWireMock boots a server,
+ * the test injects WireMockRuntimeInfo and reads the live port / base
+ * URL off it. Stub registration and HTTP calls are not needed for the
+ * hello-world — the metadata bean is the smallest proof that the
+ * container + producer wiring is in place.
+ */
 @EnableWireMock
 class HelloWireMockTest {
 
     @Inject
-    private WireMockServer server;
-
-    @Inject
-    private WireMock stubs;
+    private WireMockRuntimeInfo runtimeInfo;
 
     @Test
-    void getReturnsStubbedBody() throws Exception {
-        stubs.register(get(urlEqualTo("/hello"))
-                .willReturn(aResponse().withStatus(200).withBody("hi")));
-
-        HttpResponse<String> response;
-        try (HttpClient client = HttpClient.newHttpClient()) {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(server.baseUrl() + "/hello"))
-                    .GET()
-                    .build();
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        }
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).isEqualTo("hi");
+    void runtimeInfoIsInjectedWithALiveBaseUrlAndPort() {
+        assertThat(runtimeInfo.getHttpPort()).isPositive();
+        assertThat(runtimeInfo.getHttpBaseUrl()).startsWith("http://localhost:");
     }
 }

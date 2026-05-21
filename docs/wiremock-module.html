@@ -130,7 +130,7 @@
 <p>The standard WireMock setup &mdash; build a <code>WireMockServer</code>, start it in <code>@BeforeAll</code>, stop it in <code>@AfterAll</code>, reset stubs in <code>@BeforeEach</code>, propagate the port to the system under test &mdash; is the same scaffolding every time. wiremock-module collapses it into one annotation: <code>@EnableWireMock</code> handles the lifecycle, a CDI producer injects the server / stub-registration client, the lifecycle adapter resets stubs between test methods.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
-<p>One annotation on the test class, two <code>@Inject</code> fields, a real HTTP round-trip in the test body.</p>
+<p>One annotation on the test class, one <code>@Inject WireMockRuntimeInfo</code> field. The runtime-info bean is WireMock's read-only metadata handle &mdash; live port, base URL, recorded request log. Injecting it is the smallest proof that <code>@EnableWireMock</code> actually booted the server.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing wiremock-module/01 &middot; hello-world</span><a href="../listings/wiremock-module/01-hello-world/">listings/wiremock-module/01-hello-world/</a></div>
@@ -139,32 +139,34 @@
 <span class="kw">class</span> <span class="ty">HelloWireMockTest</span> {
 
     <span class="an">@Inject</span>
-    <span class="ty">WireMockServer</span> server;
-
-    <span class="an">@Inject</span>
-    <span class="ty">WireMock</span> stubs;
+    <span class="ty">WireMockRuntimeInfo</span> runtimeInfo;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> getReturnsStubbedBody() <span class="kw">throws</span> <span class="ty">Exception</span> {
-        stubs.register(get(urlEqualTo(<span class="st">"/hello"</span>))
-                .willReturn(aResponse().withStatus(200).withBody(<span class="st">"hi"</span>)));
-
-        <span class="ty">HttpResponse</span>&lt;<span class="ty">String</span>&gt; response;
-        <span class="kw">try</span> (<span class="ty">HttpClient</span> client = <span class="ty">HttpClient</span>.newHttpClient()) {
-            <span class="ty">HttpRequest</span> request = <span class="ty">HttpRequest</span>.newBuilder()
-                    .uri(<span class="ty">URI</span>.create(server.baseUrl() + <span class="st">"/hello"</span>))
-                    .GET()
-                    .build();
-            response = client.send(request, <span class="ty">HttpResponse</span>.<span class="ty">BodyHandlers</span>.ofString());
-        }
-
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.body()).isEqualTo(<span class="st">"hi"</span>);
+    <span class="kw">void</span> runtimeInfoIsInjectedWithALiveBaseUrlAndPort() {
+        assertThat(runtimeInfo.getHttpPort()).isPositive();
+        assertThat(runtimeInfo.getHttpBaseUrl()).startsWith(<span class="st">"http://localhost:"</span>);
     }
 }</pre>
 </div>
 
 <p><code>@EnableWireMock</code> is meta-annotated <code>@EnableTestBeans</code>, so the test class doesn't need to write both annotations. The default OS-assigned port comes from the implicit no-qualifier endpoint.</p>
+
+<p>The injectable beans the module exposes are <code>WireMockRuntimeInfo</code> (metadata, used above), <code>WireMockServer</code> (the full server handle), and <code>WireMock</code> (the stub-registration client). A typical test stubs an upstream with <code>@Inject WireMock</code>, then calls it via the JDK <code>HttpClient</code> using the base URL from <code>WireMockRuntimeInfo</code>:</p>
+
+<pre><span class="an">@Inject</span> <span class="ty">WireMockRuntimeInfo</span> runtimeInfo;
+<span class="an">@Inject</span> <span class="ty">WireMock</span> stubs;
+
+<span class="an">@Test</span>
+<span class="kw">void</span> stubAndCall() <span class="kw">throws</span> <span class="ty">Exception</span> {
+    stubs.register(get(urlEqualTo(<span class="st">"/hello"</span>)).willReturn(aResponse().withStatus(200).withBody(<span class="st">"hi"</span>)));
+
+    <span class="kw">try</span> (<span class="ty">HttpClient</span> client = <span class="ty">HttpClient</span>.newHttpClient()) {
+        <span class="ty">HttpResponse</span>&lt;<span class="ty">String</span>&gt; response = client.send(
+                <span class="ty">HttpRequest</span>.newBuilder().uri(<span class="ty">URI</span>.create(runtimeInfo.getHttpBaseUrl() + <span class="st">"/hello"</span>)).GET().build(),
+                <span class="ty">HttpResponse</span>.<span class="ty">BodyHandlers</span>.ofString());
+        assertThat(response.body()).isEqualTo(<span class="st">"hi"</span>);
+    }
+}</pre>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
 <p>wiremock-module's api / impl plus the standard CDI runtime (cdi-module + scope-module). The WireMock library itself is brought in transitively via <code>jawelte-wiremock-module-impl</code> &mdash; no need to add the upstream dep yourself.</p>

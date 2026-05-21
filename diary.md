@@ -6637,3 +6637,7 @@ The previous content-diff hello-world packed three test methods (equal-passes / 
 - `content-diff-module/03-ignoring-pattern/` — `ignoring("$.audit.timestamp")` skips a noisy field.
 
 Each listing has its own pom.xml (artifactIds `jawelte-listing-content-diff-module-01-hello-world` etc.); the per-module aggregator `listings/content-diff-module/pom.xml` lists all three. `docs/content-diff-module.html` quick-start now shows the minimal happy-path snippet, with two follow-up code blocks pointing at the dedicated listings for the failure and ignoring scenarios. `listings/README.md` Layout table now lists the three listings under `content-diff-module/`.
+
+## 2026-05-21 — revised wiremock-module hello-world
+
+Previous hello-world had the full "stub registration + JDK HttpClient round-trip" shape — useful but not minimal. Replaced with the smallest case: inject `WireMockRuntimeInfo` and read the live port / base URL off it. That's enough to prove `@EnableWireMock` actually booted the server. The full stub+HTTP example moved to a follow-up snippet in the doc page's quick-start so users still see how to do the typical test, just not as the headline. Both OWB and Weld profiles pass.
