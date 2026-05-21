@@ -18,6 +18,9 @@ package example.jaxrs;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 import jakarta.inject.Inject;
 
@@ -34,11 +37,17 @@ class HelloResourceTest {
     TestUrl testUrl;
 
     @Test
-    void serverBootedOnOsAssignedPort() {
-        String baseUrl = testUrl.get();
-        URI uri = URI.create(baseUrl);
-        assertThat(uri.getScheme()).isEqualTo("http");
-        assertThat(uri.getHost()).isEqualTo("localhost");
-        assertThat(uri.getPort()).isPositive();
+    void getHelloReturnsTheStubbedBody() throws Exception {
+        HttpResponse<String> response;
+        try (HttpClient client = HttpClient.newHttpClient()) {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(testUrl.get() + "/hello"))
+                    .GET()
+                    .build();
+            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        }
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).isEqualTo("hello, jaxrs-module");
     }
 }

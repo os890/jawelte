@@ -152,16 +152,23 @@
     <span class="ty">TestUrl</span> testUrl;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> serverBootedOnOsAssignedPort() {
-        <span class="ty">URI</span> uri = <span class="ty">URI</span>.create(testUrl.get());
-        assertThat(uri.getScheme()).isEqualTo(<span class="st">"http"</span>);
-        assertThat(uri.getHost()).isEqualTo(<span class="st">"localhost"</span>);
-        assertThat(uri.getPort()).isPositive();
+    <span class="kw">void</span> getHelloReturnsTheStubbedBody() <span class="kw">throws</span> <span class="ty">Exception</span> {
+        <span class="ty">HttpResponse</span>&lt;<span class="ty">String</span>&gt; response;
+        <span class="kw">try</span> (<span class="ty">HttpClient</span> client = <span class="ty">HttpClient</span>.newHttpClient()) {
+            <span class="ty">HttpRequest</span> request = <span class="ty">HttpRequest</span>.newBuilder()
+                    .uri(<span class="ty">URI</span>.create(testUrl.get() + <span class="st">"/hello"</span>))
+                    .GET()
+                    .build();
+            response = client.send(request, <span class="ty">HttpResponse</span>.<span class="ty">BodyHandlers</span>.ofString());
+        }
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).isEqualTo(<span class="st">"hello, jaxrs-module"</span>);
     }
 }</pre>
 </div>
 
-<p>The listing's assertion only verifies the bootstrap (URL populated, port assigned). Real-world tests pair this with an HTTP client (JDK's <code>HttpClient</code>, JAX-RS's own <code>ClientBuilder</code>, any other) to actually hit <code>testUrl.get() + "/hello"</code> and assert on the response.</p>
+<p><code>testUrl.get()</code> returns the live <code>http://localhost:{port}</code> base URL the embedded server bound to. Concatenated with the resource's <code>@Path</code> it forms the request URI for any HTTP client (JDK's <code>HttpClient</code> here; JAX-RS's own <code>ClientBuilder</code> or another library works the same way).</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
 <p>jaxrs-module's api / impl, jakarta.ws.rs-api, and a JAX-RS implementation. CXF here; RESTEasy works equally well.</p>

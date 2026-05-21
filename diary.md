@@ -6607,3 +6607,7 @@ Mechanical changes:
 Replaced the old SPI-lookup smoke test (asserting `TransactionStrategy.getClass().getSimpleName() == "JtaTransactionStrategy"`) with a user-facing example: a `Customer` entity, an `@ApplicationScoped CustomerService` with two `@Transactional` methods, a `persistence.xml` declaring `transaction-type="JTA"` plus explicit H2 config, and a `CustomerServiceTest` whose test method is deliberately **not** `@Transactional` — the transaction lives inside the service, exactly as in production. Both OWB and Weld profiles pass.
 
 Updated `docs/jta-module.html` quick-start section to show the new shape (entity + @Transactional service + JTA persistence.xml) and a follow-up paragraph noting that the user-facing code shape is identical to jpa-module's hello-world; the only visible differences are the `transaction-type` attribute and the dependency list.
+
+## 2026-05-21 — revised jaxrs-module hello-world
+
+Replaced the bootstrap-only assertion (`testUrl.get()` returns `http://localhost:<port>`) with a real HTTP round-trip: JDK `HttpClient` GETs `testUrl.get() + "/hello"`, the test asserts status 200 and body "hello, jaxrs-module". Updated `docs/jaxrs-module.html` quick-start snippet to match. Both OWB and Weld profiles pass.
