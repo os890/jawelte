@@ -38,5 +38,6 @@
 
     <modules>
         <module>01-hello-world</module>
+        <module>02-stub-and-call</module>
     </modules>
 </project>

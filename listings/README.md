@@ -68,7 +68,7 @@ global renumbering, no shifting of unrelated listings.
 | `testcontrol-module/` | `01-hello-world`, `02-update-phase`, `03-testdata-basepath`, `04-multi-pu-routing` | `docs/testcontrol-module.html` |
 | `db-testdata-module/` | `01-hello-world`, `02-seed-modes`, `03-dbdiff-ignoring`, `04-el-interpolation` | `docs/db-testdata-module.html` |
 | `content-diff-module/` | `01-hello-world`, `02-mismatch`, `03-ignoring-pattern` | `docs/content-diff-module.html` |
-| `wiremock-module/` | `01-hello-world` | `docs/wiremock-module.html` |
+| `wiremock-module/` | `01-hello-world`, `02-stub-and-call` | `docs/wiremock-module.html` |
 | `spring-data-module/` | `01-hello-world` | `docs/spring-data-module.html` |
 | `batch-module/` | `01-hello-world` | `docs/batch-module.html` |
 

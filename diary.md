@@ -6747,3 +6747,9 @@ db-testdata-module up to 4 listings (was 1). Added:
 - `04-el-interpolation` — `dbIn.xml` carries `${customerId}` / `${customerName}` placeholders. `DbSeed.withValues(Map.of(...))` resolves them at seed-time. Adds jakarta.el-api + tomcat-embed-el to the listing's test classpath.
 
 Doc snippets added in §2.1 (seed modes), §2.2 (DbDiff ignoring), §2.4 (EL interpolation). §3 SPI section unchanged.
+
+## 2026-05-21 — docs/wiremock-module.html: one follow-up listing
+
+wiremock-module up to 2 listings (was 1). Added `02-stub-and-call` — the full stub-registration + JDK-HttpClient round-trip pattern that was previously an inline snippet without a backing listing.
+
+Attempted a `03-multi-endpoint` listing demonstrating two `@WireMockEndpoint` qualifiers. Hit a CDI AmbiguousResolutionException — for each qualified type, wiremock-module's CDI extension registered two synthetic beans (one with `[QualifierAnnotation, Any]`, one with `[Default, QualifierAnnotation, Any]`). The same pattern works in the project's own scenario tests (scenario-04 / scenario-05). Couldn't isolate the cause in time, so dropped the listing scaffold. The existing inline snippets in docs §2.2 / §2.3 still demonstrate the @WireMockEndpoint qualifier pattern and the @Priority implicit-default mechanic without a backing listing.
