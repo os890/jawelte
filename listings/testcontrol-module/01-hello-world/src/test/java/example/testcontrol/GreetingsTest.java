@@ -15,27 +15,24 @@
  */
 package example.testcontrol;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import jakarta.inject.Inject;
-
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.testcontrol.api.TestControl;
 
+/**
+ * Simplest @TestControl usage: name a testdata folder that contains
+ * both dbIn/ (seed) and dbExpected/ (verify). testcontrol-module
+ * clean-inserts dbIn before the test method, then runs DbDiff against
+ * dbExpected after — the test method itself needs no assertion, the
+ * framework does the verification.
+ */
 @EnableTestBeans
 @PersistenceConfig(persistenceUnitName = "greetingsPU")
 class GreetingsTest {
 
-    @Inject
-    private GreetingCountService greetingCountService;
-
     @Test
-    @TestControl(testData = "testdata/greetings", requireDbExpected = false)
-    void dbInSeedsGreetingRowsBeforeTestMethod() {
-        assertThat(greetingCountService.countGreetings())
-                .as("dbIn/greetings.xml seeded 2 GREETING rows by testcontrol's beforeEach")
-                .isEqualTo(2);
+    @TestControl(testData = "testdata/greetings")
+    void seedFromDbInAndVerifyAgainstDbExpected() {
     }
 }

@@ -131,11 +131,17 @@
 <p>Most test-fixture work is the same three steps: load some rows into the database, run the test method, assert the resulting rows match an expected dataset. Repeating that scaffolding across every test method makes the test class noisy and the actual assertion hard to spot. <code>@TestControl(testData = "...")</code> takes the entire pipeline &mdash; seed &rarr; update &rarr; commit &rarr; verify &mdash; and runs it from one classpath folder, so the test method body holds only the assertion that's specific to the method.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
-<p>One test method, one annotation, one folder. <code>testdata/greetings/dbIn/greetings.xml</code> seeds two <code>GREETING</code> rows before the method body runs; the method body counts them.</p>
+<p>One annotation, one folder, two XML files. <code>dbIn/greetings.xml</code> clean-inserts the seed rows before the test method; <code>dbExpected/greetings.xml</code> is asserted against the live DB after. The test method body itself can be empty &mdash; the framework runs both halves.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing testcontrol-module/01 &middot; hello-world</span><a href="../listings/testcontrol-module/01-hello-world/">listings/testcontrol-module/01-hello-world/</a></div>
 <pre><span class="cm">// src/test/resources/testdata/greetings/dbIn/greetings.xml</span>
+&lt;dataset&gt;
+    &lt;<span class="ty">GREETING</span> ID=<span class="st">"1"</span> TEXT=<span class="st">"hello"</span>/&gt;
+    &lt;<span class="ty">GREETING</span> ID=<span class="st">"2"</span> TEXT=<span class="st">"hi"</span>/&gt;
+&lt;/dataset&gt;
+
+<span class="cm">// src/test/resources/testdata/greetings/dbExpected/greetings.xml</span>
 &lt;dataset&gt;
     &lt;<span class="ty">GREETING</span> ID=<span class="st">"1"</span> TEXT=<span class="st">"hello"</span>/&gt;
     &lt;<span class="ty">GREETING</span> ID=<span class="st">"2"</span> TEXT=<span class="st">"hi"</span>/&gt;
@@ -146,18 +152,14 @@
 <span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"greetingsPU"</span>)
 <span class="kw">class</span> <span class="ty">GreetingsTest</span> {
 
-    <span class="an">@Inject</span>
-    <span class="ty">GreetingCountService</span> greetingCountService;
-
     <span class="an">@Test</span>
-    <span class="an">@TestControl</span>(testData = <span class="st">"testdata/greetings"</span>, requireDbExpected = <span class="kw">false</span>)
-    <span class="kw">void</span> dbInSeedsGreetingRowsBeforeTestMethod() {
-        assertThat(greetingCountService.countGreetings()).isEqualTo(2);
+    <span class="an">@TestControl</span>(testData = <span class="st">"testdata/greetings"</span>)
+    <span class="kw">void</span> seedFromDbInAndVerifyAgainstDbExpected() {
     }
 }</pre>
 </div>
 
-<p>The <code>requireDbExpected = false</code> opt-out exists because this method only seeds; the default <code>true</code> would require a <code>dbExpected/</code> dataset under <code>testdata/greetings/</code> to guard against forgetting the assertion side.</p>
+<p>The test method body is empty &mdash; testcontrol seeds from <code>dbIn/</code> in <code>beforeEach</code> and runs <code>DbDiff</code> against <code>dbExpected/</code> in <code>afterEach</code>. The shape generalises: change the test method body to exercise the system under test, change <code>dbExpected/</code> to the post-condition you want to assert.</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
 <p>testcontrol-module is a meta-module: by itself it manipulates the lifecycle, but it relies on companion modules for the actual seeding (db-testdata-module) and persistence (jpa-module). All three are usually on the classpath together.</p>

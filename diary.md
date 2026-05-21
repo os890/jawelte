@@ -6611,3 +6611,11 @@ Updated `docs/jta-module.html` quick-start section to show the new shape (entity
 ## 2026-05-21 — revised jaxrs-module hello-world
 
 Replaced the bootstrap-only assertion (`testUrl.get()` returns `http://localhost:<port>`) with a real HTTP round-trip: JDK `HttpClient` GETs `testUrl.get() + "/hello"`, the test asserts status 200 and body "hello, jaxrs-module". Updated `docs/jaxrs-module.html` quick-start snippet to match. Both OWB and Weld profiles pass.
+
+## 2026-05-21 — revised testcontrol-module hello-world
+
+Previous version was the more specific path: `@TestControl(testData = "...", requireDbExpected = false)` (opt-out of the verify guard) plus a `GreetingCountService` doing a manual count assertion. That demonstrated the seed-only mode, not the simplest case.
+
+New version drops the opt-out and the count service: just `@TestControl(testData = "testdata/greetings")`, both `dbIn/greetings.xml` and `dbExpected/greetings.xml` under the folder, an empty test method body. testcontrol seeds from `dbIn/` in beforeEach and runs `DbDiff` against `dbExpected/` in afterEach — the framework does the verification, the test body is just a placeholder waiting to exercise the SUT.
+
+`docs/testcontrol-module.html` quick-start snippet updated to match (both XML files shown side-by-side, no requireDbExpected attribute, no service).
