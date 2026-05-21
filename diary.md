@@ -6619,3 +6619,11 @@ Previous version was the more specific path: `@TestControl(testData = "...", req
 New version drops the opt-out and the count service: just `@TestControl(testData = "testdata/greetings")`, both `dbIn/greetings.xml` and `dbExpected/greetings.xml` under the folder, an empty test method body. testcontrol seeds from `dbIn/` in beforeEach and runs `DbDiff` against `dbExpected/` in afterEach — the framework does the verification, the test body is just a placeholder waiting to exercise the SUT.
 
 `docs/testcontrol-module.html` quick-start snippet updated to match (both XML files shown side-by-side, no requireDbExpected attribute, no service).
+
+## 2026-05-21 — listing dependency scopes normalized
+
+Swept all 28 listing poms to enforce two project-wide scope rules:
+- `org.os890.jawelte:jawelte-*-api` → `<scope>test</scope>` (jawelte is a test framework; production code should never transitively depend on it)
+- Any `jakarta.*` API jar → `<scope>provided</scope>` (the runtime jar — openwebbeans-se, weld-se-shaded, hibernate-core, etc. — brings the Jakarta APIs in transitively; declaring them `provided` keeps them out of any artifact a user might produce from copying a listing)
+
+139 scope adjustments across 28 poms. `mvn -f listings/pom.xml test` still 28/28 green (20.5 s total).

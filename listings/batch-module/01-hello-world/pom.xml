@@ -60,6 +60,7 @@
             <groupId>org.os890.jawelte</groupId>
             <artifactId>jawelte-core-api</artifactId>
             <version>${jawelte.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.os890.jawelte</groupId>
@@ -84,6 +85,7 @@
             <groupId>org.os890.jawelte</groupId>
             <artifactId>jawelte-batch-module-api</artifactId>
             <version>${jawelte.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.os890.jawelte</groupId>
@@ -96,21 +98,25 @@
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
             <version>${jakarta.cdi.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>jakarta.inject</groupId>
             <artifactId>jakarta.inject-api</artifactId>
             <version>${jakarta.inject.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
             <version>${jakarta.annotation.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>jakarta.batch</groupId>
             <artifactId>jakarta.batch-api</artifactId>
             <version>${jakarta.batch.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <dependency>
