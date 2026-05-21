@@ -38,5 +38,8 @@
 
     <modules>
         <module>01-hello-world</module>
+        <module>02-derived-query</module>
+        <module>03-no-repository-bean</module>
+        <module>04-user-produces-backoff</module>
     </modules>
 </project>

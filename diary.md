@@ -6753,3 +6753,12 @@ Doc snippets added in §2.1 (seed modes), §2.2 (DbDiff ignoring), §2.4 (EL int
 wiremock-module up to 2 listings (was 1). Added `02-stub-and-call` — the full stub-registration + JDK-HttpClient round-trip pattern that was previously an inline snippet without a backing listing.
 
 Attempted a `03-multi-endpoint` listing demonstrating two `@WireMockEndpoint` qualifiers. Hit a CDI AmbiguousResolutionException — for each qualified type, wiremock-module's CDI extension registered two synthetic beans (one with `[QualifierAnnotation, Any]`, one with `[Default, QualifierAnnotation, Any]`). The same pattern works in the project's own scenario tests (scenario-04 / scenario-05). Couldn't isolate the cause in time, so dropped the listing scaffold. The existing inline snippets in docs §2.2 / §2.3 still demonstrate the @WireMockEndpoint qualifier pattern and the @Priority implicit-default mechanic without a backing listing.
+
+## 2026-05-21 — docs/spring-data-module.html: three follow-up listings
+
+spring-data-module up to 4 listings (was 1). Added:
+- `02-derived-query` — `findByName(String)` and `findByNameStartingWith(String)` auto-derived methods; no JPQL written. Verifies the synthetic bean IS the real Spring Data impl.
+- `03-no-repository-bean` — `@NoRepositoryBean` on a shared `AuditableRepository<T extends Auditable, ID>` base; concrete `CustomerRepository extends AuditableRepository<Customer, Long>` is injectable, the base isn't.
+- `04-user-produces-backoff` — `@Produces CustomerRepository` returning a JDK proxy that records the method name; the proxy serves the injection instead of spring-data-module's synthetic bean. Uses InvocationHandler (matches scenario-08's pattern; Mockito wasn't recognized by spring-data-module's back-off detection in standalone-pom form).
+
+Doc snippets added in §2.1 (derived queries), §2.2 (@NoRepositoryBean), §2.3 (@Produces back-off).

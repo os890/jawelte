@@ -193,18 +193,89 @@
 </ol>
 <p>The synthetic bean's types are exactly the discovered interface + <code>Object</code>. Framework super-interfaces (<code>JpaRepository</code>, <code>CrudRepository</code>, &hellip;) are <em>not</em> added as bean types, so the synthetic beans never compete on framework super-types when multiple repositories ship together.</p>
 
-<h2 id="dt-norepo">2.2 @NoRepositoryBean opt-out</h2>
-<p>An interface annotated <code>@org.springframework.data.repository.NoRepositoryBean</code> is excluded from discovery. Use this for shared base interfaces:</p>
-<pre>@NoRepositoryBean
-public interface AuditableRepository&lt;T extends Auditable, ID&gt; extends JpaRepository&lt;T, ID&gt; {
-    List&lt;T&gt; findAllCreatedAfter(Instant cutoff);
+<h3>derived query methods</h3>
+<p>The synthetic bean is the real Spring Data implementation, so all of Spring Data's query-derivation features are available &mdash; <code>findByName(String)</code>, <code>findByNameStartingWith(String)</code>, paged results, custom <code>@Query</code> JPQL/native, etc. The repository interface is the query DSL.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing spring-data-module/02 · derived-query</span><a href="../listings/spring-data-module/02-derived-query/">listings/spring-data-module/02-derived-query/</a></div>
+<pre><span class="cm">// src/test/java/example/derivedquery/CustomerRepository.java</span>
+<span class="kw">public interface</span> <span class="ty">CustomerRepository</span> <span class="kw">extends</span> <span class="ty">JpaRepository</span>&lt;<span class="ty">Customer</span>, <span class="ty">Long</span>&gt; {
+
+    <span class="ty">Optional</span>&lt;<span class="ty">Customer</span>&gt; findByName(<span class="ty">String</span> name);
+
+    <span class="ty">List</span>&lt;<span class="ty">Customer</span>&gt; findByNameStartingWith(<span class="ty">String</span> prefix);
 }
 
-public interface CustomerRepository extends AuditableRepository&lt;Customer, Long&gt; { }
-// CustomerRepository is auto-discovered; AuditableRepository is not.</pre>
+<span class="cm">// src/test/java/example/derivedquery/DerivedQueryTest.java</span>
+<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="kw">void</span> findByNameExecutesAGeneratedQuery() {
+    customerRepository.save(<span class="kw">new</span> <span class="ty">Customer</span>(<span class="st">"Alice"</span>));
+    customerRepository.save(<span class="kw">new</span> <span class="ty">Customer</span>(<span class="st">"Bob"</span>));
+    customerRepository.save(<span class="kw">new</span> <span class="ty">Customer</span>(<span class="st">"Charlie"</span>));
+
+    assertThat(customerRepository.findByName(<span class="st">"Bob"</span>))
+            .hasValueSatisfying(found -&gt; assertThat(found.getName()).isEqualTo(<span class="st">"Bob"</span>));
+
+    assertThat(customerRepository.findByNameStartingWith(<span class="st">"C"</span>))
+            .extracting(<span class="ty">Customer</span>::getName)
+            .containsExactly(<span class="st">"Charlie"</span>);
+}</pre>
+</div>
+
+<h2 id="dt-norepo">2.2 @NoRepositoryBean opt-out</h2>
+<p>An interface annotated <code>@org.springframework.data.repository.NoRepositoryBean</code> is excluded from discovery. Use this for shared base interfaces:</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing spring-data-module/03 · no-repository-bean</span><a href="../listings/spring-data-module/03-no-repository-bean/">listings/spring-data-module/03-no-repository-bean/</a></div>
+<pre><span class="cm">// src/test/java/example/norepo/AuditableRepository.java</span>
+<span class="an">@NoRepositoryBean</span>
+<span class="kw">public interface</span> <span class="ty">AuditableRepository</span>&lt;T <span class="kw">extends</span> <span class="ty">Auditable</span>, ID&gt; <span class="kw">extends</span> <span class="ty">JpaRepository</span>&lt;T, ID&gt; {
+    <span class="kw">long</span> countAll();
+}
+
+<span class="cm">// src/test/java/example/norepo/CustomerRepository.java</span>
+<span class="kw">public interface</span> <span class="ty">CustomerRepository</span> <span class="kw">extends</span> <span class="ty">AuditableRepository</span>&lt;<span class="ty">Customer</span>, <span class="ty">Long</span>&gt; {
+
+    <span class="an">@Override</span>
+    <span class="an">@Query</span>(<span class="st">"SELECT COUNT(c) FROM Customer c"</span>)
+    <span class="kw">long</span> countAll();
+}</pre>
+</div>
+
+<p>The concrete sub-interface (<code>CustomerRepository</code>) is auto-discovered and injectable. The base (<code>AuditableRepository</code>) is not &mdash; its only job is to share method signatures across multiple concrete repositories.</p>
 
 <h2 id="dt-backoff">2.3 user @Produces back-off</h2>
 <p>If your test code (or another module) declares <code>@Produces CustomerRepository</code> &mdash; perhaps a Mockito mock for a unit test, or a custom factory for a multi-PU scenario &mdash; the extension's <code>ProcessBean</code> pass observes that bean and the <code>AfterBeanDiscovery</code> pass skips the synthetic registration for that interface. The user's producer wins. There is no on/off switch; it's pure observation.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing spring-data-module/04 · user-produces-backoff</span><a href="../listings/spring-data-module/04-user-produces-backoff/">listings/spring-data-module/04-user-produces-backoff/</a></div>
+<pre><span class="cm">// src/test/java/example/producesbackoff/CustomerRepositoryProducer.java</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">CustomerRepositoryProducer</span> {
+
+    <span class="kw">public static final</span> <span class="ty">AtomicReference</span>&lt;<span class="ty">String</span>&gt; LAST_METHOD_CALLED = <span class="kw">new</span> <span class="ty">AtomicReference</span>&lt;&gt;();
+
+    <span class="an">@Produces</span>
+    <span class="an">@ApplicationScoped</span>
+    <span class="ty">CustomerRepository</span> produce() {
+        <span class="ty">InvocationHandler</span> handler = (proxy, method, args) -&gt; {
+            LAST_METHOD_CALLED.set(method.getName());
+            <span class="kw">return</span> method.getReturnType() == <span class="kw">long</span>.<span class="kw">class</span> ? 0L : <span class="kw">null</span>;
+        };
+        <span class="kw">return</span> (<span class="ty">CustomerRepository</span>) <span class="ty">Proxy</span>.newProxyInstance(
+                getClass().getClassLoader(),
+                <span class="kw">new</span> <span class="ty">Class</span>&lt;?&gt;[] {<span class="ty">CustomerRepository</span>.<span class="kw">class</span>},
+                handler);
+    }
+}
+
+<span class="cm">// src/test/java/example/producesbackoff/UserProducesBackoffTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> userProducerWinsOverSynthetic() {
+    customerRepository.count();
+    assertThat(<span class="ty">CustomerRepositoryProducer</span>.LAST_METHOD_CALLED.get()).isEqualTo(<span class="st">"count"</span>);
+}</pre>
+</div>
 
 <h2 id="dt-scope">2.4 @RequestScoped lifetime</h2>
 <p>The synthetic bean is <code>@RequestScoped</code>, which means consumers receive a CDI client proxy and the underlying <code>JpaRepositoryFactory</code> is materialised lazily on first method call &mdash; always inside a <code>@Transactional</code> or programmatic-transaction boundary where the EM proxy can resolve a live <code>EntityManager</code>.</p>
