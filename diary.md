@@ -6689,3 +6689,13 @@ Core page now has 20 listings across §1 quick-start, §2 detailed, and §3 SPI/
 scope-module now has 4 listings. Added `03-pre-destroy-callback` (proves @PreDestroy on a @TestMethodScoped bean fires at end of afterEach via a static AtomicInteger that the next method observes) and `04-session-scoped-remap` (a @SessionScoped UserPreferences bean is auto-remapped to @TestMethodScoped by scope-module's BeanScopeMapper — production source stays @SessionScoped, the test runtime sees method-scope without any test-side override). Both with @Order-pinned test methods + both passing on OWB and Weld.
 
 SPI section §3 already says the module ships no SPI of its own, so no listing there — extension is through core's BeanScopeMapper, already covered by core/14.
+
+## 2026-05-21 — docs/jpa-module.html: four follow-up listings
+
+jpa-module up to 5 listings (was 1). Added:
+- `02-multi-pu` — two PUs (notesPU + auditPU), @Inject @Named EMs + EMFs for each, one @Transactional method writes to both. Replaces the prior inline-only snippet in §2.4 with a real backing listing.
+- `03-readonly` — @Transactional @ReadOnly service: persist + flush succeed in-memory (id assigned), then rollback discards the row. The doc page now has a §2.2 snippet showing the discard pattern.
+- `04-transaction-events` — `TransactionAuditLog` observes Started/Committed/RolledBack; one test triggers a commit, another forces a rollback, both assert the timeline. Backs §2.5.
+- `05-table-name-resolver` — `SkipCleanupTableNameResolver` @Priority(1) returns an empty list; DbCleanupStrategy then has nothing to wipe, so data from method 1 survives into method 2. Backs §3 TableNameResolver port.
+
+One avoidable failure during 04: OWB rejects `public final` fields on @ApplicationScoped beans ("If bean has a public field, bean scope must be defined as @Scope"). Switched to a private field + `timeline()` accessor. Also added `@BeforeEach` reset since `@ApplicationScoped` accumulates across test methods.

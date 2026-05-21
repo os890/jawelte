@@ -38,5 +38,9 @@
 
     <modules>
         <module>01-hello-world</module>
+        <module>02-multi-pu</module>
+        <module>03-readonly</module>
+        <module>04-transaction-events</module>
+        <module>05-table-name-resolver</module>
     </modules>
 </project>

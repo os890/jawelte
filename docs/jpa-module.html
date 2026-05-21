@@ -260,6 +260,40 @@
 <h2 id="dt-readonly">2.2 @ReadOnly</h2>
 <p><code>@ReadOnly</code> on a <code>@Test</code> method (or the test class) marks the test as not-writing. jpa-module flushes nothing, skips the cleanup, and the active <code>TransactionStrategy</code> picks a connection mode tuned for reads. Useful for tests that genuinely don't mutate the DB &mdash; long-form report tests, regression checks against a shared fixture, etc.</p>
 
+<p>Combined with <code>@Transactional</code> on a service method, <code>@ReadOnly</code> also acts as a "discard everything" interceptor: the transaction is marked rollback-only before completion, so writes that happen inside the method are reverted on return. Useful for "what would happen if" probes that should not leave the DB mutated.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jpa-module/03 · readonly</span><a href="../listings/jpa-module/03-readonly/">listings/jpa-module/03-readonly/</a></div>
+<pre><span class="cm">// src/test/java/example/readonly/NoteService.java</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">NoteService</span> {
+
+    <span class="an">@Inject</span> <span class="ty">EntityManager</span> entityManager;
+
+    <span class="an">@Transactional</span>
+    <span class="an">@ReadOnly</span>
+    <span class="kw">public</span> <span class="ty">Long</span> tryToPersistButDiscard(<span class="ty">String</span> text) {
+        <span class="ty">Note</span> note = <span class="kw">new</span> <span class="ty">Note</span>(text);
+        entityManager.persist(note);
+        entityManager.flush();           <span class="cm">// id assigned in-memory</span>
+        <span class="kw">return</span> note.getId();
+    }
+
+    <span class="an">@Transactional</span>
+    <span class="kw">public long</span> count() {
+        <span class="kw">return</span> entityManager.createQuery(<span class="st">"SELECT COUNT(n) FROM Note n"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
+    }
+}
+
+<span class="cm">// src/test/java/example/readonly/ReadOnlyTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> readOnlyPersistIsDiscardedAfterCommit() {
+    <span class="ty">Long</span> assignedId = noteService.tryToPersistButDiscard(<span class="st">"transient"</span>);
+    assertThat(assignedId).isNotNull();                  <span class="cm">// persist+flush ran in-memory</span>
+    assertThat(noteService.count()).isEqualTo(0L);       <span class="cm">// rollback discarded the row</span>
+}</pre>
+</div>
+
 <h2 id="dt-tx-em">2.3 transactions &amp; the EntityManager</h2>
 <p>The <code>EntityManager</code> jawelte hands you via <code>@Inject</code> is a CDI proxy backed by the active <code>TransactionStrategy</code> (default <code>RESOURCE_LOCAL</code>; jta-module switches to JTA via <code>@Priority</code>). The strategy's lifecycle is per-transaction:</p>
 <ul>
@@ -279,7 +313,7 @@
 <p>The canonical CDI form. Inject either the <code>EntityManager</code> or its <code>EntityManagerFactory</code> for a specific PU by adding <code>@Named(puName)</code> next to <code>@Inject</code>.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">multi-PU @Named injection</span></div>
+  <div class="listing-bar"><span class="label">listing jpa-module/02 · multi-pu</span><a href="../listings/jpa-module/02-multi-pu/">listings/jpa-module/02-multi-pu/</a></div>
 <pre><span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">OrdersAndCustomersTest</span> {
 
@@ -335,6 +369,42 @@
 </ul>
 <p>All four extend <code>PersistenceUnitTransactionEvent</code> so an observer that wants to react to "any transaction completion" can listen to the supertype.</p>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jpa-module/04 · transaction-events</span><a href="../listings/jpa-module/04-transaction-events/">listings/jpa-module/04-transaction-events/</a></div>
+<pre><span class="cm">// src/test/java/example/txevents/TransactionAuditLog.java</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">TransactionAuditLog</span> {
+
+    <span class="kw">private final</span> <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; timeline = <span class="kw">new</span> <span class="ty">CopyOnWriteArrayList</span>&lt;&gt;();
+    <span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; timeline() { <span class="kw">return</span> timeline; }
+
+    <span class="kw">void</span> onStart(<span class="an">@Observes</span> <span class="ty">TransactionStarted</span> event) {
+        timeline.add(<span class="st">"start:"</span> + event.getPersistenceUnitName());
+    }
+
+    <span class="kw">void</span> onCommit(<span class="an">@Observes</span> <span class="ty">TransactionCommitted</span> event) {
+        timeline.add(<span class="st">"commit:"</span> + event.getPersistenceUnitName());
+    }
+
+    <span class="kw">void</span> onRollback(<span class="an">@Observes</span> <span class="ty">TransactionRolledBack</span> event) {
+        timeline.add(<span class="st">"rollback:"</span> + event.getPersistenceUnitName());
+    }
+}
+
+<span class="cm">// src/test/java/example/txevents/TransactionEventsTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> successfulTransactionFiresStartAndCommit() {
+    noteService.persistNote(<span class="st">"hi"</span>);
+    assertThat(auditLog.timeline()).containsExactly(<span class="st">"start:notesPU"</span>, <span class="st">"commit:notesPU"</span>);
+}
+
+<span class="an">@Test</span>
+<span class="kw">void</span> failedTransactionFiresStartAndRollback() {
+    <span class="kw">try</span> { noteService.persistThenRollback(<span class="st">"oops"</span>); } <span class="kw">catch</span> (<span class="ty">RuntimeException</span> expected) { }
+    assertThat(auditLog.timeline()).containsExactly(<span class="st">"start:notesPU"</span>, <span class="st">"rollback:notesPU"</span>);
+}</pre>
+</div>
+
 <h2 id="dt-emf-cache">2.6 EmfCache</h2>
 <p>The <code>EntityManagerFactory</code> bootstrap is heavy (schema generation, metamodel build, connection-pool warm-up). Repeating it per test class would make a test suite of 200 classes take minutes longer than necessary. <code>EmfCache</code> stores the factories in a <code>ConcurrentHashMap&lt;String, EntityManagerFactory&gt;</code> keyed by PU name; the second test class to ask for <code>notesPU</code> reuses the first class's factory.</p>
 <p>Cleanup is via a JVM shutdown hook registered on first use &mdash; every cached factory is closed in its own try/catch with WARN-level logs on failure. There's no explicit teardown API; the cache lives until the JVM exits.</p>
@@ -350,6 +420,26 @@
 <p>Drives the inter-method table wipe in in-memory mode. Default impl does <code>TRUNCATE TABLE</code> on every entity table the <code>EntityScanner</code> discovered, in reverse foreign-key order. Replace it for vendor-specific cleanup, soft-delete patterns, or to keep cleanup off for a specific PU.</p>
 
 <h3>TableNameResolver</h3>
+<p>Returns the list of database table names <code>DbCleanupStrategy</code> should wipe between methods. Default impl walks <code>INFORMATION_SCHEMA.TABLES</code> for the <code>PUBLIC</code> schema. Override to filter (exclude audit / lookup tables that shouldn't reset between methods) or to inject a custom-curated list.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing jpa-module/05 · table-name-resolver</span><a href="../listings/jpa-module/05-table-name-resolver/">listings/jpa-module/05-table-name-resolver/</a></div>
+<pre><span class="cm">// src/test/java/example/tableresolver/SkipCleanupTableNameResolver.java</span>
+<span class="an">@Priority</span>(<span class="kw">1</span>)
+<span class="kw">public class</span> <span class="ty">SkipCleanupTableNameResolver</span> <span class="kw">implements</span> <span class="ty">TableNameResolver</span> {
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; resolveTableNames(<span class="ty">String</span> persistenceUnitName,
+                                          <span class="ty">EntityManagerFactory</span> entityManagerFactory) {
+        <span class="kw">return</span> <span class="ty">List</span>.of();     <span class="cm">// nothing to wipe — data survives across methods</span>
+    }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.module.jpa.api.port.TableNameResolver</span>
+example.tableresolver.SkipCleanupTableNameResolver</pre>
+</div>
+
+<p>The default resolver carries no explicit <code>@Priority</code> (effective value <code>Integer.MAX_VALUE</code>); any registered alternative with a numerically-lower priority wins the <code>ServicePriorityResolver</code> sort and becomes the active impl.</p>
 <p>Maps an entity class to its physical SQL table name. Default impl reads <code>@Table</code> and Hibernate's implicit naming strategy; replace it when your project ships a custom <code>PhysicalNamingStrategy</code> the cleanup strategy needs to follow.</p>
 
 <h3>EntityScanner</h3>
