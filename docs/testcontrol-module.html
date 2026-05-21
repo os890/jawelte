@@ -212,10 +212,55 @@
 
 <p>Files within each sub-folder are processed in alphabetical order. Across multiple <code>testData</code> entries, all <code>dbIn/</code> phases complete before any <code>dbUpdate/</code> phase starts &mdash; same for <code>dbExpected/</code> after the method.</p>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing testcontrol-module/02 · update-phase</span><a href="../listings/testcontrol-module/02-update-phase/">listings/testcontrol-module/02-update-phase/</a></div>
+<pre><span class="cm">// src/test/resources/testdata/products/dbIn/products.xml</span>
+&lt;dataset&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"1"</span> NAME=<span class="st">"old-apple"</span>/&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"2"</span> NAME=<span class="st">"old-banana"</span>/&gt;
+&lt;/dataset&gt;
+
+<span class="cm">// src/test/resources/testdata/products/dbUpdate/products.xml</span>
+&lt;dataset&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"1"</span> NAME=<span class="st">"new-apple"</span>/&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"2"</span> NAME=<span class="st">"new-banana"</span>/&gt;
+&lt;/dataset&gt;
+
+<span class="cm">// src/test/resources/testdata/products/dbExpected/products.xml</span>
+&lt;dataset&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"1"</span> NAME=<span class="st">"new-apple"</span>/&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"2"</span> NAME=<span class="st">"new-banana"</span>/&gt;
+&lt;/dataset&gt;
+
+<span class="cm">// src/test/java/example/updatephase/ProductsTest.java</span>
+<span class="an">@Test</span>
+<span class="an">@TestControl</span>(testData = <span class="st">"testdata/products"</span>)
+<span class="kw">void</span> dbInThenDbUpdateThenVerifyAgainstDbExpected() {
+}</pre>
+</div>
+
+<p>The empty test-method body is intentional: dbIn seeds the "old" names, dbUpdate switches them to "new", dbExpected confirms the merged state. A real test would mutate further inside the method and the dbExpected would reflect those mutations on top.</p>
+
 <h2 id="dt-basepath">2.2 testDataBasePath + MP Config</h2>
 <p>When every test method in a class lives under a common prefix (e.g. <code>testdata/myclass/m01</code>, <code>m02</code>, …), set the prefix once via <code>@TestControl(testDataBasePath = "testdata/myclass")</code> and let each method name just the trailing slug.</p>
 
 <p>The MicroProfile Config key <code>org.os890.jawelte.module.testcontrol.api.TestControl.base-path</code> overrides the annotation when set to a non-empty value &mdash; useful for project-wide conventions like "all test data lives under <code>fixtures/</code>" without editing every test class.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing testcontrol-module/03 · testdata-basepath</span><a href="../listings/testcontrol-module/03-testdata-basepath/">listings/testcontrol-module/03-testdata-basepath/</a></div>
+<pre><span class="cm">// src/test/java/example/basepath/ItemsTest.java</span>
+<span class="an">@Test</span>
+<span class="an">@TestControl</span>(testDataBasePath = <span class="st">"fixtures"</span>, testData = <span class="st">"m01"</span>)
+<span class="kw">void</span> firstMethodReadsFixturesM01() {
+}
+
+<span class="an">@Test</span>
+<span class="an">@TestControl</span>(testDataBasePath = <span class="st">"fixtures"</span>, testData = <span class="st">"m02"</span>)
+<span class="kw">void</span> secondMethodReadsFixturesM02() {
+}</pre>
+</div>
+
+<p>Folder layout: <code>src/test/resources/fixtures/m01/{dbIn,dbExpected}/</code> and <code>fixtures/m02/{dbIn,dbExpected}/</code>. Per-method <code>testData</code> entries name just the trailing leaf; the basePath is applied as a prefix before the entry resolves.</p>
 
 <h2 id="dt-startscopes">2.3 startScopes &mdash; scope allow-list</h2>
 <p><code>startScopes = {TestMethodScoped.class, ...}</code> restricts which scope-module scopes get activated for the method. testcontrol observes scope-module's <code>BeforeScopeStarted</code> CDI event and vetoes the start of any scope not in the list. Container-managed scopes (<code>@RequestScoped</code>, JPA's <code>@TransactionScoped</code>) are never vetoed by this attribute &mdash; only scope-module-managed scopes participate.</p>
@@ -227,6 +272,26 @@
 
 <h2 id="dt-multipu">2.5 multi-PU routing</h2>
 <p>An entry can prefix the folder with a persistence-unit name to route it: <code>"orders:testdata/scenario08-orders"</code> sends the sub-folders to PU <code>orders</code>, while a bare <code>"testdata/scenario08-customers"</code> uses the default PU. Multiple entries in the same annotation may target different PUs &mdash; each phase runs against the entry's own PU.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing testcontrol-module/04 · multi-pu-routing</span><a href="../listings/testcontrol-module/04-multi-pu-routing/">listings/testcontrol-module/04-multi-pu-routing/</a></div>
+<pre><span class="cm">// persistence.xml declares customersPU and ordersPU.</span>
+
+<span class="cm">// src/test/java/example/multipu/MultiPuRoutingTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">MultiPuRoutingTest</span> {
+
+    <span class="an">@Test</span>
+    <span class="an">@TestControl</span>(testData = {
+            <span class="st">"customersPU:testdata/customers"</span>,
+            <span class="st">"ordersPU:testdata/orders"</span>
+    })
+    <span class="kw">void</span> eachTestDataEntryRoutesToItsOwnPersistenceUnit() {
+    }
+}</pre>
+</div>
+
+<p>The <code>customersPU:</code> prefix sends <code>testdata/customers/dbIn,dbExpected</code> to the customers PU; the <code>ordersPU:</code> prefix routes the other entry to the orders PU. dbExpected on each side verifies the rows landed in the right database; no test method body needed.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
 <p>testcontrol-module ships <strong>no SPI / port of its own</strong>. Its public API is exactly one annotation (<code>@TestControl</code>). All extension points it exposes are inherited from the modules it composes:</p>

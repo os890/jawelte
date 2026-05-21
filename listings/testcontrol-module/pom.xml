@@ -38,5 +38,8 @@
 
     <modules>
         <module>01-hello-world</module>
+        <module>02-update-phase</module>
+        <module>03-testdata-basepath</module>
+        <module>04-multi-pu-routing</module>
     </modules>
 </project>

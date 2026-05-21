@@ -6729,3 +6729,12 @@ jaxrs-module up to 3 listings (was 1). Added:
 - `03-response-diff` — `ResponseDiff.forJson(response).expectedContent(...).assertEquals()`. Asserts the JSON body matches semantically regardless of key order. Pulls in content-diff-module + Jackson + Jakarta-EL.
 
 Pivoted from the proposed `02-application-config` because the project's own scenarios never use `applicationConfig` — providers ride in via `restResources`. The doc snippet in §2.1 now demonstrates that pattern instead.
+
+## 2026-05-21 — docs/testcontrol-module.html: three follow-up listings
+
+testcontrol-module up to 4 listings (was 1). Added:
+- `02-update-phase` — full pipeline: dbIn seeds "old-apple/old-banana", dbUpdate switches to "new-apple/new-banana", dbExpected verifies the merged state. Empty test method body.
+- `03-testdata-basepath` — two test methods with `testDataBasePath = "fixtures"`, each with a leaf `testData = "m01"` / `"m02"`. Folders under `fixtures/m01/{dbIn,dbExpected}` etc.
+- `04-multi-pu-routing` — two PUs (customersPU + ordersPU), each fed by its own testData entry with a `"puName:path"` prefix.
+
+§3 SPI section unchanged — module ships no port of its own.

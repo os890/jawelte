@@ -65,7 +65,7 @@ global renumbering, no shifting of unrelated listings.
 | `jta-module/` | `01-hello-world`, `02-user-transaction`, `03-transaction-scoped-bean`, `04-transaction-manager-provider` | `docs/jta-module.html` |
 | `ejb-module/` | `01-singleton`, `02-stateless`, `03-implicit-transactional`, `04-ejb-annotation-mapper` | `docs/ejb-module.html` |
 | `jaxrs-module/` | `01-hello-world`, `02-exception-mapper`, `03-response-diff` | `docs/jaxrs-module.html` |
-| `testcontrol-module/` | `01-hello-world` | `docs/testcontrol-module.html` |
+| `testcontrol-module/` | `01-hello-world`, `02-update-phase`, `03-testdata-basepath`, `04-multi-pu-routing` | `docs/testcontrol-module.html` |
 | `db-testdata-module/` | `01-hello-world` | `docs/db-testdata-module.html` |
 | `content-diff-module/` | `01-hello-world`, `02-mismatch`, `03-ignoring-pattern` | `docs/content-diff-module.html` |
 | `wiremock-module/` | `01-hello-world` | `docs/wiremock-module.html` |
