@@ -6683,3 +6683,9 @@ The teaching point in the doc snippet: the provider lists *only* the contributor
 ## 2026-05-21 — core docs done
 
 Core page now has 20 listings across §1 quick-start, §2 detailed, and §3 SPI/port reference (up from 16). The remaining prose-only SPI sections — §3.2 TestBeanContainerPort and §3.9 TestBeansExtension — are explicitly documented as "user does not usually implement this" / "almost never touch this", so no listing was added for them. Next: scope-module page, then on through the module list.
+
+## 2026-05-21 — docs/scope-module.html: two follow-up listings
+
+scope-module now has 4 listings. Added `03-pre-destroy-callback` (proves @PreDestroy on a @TestMethodScoped bean fires at end of afterEach via a static AtomicInteger that the next method observes) and `04-session-scoped-remap` (a @SessionScoped UserPreferences bean is auto-remapped to @TestMethodScoped by scope-module's BeanScopeMapper — production source stays @SessionScoped, the test runtime sees method-scope without any test-side override). Both with @Order-pinned test methods + both passing on OWB and Weld.
+
+SPI section §3 already says the module ships no SPI of its own, so no listing there — extension is through core's BeanScopeMapper, already covered by core/14.

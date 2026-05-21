@@ -39,5 +39,7 @@
     <modules>
         <module>01-test-method-scoped</module>
         <module>02-test-class-scoped</module>
+        <module>03-pre-destroy-callback</module>
+        <module>04-session-scoped-remap</module>
     </modules>
 </project>

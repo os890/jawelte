@@ -284,6 +284,39 @@
 </ul>
 <p>Bean access never throws <code>ContextNotActiveException</code>; both contexts report <code>isActive() == true</code> for the whole CDI container's lifetime, allocating a fresh store between methods / classes as needed. This matters for libraries that probe <code>BeanManager.getContext(...)</code> &mdash; scope-module's contexts are always-on by design.</p>
 
+<h3>@PreDestroy fires between methods</h3>
+<p>A <code>@TestMethodScoped</code> bean's <code>@PreDestroy</code> method runs at the end of <code>afterEach</code>, before the next test method starts. Useful when a method-scoped bean owns a resource (a temp file, a JDBC connection, an in-memory queue) that has to be closed between methods.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing scope-module/03 · pre-destroy-callback</span><a href="../listings/scope-module/03-pre-destroy-callback/">listings/scope-module/03-pre-destroy-callback/</a></div>
+<pre><span class="cm">// src/test/java/example/predestroy/ResourceHandle.java</span>
+<span class="an">@TestMethodScoped</span>
+<span class="kw">public class</span> <span class="ty">ResourceHandle</span> {
+
+    <span class="kw">public static final</span> <span class="ty">AtomicInteger</span> DESTROY_COUNT = <span class="kw">new</span> <span class="ty">AtomicInteger</span>();
+
+    <span class="an">@PreDestroy</span>
+    <span class="kw">void</span> close() {
+        DESTROY_COUNT.incrementAndGet();
+    }
+}
+
+<span class="cm">// src/test/java/example/predestroy/ResourceHandleTest.java</span>
+<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">1</span>)
+<span class="kw">void</span> firstMethodUsesTheHandle() {
+    resourceHandle.use();
+    assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(0);   <span class="cm">// not yet</span>
+}
+
+<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">2</span>)
+<span class="kw">void</span> secondMethodSeesPriorMethodsPreDestroy() {
+    resourceHandle.use();
+    assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(1);   <span class="cm">// fired at end of method 1's afterEach</span>
+}</pre>
+</div>
+
+<p>The same shape works for <code>@TestClassScoped</code>; the destroy runs at the end of <code>afterAll</code> instead, once per test class.</p>
+
 <h2 id="dt-mappers">2.2 declarative remaps</h2>
 <p>scope-module ships three <code>BeanScopeMapper</code> providers (one of the core SPIs &mdash; see <a href="core.html#spi-scope-mapper">core docs section 3.5</a>). Putting scope-module on the classpath turns these three remaps on automatically:</p>
 <ul>
@@ -292,6 +325,35 @@
   <li><strong><code>@TestBean</code> static-field &rarr; <code>@TestClassScoped</code></strong>. The default scope for <code>@TestBean</code> static-field synthetic beans is <code>@Singleton</code> per the core docs; scope-module rebinds it to <code>@TestClassScoped</code> so the static-field instance is reset between test classes that share the JVM.</li>
 </ul>
 <p>The remaps are unconditional &mdash; just having scope-module on the classpath is the trigger. If you want one of them off, ship your own higher-priority <code>BeanScopeMapper</code> (see the core docs' SPI section).</p>
+
+<h3>@SessionScoped in production, @TestMethodScoped in tests</h3>
+<p>The most common case in practice: a web-tier bean carries <code>@SessionScoped</code> for production use. Drop scope-module on the test classpath and the same source becomes method-scoped under test &mdash; no annotation change in the bean, no <code>@TestBean</code> override, no production-vs-test forking.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing scope-module/04 · session-scoped-remap</span><a href="../listings/scope-module/04-session-scoped-remap/">listings/scope-module/04-session-scoped-remap/</a></div>
+<pre><span class="cm">// src/test/java/example/sessionremap/UserPreferences.java   (production-shaped)</span>
+<span class="an">@SessionScoped</span>
+<span class="kw">public class</span> <span class="ty">UserPreferences</span> <span class="kw">implements</span> <span class="ty">Serializable</span> {
+
+    <span class="kw">private</span> <span class="ty">String</span> themeName = <span class="st">"default"</span>;
+
+    <span class="kw">public</span> <span class="ty">String</span> getThemeName() { <span class="kw">return</span> themeName; }
+    <span class="kw">public void</span> setThemeName(<span class="ty">String</span> name) { <span class="kw">this</span>.themeName = name; }
+}
+
+<span class="cm">// src/test/java/example/sessionremap/UserPreferencesTest.java</span>
+<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">1</span>)
+<span class="kw">void</span> firstMethodMutatesTheme() {
+    userPreferences.setThemeName(<span class="st">"dark"</span>);
+}
+
+<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">2</span>)
+<span class="kw">void</span> secondMethodSeesAFreshInstance() {
+    assertThat(userPreferences.getThemeName()).isEqualTo(<span class="st">"default"</span>);  <span class="cm">// remapped — prior write is gone</span>
+}</pre>
+</div>
+
+<p>Same shape applies to the other two remaps: a <code>@ConfigBean</code> stereotype becomes <code>@TestClassScoped</code>, and a <code>@TestBean</code> static field becomes <code>@TestClassScoped</code> instead of the documented default <code>@Singleton</code>.</p>
 
 <h2 id="dt-config">2.3 MP Config defaults</h2>
 <p>scope-module's <code>META-INF/microprofile-config.properties</code> sets three keys at MP Config ordinal 100. They're not <em>your</em> config &mdash; they're scope-module's contribution of friendly defaults to other modules' keys. Override any of them in a higher-ordinal source if you want different behaviour.</p>
