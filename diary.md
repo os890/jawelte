@@ -6671,3 +6671,15 @@ Mirrored the project's own scenario layout: `git mv`'d all five into `src/test/j
 Added `listings/core/19-test-instance-factory/` and the doc snippet in §3.4. The trick: `TestInstanceFactoryPort` is single-impl and cdi-module already supplies one, so a listing demonstrating a custom impl has to run **without** cdi-module — and therefore also supply a stub `TestBeanContainerPort` (jawelte refuses to bootstrap without exactly one container port).
 
 The listing ships `RecordingTestInstanceFactory` (records every instantiated test class + reflection-news the instance) and `NoopContainerPort` (empty TestBeanContainerPort), each registered via its own `META-INF/services/...` file. The test class has no `@Inject` (no CDI runtime); it just asserts the recorder saw `CustomFactoryTest.class`. Single profile (no owb/weld split — there's no CDI runtime to choose). Passes on a clean build.
+
+## 2026-05-21 — docs/core.html §3.7: ConfigKeyAliasProvider contributor pattern
+
+Added `listings/core/20-config-key-alias-provider/` and the doc snippet in §3.7. Domain: a fictitious "feature flags" logical key `app.features.enabled-flags` owned by some module; a "shipping" module ships its own contributor key `app.shipping.features.enabled-flags` plus a `ShippingFeaturesAliasProvider` that maps the logical key → the contributor key.
+
+The test has two methods. (1) The lookup test confirms `configResolver.resolveAliasKeysFor(logicalKey)` returns the single contributor key. (2) The merge test does what the owner would do in production: read its own value, then loop over the alias keys and concatenate their values, ending up with the union "beta-checkout, new-search, next-day-delivery, tracking-v2". Both OWB and Weld profiles pass.
+
+The teaching point in the doc snippet: the provider lists *only* the contributor key (not the owner's own key). New contributing modules drop in by shipping their own provider + key without the owner changing a line — that's the value of the indirection.
+
+## 2026-05-21 — core docs done
+
+Core page now has 20 listings across §1 quick-start, §2 detailed, and §3 SPI/port reference (up from 16). The remaining prose-only SPI sections — §3.2 TestBeanContainerPort and §3.9 TestBeansExtension — are explicitly documented as "user does not usually implement this" / "almost never touch this", so no listing was added for them. Next: scope-module page, then on through the module list.

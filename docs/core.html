@@ -1053,6 +1053,49 @@ example.scopemap.RequestToApplicationScoped</pre>
 <h2 id="spi-alias-provider">3.7 ConfigKeyAliasProvider</h2>
 <p><strong>Multi-impl, ServiceLoader.</strong> The way a non-owning module contributes module-specific MP Config keys to a logical configuration key owned by another module. The owning module reads its own key directly and merges the contributor keys this port returns into the final value. The concrete cross-module wiring lives in the docs of the contributing modules.</p>
 
+<p>Shape: implement <code>aliasesFor(logicalKey)</code>, register via <code>META-INF/services</code>, and ship a contributor MP Config key with the actual value. The owner reads its own key + every alias key the resolver returns, then merges.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing core/20 · config-key-alias-provider</span><a href="../listings/core/20-config-key-alias-provider/">listings/core/20-config-key-alias-provider/</a></div>
+<pre><span class="cm">// src/test/java/example/aliasprovider/ShippingFeaturesAliasProvider.java</span>
+<span class="kw">public class</span> <span class="ty">ShippingFeaturesAliasProvider</span> <span class="kw">implements</span> <span class="ty">ConfigKeyAliasProvider</span> {
+
+    <span class="kw">static final</span> <span class="ty">String</span> LOGICAL_KEY = <span class="st">"app.features.enabled-flags"</span>;
+
+    <span class="kw">public static final</span> <span class="ty">String</span> SHIPPING_KEY = <span class="st">"app.shipping.features.enabled-flags"</span>;
+
+    <span class="an">@Override</span>
+    <span class="kw">public</span> <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; aliasesFor(<span class="ty">String</span> logicalKey) {
+        <span class="kw">if</span> (LOGICAL_KEY.equals(logicalKey)) {
+            <span class="kw">return</span> <span class="ty">List</span>.of(SHIPPING_KEY);
+        }
+        <span class="kw">return</span> <span class="ty">List</span>.of();
+    }
+}
+
+<span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.ConfigKeyAliasProvider</span>
+example.aliasprovider.ShippingFeaturesAliasProvider
+
+<span class="cm">// src/test/resources/META-INF/microprofile-config.properties</span>
+app.features.enabled-flags          = beta-checkout,new-search
+app.shipping.features.enabled-flags = next-day-delivery,tracking-v2
+
+<span class="cm">// src/test/java/example/aliasprovider/AliasProviderTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> ownerMergesItsOwnValueWithContributorValues() {
+    <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; merged = <span class="kw">new</span> <span class="ty">ArrayList</span>&lt;&gt;();
+    configResolver.resolve(<span class="st">"app.features.enabled-flags"</span>).ifPresent(v -&gt; merged.addAll(split(v)));
+    <span class="kw">for</span> (<span class="ty">String</span> aliasKey : configResolver.resolveAliasKeysFor(<span class="st">"app.features.enabled-flags"</span>)) {
+        configResolver.resolve(aliasKey).ifPresent(v -&gt; merged.addAll(split(v)));
+    }
+    assertThat(merged).containsExactly(
+            <span class="st">"beta-checkout"</span>, <span class="st">"new-search"</span>,
+            <span class="st">"next-day-delivery"</span>, <span class="st">"tracking-v2"</span>);
+}</pre>
+</div>
+
+<p>The provider lists only the contributor key &mdash; not the owner's own key. The owner is responsible for reading its own value directly; <code>resolveAliasKeysFor</code> exists so the owner doesn't need to know which modules might contribute. New contributing modules drop in by shipping their own provider + key without the owner changing a line.</p>
+
 <h2 id="spi-priority-resolver">3.8 ServicePriorityResolver</h2>
 <p><strong>Single active impl, bootstrap via MP Config.</strong> The project-wide canonical mechanism for ordering provider lists. Replace it via the MP Config bootstrap key <code>org.os890.jawelte.core.api.port.ServicePriorityResolver</code> — value is the FQCN of an impl class with a public no-arg constructor. Every <code>TestContext.loadService(Class)</code> SPI selection routes through the active resolver.</p>
 
