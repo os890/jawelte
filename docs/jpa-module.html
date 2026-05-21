@@ -129,8 +129,9 @@
     <li class="depth-2"><a href="#dt-persistence-config">2.1 @PersistenceConfig</a></li>
     <li class="depth-2"><a href="#dt-readonly">2.2 @ReadOnly</a></li>
     <li class="depth-2"><a href="#dt-tx-em">2.3 transactions &amp; the EntityManager</a></li>
-    <li class="depth-2"><a href="#dt-events">2.4 transaction events</a></li>
-    <li class="depth-2"><a href="#dt-emf-cache">2.5 EmfCache</a></li>
+    <li class="depth-2"><a href="#dt-multipu">2.4 multi-PU usage</a></li>
+    <li class="depth-2"><a href="#dt-events">2.5 transaction events</a></li>
+    <li class="depth-2"><a href="#dt-emf-cache">2.6 EmfCache</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
@@ -266,9 +267,64 @@
   <li>Two <code>@Inject EntityManager</code> lookups inside one transaction return the same underlying instance. The next transaction gets a fresh one.</li>
   <li><code>commit()</code> or <code>rollback()</code> closes the <code>EntityManager</code>; jpa-module fires the matching transaction events (section 2.4).</li>
 </ul>
-<p>For multi-PU tests use <code>@Inject @Named("puName") EntityManager</code>. The strategy lazy-joins each named PU on first use; the <code>JpaActivePersistenceUnits</code> ThreadLocal keeps track so the right factory is consulted per name.</p>
+<p>Multi-PU tests qualify each injection point with the PU name &mdash; see <a href="#dt-multipu">2.4</a>.</p>
 
-<h2 id="dt-events">2.4 transaction events</h2>
+<h2 id="dt-multipu">2.4 multi-PU usage</h2>
+<p>When the <code>persistence.xml</code> declares more than one <code>&lt;persistence-unit&gt;</code>, jpa-module's CDI extension publishes one synthetic <code>EntityManager</code> / <code>EntityManagerFactory</code> bean per unit, each qualified with <code>@Named(puName)</code>. An unqualified <code>@Inject EntityManager</code> fails to resolve in this mode &mdash; the qualifier is required so the routing proxy knows which factory to consult.</p>
+
+<p>Two equivalent ways to declare the qualifier on the injection point:</p>
+
+<h3>option 1 &mdash; @Inject @Named("puName")</h3>
+<p>The canonical CDI form. Inject either the <code>EntityManager</code> or its <code>EntityManagerFactory</code> for a specific PU by adding <code>@Named(puName)</code> next to <code>@Inject</code>.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">multi-PU @Named injection</span></div>
+<pre><span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">OrdersAndCustomersTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="an">@Named</span>(<span class="st">"ordersPU"</span>)
+    <span class="ty">EntityManager</span> ordersEm;
+
+    <span class="an">@Inject</span>
+    <span class="an">@Named</span>(<span class="st">"customersPU"</span>)
+    <span class="ty">EntityManager</span> customersEm;
+
+    <span class="an">@Inject</span>
+    <span class="an">@Named</span>(<span class="st">"ordersPU"</span>)
+    <span class="ty">EntityManagerFactory</span> ordersEmf;   <span class="cm">// EMF is qualified the same way</span>
+
+    <span class="an">@Test</span>
+    <span class="an">@Transactional</span>
+    <span class="kw">void</span> writesGoToTheirOwnPus() {
+        ordersEm.persist(<span class="kw">new</span> <span class="ty">Order</span>(<span class="st">"O-1"</span>));
+        customersEm.persist(<span class="kw">new</span> <span class="ty">Customer</span>(<span class="st">"Alice"</span>));
+        <span class="cm">// each PU's metamodel is disjoint; each EM joins its own resource</span>
+    }
+}</pre>
+</div>
+
+<h3>option 2 &mdash; @PersistenceContext(unitName = "puName")</h3>
+<p>The standard JPA annotation is rewritten by <code>JpaCdiExtension</code> to <code>@Inject @Named(unitName)</code> during <code>ProcessAnnotatedType</code>. The two forms are equivalent at runtime; pick whichever reads better in your codebase. <code>@PersistenceContext</code> is handy when the same source has to compile both inside and outside a CDI container (jawelte rewrites it; a real Jakarta EE container honours it natively).</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">multi-PU @PersistenceContext injection</span></div>
+<pre><span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">CrossPuService</span> {
+
+    <span class="an">@PersistenceContext</span>(unitName = <span class="st">"ordersPU"</span>)
+    <span class="kw">private</span> <span class="ty">EntityManager</span> ordersEm;
+
+    <span class="an">@PersistenceContext</span>(unitName = <span class="st">"customersPU"</span>)
+    <span class="kw">private</span> <span class="ty">EntityManager</span> customersEm;
+
+    <span class="cm">// jpa-module rewrites both fields to @Inject @Named(...) at bootstrap</span>
+}</pre>
+</div>
+
+<p><strong>What the strategy does.</strong> Each named <code>EntityManager</code> is a routing proxy that lazy-joins the active transaction the first time you call a method on it. <code>JpaActivePersistenceUnits</code> (a <code>ThreadLocal</code>) tracks which PUs the current transaction has joined so the right factory is consulted per name; <code>commit()</code> / <code>rollback()</code> closes each joined EM in turn. <code>@PersistenceConfig(persistenceUnitName = "ordersPU")</code> on the test class additionally tells the strategy which PU to eagerly open on <code>begin()</code> &mdash; useful when an early observer needs a connection before any <code>EntityManager</code> method has been called.</p>
+
+<h2 id="dt-events">2.5 transaction events</h2>
 <p>Four CDI events fire around every transaction the strategy drives. Observe them with plain <code>@Observes</code> on a CDI bean for cross-cutting logging, audit trails, or cleanup of out-of-band resources:</p>
 <ul>
   <li><code>TransactionStarted</code> &mdash; right after <code>begin()</code> succeeds.</li>
@@ -278,7 +334,7 @@
 </ul>
 <p>All four extend <code>PersistenceUnitTransactionEvent</code> so an observer that wants to react to "any transaction completion" can listen to the supertype.</p>
 
-<h2 id="dt-emf-cache">2.5 EmfCache</h2>
+<h2 id="dt-emf-cache">2.6 EmfCache</h2>
 <p>The <code>EntityManagerFactory</code> bootstrap is heavy (schema generation, metamodel build, connection-pool warm-up). Repeating it per test class would make a test suite of 200 classes take minutes longer than necessary. <code>EmfCache</code> stores the factories in a <code>ConcurrentHashMap&lt;String, EntityManagerFactory&gt;</code> keyed by PU name; the second test class to ask for <code>notesPU</code> reuses the first class's factory.</p>
 <p>Cleanup is via a JVM shutdown hook registered on first use &mdash; every cached factory is closed in its own try/catch with WARN-level logs on failure. There's no explicit teardown API; the cache lives until the JVM exits.</p>
 

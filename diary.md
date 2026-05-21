@@ -6564,3 +6564,9 @@ Wrote `docs/batch-module.html`. Section 2 details `BatchExecution` as both reque
 Listing 28 (`listings/28-batch-hello-world/`) standalone-pom: JSL job file with one batchlet step, `@Named("simpleBatchlet") @Dependent` batchlet returning "COMPLETED", a single `@Test` that `batchEvent.fire(new BatchExecution("simple-job"))` and asserts `BatchStatus.COMPLETED`. Both OWB and Weld profiles pass with BatchEE.
 
 This completes the module fan-out for ticket-016. Every catalog entry in `docs/modules.html` (12 modules) now has a corresponding detail page; every detail page links to a runnable listing in `listings/`.
+
+## 2026-05-21 — docs/jpa-module.html multi-PU snippets
+
+Added a dedicated subsection 2.4 "multi-PU usage" to the jpa-module page with two code blocks: (1) the canonical CDI form `@Inject @Named("puName") EntityManager` showing routing for both the EM and the EMF, and (2) the standard JPA `@PersistenceContext(unitName = "...")` form on an `@ApplicationScoped` service. Explained that `JpaCdiExtension`'s `ProcessAnnotatedType` rewrites `@PersistenceContext` to `@Inject @Named` so the two forms are runtime-equivalent — and that `@PersistenceContext` is the choice when the same source has to compile against both jawelte and a real Jakarta EE container. Closing paragraph covers `JpaActivePersistenceUnits` ThreadLocal routing + the eager-open role of `@PersistenceConfig(persistenceUnitName = ...)`.
+
+Renumbered the two subsequent subsections (transaction events: 2.4 → 2.5; EmfCache: 2.5 → 2.6) and removed the previous one-liner note in 2.3 since the new section covers it more thoroughly. The TOC was updated to match.
