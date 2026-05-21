@@ -121,23 +121,67 @@
 <p>jpa-module's default transaction strategy is <code>RESOURCE_LOCAL</code>: one persistence-unit transaction at a time, no cross-resource enlistment, no two-phase commit. That's enough for most tests, but anything that needs more &mdash; a write to two persistence units in one transaction, an XA-enrolled message queue, a code path that relies on <code>UserTransaction</code> &mdash; needs JTA. jta-module swaps the strategy out via <code>@Priority</code> so the rest of the framework keeps working without changes; the new strategy talks JTA underneath.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
-<p>Put jta-module + Geronimo's TM + a JNDI provider on the classpath. With nothing else changed, the active <code>TransactionStrategy</code> flips from jpa-module's RESOURCE_LOCAL default to JTA.</p>
+<p>An <code>@ApplicationScoped</code> service whose method is <code>@Transactional</code>, plus a <code>persistence.xml</code> with <code>transaction-type="JTA"</code>. The test method itself is <em>not</em> <code>@Transactional</code> &mdash; the transaction boundary lives inside the service, exactly as it would in production. Each <code>@Transactional</code> service call opens a fresh JTA transaction and commits on return.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jta-module/01 · hello-world</span><a href="../listings/jta-module/01-hello-world/">listings/jta-module/01-hello-world/</a></div>
-<pre><span class="cm">// src/test/java/example/jta/JtaActiveTest.java</span>
-<span class="an">@EnableTestBeans</span>
-<span class="kw">class</span> <span class="ty">JtaActiveTest</span> {
+<pre><span class="cm">// src/main/java/example/jta/CustomerService.java</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">CustomerService</span> {
 
-    <span class="an">@Test</span>
-    <span class="kw">void</span> jtaTransactionStrategyIsActive() {
-        <span class="ty">TransactionStrategy</span> active = <span class="ty">TestContext</span>.loadService(<span class="ty">TransactionStrategy</span>.<span class="kw">class</span>);
-        assertThat(active.getClass().getSimpleName()).isEqualTo(<span class="st">"JtaTransactionStrategy"</span>);
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">EntityManager</span> entityManager;
+
+    <span class="an">@Transactional</span>
+    <span class="kw">public</span> <span class="ty">Long</span> createCustomer(<span class="ty">String</span> name) {
+        <span class="ty">Customer</span> customer = <span class="kw">new</span> <span class="ty">Customer</span>(name);
+        entityManager.persist(customer);
+        <span class="kw">return</span> customer.getId();
+    }
+
+    <span class="an">@Transactional</span>
+    <span class="kw">public</span> <span class="kw">long</span> countCustomers() {
+        <span class="kw">return</span> entityManager
+                .createQuery(<span class="st">"SELECT COUNT(c) FROM Customer c"</span>, <span class="ty">Long</span>.<span class="kw">class</span>)
+                .getSingleResult();
+    }
+}
+
+<span class="cm">// src/test/java/example/jta/CustomerServiceTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">CustomerServiceTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">CustomerService</span> customerService;
+
+    <span class="an">@Test</span>   <span class="cm">// note: NO @Transactional on the test method</span>
+    <span class="kw">void</span> transactionalServiceCallCommitsAndIsVisibleToTheNextCall() {
+        <span class="ty">Long</span> id = customerService.createCustomer(<span class="st">"Alice"</span>);
+        assertThat(id).isNotNull();
+        assertThat(customerService.countCustomers()).isEqualTo(1L);
     }
 }</pre>
 </div>
 
-<p>The same <code>@Test @Transactional</code> shape you saw on the <a href="jpa-module.html">jpa-module page</a> still works &mdash; the user-facing code doesn't change. What changes is the underlying machinery: <code>begin()</code> / <code>commit()</code> now call into the JTA <code>TransactionManager</code> instead of <code>EntityTransaction</code>.</p>
+<p>The matching <code>persistence.xml</code> declares <code>transaction-type="JTA"</code>; the JPA provider then asks the active <code>TransactionManager</code> (which jta-module publishes via JNDI) to join the <code>EntityManager</code> into the current transaction.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">src/test/resources/META-INF/persistence.xml</span><a href="../listings/jta-module/01-hello-world/src/test/resources/META-INF/persistence.xml">listings/jta-module/01-hello-world/src/test/resources/META-INF/persistence.xml</a></div>
+<pre>&lt;persistence-unit name=<span class="st">"customersPU"</span> transaction-type=<span class="st">"JTA"</span>&gt;
+    &lt;provider&gt;org.hibernate.jpa.HibernatePersistenceProvider&lt;/provider&gt;
+    &lt;exclude-unlisted-classes&gt;false&lt;/exclude-unlisted-classes&gt;
+    &lt;properties&gt;
+        &lt;property name=<span class="st">"jakarta.persistence.jdbc.driver"</span> value=<span class="st">"org.h2.Driver"</span>/&gt;
+        &lt;property name=<span class="st">"jakarta.persistence.jdbc.url"</span>
+                  value=<span class="st">"jdbc:h2:mem:jtaCustomers;MODE=LEGACY;DB_CLOSE_DELAY=-1"</span>/&gt;
+        &lt;property name=<span class="st">"jakarta.persistence.jdbc.user"</span> value=<span class="st">"sa"</span>/&gt;
+        &lt;property name=<span class="st">"jakarta.persistence.jdbc.password"</span> value=<span class="st">""</span>/&gt;
+        &lt;property name=<span class="st">"hibernate.hbm2ddl.auto"</span> value=<span class="st">"create-drop"</span>/&gt;
+    &lt;/properties&gt;
+&lt;/persistence-unit&gt;</pre>
+</div>
+
+<p>What changed compared to <a href="jpa-module.html">jpa-module</a>'s hello-world: nothing in the user-facing code shape. The bean still injects <code>EntityManager</code>, the method is still annotated <code>@Transactional</code>. The two visible differences are the <code>persistence.xml</code> attribute (<code>JTA</code> instead of <code>RESOURCE_LOCAL</code>) and the dependency list (jta-module + a TM + a JNDI provider, see <a href="#qs-maven">1.3</a>).</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
 <p>jta-module's api / impl, a JTA TM jar (Geronimo here), and a JNDI provider. xbean-naming is the lightest free JNDI implementation; any other registered <code>InitialContextFactory</code> works.</p>

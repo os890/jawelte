@@ -6601,3 +6601,9 @@ Mechanical changes:
 - `listings/README.md` rewritten: table now groups by module; the "Running every listing for one module" snippet documents the per-module aggregator.
 - All `docs/*.html` link refs and listing-bar labels rewritten (`listing 19 · jpa-hello-world` → `listing jpa-module/01 · hello-world`, `../listings/19-jpa-hello-world/` → `../listings/jpa-module/01-hello-world/`). 13 doc pages touched.
 - `mvn -f listings/pom.xml test`: 28/28 green (21 s total).
+
+## 2026-05-21 — revised jta-module hello-world
+
+Replaced the old SPI-lookup smoke test (asserting `TransactionStrategy.getClass().getSimpleName() == "JtaTransactionStrategy"`) with a user-facing example: a `Customer` entity, an `@ApplicationScoped CustomerService` with two `@Transactional` methods, a `persistence.xml` declaring `transaction-type="JTA"` plus explicit H2 config, and a `CustomerServiceTest` whose test method is deliberately **not** `@Transactional` — the transaction lives inside the service, exactly as in production. Both OWB and Weld profiles pass.
+
+Updated `docs/jta-module.html` quick-start section to show the new shape (entity + @Transactional service + JTA persistence.xml) and a follow-up paragraph noting that the user-facing code shape is identical to jpa-module's hello-world; the only visible differences are the `transaction-type` attribute and the dependency list.
