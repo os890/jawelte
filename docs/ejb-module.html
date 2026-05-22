@@ -210,19 +210,26 @@
 }
 
 <span class="cm">// src/test/java/example/stateless/CounterTest.java</span>
-<span class="an">@Test</span>
-<span class="kw">void</span> firstMethodSeesFreshCounter() {
-    assertThat(counter.increment()).isEqualTo(1);
-}
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">CounterTest</span> {
 
-<span class="an">@Test</span>
-<span class="kw">void</span> secondMethodAlsoSeesFreshCounter() {
-    assertThat(counter.increment()).isEqualTo(1);   <span class="cm">// @RequestScoped — new instance per method</span>
+    <span class="an">@Inject</span>
+    <span class="ty">Counter</span> counter;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> firstMethodSeesFreshCounter() {
+        assertThat(counter.increment()).isEqualTo(1);
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> secondMethodAlsoSeesFreshCounter() {
+        assertThat(counter.increment()).isEqualTo(1);   <span class="cm">// fresh per-call instance</span>
+    }
 }</pre>
 </div>
 
 <h2 id="dt-tx">2.2 implicit @Transactional</h2>
-<p>EJB methods are container-managed transactional by default (<code>REQUIRED</code>). To preserve that semantic without forcing the user to re-annotate every EJB method, the mapper also adds <code>@jakarta.transaction.Transactional</code> to the class when none is present. With jta-module on the classpath that triggers the JTA strategy; with jpa-module only that triggers RESOURCE_LOCAL; either way <code>@Transactional</code> semantics hold.</p>
+<p>EJB methods are container-managed transactional by default (<code>REQUIRED</code>). To preserve that semantic without forcing the user to re-annotate every EJB method, the mapper also adds <code>@jakarta.transaction.Transactional</code> to the class when none is present. With <a href="jta-module.html">jta-module</a> on the classpath that triggers the JTA strategy; with <a href="jpa-module.html">jpa-module</a> only that triggers RESOURCE_LOCAL; either way <code>@Transactional</code> semantics hold. The listing below uses jpa-module + RESOURCE_LOCAL via the <code>@PersistenceConfig</code> annotation on the test class.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing ejb-module/03 · implicit-transactional</span><a href="../listings/ejb-module/03-implicit-transactional/">listings/ejb-module/03-implicit-transactional/</a></div>
@@ -245,11 +252,19 @@
 }
 
 <span class="cm">// src/test/java/example/implicittx/NoteRepositoryTest.java</span>
-<span class="an">@Test</span>
-<span class="kw">void</span> persistCommitsWithoutExplicitTransactional() {
-    <span class="ty">Long</span> id = noteRepository.save(<span class="st">"hello"</span>);
-    assertThat(id).isNotNull();
-    assertThat(noteRepository.count()).isEqualTo(1L);
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"notesPU"</span>)
+<span class="kw">class</span> <span class="ty">NoteRepositoryTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">NoteRepository</span> noteRepository;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> persistCommitsWithoutExplicitTransactional() {
+        <span class="ty">Long</span> id = noteRepository.save(<span class="st">"hello"</span>);
+        assertThat(id).isNotNull();
+        assertThat(noteRepository.count()).isEqualTo(1L);
+    }
 }</pre>
 </div>
 
@@ -301,10 +316,30 @@ config_ordinal=200
 org.os890.jawelte.module.ejb.bean-defining-annotations=\
     jakarta.ejb.Singleton,\
     jakarta.ejb.Stateless,\
-    jakarta.ejb.Stateful</pre>
+    jakarta.ejb.Stateful
+
+<span class="cm">// src/main/java/example/mapper/ShoppingCart.java   (the production @Stateful bean the mapper claims)</span>
+<span class="an">@Stateful</span>
+<span class="kw">public class</span> <span class="ty">ShoppingCart</span> {
+    <span class="kw">private int</span> itemCount;
+    <span class="kw">public int</span> addItem() { <span class="kw">return</span> ++itemCount; }
+}
+
+<span class="cm">// src/test/java/example/mapper/ShoppingCartTest.java   (proves the @Stateful bean is injectable)</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">ShoppingCartTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">ShoppingCart</span> shoppingCart;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> statefulBeanIsInjectableThanksToTheCustomMapper() {
+        assertThat(shoppingCart.addItem()).isEqualTo(1);
+    }
+}</pre>
 </div>
 
-<p>Two moving pieces. <strong>The mapper</strong> claims any <code>@jakarta.ejb.Stateful</code> class and adds <code>@RequestScoped</code>. <strong>The MP Config override</strong> teaches ejb-module's classpath scan to look for <code>@Stateful</code> &mdash; without it the scan only finds <code>@Singleton</code> + <code>@Stateless</code> and your <code>@Stateful</code> classes are never even seen by the CDI extension. Both are required to make a new EJB annotation injectable.</p>
+<p>Three moving pieces. <strong>The user bean</strong> &mdash; an ordinary <code>@jakarta.ejb.Stateful</code> class in production code; nothing here is jawelte-specific. <strong>The mapper</strong> claims any <code>@Stateful</code> class and adds <code>@RequestScoped</code>; it returns <code>null</code> for any other class so the default mapper keeps handling <code>@Stateless</code> + <code>@Singleton</code>. <strong>The MP Config override</strong> teaches ejb-module's classpath scan to look for <code>@Stateful</code> &mdash; without it the scan only finds <code>@Singleton</code> + <code>@Stateless</code> and your <code>@Stateful</code> classes are never even seen by the CDI extension. All three are required to make a new EJB annotation injectable.</p>
 
 <div class="closing">
   <strong>jawelte / ejb-module</strong> &nbsp;&middot;&nbsp; <a href="modules.html">modules</a> &nbsp;&middot;&nbsp; <a href="core.html">core</a> &nbsp;&middot;&nbsp; back to <a href="index.html">overview</a>
