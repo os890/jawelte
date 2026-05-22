@@ -272,8 +272,12 @@
 <pre><span class="cm">// src/main/java/example/responsediff/OrderResource.java</span>
 <span class="an">@Path</span>(<span class="st">"/order"</span>)
 <span class="kw">public class</span> <span class="ty">OrderResource</span> {
-    <span class="an">@GET</span> <span class="an">@Produces</span>(<span class="ty">MediaType</span>.APPLICATION_JSON)
-    <span class="kw">public</span> <span class="ty">String</span> getOrder() { <span class="kw">return</span> <span class="st">"{\"id\":1,\"name\":\"Widget\"}"</span>; }
+
+    <span class="an">@GET</span>
+    <span class="an">@Produces</span>(<span class="ty">MediaType</span>.APPLICATION_JSON)
+    <span class="kw">public</span> <span class="ty">String</span> getOrder() {
+        <span class="kw">return</span> <span class="st">"{\"id\":1,\"name\":\"Widget\"}"</span>;
+    }
 }
 
 <span class="cm">// src/test/java/example/responsediff/OrderResourceTest.java   (test-class shape identical to listings 01/02)</span>
