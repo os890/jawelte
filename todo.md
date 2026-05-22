@@ -256,3 +256,32 @@ Touch points:
 - `docs/core.html` section 2.2 `@TestBean modes` — drop the "cannot be
   placed directly on a @Produces method" caveat, add a fourth bullet,
   and add a new listing demonstrating it.
+
+## jaxrs-module: implement `@EnableJaxRs(applicationConfig = ...)`
+
+The doc at `docs/jaxrs-module.html` §2.1 + §3 names an `applicationConfig`
+attribute on `@EnableJaxRs` (and the §3 SPI prose calls it "the override
+channel"), but the actual annotation in
+`modules/jaxrs-module/api/src/main/java/org/os890/jawelte/module/jaxrs/api/EnableJaxRs.java`
+declares only `restResources()`. The impl always wraps user resources in
+a private internal `TestApplication extends jakarta.ws.rs.core.Application`
+class (see `JaxRsLifecycleAdapter` line 333) — there is no user hook for
+swapping in a custom Application subclass today.
+
+Two follow-up choices when this is picked up:
+
+1. **Drop the fiction** — remove the `applicationConfig` references from
+   the doc and clarify that providers / exception mappers go in
+   `restResources` (listing 02 already shows that pattern). Smallest
+   change.
+2. **Implement the attribute** — add
+   `Class<? extends Application> applicationConfig() default Application.class`
+   to `EnableJaxRs`, thread the value through `JaxRsLifecycleAdapter` so
+   a non-default user subclass replaces `TestApplication`, and ship
+   `listings/jaxrs-module/04-application-config/`. This is the path that
+   makes the docs honest about a real feature.
+
+Originated from docs-ux-review finding X7 and the follow-up audit on
+2026-05-22. Tracked here because the gap is "doc claims something the
+code doesn't ship" — addressing it is its own scoped piece of work.
+

@@ -6857,3 +6857,29 @@ Followed up the context-finding doc edits with 7 runnable Maven listings + 1 doc
 
 All new listings `mvn test` clean under OWB-SE on JDK 25.
 
+
+## 2026-05-22 — gap-coverage round (DbDiff features listing + applicationConfig todo)
+
+User asked "do we miss a major user-facing API in the listings?". Three
+candidates: AfterTestTransaction observer, DbDiff builder methods,
+@EnableJaxRs(applicationConfig=...). User picked #2 and #3.
+
+**#2 — `listings/db-testdata-module/05-dbdiff-features` (committed):**
+Listing 03 covered only `DbDiff.ignoring()`. The five remaining
+builder methods (`assertRowCount`, `subsetOnly`, `unorderedTables`,
+`withBean`, `withFunction`) each get a `@Test` method against a real
+H2 database. Footgun encountered: the EL interpolator runs on the
+raw dataset text including XML comments, so any `${...}` in a comment
+gets parsed — fixed by removing literal placeholder examples from
+the dbExpected-el.xml header comment. Wired into `docs/db-testdata-module.html §2.2`.
+
+**#3 — skipped, todo entry added:**
+While planning the listing I discovered `@EnableJaxRs` doesn't actually
+have an `applicationConfig` attribute — the doc invented it. The impl
+always wraps user resources in a private internal `TestApplication`
+class. This is what the original docs-ux-review X7 finding flagged
+(without realising the fiction goes deeper than a doc inconsistency).
+Per user direction, added a todo.md entry tracking both fix paths (drop
+the doc fiction vs implement the attribute) for later. The
+docs-ux-review report still describes the gap accurately.
+
