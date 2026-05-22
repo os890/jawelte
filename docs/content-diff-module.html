@@ -154,7 +154,8 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing content-diff-module/02 &middot; mismatch</span><a href="../listings/content-diff-module/02-mismatch/">listings/content-diff-module/02-mismatch/</a></div>
-<pre><span class="an">@Test</span>
+<pre><span class="cm">// src/test/java/example/contentdiff/JsonMismatchTest.java</span>
+<span class="an">@Test</span>
 <span class="kw">void</span> mismatchRaisesAssertionErrorThatNamesTheOffendingField() {
     <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"age\":30}"</span>;
     <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"age\":31}"</span>;
@@ -177,7 +178,8 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing content-diff-module/03 &middot; ignoring-pattern</span><a href="../listings/content-diff-module/03-ignoring-pattern/">listings/content-diff-module/03-ignoring-pattern/</a></div>
-<pre><span class="an">@Test</span>
+<pre><span class="cm">// src/test/java/example/contentdiff/JsonIgnoringTest.java</span>
+<span class="an">@Test</span>
 <span class="kw">void</span> ignoringPatternSkipsTheNoisyField() {
     <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"2026-05-20T10:00:00Z\"}}"</span>;
     <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"1970-01-01T00:00:00Z\"}}"</span>;
@@ -206,12 +208,20 @@
   &lt;version&gt;${jawelte.version}&lt;/version&gt;
   &lt;scope&gt;test&lt;/scope&gt;
 &lt;/dependency&gt;
+&lt;!-- MP Config: backs the JVM-wide ignore / unordered-array defaults --&gt;
 &lt;dependency&gt;
-  &lt;groupId&gt;com.fasterxml.jackson.core&lt;/groupId&gt;
-  &lt;artifactId&gt;jackson-databind&lt;/artifactId&gt;
-  &lt;version&gt;${jackson.version}&lt;/version&gt;
+  &lt;groupId&gt;org.eclipse.microprofile.config&lt;/groupId&gt;
+  &lt;artifactId&gt;microprofile-config-api&lt;/artifactId&gt;
+  &lt;version&gt;${microprofile.config.version}&lt;/version&gt;
   &lt;scope&gt;test&lt;/scope&gt;
 &lt;/dependency&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;io.smallrye.config&lt;/groupId&gt;
+  &lt;artifactId&gt;smallrye-config&lt;/artifactId&gt;
+  &lt;version&gt;${smallrye.config.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;!-- Jakarta EL: required for ${...} placeholders in expected datasets --&gt;
 &lt;dependency&gt;
   &lt;groupId&gt;jakarta.el&lt;/groupId&gt;
   &lt;artifactId&gt;jakarta.el-api&lt;/artifactId&gt;
@@ -222,6 +232,13 @@
   &lt;groupId&gt;org.apache.tomcat.embed&lt;/groupId&gt;
   &lt;artifactId&gt;tomcat-embed-el&lt;/artifactId&gt;
   &lt;version&gt;${tomcat.el.version}&lt;/version&gt;
+  &lt;scope&gt;test&lt;/scope&gt;
+&lt;/dependency&gt;
+&lt;!-- Jackson: default JSON engine --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;com.fasterxml.jackson.core&lt;/groupId&gt;
+  &lt;artifactId&gt;jackson-databind&lt;/artifactId&gt;
+  &lt;version&gt;${jackson.version}&lt;/version&gt;
   &lt;scope&gt;test&lt;/scope&gt;
 &lt;/dependency&gt;</pre>
 </div>
