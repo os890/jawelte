@@ -28,13 +28,11 @@ import java.net.http.HttpResponse;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.Test;
-import org.os890.jawelte.core.api.EnableTestBeans;
 import org.os890.jawelte.module.wiremock.api.EnableWireMock;
 
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 
-@EnableTestBeans
 @EnableWireMock
 class StubAndCallTest {
 

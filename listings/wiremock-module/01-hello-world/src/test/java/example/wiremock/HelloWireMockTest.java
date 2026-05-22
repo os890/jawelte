@@ -35,7 +35,7 @@ import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 class HelloWireMockTest {
 
     @Inject
-    private WireMockRuntimeInfo runtimeInfo;
+    WireMockRuntimeInfo runtimeInfo;
 
     @Test
     void runtimeInfoIsInjectedWithALiveBaseUrlAndPort() {
