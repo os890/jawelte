@@ -163,7 +163,7 @@
 <p>No <code>@EnableSpringData</code> annotation, no <code>@EnableJpaRepositories</code>, no scan packages. Adding <code>jawelte-spring-data-module</code> to the test classpath is the entire opt-in.</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
-<p>The single jar plus <code>spring-data-jpa</code> (consumers bring their own Spring Data version), on top of the usual jpa-module + CDI runtime stack.</p>
+<p>The single jar plus <code>spring-data-jpa</code> (consumers bring their own Spring Data version), on top of the usual jpa-module + CDI runtime stack. If you haven't set up jpa-module yet, do that first &mdash; see <a href="jpa-module.html#qs-maven">jpa-module &middot; maven setup</a>; spring-data-module reuses that <code>EntityManager</code>.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/spring-data-module/01-hello-world/pom.xml">listings/spring-data-module/01-hello-world/pom.xml</a></div>
@@ -223,7 +223,7 @@
 </div>
 
 <h2 id="dt-norepo">2.2 @NoRepositoryBean opt-out</h2>
-<p>An interface annotated <code>@org.springframework.data.repository.NoRepositoryBean</code> is excluded from discovery. Use this for shared base interfaces:</p>
+<p>An interface annotated <code>@org.springframework.data.repository.NoRepositoryBean</code> is excluded from discovery. Use this for shared base interfaces &mdash; common reason: several JPA aggregate types that all need the same audit-style methods (id-keyed counts, soft-delete checks, &hellip;) and you want to declare those methods once. The base interface is marked <code>@NoRepositoryBean</code> so the extension doesn't try to register it directly; only the concrete subinterfaces become CDI beans.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing spring-data-module/03 · no-repository-bean</span><a href="../listings/spring-data-module/03-no-repository-bean/">listings/spring-data-module/03-no-repository-bean/</a></div>
@@ -246,6 +246,7 @@
 
 <h2 id="dt-backoff">2.3 user @Produces back-off</h2>
 <p>If your test code (or another module) declares <code>@Produces CustomerRepository</code> &mdash; perhaps a Mockito mock for a unit test, or a custom factory for a multi-PU scenario &mdash; the extension's <code>ProcessBean</code> pass observes that bean and the <code>AfterBeanDiscovery</code> pass skips the synthetic registration for that interface. The user's producer wins. There is no on/off switch; it's pure observation.</p>
+<p>The listing below skips Mockito and uses a tiny JDK-proxy producer so the example carries no matcher syntax &mdash; a static <code>LAST_METHOD_CALLED</code> field is the proof that the user producer (and not the synthetic one) served the injection.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing spring-data-module/04 · user-produces-backoff</span><a href="../listings/spring-data-module/04-user-produces-backoff/">listings/spring-data-module/04-user-produces-backoff/</a></div>
