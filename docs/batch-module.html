@@ -154,16 +154,18 @@
 <span class="kw">class</span> <span class="ty">HelloBatchTest</span> {
 
     <span class="an">@Inject</span>
-    <span class="ty">Event</span>&lt;<span class="ty">BatchExecution</span>&gt; batchEvent;
+    <span class="kw">private</span> <span class="ty">Event</span>&lt;<span class="ty">BatchExecution</span>&gt; batchEvent;
 
     <span class="an">@Test</span>
     <span class="kw">void</span> simpleJobRunsToCompleted() {
         <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"simple-job"</span>);
 
-        batchEvent.fire(execution);   <span class="cm">// blocks until terminal</span>
+        batchEvent.fire(execution);
 
         assertThat(execution.getStatus()).isEqualTo(<span class="ty">BatchStatus</span>.COMPLETED);
         assertThat(execution.getJobExecution()).isNotNull();
+        assertThat(execution.getExecutionId())
+                .isEqualTo(execution.getJobExecution().getExecutionId());
     }
 }</pre>
 </div>
@@ -232,30 +234,45 @@
 <span class="an">@Dependent</span>
 <span class="kw">public class</span> <span class="ty">EchoBatchlet</span> <span class="kw">implements</span> <span class="ty">Batchlet</span> {
 
-    <span class="an">@Inject</span> <span class="ty">JobContext</span> jobContext;
-    <span class="an">@Inject</span> <span class="ty">JobOperator</span> jobOperator;
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">JobContext</span> jobContext;
+
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">JobOperator</span> jobOperator;
 
     <span class="an">@Override</span>
     <span class="kw">public</span> <span class="ty">String</span> process() {
-        <span class="cm">// BatchExecution.param() values come back through jobOperator.getParameters(),</span>
-        <span class="cm">// NOT jobContext.getProperties() (which holds JSL &lt;properties&gt;).</span>
-        <span class="ty">Properties</span> p = jobOperator.getParameters(jobContext.getExecutionId());
-        jobContext.setExitStatus(p.getProperty(<span class="st">"greeting"</span>) + <span class="st">"="</span> + p.getProperty(<span class="st">"target"</span>));
+        <span class="cm">// BatchExecution.param() values come back through</span>
+        <span class="cm">// jobOperator.getParameters(executionId) — NOT</span>
+        <span class="cm">// jobContext.getProperties() (which holds JSL &lt;properties&gt;).</span>
+        <span class="ty">Properties</span> parameters = jobOperator.getParameters(jobContext.getExecutionId());
+        jobContext.setExitStatus(parameters.getProperty(<span class="st">"greeting"</span>) + <span class="st">"="</span> + parameters.getProperty(<span class="st">"target"</span>));
         <span class="kw">return</span> <span class="st">"COMPLETED"</span>;
     }
-    <span class="an">@Override</span> <span class="kw">public void</span> stop() { }
+
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> stop() {
+    }
 }
 
 <span class="cm">// src/test/java/example/jobparams/JobParametersTest.java</span>
-<span class="an">@Test</span>
-<span class="kw">void</span> parametersAreVisibleToTheBatchletViaJobContext() {
-    <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"parametrised-job"</span>)
-            .param(<span class="st">"greeting"</span>, <span class="st">"hello"</span>)
-            .param(<span class="st">"target"</span>, <span class="st">"world"</span>);
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">JobParametersTest</span> {
 
-    batchEvent.fire(execution);
+    <span class="an">@Inject</span>
+    <span class="ty">Event</span>&lt;<span class="ty">BatchExecution</span>&gt; batchEvent;
 
-    assertThat(execution.getExitStatus()).isEqualTo(<span class="st">"hello=world"</span>);
+    <span class="an">@Test</span>
+    <span class="kw">void</span> parametersAreVisibleToTheBatchletViaJobContext() {
+        <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"parametrised-job"</span>)
+                .param(<span class="st">"greeting"</span>, <span class="st">"hello"</span>)
+                .param(<span class="st">"target"</span>, <span class="st">"world"</span>);
+
+        batchEvent.fire(execution);
+
+        assertThat(execution.getStatus()).isEqualTo(<span class="ty">BatchStatus</span>.COMPLETED);
+        assertThat(execution.getExitStatus()).isEqualTo(<span class="st">"hello=world"</span>);
+    }
 }</pre>
 </div>
 
