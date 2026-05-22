@@ -144,6 +144,9 @@
     <span class="an">@Inject</span>
     <span class="kw">private</span> <span class="ty">EntityManager</span> entityManager;
 
+    <span class="kw">public</span> <span class="ty">CustomerService</span>() {
+    }
+
     <span class="an">@Transactional</span>
     <span class="kw">public</span> <span class="ty">Long</span> createCustomer(<span class="ty">String</span> name) {
         <span class="ty">Customer</span> customer = <span class="kw">new</span> <span class="ty">Customer</span>(name);
@@ -160,17 +163,29 @@
 }
 
 <span class="cm">// src/test/java/example/jta/CustomerServiceTest.java</span>
+<span class="cm">/**</span>
+<span class="cm"> * Hello-world for jta-module: the test method itself is NOT</span>
+<span class="cm"> * @Transactional. The transaction boundary lives inside CustomerService,</span>
+<span class="cm"> * exactly as it would in production code. Each @Transactional call</span>
+<span class="cm"> * begins a fresh JTA transaction; on commit, the next @Transactional</span>
+<span class="cm"> * read sees the row.</span>
+<span class="cm"> */</span>
 <span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">CustomerServiceTest</span> {
 
     <span class="an">@Inject</span>
     <span class="kw">private</span> <span class="ty">CustomerService</span> customerService;
 
-    <span class="an">@Test</span>   <span class="cm">// note: NO @Transactional on the test method</span>
+    <span class="an">@Test</span>
     <span class="kw">void</span> transactionalServiceCallCommitsAndIsVisibleToTheNextCall() {
-        <span class="ty">Long</span> id = customerService.createCustomer(<span class="st">"Alice"</span>);
-        assertThat(id).isNotNull();
-        assertThat(customerService.countCustomers()).isEqualTo(1L);
+        <span class="ty">Long</span> generatedId = customerService.createCustomer(<span class="st">"Alice"</span>);
+        assertThat(generatedId)
+                .as(<span class="st">"createCustomer's JTA transaction committed and assigned a generated id"</span>)
+                .isNotNull();
+
+        assertThat(customerService.countCustomers())
+                .as(<span class="st">"a fresh JTA read sees the row the previous @Transactional committed"</span>)
+                .isEqualTo(<span class="kw">1</span>L);
     }
 }</pre>
 </div>
@@ -243,16 +258,28 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jta-module/02 · user-transaction</span><a href="../listings/jta-module/02-user-transaction/">listings/jta-module/02-user-transaction/</a></div>
 <pre><span class="cm">// src/test/java/example/usertx/UserTransactionTest.java</span>
+<span class="cm">/**</span>
+<span class="cm"> * Programmatic UserTransaction. jta-module exposes UserTransaction as</span>
+<span class="cm"> * a CDI bean wired to the same TransactionManager the @Transactional</span>
+<span class="cm"> * interceptor drives — so begin/commit/rollback by hand have the same</span>
+<span class="cm"> * effect on the database as the annotation.</span>
+<span class="cm"> */</span>
 <span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">UserTransactionTest</span> {
 
-    <span class="an">@Inject</span> <span class="ty">UserTransaction</span> userTransaction;
-    <span class="an">@Inject</span> <span class="ty">EntityManager</span> entityManager;
+    <span class="an">@Inject</span>
+    <span class="ty">UserTransaction</span> userTransaction;
+
+    <span class="an">@Inject</span>
+    <span class="ty">EntityManager</span> entityManager;
 
     <span class="an">@Test</span>
     <span class="kw">void</span> beginCommitPersistsAndIsVisibleToTheNextTransaction() <span class="kw">throws</span> <span class="ty">Exception</span> {
+        assertThat(userTransaction.getStatus()).isEqualTo(<span class="ty">Status</span>.STATUS_NO_TRANSACTION);
+
         userTransaction.begin();
         <span class="kw">try</span> {
+            assertThat(userTransaction.getStatus()).isEqualTo(<span class="ty">Status</span>.STATUS_ACTIVE);
             entityManager.persist(<span class="kw">new</span> <span class="ty">Marker</span>());
             userTransaction.commit();
         } <span class="kw">catch</span> (<span class="ty">RuntimeException</span> unexpected) {
@@ -265,8 +292,9 @@
         userTransaction.begin();
         <span class="kw">try</span> {
             <span class="kw">long</span> count = entityManager
-                    .createQuery(<span class="st">"SELECT COUNT(m) FROM Marker m"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
-            assertThat(count).isEqualTo(1L);
+                    .createQuery(<span class="st">"SELECT COUNT(m) FROM Marker m"</span>, <span class="ty">Long</span>.<span class="kw">class</span>)
+                    .getSingleResult();
+            assertThat(count).isEqualTo(<span class="kw">1</span>L);
         } <span class="kw">finally</span> {
             userTransaction.commit();
         }
@@ -282,6 +310,12 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jta-module/03 · transaction-scoped-bean</span><a href="../listings/jta-module/03-transaction-scoped-bean/">listings/jta-module/03-transaction-scoped-bean/</a></div>
 <pre><span class="cm">// src/test/java/example/txscoped/PerTxBean.java</span>
+<span class="cm">/**</span>
+<span class="cm"> * @TransactionScoped bean: one instance per JTA transaction. The</span>
+<span class="cm"> * per-instance UUID lets the test see two transactions produce two</span>
+<span class="cm"> * different bean instances. The @PreDestroy counter proves the bean</span>
+<span class="cm"> * is destroyed when the transaction completes.</span>
+<span class="cm"> */</span>
 <span class="an">@TransactionScoped</span>
 <span class="kw">public class</span> <span class="ty">PerTxBean</span> <span class="kw">implements</span> <span class="ty">Serializable</span> {
 
@@ -289,10 +323,14 @@
 
     <span class="kw">private final</span> <span class="ty">String</span> id = <span class="ty">UUID</span>.randomUUID().toString();
 
-    <span class="kw">public</span> <span class="ty">String</span> getId() { <span class="kw">return</span> id; }
+    <span class="kw">public</span> <span class="ty">String</span> getId() {
+        <span class="kw">return</span> id;
+    }
 
     <span class="an">@PreDestroy</span>
-    <span class="kw">void</span> onPreDestroy() { PRE_DESTROY_COUNT.incrementAndGet(); }
+    <span class="kw">void</span> onPreDestroy() {
+        PRE_DESTROY_COUNT.incrementAndGet();
+    }
 }
 
 <span class="cm">// src/test/java/example/txscoped/PerTxBeanReader.java   (provides the @Transactional boundary)</span>
@@ -317,11 +355,16 @@
 
     <span class="an">@Test</span>
     <span class="kw">void</span> eachJtaTransactionGetsItsOwnInstance() {
-        <span class="ty">String</span> firstTxId  = reader.readIdInsideJtaTx();   <span class="cm">// @Transactional opens tx 1, closes it on return</span>
-        <span class="ty">String</span> secondTxId = reader.readIdInsideJtaTx();   <span class="cm">// @Transactional opens tx 2, closes it on return</span>
+        <span class="ty">PerTxBean</span>.PRE_DESTROY_COUNT.set(<span class="kw">0</span>);
 
-        assertThat(firstTxId).isNotEqualTo(secondTxId);
-        assertThat(<span class="ty">PerTxBean</span>.PRE_DESTROY_COUNT.get()).isEqualTo(2);
+        <span class="ty">String</span> firstTxId = reader.readIdInsideJtaTx();
+        <span class="ty">String</span> secondTxId = reader.readIdInsideJtaTx();
+
+        assertThat(firstTxId).isNotBlank();
+        assertThat(secondTxId).isNotBlank().isNotEqualTo(firstTxId);
+        assertThat(<span class="ty">PerTxBean</span>.PRE_DESTROY_COUNT.get())
+                .as(<span class="st">"@PreDestroy fired once for the first tx and once for the second"</span>)
+                .isEqualTo(<span class="kw">2</span>);
     }
 }</pre>
 </div>
