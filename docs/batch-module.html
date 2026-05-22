@@ -286,29 +286,55 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing batch-module/03 · timeout-handler</span><a href="../listings/batch-module/03-timeout-handler/">listings/batch-module/03-timeout-handler/</a></div>
 <pre><span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.module.batch.api.port.TimeoutHandler</span>
+<span class="cm"># Activates the opt-in PopulateLatestSnapshotTimeoutHandler that ships</span>
+<span class="cm"># in batch-module-impl. Its @Priority (Integer.MAX_VALUE - 100) is</span>
+<span class="cm"># numerically lower than the default ThrowingTimeoutHandler's</span>
+<span class="cm"># Integer.MAX_VALUE, so ServicePriorityResolver picks it whenever this</span>
+<span class="cm"># services file adds it to the discovered candidate set.</span>
 org.os890.jawelte.module.batch.impl.adapter.timeout.PopulateLatestSnapshotTimeoutHandler
 
 <span class="cm">// src/test/java/example/timeout/LongRunningBatchlet.java</span>
-<span class="an">@Named</span>(<span class="st">"longRunningBatchlet"</span>) <span class="an">@Dependent</span>
+<span class="an">@Named</span>(<span class="st">"longRunningBatchlet"</span>)
+<span class="an">@Dependent</span>
 <span class="kw">public class</span> <span class="ty">LongRunningBatchlet</span> <span class="kw">implements</span> <span class="ty">Batchlet</span> {
+
     <span class="an">@Override</span>
     <span class="kw">public</span> <span class="ty">String</span> process() <span class="kw">throws</span> <span class="ty">InterruptedException</span> {
         <span class="ty">Thread</span>.sleep(3_000L);
         <span class="kw">return</span> <span class="st">"COMPLETED"</span>;
     }
-    <span class="an">@Override</span> <span class="kw">public void</span> stop() { }
+
+    <span class="an">@Override</span>
+    <span class="kw">public void</span> stop() {
+    }
 }
 
 <span class="cm">// src/test/java/example/timeout/TimeoutHandlerTest.java</span>
-<span class="an">@Test</span>
-<span class="kw">void</span> alternativeHandlerPopulatesEventWithoutThrowing() {
-    <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"long-running-job"</span>)
-            .timeout(<span class="ty">Duration</span>.ofMillis(500L));
+<span class="cm">/**</span>
+<span class="cm"> * Activated by the META-INF/services file: the bundled</span>
+<span class="cm"> * PopulateLatestSnapshotTimeoutHandler returns the latest non-terminal</span>
+<span class="cm"> * snapshot instead of throwing when the polling loop hits the timeout.</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;The default ThrowingTimeoutHandler would have raised</span>
+<span class="cm"> * IllegalStateException; this opt-in handler keeps the test alive and</span>
+<span class="cm"> * lets it inspect what the runtime last reported.</span>
+<span class="cm"> */</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">TimeoutHandlerTest</span> {
 
-    assertThatCode(() -&gt; batchEvent.fire(execution)).doesNotThrowAnyException();
+    <span class="an">@Inject</span>
+    <span class="ty">Event</span>&lt;<span class="ty">BatchExecution</span>&gt; batchEvent;
 
-    assertThat(execution.getJobExecution()).isNotNull();
-    assertThat(execution.getStatus()).isNotEqualTo(<span class="ty">BatchStatus</span>.COMPLETED);
+    <span class="an">@Test</span>
+    <span class="kw">void</span> alternativeHandlerPopulatesEventWithoutThrowing() {
+        <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"long-running-job"</span>)
+                .timeout(<span class="ty">Duration</span>.ofMillis(<span class="kw">500</span>L));
+
+        assertThatCode(() -&gt; batchEvent.fire(execution)).doesNotThrowAnyException();
+
+        assertThat(execution.getJobExecution()).isNotNull();
+        assertThat(execution.getStatus()).isNotEqualTo(<span class="ty">BatchStatus</span>.COMPLETED);
+    }
 }</pre>
 </div>
 
@@ -321,7 +347,7 @@ org.os890.jawelte.module.batch.impl.adapter.timeout.PopulateLatestSnapshotTimeou
 <table class="ports">
   <thead><tr><th>Port</th><th>Default</th><th>Purpose</th></tr></thead>
   <tbody>
-    <tr><td><code>TimeoutHandler</code></td><td><code>ThrowOnTimeoutTimeoutHandler</code> with <code>@Priority(Integer.MAX_VALUE)</code> &mdash; throws <code>IllegalStateException</code> when the timeout elapses</td><td>Decides what happens when the polling loop exceeds <code>BatchExecution.getTimeout()</code>: either throw (job didn't finish in time) or populate the event with the latest snapshot and return normally (here's what the runtime last reported).</td></tr>
+    <tr><td><code>TimeoutHandler</code></td><td><code>ThrowingTimeoutHandler</code> with <code>@Priority(Integer.MAX_VALUE)</code> &mdash; throws <code>IllegalStateException</code> when the timeout elapses</td><td>Decides what happens when the polling loop exceeds <code>BatchExecution.getTimeout()</code>: either throw (job didn't finish in time) or populate the event with the latest snapshot and return normally (here's what the runtime last reported).</td></tr>
   </tbody>
 </table>
 
