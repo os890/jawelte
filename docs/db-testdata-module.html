@@ -193,7 +193,7 @@
 <table class="config">
   <thead><tr><th>Builder method</th><th>SeedMode</th><th>What happens</th></tr></thead>
   <tbody>
-    <tr><td><code>.cleanInsert()</code> <em>(default)</em></td><td>CLEAN_INSERT</td><td>DELETE every row in the dataset's tables in reverse-FK order, then INSERT the dataset rows.</td></tr>
+    <tr><td><code>.cleanInsert()</code> <em>(default)</em></td><td>CLEAN_INSERT</td><td>DELETE every row in the dataset's tables in reverse-FK order, then INSERT the dataset rows. Fails on circular FK graphs because no reverse-FK ordering exists.</td></tr>
     <tr><td><code>.insert()</code></td><td>INSERT</td><td>INSERT only; duplicate PK throws.</td></tr>
     <tr><td><code>.update()</code></td><td>UPDATE</td><td>UPDATE existing rows by PK; missing PK throws.</td></tr>
     <tr><td><code>.refresh()</code></td><td>REFRESH</td><td>Upsert by PK. Safe under circular FK dependencies because no DELETE step fires.</td></tr>
@@ -204,15 +204,23 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing db-testdata-module/02 · seed-modes</span><a href="../listings/db-testdata-module/02-seed-modes/">listings/db-testdata-module/02-seed-modes/</a></div>
 <pre><span class="cm">// src/test/java/example/seedmodes/SeedModesTest.java</span>
-<span class="an">@Test</span>
-<span class="an">@Transactional</span>
-<span class="kw">void</span> cleanInsertThenRefreshUpserts() {
-    <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/initial.xml"</span>).cleanInsert().execute();
-    <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/refresh.xml"</span>).refresh().execute();
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"productsPU"</span>)
+<span class="kw">class</span> <span class="ty">SeedModesTest</span> {
 
-    <span class="cm">// refresh upserts: id=1 untouched, id=2 renamed, id=3 inserted -> 3 rows total.</span>
-    <span class="ty">Long</span> count = entityManager.createQuery(<span class="st">"SELECT COUNT(p) FROM Product p"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
-    assertThat(count).isEqualTo(3L);
+    <span class="an">@Inject</span>
+    <span class="ty">EntityManager</span> entityManager;
+
+    <span class="an">@Test</span>
+    <span class="an">@Transactional</span>
+    <span class="kw">void</span> cleanInsertThenRefreshUpserts() {
+        <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/initial.xml"</span>).cleanInsert().execute();
+        <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/refresh.xml"</span>).refresh().execute();
+
+        <span class="cm">// refresh: id=1 untouched, id=2 renamed, id=3 inserted -&gt; 3 rows total.</span>
+        <span class="ty">Long</span> count = entityManager.createQuery(<span class="st">"SELECT COUNT(p) FROM Product p"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
+        assertThat(count).isEqualTo(3L);
+    }
 }</pre>
 </div>
 
@@ -250,11 +258,27 @@
   <thead><tr><th>Factory</th><th>Source of the JDBC connection</th></tr></thead>
   <tbody>
     <tr><td><code>forConnection(connection)</code></td><td>The supplied JDBC connection. db-testdata-module never closes / commits / rolls it back &mdash; you own the lifecycle.</td></tr>
-    <tr><td><code>forPersistenceUnit()</code></td><td>Reads <code>@PersistenceConfig(persistenceUnitName)</code> off the active test class. Non-empty &rarr; named PU; empty &rarr; delegate to <code>forCurrentPersistenceUnit()</code>.</td></tr>
+    <tr><td><code>forPersistenceUnit()</code></td><td>Reads <code>@PersistenceConfig(persistenceUnitName)</code> off the active test class. Non-empty &rarr; named PU; empty &rarr; delegate to <code>forCurrentPersistenceUnit()</code>. Default for jpa-module users (every listing on this page).</td></tr>
     <tr><td><code>forCurrentPersistenceUnit()</code></td><td>The single PU currently active on the calling thread (via <code>PersistenceUnitConnectionResolver</code>). Zero or multiple active PUs raise <code>IllegalStateException</code>.</td></tr>
     <tr><td><code>forPersistenceUnit(name)</code></td><td>Explicitly named PU, regardless of annotation.</td></tr>
   </tbody>
 </table>
+
+<p>One-line examples covering each factory:</p>
+<pre style="background: #f0f0f0; padding: 12px 16px; font-size: 12.5px; border-left: 3px solid #88a; border-radius: 3px; overflow: auto; margin: 12px 0; line-height: 1.6;"><span class="cm">// Default — reads @PersistenceConfig off the test class.</span>
+<span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/initial.xml"</span>).cleanInsert().execute();
+
+<span class="cm">// Named PU — overrides @PersistenceConfig, useful in multi-PU tests.</span>
+<span class="ty">DbSeed</span>.forPersistenceUnit(<span class="st">"customersPU"</span>).dataset(<span class="st">"customers.xml"</span>).cleanInsert().execute();
+
+<span class="cm">// Current active PU — fails if zero or multiple PUs are active on the thread.</span>
+<span class="ty">DbSeed</span>.forCurrentPersistenceUnit().dataset(<span class="st">"products.xml"</span>).refresh().execute();
+
+<span class="cm">// Raw JDBC — bypass JPA entirely; caller manages the connection lifecycle.</span>
+<span class="kw">try</span> (<span class="ty">Connection</span> c = dataSource.getConnection()) {
+    <span class="ty">DbSeed</span>.forConnection(c).dataset(<span class="st">"products.xml"</span>).cleanInsert().execute();
+    c.commit();
+}</pre>
 
 <h2 id="dt-el">2.4 EL interpolation</h2>
 <p>Dataset cells (and column values in <code>DbDiff</code>'s predicate columns) may contain <code>${expression}</code>. The expressions resolve against:</p>
@@ -263,7 +287,14 @@
   <li><strong>Beans</strong> passed via <code>.withBean(name, instance)</code> &mdash; method calls / property reads against the bean.</li>
   <li><strong>Functions</strong> passed via <code>.withFunction(prefix, name, sourceClass, methodName)</code> &mdash; called as <code>${prefix:name(args)}</code>. The source class is reflected for a public-static method with that name; missing or non-static raises an explicit error before the dataset runs.</li>
 </ul>
-<p>Predicate cells in <code>DbDiff</code>'s expected file (e.g. <code>${value &gt; 0}</code>) evaluate the expression against the actual cell from the database and pass when the predicate returns <code>true</code>; <code>NULL</code> handling mirrors EL's standard semantics.</p>
+<p>Predicate cells in <code>DbDiff</code>'s expected file (e.g. <code>${value &gt; 0}</code>) evaluate the expression against the actual cell from the database and pass when the predicate returns <code>true</code>; <code>NULL</code> handling mirrors EL's standard semantics. The cell-local variable is <code>value</code>:</p>
+
+<pre style="background: #f0f0f0; padding: 12px 16px; font-size: 12.5px; border-left: 3px solid #88a; border-radius: 3px; overflow: auto; margin: 12px 0; line-height: 1.6;"><span class="cm">&lt;!-- expected.xml: ID must equal 42 exactly, AMOUNT must be positive, NOTE may be anything --&gt;</span>
+&lt;dataset&gt;
+    &lt;<span class="ty">ORDER_ROW</span> ID=<span class="st">"42"</span> AMOUNT=<span class="st">"${value &gt; 0}"</span> NOTE=<span class="st">"${true}"</span>/&gt;
+&lt;/dataset&gt;</pre>
+
+<p>Plain string cells compare literally; cells containing <code>${...}</code> become predicate cells when the expression returns <code>boolean</code>, or value-substitution cells when it returns anything else.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing db-testdata-module/04 · el-interpolation</span><a href="../listings/db-testdata-module/04-el-interpolation/">listings/db-testdata-module/04-el-interpolation/</a></div>
@@ -273,16 +304,25 @@
 &lt;/dataset&gt;
 
 <span class="cm">// src/test/java/example/elinterp/InterpolationTest.java</span>
-<span class="an">@Test</span> <span class="an">@Transactional</span>
-<span class="kw">void</span> elPlaceholdersAreResolvedAtSeedTime() {
-    <span class="ty">DbSeed</span>.forPersistenceUnit()
-            .dataset(<span class="st">"customers/dbIn.xml"</span>)
-            .withValues(<span class="ty">Map</span>.of(<span class="st">"customerId"</span>, 42, <span class="st">"customerName"</span>, <span class="st">"Alice"</span>))
-            .cleanInsert()
-            .execute();
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"customersPU"</span>)
+<span class="kw">class</span> <span class="ty">InterpolationTest</span> {
 
-    <span class="ty">Object</span> name = entityManager.createNativeQuery(<span class="st">"SELECT NAME FROM CUSTOMER WHERE ID=42"</span>).getSingleResult();
-    assertThat(name).isEqualTo(<span class="st">"Alice"</span>);
+    <span class="an">@Inject</span>
+    <span class="ty">EntityManager</span> entityManager;
+
+    <span class="an">@Test</span>
+    <span class="an">@Transactional</span>
+    <span class="kw">void</span> elPlaceholdersAreResolvedAtSeedTime() {
+        <span class="ty">DbSeed</span>.forPersistenceUnit()
+                .dataset(<span class="st">"customers/dbIn.xml"</span>)
+                .withValues(<span class="ty">Map</span>.of(<span class="st">"customerId"</span>, 42, <span class="st">"customerName"</span>, <span class="st">"Alice"</span>))
+                .cleanInsert()
+                .execute();
+
+        <span class="ty">Object</span> name = entityManager.createNativeQuery(<span class="st">"SELECT NAME FROM CUSTOMER WHERE ID=42"</span>).getSingleResult();
+        assertThat(name).isEqualTo(<span class="st">"Alice"</span>);
+    }
 }</pre>
 </div>
 
