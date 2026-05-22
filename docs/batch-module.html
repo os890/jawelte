@@ -260,7 +260,7 @@
 </div>
 
 <h2 id="dt-fire">2.2 Event&lt;BatchExecution&gt;.fire &mdash; the blocking call</h2>
-<p>The CDI <code>Event.fire(...)</code> looks fire-and-forget but is observably <em>blocking</em>: the impl observer runs synchronously on the test thread, polls <code>JobOperator</code> with exponential backoff (50 ms initial, capped at 5 s) until a terminal <code>BatchStatus</code> is reached, then populates <code>BatchExecution</code> via the internal <code>markCompleted</code> hook before <code>fire(...)</code> returns. The test reads the result off the same instance that was fired.</p>
+<p>The CDI <code>Event.fire(...)</code> looks fire-and-forget but is observably <em>blocking</em>: the impl observer runs synchronously on the test thread, polls <code>JobOperator</code> with exponential backoff (50 ms initial, capped at 5 s) until a terminal <code>BatchStatus</code> is reached, then populates the <code>BatchExecution</code> with the final status and the resolved <code>JobExecution</code> handle before <code>fire(...)</code> returns. The test reads the result off the same instance that was fired &mdash; see <a href="#qs-hello">listing 01</a> for the simplest shape (<code>fire(...)</code>, then <code>execution.getStatus()</code>).</p>
 
 <h2 id="dt-timeout">2.3 timeout</h2>
 <p>Default 60 seconds. If the job does not reach a terminal status in time, the default <code>TimeoutHandler</code> throws <code>IllegalStateException</code> &mdash; <em>the job itself is not cancelled</em>; it keeps running on the jBatch thread, just no longer observed by your test.</p>
