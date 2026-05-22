@@ -164,7 +164,10 @@
 }
 
 <span class="cm">// src/main/resources/META-INF/persistence.xml</span>
-&lt;persistence version=<span class="st">"3.2"</span> ...&gt;
+&lt;persistence version=<span class="st">"3.2"</span>
+             xmlns=<span class="st">"https://jakarta.ee/xml/ns/persistence"</span>
+             xmlns:xsi=<span class="st">"http://www.w3.org/2001/XMLSchema-instance"</span>
+             xsi:schemaLocation=<span class="st">"https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_2.xsd"</span>&gt;
   &lt;persistence-unit name=<span class="st">"notesPU"</span> transaction-type=<span class="st">"RESOURCE_LOCAL"</span>&gt;
     &lt;provider&gt;org.hibernate.jpa.HibernatePersistenceProvider&lt;/provider&gt;
     &lt;exclude-unlisted-classes&gt;false&lt;/exclude-unlisted-classes&gt;
@@ -256,6 +259,22 @@
   <li><code>persistenceUnitName = ""</code> &mdash; in multi-PU mode, names the PU the <code>TransactionStrategy</code> eagerly opens on <code>begin()</code>. Empty means the strategy resolves it itself by looking at the test class's <code>@Inject @Named EntityManager</code> fields.</li>
 </ul>
 <p>Annotation is <code>@Inherited</code> so a base test class can set the config for a whole hierarchy.</p>
+
+<p>Three common shapes on a test class:</p>
+<pre style="background: #f0f0f0; padding: 12px 16px; font-size: 12.5px; border-left: 3px solid #88a; border-radius: 3px; overflow: auto; margin: 12px 0; line-height: 1.6;"><span class="cm">// Single PU with durable state on disk (e.g. for tests that exercise an upgrade script).</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(fileMode = <span class="kw">true</span>)
+<span class="kw">class</span> <span class="ty">UpgradeScriptTest</span> { ... }
+
+<span class="cm">// Multi-PU mode — bootstrap only the named PU(s) from persistence.xml; eagerly open ordersPU on begin().</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(persistenceUnits = {<span class="st">"ordersPU"</span>, <span class="st">"customersPU"</span>}, persistenceUnitName = <span class="st">"ordersPU"</span>)
+<span class="kw">class</span> <span class="ty">OrdersAndCustomersTest</span> { ... }
+
+<span class="cm">// Default — in-memory H2, all PUs from persistence.xml. Same as omitting @PersistenceConfig altogether.</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>
+<span class="kw">class</span> <span class="ty">DefaultsTest</span> { ... }</pre>
 
 <h2 id="dt-readonly">2.2 @ReadOnly</h2>
 <p><code>@ReadOnly</code> on a <code>@Test</code> method (or the test class) marks the test as not-writing. jpa-module flushes nothing, skips the cleanup, and the active <code>TransactionStrategy</code> picks a connection mode tuned for reads. Useful for tests that genuinely don't mutate the DB &mdash; long-form report tests, regression checks against a shared fixture, etc.</p>
