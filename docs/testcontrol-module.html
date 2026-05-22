@@ -163,7 +163,7 @@
 <p>The test method body is empty &mdash; testcontrol seeds from <code>dbIn/</code> in <code>beforeEach</code> and runs <code>DbDiff</code> against <code>dbExpected/</code> in <code>afterEach</code>. The shape generalises: change the test method body to exercise the system under test, change <code>dbExpected/</code> to the post-condition you want to assert.</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
-<p>testcontrol-module is a meta-module: by itself it manipulates the lifecycle, but it relies on companion modules for the actual seeding (db-testdata-module) and persistence (jpa-module). All three are usually on the classpath together.</p>
+<p>testcontrol-module is a meta-module: by itself it manipulates the lifecycle, but it relies on companion modules for the actual seeding (db-testdata-module) and persistence (jpa-module). All three are usually on the classpath together. The fragment below shows only the testcontrol-module + db-testdata-module deltas; the <a href="core.html#qs-maven">core-docs maven setup</a> covers jawelte-core + cdi-module + Jakarta APIs + JUnit + AssertJ + CDI runtime, and the <a href="jpa-module.html#qs-maven">jpa-module setup</a> adds the JPA provider + H2 + xbean/asm that testcontrol's seed/verify pipeline drives.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/testcontrol-module/01-hello-world/pom.xml">listings/testcontrol-module/01-hello-world/pom.xml</a></div>
@@ -214,7 +214,7 @@
 <p>Files within each sub-folder are processed in alphabetical order. Across multiple <code>testData</code> entries, all <code>dbIn/</code> phases complete before any <code>dbUpdate/</code> phase starts &mdash; same for <code>dbExpected/</code> after the method.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing testcontrol-module/02 · update-phase</span><a href="../listings/testcontrol-module/02-update-phase/">listings/testcontrol-module/02-update-phase/</a></div>
+  <div class="listing-bar"><span class="label">listing testcontrol-module/02 &middot; update-phase</span><a href="../listings/testcontrol-module/02-update-phase/">listings/testcontrol-module/02-update-phase/</a></div>
 <pre><span class="cm">// src/test/resources/testdata/products/dbIn/products.xml</span>
 &lt;dataset&gt;
     &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"1"</span> NAME=<span class="st">"old-apple"</span>/&gt;
@@ -234,9 +234,14 @@
 &lt;/dataset&gt;
 
 <span class="cm">// src/test/java/example/updatephase/ProductsTest.java</span>
-<span class="an">@Test</span>
-<span class="an">@TestControl</span>(testData = <span class="st">"testdata/products"</span>)
-<span class="kw">void</span> dbInThenDbUpdateThenVerifyAgainstDbExpected() {
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"productsPU"</span>)
+<span class="kw">class</span> <span class="ty">ProductsTest</span> {
+
+    <span class="an">@Test</span>
+    <span class="an">@TestControl</span>(testData = <span class="st">"testdata/products"</span>)
+    <span class="kw">void</span> dbInThenDbUpdateThenVerifyAgainstDbExpected() {
+    }
 }</pre>
 </div>
 
@@ -248,16 +253,21 @@
 <p>The MicroProfile Config key <code>org.os890.jawelte.module.testcontrol.api.TestControl.base-path</code> overrides the annotation when set to a non-empty value &mdash; useful for project-wide conventions like "all test data lives under <code>fixtures/</code>" without editing every test class.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing testcontrol-module/03 · testdata-basepath</span><a href="../listings/testcontrol-module/03-testdata-basepath/">listings/testcontrol-module/03-testdata-basepath/</a></div>
+  <div class="listing-bar"><span class="label">listing testcontrol-module/03 &middot; testdata-basepath</span><a href="../listings/testcontrol-module/03-testdata-basepath/">listings/testcontrol-module/03-testdata-basepath/</a></div>
 <pre><span class="cm">// src/test/java/example/basepath/ItemsTest.java</span>
-<span class="an">@Test</span>
-<span class="an">@TestControl</span>(testDataBasePath = <span class="st">"fixtures"</span>, testData = <span class="st">"m01"</span>)
-<span class="kw">void</span> firstMethodReadsFixturesM01() {
-}
+<span class="an">@EnableTestBeans</span>
+<span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"itemsPU"</span>)
+<span class="kw">class</span> <span class="ty">ItemsTest</span> {
 
-<span class="an">@Test</span>
-<span class="an">@TestControl</span>(testDataBasePath = <span class="st">"fixtures"</span>, testData = <span class="st">"m02"</span>)
-<span class="kw">void</span> secondMethodReadsFixturesM02() {
+    <span class="an">@Test</span>
+    <span class="an">@TestControl</span>(testDataBasePath = <span class="st">"fixtures"</span>, testData = <span class="st">"m01"</span>)
+    <span class="kw">void</span> firstMethodReadsFixturesM01() {
+    }
+
+    <span class="an">@Test</span>
+    <span class="an">@TestControl</span>(testDataBasePath = <span class="st">"fixtures"</span>, testData = <span class="st">"m02"</span>)
+    <span class="kw">void</span> secondMethodReadsFixturesM02() {
+    }
 }</pre>
 </div>
 
@@ -275,7 +285,7 @@
 <p>An entry can prefix the folder with a persistence-unit name to route it: <code>"orders:testdata/scenario08-orders"</code> sends the sub-folders to PU <code>orders</code>, while a bare <code>"testdata/scenario08-customers"</code> uses the default PU. Multiple entries in the same annotation may target different PUs &mdash; each phase runs against the entry's own PU.</p>
 
 <div class="listing">
-  <div class="listing-bar"><span class="label">listing testcontrol-module/04 · multi-pu-routing</span><a href="../listings/testcontrol-module/04-multi-pu-routing/">listings/testcontrol-module/04-multi-pu-routing/</a></div>
+  <div class="listing-bar"><span class="label">listing testcontrol-module/04 &middot; multi-pu-routing</span><a href="../listings/testcontrol-module/04-multi-pu-routing/">listings/testcontrol-module/04-multi-pu-routing/</a></div>
 <pre><span class="cm">// persistence.xml declares customersPU and ordersPU.</span>
 
 <span class="cm">// src/test/java/example/multipu/MultiPuRoutingTest.java</span>
