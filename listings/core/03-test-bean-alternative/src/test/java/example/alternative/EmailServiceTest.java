@@ -13,17 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package example.alt;
+package example.alternative;
 
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.enterprise.inject.Alternative;
+import static org.assertj.core.api.Assertions.assertThat;
 
-@Alternative
-@ApplicationScoped
-public class StubEmailService implements EmailService {
+import jakarta.inject.Inject;
 
-    @Override
-    public String send(String to) {
-        return "stub:" + to;
+import org.junit.jupiter.api.Test;
+import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.TestBean;
+
+@EnableTestBeans
+@TestBean(bean = StubEmailService.class)
+class EmailServiceTest {
+
+    @Inject
+    EmailService emailService;
+
+    @Test
+    void stubAlternativeWins() {
+        assertThat(emailService.send("alice@example.com")).isEqualTo("stub:alice@example.com");
     }
 }

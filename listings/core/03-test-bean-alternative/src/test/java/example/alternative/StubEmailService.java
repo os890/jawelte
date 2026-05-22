@@ -13,9 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package example.alt;
+package example.alternative;
 
-public interface EmailService {
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Alternative;
 
-    String send(String to);
+@Alternative
+@ApplicationScoped
+public class StubEmailService implements EmailService {
+
+    @Override
+    public String send(String to) {
+        return "stub:" + to;
+    }
 }

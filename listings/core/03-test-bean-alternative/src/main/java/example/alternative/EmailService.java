@@ -13,15 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package example.alt;
+package example.alternative;
 
-import jakarta.enterprise.context.ApplicationScoped;
+public interface EmailService {
 
-@ApplicationScoped
-public class SmtpEmailService implements EmailService {
-
-    @Override
-    public String send(String to) {
-        return "smtp:" + to;
-    }
+    String send(String to);
 }
