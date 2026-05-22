@@ -6883,3 +6883,185 @@ Per user direction, added a todo.md entry tracking both fix paths (drop
 the doc fiction vs implement the attribute) for later. The
 docs-ux-review report still describes the gap accurately.
 
+
+## 2026-05-22 — sync findings round (every docs ↔ listing drift the report flagged)
+
+User asked to "continue with the sync findings". Worked through all 13
+tasks in the order they appeared in the report. Each fix targets the
+canonical source (the .java / .properties / pom file under
+`listings/<module>/`) and regenerates the HTML pre-block to match —
+with two intentional source-side changes flagged by the original review.
+
+**modules.html (M1)** — §2.5 pom-fragment link target was the
+hello-world pom (no mockito-core), but the fragment showed mockito-core
+as a dep. Switched the link to listing 02 (auto-mock), which actually
+does carry mockito-core; fragment + linked file now agree.
+
+**scope-module.html (S1/S2)** — listings 01/02 path comments said
+`src/main/java/` but bean files live under `src/test/java/`; fixed.
+Listings 03/04 regenerated end-to-end: ResourceHandle.use() restored,
+ResourceHandleTest now shows @EnableTestBeans + @TestMethodOrder +
+@Inject + actual source comments; UserPreferences accessors
+multi-line + UserPreferencesTest with missing assertions and the
+`.as("...")` description that source uses.
+
+**jpa-module.html (J1/J2/J4/J5/J6/J7/J9)** — biggest set:
+- listing 02 (multi-pu) HTML had wholly fabricated identifiers
+  (`OrdersAndCustomersTest`/`ordersPU`/`Order`/`Customer`). Regenerated
+  to match source (`MultiPuTest`/`notesPU`/`auditPU`/`Note`/`AuditRecord`)
+  with both test methods.
+- §1.3 maven setup links to core-docs maven setup as the baseline the
+  jpa-module fragment is a delta on.
+- listing 03 (readonly) now carries the full NoteService with
+  persistNote, the second test method `plainTransactionalStillCommits`,
+  and the `.as(...)` descriptions.
+- listing 04 (transaction-events) now shows the @EnableTestBeans +
+  @PersistenceConfig class shell + @Inject fields + @BeforeEach
+  resetTimeline() hook.
+- §2.3 cross-reference "section 2.4" → "<a href='#dt-events'>section
+  2.5</a>" (the transaction-events section).
+- §3 intro "six ports" → "seven ports"; the orphan paragraph that
+  described a fictional `physical-table-name` port (no matching code)
+  is dropped.
+- listing 05 (table-name-resolver) carries the source class Javadoc;
+  the fabricated `// nothing to wipe — data survives across methods`
+  inline comment that wasn't in source is removed.
+
+**jta-module.html (T3/T4/T5)** — listings 01/02/03 all regenerated:
+- 01 hello-world: source no-arg ctor restored; fabricated
+  `// note: NO @Transactional on the test method` comment removed;
+  `id` → `generatedId`; `.as(...)` descriptions added on both
+  assertions; source class Javadoc visible.
+- 02 user-transaction: source Javadoc visible; the two pre/post
+  `getStatus()` Status assertions surrounding `begin()` are visible.
+- 03 transaction-scoped-bean: PerTxBean class Javadoc + multi-line
+  accessor/@PreDestroy bodies; PerTxBeanTest now includes the
+  `PRE_DESTROY_COUNT.set(0)` reset call, both `.isNotBlank()`
+  assertions, and the `.as("@PreDestroy fired once for the first tx
+  and once for the second")` description; the fabricated
+  `// @Transactional opens tx 1` comments are removed.
+
+**ejb-module.html (E1/E2/E11)** — the @Stateless / @Dependent fact:
+- E1: implementation maps @jakarta.ejb.Stateless to @Dependent (not
+  @RequestScoped). Doc §1.1 + §2.1, plus the Javadocs on the listing
+  02 source (Counter.java + CounterTest.java), all updated to say
+  @Dependent. Test still passes — listing 02 (`assertThat(1)` in
+  both methods) matches @Dependent semantics (fresh instance per
+  injection point).
+- E2: listing 03 NoteRepository pre-block now carries the source
+  Javadoc explaining "ejb-module's interceptor wraps every method";
+  the misleading `// Note: no @Transactional anywhere; ejb-module's
+  mapper added it.` inline comment (which used the wrong mechanism
+  word "mapper" instead of "interceptor") is gone. `private
+  EntityManager` restored.
+- E11: listings 02/03/04 each pom carried a copy-paste description
+  from listing 01 that talked about @Singleton; each now has a
+  description that describes its own listing (Stateless / implicit
+  Transactional / EjbAnnotationMapper-for-Stateful).
+
+**jaxrs-module.html (X11/X14)** — X11 intentionally left as-is (the
+  `// src/main/java/...` path-comment convention is consistent across
+  every module's HTML and adds in-snippet location hints; flagging
+  one page without a project-wide sweep would only make this page
+  inconsistent). X14: OrderResource @GET/@Produces method now spans
+  five lines matching source instead of two.
+
+**testcontrol-module.html (TC1/TC2/TC11)** — listings 02/03 HTML now
+  show the @EnableTestBeans + @PersistenceConfig class shell that the
+  on-disk source carries (matching listing 01's convention). §1.3
+  maven setup intro points readers to core-docs maven setup and
+  jpa-module setup as the baselines. Middle-dot encoding in all
+  listing-bar labels normalised to `&middot;`.
+
+**db-testdata-module.html (D1/D2/D3/D11)** — §3 SPI intro changed
+  from "three ports" to "four ports" (matching the four-row table and
+  the existing "all four" wrap-up sentence). All `@Test @Transactional`
+  occurrences split onto two lines. Every db-testdata listing's
+  `pom.xml` had a "See listing 23 for the rationale" comment that
+  pointed at a listing that never existed; replaced with a
+  self-contained explanation of the dbunit exclusion.
+
+**content-diff-module.html (CD4/CD5/CD9)** — pom fragment now lists
+  microprofile-config-api + smallrye-config (which the prose names
+  as required for MP Config defaults). Dep blocks ordered and prefixed
+  with one-line rationale comments. Listings 02/03 carry path
+  comments matching listing 01's convention.
+
+**wiremock-module.html (W1/W2/W3/W4/W12)** —
+- W1: source for listing 02 (StubAndCallTest) had a redundant
+  @EnableTestBeans alongside @EnableWireMock. Removed; @EnableWireMock
+  is meta-annotated @EnableTestBeans so the prose claim is now
+  consistent with the source. Test still passes.
+- W3: listing 01 source dropped `private` modifier on
+  WireMockRuntimeInfo field, matching listing 02's package-private
+  style. Test still passes.
+- W2: listing 02 HTML pre regenerated from source — full
+  @EnableWireMock class shell, multi-line stub registration, the
+  HttpRequest assignment separated from client.send, the status-code
+  assertion.
+- W4: §1.3 prose names jawelte-core in the runtime list and points
+  at core-docs maven setup as the baseline.
+- W12: listing 02 listing-bar label middle-dot normalised.
+
+**spring-data-module.html (SD1-SD6/SD9/SD20)** —
+- SD1/SD9: listing 01 source dropped `private` modifier on the
+  @Inject field, matching the other listings.
+- SD5: listing 02 (derived-query) carries the source's per-method
+  Javadocs describing the JPQL Spring Data derives.
+- SD2: listing 03 (no-repository-bean) now shows the
+  `default boolean isEmpty()` method on AuditableRepository (the
+  matching test calls `customerRepository.isEmpty()` which was
+  previously unexplained).
+- SD4: both interface Javadocs visible.
+- SD3: listing 04 InvocationHandler shows the full if/else cascade
+  with the boolean.class branch (so existsById and similar
+  boolean-returning JpaRepository methods don't NPE in the proxy).
+- SD6: CustomerRepositoryProducer class Javadoc + UserProducesBackoffTest's
+  full body with `.as(...)` descriptions visible.
+
+**batch-module.html (B1/B2/B3/B4/B7/B8)** —
+- B1: §3 SPI table TimeoutHandler entry now correctly names
+  `ThrowingTimeoutHandler` (the actual default impl class) instead
+  of the fictional `ThrowOnTimeoutTimeoutHandler`.
+- B8: listing 01 HelloBatchTest declares `private Event<BatchExecution>`
+  and includes the third executionId assertion the source carries.
+- B2: listing 02 EchoBatchlet matches source layout (separate
+  @Inject blocks, the multi-line inline comment, the variable name
+  `parameters`).
+- B3: listing 02 JobParametersTest now shows the @EnableTestBeans
+  class header and the `getStatus().isEqualTo(BatchStatus.COMPLETED)`
+  assertion.
+- B4: listing 03 TimeoutHandlerTest now shows the @EnableTestBeans
+  class header + @Inject field + the source's 6-line class Javadoc.
+- B7: listing 03 services-file pre-block carries the 5-line comment
+  header explaining the priority arithmetic.
+
+**core.html (C10/C11)** —
+- C11: listing 03 (test-bean-alternative) package renamed from the
+  abbreviated `example.alt` to `example.alternative`, matching the
+  convention used by every other listing. Doc references updated.
+  Test still passes.
+- C10: §1.4 maven setup pom fragment trailing comment expanded from a
+  bare list of artefact names into a self-contained sentence with
+  scope (provided/test) for each entry plus a forward pointer to the
+  full pom.
+
+13 commits total, all under WORKING:. Two listing source files
+(scope-module 01/02 unchanged because the source path matches; jpa
+listing 02 etc unchanged) — most fixes are HTML-only and reflect the
+canonical source. Source-side fixes were limited to:
+- wiremock-module/02-stub-and-call: remove redundant @EnableTestBeans
+- wiremock-module/01-hello-world: drop `private` on runtimeInfo
+- spring-data-module/01-hello-world: drop `private` on
+  customerRepository
+- ejb-module/02-stateless: Counter.java + CounterTest.java Javadocs
+  updated from @RequestScoped to @Dependent
+- ejb-module/02-stateless + 03-implicit-transactional + 04-ejb-annotation-mapper:
+  pom <description> + header comment per listing
+- listings/core/03-test-bean-alternative: package rename example.alt
+  → example.alternative
+- listings/db-testdata-module/01-05: dangling "See listing 23"
+  comment replaced with a real explanation
+
+All affected listings `mvn test` clean on JDK 25.
+
