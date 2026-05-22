@@ -168,6 +168,13 @@
 }</pre>
 </div>
 
+<p>The failure message itself names the diverging path and both sides &mdash; what the assertion above asserts via <code>hasMessageContaining("age")</code> is part of a richer message that looks like:</p>
+
+<pre style="background: #f0f0f0; padding: 12px 16px; font-size: 12.5px; border-left: 3px solid #88a; border-radius: 3px; overflow: auto; margin: 12px 0; line-height: 1.6;">JSON diff found 1 difference(s):
+  $.age: expected="31" actual="30" (expected file line 1)</pre>
+
+<p>The path is a JSON-Path (XPath for the XML variant) anchoring exactly which field disagreed; the parenthetical line number points back into the expected document so you can open the source dataset and edit one specific line.</p>
+
 <div class="listing">
   <div class="listing-bar"><span class="label">listing content-diff-module/03 &middot; ignoring-pattern</span><a href="../listings/content-diff-module/03-ignoring-pattern/">listings/content-diff-module/03-ignoring-pattern/</a></div>
 <pre><span class="an">@Test</span>
