@@ -252,6 +252,44 @@
 }</pre>
 </div>
 
+<p>The five remaining builder methods (<code>assertRowCount</code>, <code>subsetOnly</code>, <code>unorderedTables</code>, <code>withBean</code>, <code>withFunction</code>) each get a runnable test method in the dedicated features listing:</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing db-testdata-module/05 · dbdiff-features</span><a href="../listings/db-testdata-module/05-dbdiff-features/">listings/db-testdata-module/05-dbdiff-features/</a></div>
+<pre><span class="cm">// src/test/java/example/difffeatures/DbDiffFeaturesTest.java</span>
+<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="kw">void</span> assertRowCountSkipsTheFullDiff() {
+    <span class="ty">DbDiff</span>.forPersistenceUnit()
+            .expectedContent(<span class="st">"&lt;dataset/&gt;"</span>)
+            .assertRowCount(<span class="st">"ORDER_ROW"</span>, <span class="kw">3</span>);
+}
+
+<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="kw">void</span> subsetOnlyIgnoresExtraRowsInTheDatabase() {
+    <span class="ty">DbDiff</span>.forPersistenceUnit()
+            .expected(<span class="st">"orders/dbExpected-subset.xml"</span>)
+            .subsetOnly()
+            .assertEquals();
+}
+
+<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="kw">void</span> unorderedTablesIgnoresRowOrder() {
+    <span class="ty">DbDiff</span>.forPersistenceUnit()
+            .expected(<span class="st">"orders/dbExpected-unordered.xml"</span>)
+            .unorderedTables(<span class="st">"ORDER_ROW"</span>)
+            .assertEquals();
+}
+
+<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="kw">void</span> withBeanAndWithFunctionResolveElInTheExpectedDataset() {
+    <span class="ty">DbDiff</span>.forPersistenceUnit()
+            .withBean(<span class="st">"catalog"</span>, <span class="kw">new</span> <span class="ty">Catalog</span>())              <span class="cm">// ${catalog.appleName}</span>
+            .withFunction(<span class="st">"fn"</span>, <span class="st">"lower"</span>, <span class="ty">StringFns</span>.<span class="kw">class</span>, <span class="st">"lower"</span>)  <span class="cm">// ${fn:lower('CHERRY')}</span>
+            .expected(<span class="st">"orders/dbExpected-el.xml"</span>)
+            .assertEquals();
+}</pre>
+</div>
+
 <h2 id="dt-factories">2.3 factory choice</h2>
 <p>Both <code>DbSeed</code> and <code>DbDiff</code> ship four entry-point factories. Pick the one that matches how the calling test resolves its database connection:</p>
 <table class="config">
