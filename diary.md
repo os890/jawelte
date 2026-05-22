@@ -6768,3 +6768,66 @@ Doc snippets added in §2.1 (derived queries), §2.2 (@NoRepositoryBean), §2.3 
 batch-module up to 3 listings (was 1). Added:
 - `02-job-parameters` — `BatchExecution.param("k","v")` chain; the batchlet reads them via `jobOperator.getParameters(jobContext.getExecutionId())` (NOT `jobContext.getProperties()`, which holds JSL `<properties>`; first attempt failed with that mistake, fixed after looking at scenario-02). Asserts the round-trip via `setExitStatus()`.
 - `03-timeout-handler` — activates the bundled `PopulateLatestSnapshotTimeoutHandler` via a META-INF/services file. A 3-second batchlet vs a 500-ms timeout: with the alternative handler, fire() doesn't throw — it returns with the latest non-terminal JobExecution snapshot. The doc snippet in §2.3 shows the services-file content + the test body.
+
+## 2026-05-22 — docs/* context-finding fixes from docs-ux-review
+
+Fixed all "context"-dimension findings from `tickets/docs-ux-review.html`
+that could be addressed via doc edits alone (no new listing folders).
+
+Per-file commits (each follows commit-ASAP):
+
+- `modules.html` — dropped the misleading WIP "will land here over time"
+  sentence (M3); each module already has its own page linked from the
+  catalog cards.
+- `core.html` — surfaced production classes in listings 06 + 07 (C2/C3);
+  relocated the Mockito-on-JDK-25 6-line aside from §1.3 (between
+  auto-mock and @TestBean) to §1.4 maven setup with a one-line forward
+  pointer (C5); added BeanScopeMapperPort override note (C6); added a
+  shape snippet + cross-link for AfterTestTransaction (C8); added three
+  concrete bootstrap-key override examples in §3.10 (C9); clarified the
+  NoopContainerPort stub mention in §3.4 (C12).
+- `scope-module.html` — linked core's maven setup (S5).
+- `jpa-module.html` — showed the full persistence.xml root element
+  instead of `...` (J12); added three @PersistenceConfig usage shapes
+  (J8).
+- `jta-module.html` — added Customer.java to hello-world (T15); added
+  PerTxBeanReader + test-class shell to listing 03 (T7); replaced the
+  opaque "two existing test scenarios" Atomikos reference with the
+  TransactionManagerProvider SPI pointer (T9).
+- `ejb-module.html` — surfaced ShoppingCart + ShoppingCartTest in
+  listing 04, making the SPI override payoff visible (E3); added
+  test-class shell + @Inject field to listings 02/03 (E4); linked
+  jta-module / jpa-module and showed @PersistenceConfig in §2.2 (E6).
+- `jaxrs-module.html` — added BrewResource + TeapotException to listing
+  02 (X1); restored the @EnableTestBeans + @EnableJaxRs + @Inject TestUrl
+  class shape to listing 03 (X2); cross-linked the core-docs maven
+  setup from §1.3 (X3); named the FQCN of ResponseDiff in §2.3 (X9).
+- `testcontrol-module.html` — added a paragraph above listing 01
+  explaining the three stacked annotations (@EnableTestBeans /
+  @PersistenceConfig / @TestControl) with cross-links to core and
+  jpa-module (TC6); linked scope-module in §3 (TC7).
+- `db-testdata-module.html` — surfaced @EnableTestBeans /
+  @PersistenceConfig / @Inject EntityManager scaffolding in listings 02
+  and 04 (D4); added a predicate-cell example to §2.4 (D5); added four
+  one-line factory examples to §2.3 (D6); added the CLEAN_INSERT
+  circular-FK caveat (D14).
+- `content-diff-module.html` — added a sample-output pre-block showing
+  the actual failure-message format after listing 02 (CD3).
+- `wiremock-module.html` — added a paragraph after listing 02 explaining
+  the two injection sites (live URL vs stub-client) and clarifying that
+  static imports are upstream WireMock, not a jawelte facade (W5).
+- `spring-data-module.html` — pointed §1.3 maven setup to jpa-module's
+  own setup (SD19); added the @NoRepositoryBean benefit sentence (SD13);
+  added the JDK-proxy bridge sentence to §2.3 (SD14).
+- `batch-module.html` — added the @EnableTestBeans paragraph linking
+  core and identifying jakarta.batch types as upstream (B5); inlined
+  src/test/resources in §2.3 + §3 SPI prose (B9); cross-linked
+  TestContext.loadService + ServicePriorityResolver to core docs (B11).
+
+Deferred — these context findings need new Maven listing projects:
+- TC4: `05-start-scopes` + `06-require-db-expected` for testcontrol-module.
+- CD2: forXml / unorderedArrays / withValues / MP Config listings for
+  content-diff-module.
+- W8: `03-multi-endpoint` + `04-priority-default` for wiremock-module.
+- B6: §2.2 observer-signature listing for batch-module.
+
