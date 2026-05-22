@@ -29,7 +29,7 @@ import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 class CustomerRepositoryTest {
 
     @Inject
-    private CustomerRepository customerRepository;
+    CustomerRepository customerRepository;
 
     @Test
     @Transactional

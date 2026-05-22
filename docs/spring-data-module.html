@@ -251,6 +251,15 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing spring-data-module/04 · user-produces-backoff</span><a href="../listings/spring-data-module/04-user-produces-backoff/">listings/spring-data-module/04-user-produces-backoff/</a></div>
 <pre><span class="cm">// src/test/java/example/producesbackoff/CustomerRepositoryProducer.java</span>
+<span class="cm">/**</span>
+<span class="cm"> * User-supplied @Produces method. spring-data-module's CDI extension</span>
+<span class="cm"> * observes this bean during ProcessBean, sees that CustomerRepository</span>
+<span class="cm"> * already has a producer, and skips its own synthetic registration.</span>
+<span class="cm"> *</span>
+<span class="cm"> * &lt;p&gt;The returned object is a JDK proxy that records every method</span>
+<span class="cm"> * call on a static field — proof during the test that this producer</span>
+<span class="cm"> * (not the synthetic) served the injection.</span>
+<span class="cm"> */</span>
 <span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">CustomerRepositoryProducer</span> {
 
@@ -261,7 +270,14 @@
     <span class="ty">CustomerRepository</span> produce() {
         <span class="ty">InvocationHandler</span> handler = (proxy, method, args) -&gt; {
             LAST_METHOD_CALLED.set(method.getName());
-            <span class="kw">return</span> method.getReturnType() == <span class="kw">long</span>.<span class="kw">class</span> ? 0L : <span class="kw">null</span>;
+            <span class="ty">Class</span>&lt;?&gt; returnType = method.getReturnType();
+            <span class="kw">if</span> (returnType == <span class="kw">long</span>.<span class="kw">class</span>) {
+                <span class="kw">return</span> <span class="kw">0</span>L;
+            }
+            <span class="kw">if</span> (returnType == <span class="kw">boolean</span>.<span class="kw">class</span>) {
+                <span class="kw">return</span> <span class="kw">false</span>;
+            }
+            <span class="kw">return</span> <span class="kw">null</span>;
         };
         <span class="kw">return</span> (<span class="ty">CustomerRepository</span>) <span class="ty">Proxy</span>.newProxyInstance(
                 getClass().getClassLoader(),
@@ -273,8 +289,14 @@
 <span class="cm">// src/test/java/example/producesbackoff/UserProducesBackoffTest.java</span>
 <span class="an">@Test</span>
 <span class="kw">void</span> userProducerWinsOverSynthetic() {
-    customerRepository.count();
-    assertThat(<span class="ty">CustomerRepositoryProducer</span>.LAST_METHOD_CALLED.get()).isEqualTo(<span class="st">"count"</span>);
+    <span class="kw">long</span> count = customerRepository.count();
+
+    assertThat(count)
+            .as(<span class="st">"user producer's JDK proxy returns 0 for primitive long — no real DB query"</span>)
+            .isZero();
+    assertThat(<span class="ty">CustomerRepositoryProducer</span>.LAST_METHOD_CALLED.get())
+            .as(<span class="st">"the user's producer InvocationHandler recorded the count() call"</span>)
+            .isEqualTo(<span class="st">"count"</span>);
 }</pre>
 </div>
 
