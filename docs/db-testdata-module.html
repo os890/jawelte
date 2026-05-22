@@ -241,7 +241,8 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing db-testdata-module/03 · dbdiff-ignoring</span><a href="../listings/db-testdata-module/03-dbdiff-ignoring/">listings/db-testdata-module/03-dbdiff-ignoring/</a></div>
 <pre><span class="cm">// dbIn.xml seeds real timestamps; dbExpected.xml has sentinel "9999-01-01..." timestamps.</span>
-<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="an">@Test</span>
+<span class="an">@Transactional</span>
 <span class="kw">void</span> ignoringSkipsTheNoisyColumn() {
     <span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"orders/dbIn.xml"</span>).cleanInsert().execute();
 
@@ -257,14 +258,16 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing db-testdata-module/05 · dbdiff-features</span><a href="../listings/db-testdata-module/05-dbdiff-features/">listings/db-testdata-module/05-dbdiff-features/</a></div>
 <pre><span class="cm">// src/test/java/example/difffeatures/DbDiffFeaturesTest.java</span>
-<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="an">@Test</span>
+<span class="an">@Transactional</span>
 <span class="kw">void</span> assertRowCountSkipsTheFullDiff() {
     <span class="ty">DbDiff</span>.forPersistenceUnit()
             .expectedContent(<span class="st">"&lt;dataset/&gt;"</span>)
             .assertRowCount(<span class="st">"ORDER_ROW"</span>, <span class="kw">3</span>);
 }
 
-<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="an">@Test</span>
+<span class="an">@Transactional</span>
 <span class="kw">void</span> subsetOnlyIgnoresExtraRowsInTheDatabase() {
     <span class="ty">DbDiff</span>.forPersistenceUnit()
             .expected(<span class="st">"orders/dbExpected-subset.xml"</span>)
@@ -272,7 +275,8 @@
             .assertEquals();
 }
 
-<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="an">@Test</span>
+<span class="an">@Transactional</span>
 <span class="kw">void</span> unorderedTablesIgnoresRowOrder() {
     <span class="ty">DbDiff</span>.forPersistenceUnit()
             .expected(<span class="st">"orders/dbExpected-unordered.xml"</span>)
@@ -280,7 +284,8 @@
             .assertEquals();
 }
 
-<span class="an">@Test</span> <span class="an">@Transactional</span>
+<span class="an">@Test</span>
+<span class="an">@Transactional</span>
 <span class="kw">void</span> withBeanAndWithFunctionResolveElInTheExpectedDataset() {
     <span class="ty">DbDiff</span>.forPersistenceUnit()
             .withBean(<span class="st">"catalog"</span>, <span class="kw">new</span> <span class="ty">Catalog</span>())              <span class="cm">// ${catalog.appleName}</span>
@@ -367,7 +372,7 @@
 <p>One dataset file, parameterised through <code>.withValues(Map)</code> — different test methods seed different concrete rows without producing new XML files. Add <code>jakarta.el-api</code> + an EL provider (Tomcat's <code>tomcat-embed-el</code> here) to the test classpath.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
-<p>db-testdata-module ships <strong>three ports</strong>, all resolved through core's <code>ServicePriorityResolver</code> + ServiceLoader chain:</p>
+<p>db-testdata-module ships <strong>four ports</strong>, all resolved through core's <code>ServicePriorityResolver</code> + ServiceLoader chain:</p>
 
 <table class="ports">
   <thead><tr><th>Port</th><th>Default</th><th>Purpose</th></tr></thead>
