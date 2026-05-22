@@ -6831,3 +6831,29 @@ Deferred — these context findings need new Maven listing projects:
 - W8: `03-multi-endpoint` + `04-priority-default` for wiremock-module.
 - B6: §2.2 observer-signature listing for batch-module.
 
+
+## 2026-05-22 — new listings backing previously-deferred docs-ux-review findings (CD2, W8, TC4 partial, B6)
+
+Followed up the context-finding doc edits with 7 runnable Maven listings + 1 doc clarification.
+
+**content-diff-module (CD2):**
+- `04-forXml` — ContentDiff.forXml() with two test methods (attribute-order tolerance + nested element shape).
+- `05-unordered-arrays` — `.unorderedArrays("$.tags")` shows multiset semantics; second method proves index-wise default fails.
+- `06-with-values` — `.withValues(Map)` EL interpolation, including property navigation `${order.customer.name}`.
+- `07-mp-config-defaults` — ships microprofile-config.properties with `$..audit.timestamp`; two test methods show the MP Config default is honoured without `.ignoring(...)` calls AND that inline patterns are unioned with the configured default.
+
+**wiremock-module (W8):**
+- `03-multi-endpoint` — @PaymentApi + @InventoryApi qualifiers, both port=0, two servers, isolated stubs. Required two non-obvious things in the pom/resources:
+  - `mockito-core` on the test classpath, because cdi-module's auto-mock extension probes the qualified IPs and would otherwise throw `NoClassDefFoundError` before wiremock-module's own beans register.
+  - `microprofile-config.properties` setting `org.os890.jawelte.module.cdi.auto-mock.exclude-packages=com.github.tomakehurst.wiremock.` so auto-mock skips the upstream WireMock types entirely; without this both auto-mock AND wiremock-module register beans for the qualified IPs and CDI raises `AmbiguousResolutionException`.
+- `04-priority-default` — clones the multi-endpoint setup, adds `@Priority(1)` to `@PaymentApi`. Test asserts unqualified `@Inject WireMockServer` resolves to the priority winner; qualified injections still reach their own servers.
+
+**testcontrol-module (TC4 partial):**
+- `06-require-db-expected` — `@TestControl(requireDbExpected = false)` lets a test seed-only (fixture folder has just `dbIn/`). The test verifies via direct `EntityManager` query instead of `DbDiff`.
+- `05-start-scopes` — *deferred / skipped*. scope-module's `ScopeLifecycleAdapter` Javadoc explicitly notes the BeforeScopeStarted event veto is observable but "the 'usage-veto' semantics — telling consumers to skip use of @TestMethodScoped beans for a given method — are deferred to a follow-up ticket". A listing demonstrating `startScopes` today would show "event is vetoed but the bean still works" — worse UX than honest prose. Instead, edited `docs/testcontrol-module.html §2.3` to add a "Current behaviour" paragraph noting the enforcement gap.
+
+**batch-module §2.2 (B6):**
+- Original review suggested either a listing showing the BatchExecutionObserver polling-loop OR removing the internal `markCompleted` name-drop. The observer is framework-internal (users never write one), so chose the doc edit: §2.2 prose now describes the user-observable end-state (BatchExecution populated with final status + JobExecution handle) and cross-links to listing 01 for the pattern.
+
+All new listings `mvn test` clean under OWB-SE on JDK 25.
+
