@@ -399,12 +399,7 @@
 <p>The request scope is freshly activated in <code>beforeEach</code> and torn down in <code>afterEach</code>, so each test method gets its own fresh mock. Stubs you set up in one method never bleed into the next — Mockito state resets implicitly with the scope. Add a second <code>@Test</code> method that doesn't call <code>when(…)</code> and <code>translator.translate(…)</code> returns Mockito's default <code>null</code> again.</p>
 <p>The default scope is configurable; the exact MP Config key and what each module rebinds it to is covered in the cdi-module / scope-module documentation. JDK types (<code>String</code>, primitives, the final classes mocking can't subclass…) are auto-mocked at <code>@Dependent</code> scope so each injection point gets its own instance — the framework can't put a normal-scope proxy on a final class.</p>
 
-<h4>Mockito version on JDK 25</h4>
-<p>The listing pins <code>mockito-core 5.23.0</code> deliberately. Mockito's default <em>inline</em> mock maker rewrites bytecode at runtime via Byte Buddy; older Mockito releases (e.g.&nbsp;<code>5.14.2</code>) bundled Byte Buddy <code>1.15.4</code>, which only knows class files up to Java 24 (major version 68). Under JDK 25 (major 69), <code>Mockito.mock(...)</code> throws</p>
-<pre style="background: var(--bg-code); border: 1px solid var(--border); border-radius: 4px; padding: 12px 16px; font-size: 12.5px; color: var(--text-soft); margin: 12px 0 16px; overflow-x: auto;">java.lang.IllegalArgumentException: Java 25 (69) is not supported by the
-current version of Byte Buddy which officially supports Java 24 (68)</pre>
-<p>jawelte's <code>MockitoMockFactory</code> catches the exception and returns <code>null</code>, the auto-mock synthetic bean is never registered, and <code>@Inject Translator</code> fails with <code>UnsatisfiedResolutionException</code> at container boot. Mockito <code>5.23.0</code> ships Byte Buddy <code>1.17.7</code>, which understands Java 26's class file (major&nbsp;70) and therefore Java 25 too — picking that version is enough; no <code>mockito-extensions/org.mockito.plugins.MockMaker</code> override and no <code>-Dnet.bytebuddy.experimental=true</code> JVM flag.</p>
-<p>If you have to keep an older Mockito on the classpath (transitive dep clash, internal artifact-policy, …), the same fix can be applied by overriding only Byte Buddy: pin <code>net.bytebuddy:byte-buddy</code> + <code>net.bytebuddy:byte-buddy-agent</code> to <code>1.17.7</code> (or newer) in your <code>&lt;dependencyManagement&gt;</code>. The <code>mock-maker-subclass</code> config file route is the last-resort fallback when neither version bump is possible.</p>
+<p>The compatibility footnote on Mockito + Byte Buddy + JDK 25 (why the listings pin <code>mockito-core 5.23.0</code>) lives in <a href="#qs-maven-mockito">§1.4 below</a> &mdash; skip it on first read.</p>
 
 <h3>@TestBean — pick an alternative</h3>
 <p>A test-only <code>@Alternative</code> class wins over the production impl when its class is named in <code>@TestBean(bean=…)</code> on the test class.</p>
@@ -612,6 +607,13 @@ app.retries  = 5</pre>
        bean-discovery-mode="annotated"/&gt;</pre>
 </div>
 
+<h3 id="qs-maven-mockito">Mockito version on JDK 25</h3>
+<p>The listings pin <code>mockito-core 5.23.0</code> deliberately. Mockito's default <em>inline</em> mock maker rewrites bytecode at runtime via Byte Buddy; older Mockito releases (e.g.&nbsp;<code>5.14.2</code>) bundled Byte Buddy <code>1.15.4</code>, which only knows class files up to Java 24 (major version 68). Under JDK 25 (major 69), <code>Mockito.mock(...)</code> throws</p>
+<pre style="background: var(--bg-code); border: 1px solid var(--border); border-radius: 4px; padding: 12px 16px; font-size: 12.5px; color: var(--text-soft); margin: 12px 0 16px; overflow-x: auto;">java.lang.IllegalArgumentException: Java 25 (69) is not supported by the
+current version of Byte Buddy which officially supports Java 24 (68)</pre>
+<p>jawelte's <code>MockitoMockFactory</code> catches the exception and returns <code>null</code>, the auto-mock synthetic bean is never registered, and <code>@Inject Translator</code> fails with <code>UnsatisfiedResolutionException</code> at container boot. Mockito <code>5.23.0</code> ships Byte Buddy <code>1.17.7</code>, which understands Java 26's class file (major&nbsp;70) and therefore Java 25 too — picking that version is enough; no <code>mockito-extensions/org.mockito.plugins.MockMaker</code> override and no <code>-Dnet.bytebuddy.experimental=true</code> JVM flag.</p>
+<p>If you have to keep an older Mockito on the classpath (transitive dep clash, internal artifact-policy, …), the same fix can be applied by overriding only Byte Buddy: pin <code>net.bytebuddy:byte-buddy</code> + <code>net.bytebuddy:byte-buddy-agent</code> to <code>1.17.7</code> (or newer) in your <code>&lt;dependencyManagement&gt;</code>. The <code>mock-maker-subclass</code> config file route is the last-resort fallback when neither version bump is possible.</p>
+
 <h1 id="detailed">2. detailed</h1>
 
 <h2 id="dt-enable">2.1 @EnableTestBeans</h2>
@@ -622,7 +624,25 @@ app.retries  = 5</pre>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing core/06 · limit-to-test-beans</span><a href="../listings/core/06-limit-to-test-beans/">listings/core/06-limit-to-test-beans/</a></div>
-<pre><span class="an">@EnableTestBeans</span>(limitToTestBeans = <span class="kw">true</span>)
+<pre><span class="cm">// src/main/java/example/strict/EmailService.java  — the interface the production code depends on</span>
+<span class="kw">public interface</span> <span class="ty">EmailService</span> { <span class="ty">String</span> send(<span class="ty">String</span> to); }
+
+<span class="cm">// src/main/java/example/strict/SmtpEmailService.java  — real production impl (vetoed under limitToTestBeans=true)</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">SmtpEmailService</span> <span class="kw">implements</span> <span class="ty">EmailService</span> { ... }
+
+<span class="cm">// src/main/java/example/strict/AuditService.java  — unrelated @ApplicationScoped bean (also vetoed)</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">AuditService</span> { ... }
+
+<span class="cm">// src/test/java/example/strict/StubEmailService.java  — @Alternative the test names via @TestBean</span>
+<span class="an">@Alternative</span> <span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">StubEmailService</span> <span class="kw">implements</span> <span class="ty">EmailService</span> {
+    <span class="an">@Override</span> <span class="kw">public</span> <span class="ty">String</span> send(<span class="ty">String</span> to) { <span class="kw">return</span> <span class="st">"stub:"</span> + to; }
+}
+
+<span class="cm">// src/test/java/example/strict/LimitToTestBeansTest.java</span>
+<span class="an">@EnableTestBeans</span>(limitToTestBeans = <span class="kw">true</span>)
 <span class="an">@TestBean</span>(bean = <span class="ty">StubEmailService</span>.<span class="kw">class</span>)
 <span class="kw">class</span> <span class="ty">LimitToTestBeansTest</span> {
 
@@ -647,7 +667,16 @@ app.retries  = 5</pre>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing core/07 · external-container</span><a href="../listings/core/07-external-container/">listings/core/07-external-container/</a></div>
-<pre><span class="an">@EnableTestBeans</span>(manageContainer = <span class="kw">false</span>)
+<pre><span class="cm">// src/main/java/example/external/Counter.java  — ordinary @ApplicationScoped bean</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">Counter</span> {
+    <span class="kw">private int</span> count;
+    <span class="kw">public int</span> increment() { <span class="kw">return</span> ++count; }
+    <span class="kw">public int</span> value() { <span class="kw">return</span> count; }
+}
+
+<span class="cm">// src/test/java/example/external/ExternalContainerTest.java</span>
+<span class="an">@EnableTestBeans</span>(manageContainer = <span class="kw">false</span>)
 <span class="kw">class</span> <span class="ty">ExternalContainerTest</span> {
 
     <span class="kw">private static</span> <span class="ty">SeContainer</span> container;
@@ -868,7 +897,16 @@ app.backoff.enabled       = true</pre>
 </div>
 
 <h3>AfterTestTransaction</h3>
-<p>Defined in core as a contract; fired only when a transaction-managing module is on the classpath. See that module's documentation for when it fires and what the <code>committed</code> flag means in that context.</p>
+<p>Defined in core as a contract; fired only when a transaction-managing module is on the classpath. See that module's documentation for when it fires and what the <code>committed</code> flag means in that context. The observer shape is the same as for the events above:</p>
+
+<pre style="background: var(--bg-code); border: 1px solid var(--border); border-radius: 4px; padding: 12px 16px; font-size: 12.5px; color: var(--text-soft); margin: 12px 0 16px; overflow-x: auto;"><span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">TxAuditor</span> {
+    <span class="kw">public void</span> onAfterTx(<span class="an">@Observes</span> <span class="ty">AfterTestTransaction</span> event) {
+        <span class="cm">// event.isCommitted() vs rollback; event.getTestClass() / event.getTestMethod() available too.</span>
+    }
+}</pre>
+
+<p>See <a href="jpa-module.html#dt-events">jpa-module &middot; §2.5 transaction events</a> for the firing rules in the JPA case (paired with <code>TransactionStarted</code>) and <a href="jta-module.html">jta-module</a> for the JTA variant.</p>
 
 <h2 id="dt-ordering">2.5 lifecycle ordering</h2>
 <p>jawelte invokes lifecycle callbacks in a specific order across the active ports:</p>
@@ -989,7 +1027,7 @@ example.factory.RecordingTestInstanceFactory
 }</pre>
 </div>
 
-<p>The listing also ships a stub <code>NoopContainerPort implements TestBeanContainerPort</code> (registered in its own <code>META-INF/services</code> file) &mdash; jawelte refuses to bootstrap without exactly one container port, and we deliberately don't pull in cdi-module here. Real consumers replace this port only when they need a non-CDI test-instance source (Spring, custom DI, …).</p>
+<p>The listing also ships a stub <code>NoopContainerPort implements TestBeanContainerPort</code> in its own source file (visible in the linked folder under <code>src/test/java/example/factory/NoopContainerPort.java</code>, plus a <code>META-INF/services/...TestBeanContainerPort</code> file naming it) &mdash; jawelte refuses to bootstrap without exactly one container port, and we deliberately don't pull in cdi-module here so the <code>TestInstanceFactoryPort</code> override is what the test exercises. Real consumers replace this port only when they need a non-CDI test-instance source (Spring, custom DI, &hellip;).</p>
 
 <h2 id="spi-scope-mapper">3.5 BeanScopeMapper + BeanScopeMapperPort</h2>
 <p>Two related ports for declarative CDI scope rewriting at <code>ProcessAnnotatedType</code> time.</p>
@@ -1017,6 +1055,8 @@ example.factory.RecordingTestInstanceFactory
 <span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper</span>
 example.scopemap.RequestToApplicationScoped</pre>
 </div>
+
+<p>The listing demonstrates the everyday <code>BeanScopeMapper</code> provider; almost no consumer replaces the driven <code>BeanScopeMapperPort</code> itself. The override pattern is the standard single-impl shape (<code>META-INF/services/...BeanScopeMapperPort</code> naming an FQCN with a public no-arg constructor) &mdash; do this only if you need to bypass the provider loop entirely (e.g. to plug a different annotation-rewrite algorithm).</p>
 
 <h2 id="spi-config-resolver">3.6 ConfigResolver</h2>
 <p><strong>Single active impl, CDI bean (NOT ServiceLoader).</strong> Resolves config keys to their raw <code>String</code> values. <code>@ConfigBean</code> classes inject it and call <code>resolve(dotKey)</code>. The default impl in <code>core/impl</code> looks up via MicroProfile Config with the documented two-step fallback (<code>dotKey</code> first, then the underscore variant if and only if <code>dotKey</code> contained at least one <code>.</code>).</p>
@@ -1139,7 +1179,17 @@ app.shipping.features.enabled-flags = next-day-delivery,tracking-v2
   <p class="desc">The resolver behind every <code>TestContext.loadService(Class)</code> call — section <a href="#spi-priority-resolver">3.8</a>.</p>
 </div>
 
-<p>Both defaults ship in <code>core/impl</code>'s own <code>META-INF/microprofile-config.properties</code> at MP Config ordinal 100; user overrides at any higher ordinal (system properties, env vars, application <code>.properties</code>) win.</p>
+<p>Both defaults ship in <code>core/impl</code>'s own <code>META-INF/microprofile-config.properties</code> at MP Config ordinal 100; user overrides at any higher ordinal (system properties, env vars, application <code>.properties</code>) win. Concrete overrides look like:</p>
+
+<pre style="background: var(--bg-code); border: 1px solid var(--border); border-radius: 4px; padding: 12px 16px; font-size: 12.5px; color: var(--text-soft); margin: 12px 0 16px; overflow-x: auto;"><span class="cm"># src/test/resources/META-INF/microprofile-config.properties  (ordinal &gt; 100 wins)</span>
+config_ordinal=200
+org.os890.jawelte.core.api.port.ServicePriorityResolver=com.example.MyResolver
+
+<span class="cm"># Or in pom.xml &lt;configuration&gt; for surefire / failsafe:</span>
+&lt;argLine&gt;-Dorg.os890.jawelte.core.api.port.ServicePriorityResolver=com.example.MyResolver&lt;/argLine&gt;
+
+<span class="cm"># Or via shell env var (MP Config maps `_` to `.` for the lookup):</span>
+$ ORG_OS890_JAWELTE_CORE_API_PORT_SERVICEPRIORITYRESOLVER=com.example.MyResolver mvn test</pre>
 
 <div class="closing">
   <strong>jawelte / core</strong> &nbsp;·&nbsp; <a href="modules.html">modules</a> &nbsp;·&nbsp; back to <a href="index.html">overview</a>
