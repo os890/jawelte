@@ -181,7 +181,7 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing scope-module/01 · test-method-scoped</span><a href="../listings/scope-module/01-test-method-scoped/">listings/scope-module/01-test-method-scoped/</a></div>
-<pre><span class="cm">// src/main/java/example/methodscope/Counter.java</span>
+<pre><span class="cm">// src/test/java/example/methodscope/Counter.java</span>
 <span class="an">@TestMethodScoped</span>
 <span class="kw">public class</span> <span class="ty">Counter</span> {
 
@@ -218,7 +218,7 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing scope-module/02 · test-class-scoped</span><a href="../listings/scope-module/02-test-class-scoped/">listings/scope-module/02-test-class-scoped/</a></div>
-<pre><span class="cm">// src/main/java/example/classscope/Counter.java</span>
+<pre><span class="cm">// src/test/java/example/classscope/Counter.java</span>
 <span class="an">@TestClassScoped</span>
 <span class="kw">public class</span> <span class="ty">Counter</span> {
 
@@ -295,6 +295,10 @@
 
     <span class="kw">public static final</span> <span class="ty">AtomicInteger</span> DESTROY_COUNT = <span class="kw">new</span> <span class="ty">AtomicInteger</span>();
 
+    <span class="kw">public void</span> use() {
+        <span class="cm">// pretend we did real work</span>
+    }
+
     <span class="an">@PreDestroy</span>
     <span class="kw">void</span> close() {
         DESTROY_COUNT.incrementAndGet();
@@ -302,16 +306,29 @@
 }
 
 <span class="cm">// src/test/java/example/predestroy/ResourceHandleTest.java</span>
-<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">1</span>)
-<span class="kw">void</span> firstMethodUsesTheHandle() {
-    resourceHandle.use();
-    assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(0);   <span class="cm">// not yet</span>
-}
+<span class="an">@EnableTestBeans</span>
+<span class="an">@TestMethodOrder</span>(<span class="ty">MethodOrderer</span>.<span class="ty">OrderAnnotation</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">ResourceHandleTest</span> {
 
-<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">2</span>)
-<span class="kw">void</span> secondMethodSeesPriorMethodsPreDestroy() {
-    resourceHandle.use();
-    assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(1);   <span class="cm">// fired at end of method 1's afterEach</span>
+    <span class="an">@Inject</span>
+    <span class="ty">ResourceHandle</span> resourceHandle;
+
+    <span class="an">@Test</span>
+    <span class="an">@Order</span>(<span class="kw">1</span>)
+    <span class="kw">void</span> firstMethodUsesTheHandle() {
+        resourceHandle.use();
+        <span class="cm">// PreDestroy has NOT fired yet for the current method — it runs at end of afterEach.</span>
+        assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(<span class="kw">0</span>);
+    }
+
+    <span class="an">@Test</span>
+    <span class="an">@Order</span>(<span class="kw">2</span>)
+    <span class="kw">void</span> secondMethodSeesPriorMethodsPreDestroy() {
+        resourceHandle.use();
+        <span class="cm">// After method 1 returned, scope-module fired @PreDestroy on the</span>
+        <span class="cm">// method-1 instance. Method 2 is now using a fresh instance.</span>
+        assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(<span class="kw">1</span>);
+    }
 }</pre>
 </div>
 
@@ -337,19 +354,38 @@
 
     <span class="kw">private</span> <span class="ty">String</span> themeName = <span class="st">"default"</span>;
 
-    <span class="kw">public</span> <span class="ty">String</span> getThemeName() { <span class="kw">return</span> themeName; }
-    <span class="kw">public void</span> setThemeName(<span class="ty">String</span> name) { <span class="kw">this</span>.themeName = name; }
+    <span class="kw">public</span> <span class="ty">String</span> getThemeName() {
+        <span class="kw">return</span> themeName;
+    }
+
+    <span class="kw">public void</span> setThemeName(<span class="ty">String</span> themeName) {
+        <span class="kw">this</span>.themeName = themeName;
+    }
 }
 
 <span class="cm">// src/test/java/example/sessionremap/UserPreferencesTest.java</span>
-<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">1</span>)
-<span class="kw">void</span> firstMethodMutatesTheme() {
-    userPreferences.setThemeName(<span class="st">"dark"</span>);
-}
+<span class="an">@EnableTestBeans</span>
+<span class="an">@TestMethodOrder</span>(<span class="ty">MethodOrderer</span>.<span class="ty">OrderAnnotation</span>.<span class="kw">class</span>)
+<span class="kw">class</span> <span class="ty">UserPreferencesTest</span> {
 
-<span class="an">@Test</span> <span class="an">@Order</span>(<span class="kw">2</span>)
-<span class="kw">void</span> secondMethodSeesAFreshInstance() {
-    assertThat(userPreferences.getThemeName()).isEqualTo(<span class="st">"default"</span>);  <span class="cm">// remapped — prior write is gone</span>
+    <span class="an">@Inject</span>
+    <span class="ty">UserPreferences</span> userPreferences;
+
+    <span class="an">@Test</span>
+    <span class="an">@Order</span>(<span class="kw">1</span>)
+    <span class="kw">void</span> firstMethodMutatesTheme() {
+        assertThat(userPreferences.getThemeName()).isEqualTo(<span class="st">"default"</span>);
+        userPreferences.setThemeName(<span class="st">"dark"</span>);
+        assertThat(userPreferences.getThemeName()).isEqualTo(<span class="st">"dark"</span>);
+    }
+
+    <span class="an">@Test</span>
+    <span class="an">@Order</span>(<span class="kw">2</span>)
+    <span class="kw">void</span> secondMethodSeesAFreshInstance() {
+        assertThat(userPreferences.getThemeName())
+                .as(<span class="st">"the @SessionScoped bean was remapped to @TestMethodScoped, so the prior write is gone"</span>)
+                .isEqualTo(<span class="st">"default"</span>);
+    }
 }</pre>
 </div>
 
