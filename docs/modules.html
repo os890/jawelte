@@ -306,7 +306,7 @@
 
 <p>jawelte is a thin core wrapped in a constellation of <em>modules</em>. Each module is one feature jawelte tests need to integrate — JPA, JTA, JAX-RS, EJB scopes, WireMock, batch jobs, Spring Data, content-diff assertions, … — packaged as an opt-in dependency that plugs into core's port surface. Adding a module is the same act as adding any other Maven dependency to your test scope; no global wiring file, no module registration step. Each module owns its own ports (api) and adapter (impl), so swapping the implementation, hooking events, or overriding a default is the same hexagonal pattern jawelte's <a href="core.html">core</a> documents.</p>
 
-<p>This page opens with the catalog of what every module is and what it gives you. The cdi-module section below it goes deeper — the rest of the modules will land here over time, each as its own section using the same template.</p>
+<p>This page opens with the catalog of what every module is and what it gives you. The cdi-module section below it documents the SE-CDI adapter directly on this page because every other module already assumes it; each opt-in module ships its own dedicated docs page (linked from the catalog cards).</p>
 
 <h1 id="overview">1. modules overview</h1>
 
