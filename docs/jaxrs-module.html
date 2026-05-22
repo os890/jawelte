@@ -171,7 +171,7 @@
 <p><code>testUrl.get()</code> returns the live <code>http://localhost:{port}</code> base URL the embedded server bound to. Concatenated with the resource's <code>@Path</code> it forms the request URI for any HTTP client (JDK's <code>HttpClient</code> here; JAX-RS's own <code>ClientBuilder</code> or another library works the same way).</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
-<p>jaxrs-module's api / impl, jakarta.ws.rs-api, and a JAX-RS implementation. CXF here; RESTEasy works equally well.</p>
+<p>jaxrs-module's api / impl, jakarta.ws.rs-api, and a JAX-RS implementation. CXF here; RESTEasy works equally well. The fragment below only shows jaxrs-module's deltas; the <a href="core.html#qs-maven">core-docs maven setup</a> covers the underlying jawelte-core + cdi-module + JUnit + AssertJ + Jakarta APIs the listing also depends on.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/jaxrs-module/01-hello-world/pom.xml">listings/jaxrs-module/01-hello-world/pom.xml</a></div>
@@ -216,7 +216,21 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jaxrs-module/02 · exception-mapper</span><a href="../listings/jaxrs-module/02-exception-mapper/">listings/jaxrs-module/02-exception-mapper/</a></div>
-<pre><span class="cm">// src/main/java/example/excmapper/TeapotExceptionMapper.java</span>
+<pre><span class="cm">// src/main/java/example/excmapper/TeapotException.java   (plain RuntimeException, no jawelte hook)</span>
+<span class="kw">public class</span> <span class="ty">TeapotException</span> <span class="kw">extends</span> <span class="ty">RuntimeException</span> {
+    <span class="kw">public</span> <span class="ty">TeapotException</span>(<span class="ty">String</span> message) { <span class="kw">super</span>(message); }
+}
+
+<span class="cm">// src/main/java/example/excmapper/BrewResource.java   (the resource that throws)</span>
+<span class="an">@Path</span>(<span class="st">"/brew"</span>)
+<span class="kw">public class</span> <span class="ty">BrewResource</span> {
+    <span class="an">@GET</span>
+    <span class="kw">public</span> <span class="ty">String</span> brewCoffee() {
+        <span class="kw">throw new</span> <span class="ty">TeapotException</span>(<span class="st">"I'm a teapot"</span>);
+    }
+}
+
+<span class="cm">// src/main/java/example/excmapper/TeapotExceptionMapper.java</span>
 <span class="an">@Provider</span>
 <span class="kw">public class</span> <span class="ty">TeapotExceptionMapper</span> <span class="kw">implements</span> <span class="ty">ExceptionMapper</span>&lt;<span class="ty">TeapotException</span>&gt; {
 
@@ -251,7 +265,7 @@
 <p><code>TestUrl</code> is a <code>Supplier&lt;String&gt;</code> returning the base URL the embedded server bound to &mdash; typically <code>http://localhost:{port}</code> where <code>{port}</code> is OS-assigned (port 0). Inject it once per test class; concatenate with your resource paths to form the request URL.</p>
 
 <h2 id="dt-responsediff">2.3 ResponseDiff</h2>
-<p><code>ResponseDiff</code> wraps a <code>jakarta.ws.rs.core.Response</code> and gives you fluent assertions on the status code, headers, and body. Useful when the test makes a JAX-RS <code>ClientBuilder</code> call and wants to assert on the resulting <code>Response</code> without manually pulling status / entity / Content-Type apart.</p>
+<p><code>ResponseDiff</code> (<code>org.os890.jawelte.module.jaxrs.api.ResponseDiff</code>) wraps a <code>jakarta.ws.rs.core.Response</code> and gives you fluent assertions on the status code, headers, and body. Useful when the test makes a JAX-RS <code>ClientBuilder</code> call and wants to assert on the resulting <code>Response</code> without manually pulling status / entity / Content-Type apart.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jaxrs-module/03 · response-diff</span><a href="../listings/jaxrs-module/03-response-diff/">listings/jaxrs-module/03-response-diff/</a></div>
@@ -262,14 +276,21 @@
     <span class="kw">public</span> <span class="ty">String</span> getOrder() { <span class="kw">return</span> <span class="st">"{\"id\":1,\"name\":\"Widget\"}"</span>; }
 }
 
-<span class="cm">// src/test/java/example/responsediff/OrderResourceTest.java</span>
-<span class="an">@Test</span>
-<span class="kw">void</span> responseBodyMatchesExpectedJson() {
-    <span class="kw">try</span> (<span class="ty">Client</span> client = <span class="ty">ClientBuilder</span>.newClient()) {
-        <span class="kw">try</span> (<span class="ty">Response</span> response = client.target(testUrl.get() + <span class="st">"/order"</span>).request().get()) {
-            <span class="ty">ResponseDiff</span>.forJson(response)
-                    .expectedContent(<span class="st">"{\"name\":\"Widget\",\"id\":1}"</span>)   <span class="cm">// different key order</span>
-                    .assertEquals();
+<span class="cm">// src/test/java/example/responsediff/OrderResourceTest.java   (test-class shape identical to listings 01/02)</span>
+<span class="an">@EnableTestBeans</span>
+<span class="an">@EnableJaxRs</span>(restResources = {<span class="ty">OrderResource</span>.<span class="kw">class</span>})
+<span class="kw">class</span> <span class="ty">OrderResourceTest</span> {
+
+    <span class="an">@Inject</span> <span class="ty">TestUrl</span> testUrl;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> responseBodyMatchesExpectedJson() {
+        <span class="kw">try</span> (<span class="ty">Client</span> client = <span class="ty">ClientBuilder</span>.newClient()) {
+            <span class="kw">try</span> (<span class="ty">Response</span> response = client.target(testUrl.get() + <span class="st">"/order"</span>).request().get()) {
+                <span class="ty">ResponseDiff</span>.forJson(response)
+                        .expectedContent(<span class="st">"{\"name\":\"Widget\",\"id\":1}"</span>)   <span class="cm">// different key order — still equal</span>
+                        .assertEquals();
+            }
         }
     }
 }</pre>
