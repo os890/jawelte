@@ -236,6 +236,22 @@
 </ul>
 <p>Both builders share the same base methods: <code>.expected("classpath/path.json")</code> loads from the classpath, <code>.expectedContent("...")</code> uses an inline string (mutually exclusive), <code>.ignoring(...)</code> adds ignore-patterns, <code>.withValues(Map)</code> binds EL variables, <code>.assertEquals()</code> runs the comparison. <code>JsonBuilder</code> additionally has <code>.unorderedArrays(...)</code>.</p>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing content-diff-module/04 &middot; forXml</span><a href="../listings/content-diff-module/04-forXml/">listings/content-diff-module/04-forXml/</a></div>
+<pre><span class="cm">// src/test/java/example/contentdiff/XmlHelloDiffTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> semanticallyEqualXmlPassesSilently() {
+    <span class="cm">// Same element shape, attribute order differs — the XML engine</span>
+    <span class="cm">// compares attribute sets, not byte streams.</span>
+    <span class="ty">String</span> actual   = <span class="st">"&lt;customer id=\"1\" name=\"Alice\"/&gt;"</span>;
+    <span class="ty">String</span> expected = <span class="st">"&lt;customer name=\"Alice\" id=\"1\"/&gt;"</span>;
+
+    <span class="ty">ContentDiff</span>.forXml(actual)
+            .expectedContent(expected)
+            .assertEquals();
+}</pre>
+</div>
+
 <h2 id="dt-ignoring">2.2 ignoring patterns</h2>
 <p>Each builder takes a list of path patterns to skip during the diff. The pattern dialect is dictated by the content type:</p>
 <ul>
@@ -247,10 +263,44 @@
 <h2 id="dt-unordered">2.3 unorderedArrays (JSON)</h2>
 <p>JSON arrays are ordered by default. <code>JsonBuilder.unorderedArrays("$.tags", "$.items[*].labels")</code> declares specific arrays to be compared as multisets &mdash; duplicate sensitivity preserved, element order not. Helpful for response payloads where the server emits results in an unspecified order.</p>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing content-diff-module/05 &middot; unordered-arrays</span><a href="../listings/content-diff-module/05-unordered-arrays/">listings/content-diff-module/05-unordered-arrays/</a></div>
+<pre><span class="cm">// src/test/java/example/contentdiff/JsonUnorderedArraysTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> taggedArrayComparesAsMultiset() {
+    <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"tags\":[\"vip\",\"new\",\"trial\"]}"</span>;
+    <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"tags\":[\"new\",\"trial\",\"vip\"]}"</span>;
+
+    <span class="ty">ContentDiff</span>.forJson(actual)
+            .unorderedArrays(<span class="st">"$.tags"</span>)
+            .expectedContent(expected)
+            .assertEquals();
+}</pre>
+</div>
+
 <h2 id="dt-el">2.4 EL interpolation in expected</h2>
 <p>The expected document may contain <code>${expression}</code> placeholders. They're interpolated against the bindings passed to <code>.withValues(Map)</code> before the diff runs, which lets you parameterise the expected file:</p>
 <pre>{"createdBy": "${currentUser}", "age": 30}</pre>
 <p>Combined with <code>.withValues(Map.of("currentUser", "alice"))</code>, the engine sees <code>{"createdBy": "alice", "age": 30}</code>. The EL provider is whichever Jakarta EL implementation is on the classpath &mdash; Tomcat's <code>tomcat-embed-el</code> is the default in jawelte's own tests; <code>org.glassfish.expressly:expressly</code> works as a drop-in.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing content-diff-module/06 &middot; with-values</span><a href="../listings/content-diff-module/06-with-values/">listings/content-diff-module/06-with-values/</a></div>
+<pre><span class="cm">// src/test/java/example/contentdiff/JsonWithValuesTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> elPropertyNavigationWorksOnBoundBeans() {
+    <span class="ty">Map</span>&lt;<span class="ty">String</span>, <span class="ty">Object</span>&gt; order = <span class="ty">Map</span>.of(
+            <span class="st">"id"</span>, 42,
+            <span class="st">"customer"</span>, <span class="ty">Map</span>.of(<span class="st">"name"</span>, <span class="st">"Alice"</span>));
+
+    <span class="ty">String</span> actual   = <span class="st">"{\"orderId\":42,\"customer\":\"Alice\"}"</span>;
+    <span class="ty">String</span> expected = <span class="st">"{\"orderId\":${order.id},\"customer\":\"${order.customer.name}\"}"</span>;
+
+    <span class="ty">ContentDiff</span>.forJson(actual)
+            .withValues(<span class="ty">Map</span>.of(<span class="st">"order"</span>, order))
+            .expectedContent(expected)
+            .assertEquals();
+}</pre>
+</div>
 
 <h2 id="dt-config">2.5 MP Config defaults</h2>
 <p>Three MicroProfile Config keys carry JVM-wide defaults that are <em>prepended</em> to whatever the caller supplies through the builder:</p>
@@ -263,6 +313,24 @@
   </tbody>
 </table>
 <p>All three default to empty and are read once on first use via the active <code>ConfigResolver</code>, then cached for the JVM lifetime.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing content-diff-module/07 &middot; mp-config-defaults</span><a href="../listings/content-diff-module/07-mp-config-defaults/">listings/content-diff-module/07-mp-config-defaults/</a></div>
+<pre><span class="cm">// src/test/resources/META-INF/microprofile-config.properties</span>
+org.os890.jawelte.module.contentdiff.api.ContentDiff.json.ignore=$..audit.timestamp
+
+<span class="cm">// src/test/java/example/contentdiff/JsonMpConfigDefaultsTest.java</span>
+<span class="an">@Test</span>
+<span class="kw">void</span> mpConfigDefaultIgnoresAuditTimestampWithoutAnyBuilderCall() {
+    <span class="cm">// No .ignoring(...) on the builder — the MP Config default skips $..audit.timestamp at any depth.</span>
+    <span class="ty">String</span> actual   = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"2026-05-20T10:00:00Z\"}}"</span>;
+    <span class="ty">String</span> expected = <span class="st">"{\"name\":\"Alice\",\"audit\":{\"timestamp\":\"1970-01-01T00:00:00Z\"}}"</span>;
+
+    <span class="ty">ContentDiff</span>.forJson(actual)
+            .expectedContent(expected)
+            .assertEquals();
+}</pre>
+</div>
 
 <h1 id="spi">3. spi / port reference</h1>
 <p>content-diff-module ships <strong>four ports</strong>, all resolved via core's ServiceLoader + <code>ServicePriorityResolver</code>:</p>

@@ -230,6 +230,34 @@ public @interface InventoryApi { }</pre>
 <p><strong>port = 0</strong> &mdash; OS-assigned ephemeral port (recommended; no port-conflict flakiness when multiple suites run on the same host). The resolved port is then readable via <code>server.port()</code>.<br>
 <strong>port = N (N &gt; 0)</strong> &mdash; bind to a specific port. If already in use, <code>beforeAll</code> fails with a <code>BindException</code>.</p>
 
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing wiremock-module/03 &middot; multi-endpoint</span><a href="../listings/wiremock-module/03-multi-endpoint/">listings/wiremock-module/03-multi-endpoint/</a></div>
+<pre><span class="cm">// src/test/java/example/wiremock/multi/MultiEndpointTest.java</span>
+<span class="an">@EnableWireMock</span>
+<span class="kw">class</span> <span class="ty">MultiEndpointTest</span> {
+
+    <span class="an">@Inject</span> <span class="an">@PaymentApi</span>
+    <span class="ty">WireMockServer</span> paymentServer;
+
+    <span class="an">@Inject</span> <span class="an">@InventoryApi</span>
+    <span class="ty">WireMockServer</span> inventoryServer;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> eachQualifierGetsItsOwnServerAndStubsAreIsolated() <span class="kw">throws</span> <span class="ty">Exception</span> {
+        assertThat(paymentServer.port()).isNotEqualTo(inventoryServer.port());
+
+        paymentServer.stubFor(get(urlEqualTo(<span class="st">"/hello"</span>))
+                .willReturn(aResponse().withStatus(200).withBody(<span class="st">"from-payment"</span>)));
+        inventoryServer.stubFor(get(urlEqualTo(<span class="st">"/hello"</span>))
+                .willReturn(aResponse().withStatus(200).withBody(<span class="st">"from-inventory"</span>)));
+
+        <span class="cm">// ... HTTP calls to each server.baseUrl() return the matching stubbed bodies.</span>
+    }
+}</pre>
+</div>
+
+<p><b>Auto-mock interaction.</b> Multi-endpoint listings need <code>mockito-core</code> on the test classpath and an MP Config exclude entry &mdash; <code>org.os890.jawelte.module.cdi.auto-mock.exclude-packages=com.github.tomakehurst.wiremock.</code> &mdash; because cdi-module's auto-mock extension and wiremock-module's CDI extension both fire in <code>AfterBeanDiscovery</code> with no defined ordering; without the exclude, auto-mock can synthesise a mock for the qualified <code>WireMockServer</code> IPs and collide with wiremock-module's real beans (AmbiguousResolutionException at validation). See the linked listing's pom + <code>microprofile-config.properties</code> for the recipe.</p>
+
 <h2 id="dt-priority">2.3 @Priority &mdash; the implicit default</h2>
 <p>In multi-endpoint mode, an unqualified <code>@Inject WireMockServer</code> is ambiguous by default. Add <code>@jakarta.annotation.Priority</code> to one of the qualifiers and that qualifier's server becomes the implicit default:</p>
 
@@ -250,6 +278,31 @@ class MyTest {
 }</pre>
 
 <p>Without <code>@Priority</code> &mdash; or with a tie on the lowest value &mdash; every synthetic bean keeps <code>@Default</code>, and unqualified injection raises the standard CDI <code>AmbiguousResolutionException</code> at deployment.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing wiremock-module/04 &middot; priority-default</span><a href="../listings/wiremock-module/04-priority-default/">listings/wiremock-module/04-priority-default/</a></div>
+<pre><span class="cm">// src/test/java/example/wiremock/priority/PaymentApi.java   (carries @Priority(1))</span>
+<span class="an">@WireMockEndpoint</span>(port = 0)
+<span class="an">@Priority</span>(<span class="kw">1</span>)
+<span class="an">@Qualifier</span>
+<span class="an">@Retention</span>(RUNTIME)
+<span class="an">@Target</span>({FIELD, METHOD, PARAMETER, TYPE})
+<span class="kw">public @interface</span> <span class="ty">PaymentApi</span> { }
+
+<span class="cm">// src/test/java/example/wiremock/priority/PriorityDefaultTest.java</span>
+<span class="an">@EnableWireMock</span>
+<span class="kw">class</span> <span class="ty">PriorityDefaultTest</span> {
+
+    <span class="an">@Inject</span> <span class="an">@PaymentApi</span>    <span class="ty">WireMockServer</span> paymentServer;
+    <span class="an">@Inject</span> <span class="an">@InventoryApi</span>  <span class="ty">WireMockServer</span> inventoryServer;
+    <span class="an">@Inject</span>                <span class="ty">WireMockServer</span> implicitDefault;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> unqualifiedInjectionResolvesToThePriorityWinner() {
+        assertThat(implicitDefault).isSameAs(paymentServer);
+    }
+}</pre>
+</div>
 
 <h2 id="dt-reset">2.4 stubs reset between methods</h2>
 <p>The lifecycle adapter calls <code>WireMockServer.resetAll()</code> in its <code>beforeEach</code>, so stubs you register in one method don't leak into the next. This is independent of CDI scope destruction &mdash; even if <a href="testcontrol-module.html">testcontrol-module</a> vetoes scopes for a method, stubs are still reset.</p>
