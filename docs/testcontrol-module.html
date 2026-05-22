@@ -132,6 +132,7 @@
 
 <h2 id="qs-hello">1.2 hello-world</h2>
 <p>One annotation, one folder, two XML files. <code>dbIn/greetings.xml</code> clean-inserts the seed rows before the test method; <code>dbExpected/greetings.xml</code> is asserted against the live DB after. The test method body itself can be empty &mdash; the framework runs both halves.</p>
+<p>The test class below stacks three annotations from three modules: <a href="core.html#qs-purpose"><code>@EnableTestBeans</code></a> (core, boots the CDI container per test class), <a href="jpa-module.html#dt-persistence-config"><code>@PersistenceConfig</code></a> (jpa-module, picks the persistence unit), and <code>@TestControl</code> (testcontrol's own contribution, declares the testdata folder). The other two are documented on their own module pages; everything below explains <code>@TestControl</code>.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing testcontrol-module/01 &middot; hello-world</span><a href="../listings/testcontrol-module/01-hello-world/">listings/testcontrol-module/01-hello-world/</a></div>
@@ -298,7 +299,7 @@
 <ul>
   <li><strong>How datasets are read &amp; verified</strong> &mdash; <a href="db-testdata-module.html">db-testdata-module</a>'s <code>DbSeedDataSetReader</code> / <code>DbDiffEngine</code> ports. Swap these to use a non-XML dataset format or change the diff strategy.</li>
   <li><strong>Which transaction wraps the seed phase</strong> &mdash; <a href="jpa-module.html">jpa-module</a>'s <code>TransactionStrategy</code> port. JTA, JPA-resource-local, or a custom strategy all work.</li>
-  <li><strong>How scope activation gets vetoed</strong> &mdash; scope-module's <code>BeforeScopeStarted</code> CDI event is the listener side; testcontrol's observer is registered automatically when the impl jar is on the classpath.</li>
+  <li><strong>How scope activation gets vetoed</strong> &mdash; <a href="scope-module.html">scope-module</a>'s <code>BeforeScopeStarted</code> CDI event is the listener side; testcontrol's observer is registered automatically when the impl jar is on the classpath.</li>
 </ul>
 <p>The base-path override key <code>org.os890.jawelte.module.testcontrol.api.TestControl.base-path</code> is the only MP Config knob testcontrol itself reads.</p>
 
