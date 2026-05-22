@@ -125,7 +125,19 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jta-module/01 · hello-world</span><a href="../listings/jta-module/01-hello-world/">listings/jta-module/01-hello-world/</a></div>
-<pre><span class="cm">// src/main/java/example/jta/CustomerService.java</span>
+<pre><span class="cm">// src/main/java/example/jta/Customer.java</span>
+<span class="an">@Entity</span>
+<span class="kw">public class</span> <span class="ty">Customer</span> {
+    <span class="an">@Id</span> <span class="an">@GeneratedValue</span>(strategy = <span class="ty">GenerationType</span>.IDENTITY)
+    <span class="kw">private</span> <span class="ty">Long</span> id;
+    <span class="kw">private</span> <span class="ty">String</span> name;
+    <span class="kw">public</span> <span class="ty">Customer</span>() {}
+    <span class="kw">public</span> <span class="ty">Customer</span>(<span class="ty">String</span> name) { <span class="kw">this</span>.name = name; }
+    <span class="kw">public</span> <span class="ty">Long</span> getId() { <span class="kw">return</span> id; }
+    <span class="kw">public</span> <span class="ty">String</span> getName() { <span class="kw">return</span> name; }
+}
+
+<span class="cm">// src/main/java/example/jta/CustomerService.java</span>
 <span class="an">@ApplicationScoped</span>
 <span class="kw">public class</span> <span class="ty">CustomerService</span> {
 
@@ -283,14 +295,34 @@
     <span class="kw">void</span> onPreDestroy() { PRE_DESTROY_COUNT.incrementAndGet(); }
 }
 
-<span class="cm">// src/test/java/example/txscoped/PerTxBeanTest.java</span>
-<span class="an">@Test</span>
-<span class="kw">void</span> eachJtaTransactionGetsItsOwnInstance() {
-    <span class="ty">String</span> firstTxId  = reader.readIdInsideJtaTx();   <span class="cm">// @Transactional method</span>
-    <span class="ty">String</span> secondTxId = reader.readIdInsideJtaTx();   <span class="cm">// another @Transactional method</span>
+<span class="cm">// src/test/java/example/txscoped/PerTxBeanReader.java   (provides the @Transactional boundary)</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">PerTxBeanReader</span> {
 
-    assertThat(firstTxId).isNotEqualTo(secondTxId);
-    assertThat(<span class="ty">PerTxBean</span>.PRE_DESTROY_COUNT.get()).isEqualTo(2);
+    <span class="an">@Inject</span>
+    <span class="ty">PerTxBean</span> perTxBean;
+
+    <span class="an">@Transactional</span>
+    <span class="kw">public</span> <span class="ty">String</span> readIdInsideJtaTx() {
+        <span class="kw">return</span> perTxBean.getId();
+    }
+}
+
+<span class="cm">// src/test/java/example/txscoped/PerTxBeanTest.java</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">PerTxBeanTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">PerTxBeanReader</span> reader;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> eachJtaTransactionGetsItsOwnInstance() {
+        <span class="ty">String</span> firstTxId  = reader.readIdInsideJtaTx();   <span class="cm">// @Transactional opens tx 1, closes it on return</span>
+        <span class="ty">String</span> secondTxId = reader.readIdInsideJtaTx();   <span class="cm">// @Transactional opens tx 2, closes it on return</span>
+
+        assertThat(firstTxId).isNotEqualTo(secondTxId);
+        assertThat(<span class="ty">PerTxBean</span>.PRE_DESTROY_COUNT.get()).isEqualTo(2);
+    }
 }</pre>
 </div>
 
@@ -299,7 +331,7 @@
 <ul>
   <li><strong>Geronimo (<code>org.apache.geronimo.components:geronimo-transaction</code>)</strong> &mdash; lightest, fewest moving parts, the default in jawelte's own test sweep. Good for tests that just need JTA semantics, not the full XA recovery story.</li>
   <li><strong>Narayana (<code>org.jboss.narayana.jta:narayana-jta</code>)</strong> &mdash; full XA, used inside WildFly. Reach for it when your production runtime is Narayana-based and you want maximum fidelity in tests.</li>
-  <li><strong>Atomikos (<code>com.atomikos:atomikos-util</code> + Jakarta classifier deps)</strong> &mdash; another XA-capable choice with its own configuration surface. Two existing test scenarios pin Atomikos at the scenario level so the cross-runtime sweep covers it.</li>
+  <li><strong>Atomikos (<code>com.atomikos:atomikos-util</code> + the Jakarta-namespace classifier artifacts)</strong> &mdash; another XA-capable choice with its own configuration surface; jta-module's <code>TransactionManagerProvider</code> SPI lets you supply an Atomikos-specific provider (no concrete pom fragment in this listing set yet).</li>
 </ul>
 <p>All three publish their <code>TransactionManager</code> via JNDI; jta-module's <code>JndiArtifactBinder</code> looks the TM up at startup via a known set of JNDI names. You need <em>some</em> JNDI provider on the classpath for the lookup to resolve &mdash; xbean-naming is the easiest; any other <code>InitialContextFactory</code> works.</p>
 
