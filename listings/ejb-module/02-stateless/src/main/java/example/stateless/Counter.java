@@ -19,8 +19,9 @@ import jakarta.ejb.Stateless;
 
 /**
  * @jakarta.ejb.Stateless is rewritten by ejb-module's CDI extension
- * to @RequestScoped — fresh instance per test method, no state
- * carried across @Test methods.
+ * to @Dependent — per-injection-point fresh instance, no state
+ * carried across @Test methods (each method's @Inject site resolves
+ * a fresh instance).
  */
 @Stateless
 public class Counter {

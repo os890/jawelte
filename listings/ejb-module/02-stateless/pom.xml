@@ -16,7 +16,7 @@
 -->
 <!--
     Stand-alone Maven project for jawelte documentation listing ejb-module/02:
-    ejb-module — @jakarta.ejb.Singleton injected as a CDI bean.
+    ejb-module — @jakarta.ejb.Stateless rewritten to @Dependent and injected as a CDI bean.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

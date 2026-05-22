@@ -23,10 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.EnableTestBeans;
 
 /**
- * @Stateless gets rewritten to @RequestScoped at ProcessAnnotatedType
+ * @Stateless gets rewritten to @Dependent at ProcessAnnotatedType
  * time. Both @Test methods increment the counter once; both see 1
- * because the @RequestScoped lifecycle hands each method a fresh
- * instance.
+ * because each @Inject site resolves a fresh @Dependent instance.
  */
 @EnableTestBeans
 class CounterTest {

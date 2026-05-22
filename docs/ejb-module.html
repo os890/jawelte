@@ -128,7 +128,7 @@
 <h2 id="qs-purpose">1.1 purpose</h2>
 <p>You have a production codebase full of EJB session beans &mdash; <code>@Stateless</code> services, <code>@Singleton</code> facades. The production deployment runs inside an EE container that knows what those annotations mean. Unit tests don't run inside an EE container, so the same code can't normally be exercised without an embedded server or a parallel CDI version of every EJB.</p>
 
-<p>ejb-module short-circuits that. With it on the classpath, jawelte's CDI extension sees a class annotated <code>@Stateless</code> or <code>@Singleton</code>, adds the matching CDI scope (<code>@RequestScoped</code> or <code>@ApplicationScoped</code> by default; <code>@TestClassScoped</code> for Singleton when scope-module is also present), and adds <code>@Transactional</code> so transactional semantics match the EE expectation. The bean now is a CDI bean as far as the test runtime is concerned, even though the source declares EJB.</p>
+<p>ejb-module short-circuits that. With it on the classpath, jawelte's CDI extension sees a class annotated <code>@Stateless</code> or <code>@Singleton</code>, adds the matching CDI scope (<code>@Dependent</code> for <code>@Stateless</code> &mdash; per-injection-point fresh instance; <code>@ApplicationScoped</code> for <code>@Singleton</code> by default, <code>@TestClassScoped</code> when scope-module is also present), and adds <code>@Transactional</code> so transactional semantics match the EE expectation. The bean now is a CDI bean as far as the test runtime is concerned, even though the source declares EJB.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
 <p>A production <code>@Singleton</code> EJB in <code>src/main</code>, a CDI test that injects it.</p>
@@ -195,7 +195,7 @@
 <h2 id="dt-mapping">2.1 annotation mapping</h2>
 <p>The default mapper rewrites:</p>
 <ul>
-  <li><code>@jakarta.ejb.Stateless</code> &rarr; <code>@RequestScoped</code> (matches the typical "one EJB instance per call" pattern).</li>
+  <li><code>@jakarta.ejb.Stateless</code> &rarr; <code>@Dependent</code> (per-injection-point fresh instance &mdash; matches the EJB stateless contract from the consumer's perspective; long-lived test scopes are not applied because a stateless bean does not benefit).</li>
   <li><code>@jakarta.ejb.Singleton</code> &rarr; <code>@ApplicationScoped</code> by default. With scope-module also on the classpath the MP Config key <code>org.os890.jawelte.module.ejb.singleton.default-scope</code> rebinds it to <code>@TestClassScoped</code> &mdash; one shared instance per test class instead of one per JVM.</li>
 </ul>
 <p>The rewrite happens at <code>ProcessAnnotatedType</code> time; the source class keeps the EJB annotation, the CDI bean carries the mapped scope.</p>
@@ -234,12 +234,19 @@
 <div class="listing">
   <div class="listing-bar"><span class="label">listing ejb-module/03 · implicit-transactional</span><a href="../listings/ejb-module/03-implicit-transactional/">listings/ejb-module/03-implicit-transactional/</a></div>
 <pre><span class="cm">// src/main/java/example/implicittx/NoteRepository.java</span>
+<span class="cm">/**</span>
+<span class="cm"> * No @Transactional anywhere. ejb-module's interceptor wraps every</span>
+<span class="cm"> * method of a @Stateless / @Singleton bean in an implicit</span>
+<span class="cm"> * REQUIRED-style transaction; persist commits without the</span>
+<span class="cm"> * @Transactional annotation that the same code would need under</span>
+<span class="cm"> * plain jpa-module.</span>
+<span class="cm"> */</span>
 <span class="an">@Stateless</span>
 <span class="kw">public class</span> <span class="ty">NoteRepository</span> {
 
-    <span class="an">@Inject</span> <span class="ty">EntityManager</span> entityManager;
+    <span class="an">@Inject</span>
+    <span class="kw">private</span> <span class="ty">EntityManager</span> entityManager;
 
-    <span class="cm">// Note: no @Transactional anywhere; ejb-module's mapper added it.</span>
     <span class="kw">public</span> <span class="ty">Long</span> save(<span class="ty">String</span> body) {
         <span class="ty">Note</span> note = <span class="kw">new</span> <span class="ty">Note</span>(body);
         entityManager.persist(note);
@@ -247,7 +254,9 @@
     }
 
     <span class="kw">public long</span> count() {
-        <span class="kw">return</span> entityManager.createQuery(<span class="st">"SELECT COUNT(n) FROM Note n"</span>, <span class="ty">Long</span>.<span class="kw">class</span>).getSingleResult();
+        <span class="kw">return</span> entityManager
+                .createQuery(<span class="st">"SELECT COUNT(n) FROM Note n"</span>, <span class="ty">Long</span>.<span class="kw">class</span>)
+                .getSingleResult();
     }
 }
 

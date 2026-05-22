@@ -16,7 +16,7 @@
 -->
 <!--
     Stand-alone Maven project for jawelte documentation listing ejb-module/03:
-    ejb-module — @jakarta.ejb.Singleton injected as a CDI bean.
+    ejb-module — implicit @Transactional on @Stateless / @Singleton beans.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -30,7 +30,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte listing ejb-module/03: implicit-transactional</name>
-    <description>ejb-module: an @jakarta.ejb.Singleton production bean is injectable as a regular CDI bean in a jawelte test, no application server.</description>
+    <description>ejb-module: ejb-module's interceptor wraps every method of a @Stateless / @Singleton bean in an implicit REQUIRED-style transaction; persist commits without an explicit @Transactional annotation.</description>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
