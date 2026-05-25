@@ -24,16 +24,24 @@ import org.os890.jawelte.module.scope.api.TestMethodScoped;
 /**
  * A @TestMethodScoped bean with a @PreDestroy method. Because the
  * scope is destroyed at the end of every afterEach, the destroy hook
- * fires once per test method. A static AtomicInteger lets the test
- * observe the firing.
+ * fires once per test method.
  */
 @TestMethodScoped
 public class ResourceHandle {
 
+    // Test-harness counter (not part of the bean's production responsibility).
+    // A real ResourceHandle would not expose a static counter; we use one
+    // here so the test method can observe @PreDestroy firing.
     public static final AtomicInteger DESTROY_COUNT = new AtomicInteger();
 
-    public void use() {
-        // pretend we did real work
+    private int accessCount;
+
+    public void recordAccess() {
+        accessCount++;
+    }
+
+    public int getAccessCount() {
+        return accessCount;
     }
 
     @PreDestroy

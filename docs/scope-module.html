@@ -159,15 +159,16 @@
     <li class="depth-2"><a href="#qs-maven">1.4 maven setup</a></li>
     <li><a href="#detailed">2. detailed</a></li>
     <li class="depth-2"><a href="#dt-lifetime">2.1 scope lifetime</a></li>
-    <li class="depth-2"><a href="#dt-mappers">2.2 declarative remaps</a></li>
-    <li class="depth-2"><a href="#dt-config">2.3 MP Config defaults</a></li>
+    <li class="depth-2"><a href="#dt-predestroy">2.2 @PreDestroy fires between methods</a></li>
+    <li class="depth-2"><a href="#dt-mappers">2.3 declarative remaps</a></li>
+    <li class="depth-2"><a href="#dt-config">2.4 MP Config defaults</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
 
 <p>scope-module adds two CDI normal scopes tuned for tests &mdash; <code>@TestMethodScoped</code> (one bean instance per <code>@Test</code> method) and <code>@TestClassScoped</code> (one bean instance per test class). Put them on your beans and the framework destroys the old instance at the right boundary; no static-field gymnastics, no leaking state between methods.</p>
 
-<p>Once on the classpath, scope-module also rebinds three jawelte concepts automatically: <code>@SessionScoped</code> beans behave like <code>@TestMethodScoped</code>, <code>@ConfigBean</code> classes behave like <code>@TestClassScoped</code>, and <code>@TestBean</code> static fields are <code>@TestClassScoped</code>. Auto-mocked beans (the default <code>cdi-module</code> output) drop from <code>@RequestScoped</code> to <code>@TestMethodScoped</code> too. The aim: nothing leaks between tests by default, and the user doesn't have to think about it.</p>
+<p>Once on the classpath, scope-module also rebinds existing jawelte / Jakarta scopes onto the new ones &mdash; <code>@SessionScoped</code>, <code>@ConfigBean</code>, <code>@TestBean</code> static fields, and auto-mock fallbacks all become per-method or per-class instead of leaking. See <a href="#dt-mappers">§2.2 declarative remaps</a> for the full table.</p>
 
 <h1 id="quick-start">1. quick-start</h1>
 
@@ -212,6 +213,8 @@
 </div>
 
 <p>Both <code>@Test</code> methods increment exactly once and both see <code>1</code>. Under <code>@ApplicationScoped</code> the second method would see <code>2</code>; under <code>@TestMethodScoped</code> the bean is destroyed in <code>afterEach</code> and the next method gets a fresh instance.</p>
+
+<p style="font-size: 12.5px; color: var(--text-soft);"><em>How the framework hooks into JUnit:</em> scope-module ships a <code>TestModuleLifecyclePort</code> impl that fires at JUnit's <code>afterEach</code> / <code>afterAll</code> boundaries &mdash; see <a href="core.html#dt-ordering">core docs &middot; lifecycle ordering</a>. You don't wire this up; putting scope-module on the classpath is the trigger.</p>
 
 <h2 id="qs-class-scope">1.3 @TestClassScoped &mdash; shared across methods</h2>
 <p>Swap the annotation, swap the assertion. Same bean lives for the whole class; increments accumulate.</p>
@@ -277,15 +280,12 @@
 <h1 id="detailed">2. detailed</h1>
 
 <h2 id="dt-lifetime">2.1 scope lifetime</h2>
-<p>Both scopes are <strong>normal scopes</strong> (proxy-based, lazy first-access creation, single managed instance per scope-store, <code>passivating = false</code>). The only difference from <code>@ApplicationScoped</code> is when the underlying instance is destroyed:</p>
-<ul>
-  <li><code>@TestMethodScoped</code> &mdash; bean instance destroyed at the end of <code>afterEach</code>. <code>@PreDestroy</code> runs then. The proxy stays valid for the whole CDI container lifetime; the next test method's first access lazily allocates a fresh instance.</li>
-  <li><code>@TestClassScoped</code> &mdash; bean instance destroyed at the end of <code>afterAll</code>. <code>@PreDestroy</code> runs after the user's own <code>@AfterAll</code> methods but before the CDI container shuts down.</li>
-</ul>
-<p>Bean access never throws <code>ContextNotActiveException</code>; both contexts report <code>isActive() == true</code> for the whole CDI container's lifetime, allocating a fresh store between methods / classes as needed. This matters for libraries that probe <code>BeanManager.getContext(...)</code> &mdash; scope-module's contexts are always-on by design.</p>
+<p>Both scopes are <strong>normal scopes</strong>: proxy-based, lazy first-access creation, single managed instance per scope-store, non-passivating. The proxy is valid for the whole CDI container lifetime; only the underlying instance is recycled (per method for <code>@TestMethodScoped</code>, per class for <code>@TestClassScoped</code>).</p>
 
-<h3>@PreDestroy fires between methods</h3>
-<p>A <code>@TestMethodScoped</code> bean's <code>@PreDestroy</code> method runs at the end of <code>afterEach</code>, before the next test method starts. Useful when a method-scoped bean owns a resource (a temp file, a JDBC connection, an in-memory queue) that has to be closed between methods.</p>
+<p style="font-size: 12.5px; color: var(--text-soft);"><em>Aside &mdash; <code>BeanManager.getContext(scope)</code> probes:</em> both contexts report <code>isActive() == true</code> for the whole CDI container's lifetime, allocating a fresh store between methods / classes as needed. Libraries that probe context-activeness see scope-module's contexts as always-on by design.</p>
+
+<h2 id="dt-predestroy">2.2 @PreDestroy fires between methods</h2>
+<p>A <code>@TestMethodScoped</code> bean's <code>@PreDestroy</code> method runs at the end of <code>afterEach</code>, before the next test method starts. Useful when a method-scoped bean owns a resource (a temp file, a JDBC connection, an in-memory queue) that has to be closed between methods. <code>@TestClassScoped</code> bean's <code>@PreDestroy</code> runs at the end of <code>afterAll</code>, after the user's own <code>@AfterAll</code> methods but before the CDI container shuts down.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing scope-module/03 · pre-destroy-callback</span><a href="../listings/scope-module/03-pre-destroy-callback/">listings/scope-module/03-pre-destroy-callback/</a></div>
@@ -293,10 +293,19 @@
 <span class="an">@TestMethodScoped</span>
 <span class="kw">public class</span> <span class="ty">ResourceHandle</span> {
 
+    <span class="cm">// Test-harness counter (not part of the bean's production responsibility).</span>
+    <span class="cm">// A real ResourceHandle would not expose a static counter; we use one</span>
+    <span class="cm">// here so the test method can observe @PreDestroy firing.</span>
     <span class="kw">public static final</span> <span class="ty">AtomicInteger</span> DESTROY_COUNT = <span class="kw">new</span> <span class="ty">AtomicInteger</span>();
 
-    <span class="kw">public void</span> use() {
-        <span class="cm">// pretend we did real work</span>
+    <span class="kw">private int</span> accessCount;
+
+    <span class="kw">public void</span> recordAccess() {
+        accessCount++;
+    }
+
+    <span class="kw">public int</span> getAccessCount() {
+        <span class="kw">return</span> accessCount;
     }
 
     <span class="an">@PreDestroy</span>
@@ -316,7 +325,7 @@
     <span class="an">@Test</span>
     <span class="an">@Order</span>(<span class="kw">1</span>)
     <span class="kw">void</span> firstMethodUsesTheHandle() {
-        resourceHandle.use();
+        resourceHandle.recordAccess();
         <span class="cm">// PreDestroy has NOT fired yet for the current method — it runs at end of afterEach.</span>
         assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(<span class="kw">0</span>);
     }
@@ -324,7 +333,7 @@
     <span class="an">@Test</span>
     <span class="an">@Order</span>(<span class="kw">2</span>)
     <span class="kw">void</span> secondMethodSeesPriorMethodsPreDestroy() {
-        resourceHandle.use();
+        resourceHandle.recordAccess();
         <span class="cm">// After method 1 returned, scope-module fired @PreDestroy on the</span>
         <span class="cm">// method-1 instance. Method 2 is now using a fresh instance.</span>
         assertThat(<span class="ty">ResourceHandle</span>.DESTROY_COUNT.get()).isEqualTo(<span class="kw">1</span>);
@@ -334,12 +343,13 @@
 
 <p>The same shape works for <code>@TestClassScoped</code>; the destroy runs at the end of <code>afterAll</code> instead, once per test class.</p>
 
-<h2 id="dt-mappers">2.2 declarative remaps</h2>
+<h2 id="dt-mappers">2.3 declarative remaps</h2>
 <p>scope-module ships three <code>BeanScopeMapper</code> providers (one of the core SPIs &mdash; see <a href="core.html#spi-scope-mapper">core docs section 3.5</a>). Putting scope-module on the classpath turns these three remaps on automatically:</p>
 <ul>
   <li><strong><code>@SessionScoped</code> &rarr; <code>@TestMethodScoped</code></strong>. Web-tier <code>@SessionScoped</code> beans don't have a meaningful "session" inside a unit test &mdash; jawelte treats one test method as the analogue and rebinds the scope accordingly. Production code keeps <code>@SessionScoped</code>; the test runtime sees it as method-scoped.</li>
-  <li><strong><code>@ConfigBean</code> &rarr; <code>@TestClassScoped</code></strong>. <code>@ConfigBean</code> is a stereotype that contributes <code>@ApplicationScoped</code> by default; with scope-module it becomes test-class-scoped instead, so config can drift across test classes without leaking.</li>
-  <li><strong><code>@TestBean</code> static-field &rarr; <code>@TestClassScoped</code></strong>. The default scope for <code>@TestBean</code> static-field synthetic beans is <code>@Singleton</code> per the core docs; scope-module rebinds it to <code>@TestClassScoped</code> so the static-field instance is reset between test classes that share the JVM.</li>
+  <li><strong><a href="core.html#dt-config-bean"><code>@ConfigBean</code></a> &rarr; <code>@TestClassScoped</code></strong>. <code>@ConfigBean</code> is a stereotype that contributes <code>@ApplicationScoped</code> by default; with scope-module it becomes test-class-scoped instead, so config can drift across test classes without leaking.</li>
+  <li><strong><a href="core.html#dt-test-bean"><code>@TestBean</code></a> static-field &rarr; <code>@TestClassScoped</code></strong>. The default scope for <code>@TestBean</code> static-field synthetic beans is <code>@Singleton</code> per the core docs; scope-module rebinds it to <code>@TestClassScoped</code> so the static-field instance is reset between test classes that share the JVM.</li>
+  <li><strong><a href="modules.html#cdi-config">auto-mock</a> fallback &rarr; <code>@TestMethodScoped</code></strong>. cdi-module's auto-mock extension synthesises beans for unsatisfied injection points; the configured default scope is <code>@RequestScoped</code> without scope-module, <code>@TestMethodScoped</code> with it.</li>
 </ul>
 <p>The remaps are unconditional &mdash; just having scope-module on the classpath is the trigger. If you want one of them off, ship your own higher-priority <code>BeanScopeMapper</code> (see the core docs' SPI section).</p>
 
@@ -391,7 +401,7 @@
 
 <p>Same shape applies to the other two remaps: a <code>@ConfigBean</code> stereotype becomes <code>@TestClassScoped</code>, and a <code>@TestBean</code> static field becomes <code>@TestClassScoped</code> instead of the documented default <code>@Singleton</code>.</p>
 
-<h2 id="dt-config">2.3 MP Config defaults</h2>
+<h2 id="dt-config">2.4 MP Config defaults</h2>
 <p>scope-module's <code>META-INF/microprofile-config.properties</code> sets three keys at MP Config ordinal 100. They're not <em>your</em> config &mdash; they're scope-module's contribution of friendly defaults to other modules' keys. Override any of them in a higher-ordinal source if you want different behaviour.</p>
 
 <div class="cfg-entry">
@@ -403,13 +413,13 @@
 <div class="cfg-entry">
   <span class="key">org.os890.jawelte.module.wiremock.registry.default-scope</span>
   <span class="default">org.os890.jawelte.module.scope.api.TestClassScoped</span>
-  <p class="desc">wiremock-module's <code>WireMockServerRegistry</code> scope key. WireMock servers are expensive to boot and reuse across methods of one class naturally; the test-class scope matches that pattern.</p>
+  <p class="desc"><a href="wiremock-module.html#dt-enable">wiremock-module</a>'s <code>WireMockServerRegistry</code> scope key. WireMock servers are expensive to boot and reuse across methods of one class naturally; the test-class scope matches that pattern.</p>
 </div>
 
 <div class="cfg-entry">
   <span class="key">org.os890.jawelte.module.ejb.singleton.default-scope</span>
   <span class="default">org.os890.jawelte.module.scope.api.TestClassScoped</span>
-  <p class="desc">ejb-module's mapping of <code>@jakarta.ejb.Singleton</code>. In a real EE container an EJB Singleton lives for the whole application; in a per-class CDI test the closest analogue is <code>@TestClassScoped</code>.</p>
+  <p class="desc"><a href="ejb-module.html#dt-mapping">ejb-module</a>'s mapping of <code>@jakarta.ejb.Singleton</code>. In a real EE container an EJB Singleton lives for the whole application; in a per-class CDI test the closest analogue is <code>@TestClassScoped</code>.</p>
 </div>
 
 <h1 id="spi">3. spi / port reference</h1>

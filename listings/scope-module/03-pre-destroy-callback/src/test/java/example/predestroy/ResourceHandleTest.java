@@ -41,7 +41,7 @@ class ResourceHandleTest {
     @Test
     @Order(1)
     void firstMethodUsesTheHandle() {
-        resourceHandle.use();
+        resourceHandle.recordAccess();
         // PreDestroy has NOT fired yet for the current method — it runs at end of afterEach.
         assertThat(ResourceHandle.DESTROY_COUNT.get()).isEqualTo(0);
     }
@@ -49,7 +49,7 @@ class ResourceHandleTest {
     @Test
     @Order(2)
     void secondMethodSeesPriorMethodsPreDestroy() {
-        resourceHandle.use();
+        resourceHandle.recordAccess();
         // After method 1 returned, scope-module fired @PreDestroy on the
         // method-1 instance. Method 2 is now using a fresh instance.
         assertThat(ResourceHandle.DESTROY_COUNT.get()).isEqualTo(1);

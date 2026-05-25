@@ -7108,3 +7108,13 @@ Fixes applied:
 - **SD15 + SD16** (low ordering): §2 fully reordered with user-actionable first. New layout: §2.1 derived query methods (promoted from h3 sub-head) · §2.2 @NoRepositoryBean · §2.3 @Produces back-off · §2.4 EntityManager dispatch & multi-PU caveat · §2.5 @RequestScoped lifetime · §2.6 discovery model (advanced, marked as such, footnote split out). TOC + ids updated.
 - **SD17** (low names): introduced `private static final String COUNT_METHOD = "count";` in listing 04's UserProducesBackoffTest (and matched in HTML pre-block). Magic string named.
 - **SD18** (low names): listing 04 Customer entity gained a `name` field + name-constructor + getId/getName, restoring parity with listings 01/02/03. Test still passes (the test only calls `customerRepository.count()`).
+
+## 2026-05-22 — docs/scope-module.html + listing 03 (pending S3/S4/S6/S7/S8/S9)
+
+Fixes applied:
+- **S3** (medium ordering): promoted "@PreDestroy fires between methods" from an h3 inside §2.1 to its own §2.2 with TOC entry. §2.1 scope lifetime trimmed to one paragraph about the proxy/destruction split + a side note on BeanManager.getContext(...) probes. Original §2.2 declarative remaps → §2.3; §2.3 MP Config defaults → §2.4; TOC + headings + ids renumbered.
+- **S4** (medium userfriendly): §2.3 declarative remaps now cross-links the rebound concepts at definition site — `core.html#dt-config-bean`, `core.html#dt-test-bean`, `modules.html#cdi-config`. Added an explicit fourth bullet for the auto-mock fallback remap so the reader sees all four in one place. (Intro paragraph was already trimmed under S9.)
+- **S6** (medium userfriendly): §2.4 MP Config defaults — the wiremock-module entry now links to `wiremock-module.html#dt-enable` and the ejb-module entry links to `ejb-module.html#dt-mapping`. Symmetric with the existing cdi-module link.
+- **S7** (low userfriendly): §1.2 hello-world adds a softer aside paragraph that names the TestModuleLifecyclePort wiring and links `core.html#dt-ordering` so the reader knows how scope-module hooks JUnit afterEach.
+- **S8** (low names): listing 03 ResourceHandle — `use()` (with `// pretend we did real work` comment) replaced by `recordAccess()` / `getAccessCount()`. DESTROY_COUNT preserved but the class-level Javadoc-block + new inline comment make explicit that it's test-harness state, not the bean's production responsibility. Test method calls renamed to `resourceHandle.recordAccess()` in both source and HTML. Tests pass.
+- **S9** (low ordering): intro paragraph trimmed from "four jawelte-specific concepts crammed in" to a single sentence pointing at §2.2 declarative remaps. Full table now lives in one place.
