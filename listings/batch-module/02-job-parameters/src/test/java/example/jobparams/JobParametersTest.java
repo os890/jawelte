@@ -32,7 +32,7 @@ class JobParametersTest {
     Event<BatchExecution> batchEvent;
 
     @Test
-    void parametersAreVisibleToTheBatchletViaJobContext() {
+    void parametersAreVisibleToTheBatchletViaJobOperator() {
         BatchExecution execution = new BatchExecution("parametrised-job")
                 .param("greeting", "hello")
                 .param("target", "world");

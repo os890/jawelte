@@ -117,7 +117,6 @@
     <li class="depth-2"><a href="#dt-execution">2.1 BatchExecution &mdash; the request/result carrier</a></li>
     <li class="depth-2"><a href="#dt-fire">2.2 Event&lt;BatchExecution&gt;.fire &mdash; the blocking call</a></li>
     <li class="depth-2"><a href="#dt-timeout">2.3 timeout</a></li>
-    <li class="depth-2"><a href="#dt-runtime">2.4 picking a jBatch runtime</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
@@ -173,7 +172,8 @@
 <p><code>@EnableTestBeans</code> is the <a href="core.html#qs-purpose">core-module</a> JUnit extension that boots a CDI SE container around the test class &mdash; batch-module assumes it (and the cdi-module impl that backs it) is on the classpath. <code>BatchStatus</code>, <code>JobOperator</code>, <code>JobContext</code> and <code>Batchlet</code> are stock Jakarta Batch types from <code>jakarta.batch-api</code>.</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
-<p>batch-module's api / impl, the <code>jakarta.batch-api</code>, and a jBatch runtime &mdash; Apache BatchEE here; JBeret is a one-dep swap. The fragment below only shows batch-module's deltas; the <a href="core.html#qs-maven">core-docs maven setup</a> covers the underlying jawelte-core + cdi-module + JUnit + AssertJ stack the listing also depends on.</p>
+<p>batch-module's api / impl, the <code>jakarta.batch-api</code>, and a jBatch runtime. The fragment below only shows batch-module's deltas; the <a href="core.html#qs-maven">core-docs maven setup</a> covers the underlying jawelte-core + cdi-module + JUnit + AssertJ stack the listing also depends on.</p>
+<p><strong>Picking a jBatch runtime.</strong> batch-module talks to jBatch through the spec API (<code>JobOperator</code>, <code>JobExecution</code>, <code>BatchStatus</code>), so any conformant runtime works. Tested in jawelte's own sweep: <strong>Apache BatchEE</strong> (default; <code>org.apache.batchee:batchee-jbatch</code>) and <strong>JBeret</strong> (<code>org.jberet:jberet-se</code>). Pick by classpath dependency; no code change.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/batch-module/01-hello-world/pom.xml">listings/batch-module/01-hello-world/pom.xml</a></div>
@@ -263,7 +263,7 @@
     <span class="ty">Event</span>&lt;<span class="ty">BatchExecution</span>&gt; batchEvent;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> parametersAreVisibleToTheBatchletViaJobContext() {
+    <span class="kw">void</span> parametersAreVisibleToTheBatchletViaJobOperator() {
         <span class="ty">BatchExecution</span> execution = <span class="kw">new</span> <span class="ty">BatchExecution</span>(<span class="st">"parametrised-job"</span>)
                 .param(<span class="st">"greeting"</span>, <span class="st">"hello"</span>)
                 .param(<span class="st">"target"</span>, <span class="st">"world"</span>);
@@ -337,9 +337,6 @@ org.os890.jawelte.module.batch.impl.adapter.timeout.PopulateLatestSnapshotTimeou
     }
 }</pre>
 </div>
-
-<h2 id="dt-runtime">2.4 picking a jBatch runtime</h2>
-<p>batch-module talks to jBatch through the spec API (<code>JobOperator</code>, <code>JobExecution</code>, <code>BatchStatus</code>), so any conformant runtime works. Tested in jawelte's own sweep: <strong>Apache BatchEE</strong> (default; <code>org.apache.batchee:batchee-jbatch</code>) and <strong>JBeret</strong> (<code>org.jberet:jberet-se</code>). Pick by classpath dependency; no code change.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
 <p>batch-module ships <strong>one SPI port</strong>:</p>
