@@ -32,11 +32,11 @@ class ItemsTest {
 
     @Test
     @TestControl(testDataBasePath = "fixtures", testData = "m01")
-    void firstMethodReadsFixturesM01() {
+    void basePathIsAppliedAsPrefixToTestData_m01() {
     }
 
     @Test
     @TestControl(testDataBasePath = "fixtures", testData = "m02")
-    void secondMethodReadsFixturesM02() {
+    void basePathIsAppliedAsPrefixToTestData_m02() {
     }
 }

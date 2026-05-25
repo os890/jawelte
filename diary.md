@@ -7076,3 +7076,13 @@ Fixes applied:
 - **D12** (low names): test method `dbSeedClearsAndInsertsThenDbDiffPasses` → `cleanInsertsThenDbDiffPasses` in both `ProductsTest.java` (listing 01) and the HTML pre-block. Tests pass.
 - **D13** (low userfriendly): EL provider prerequisite (jakarta.el-api + Tomcat embed EL or Expressly) moved to a `<strong>Prerequisite:</strong>` paragraph above listing 04, mentioning the failure mode (`JakartaELInterpolator` resolution error).
 - **D15** (low ordering): §2.3 ↔ §2.4 swap — EL interpolation now §2.3 (right after DbDiff which references it via `.withValues`), factory choice moved to §2.4 (last in the detailed section, framed as "the listings all use forPersistenceUnit() — here are the alternatives"). TOC entries + the §2.1 cross-link to EL section updated accordingly.
+
+## 2026-05-22 — docs/testcontrol-module.html: pending findings TC3/TC5/TC8/TC9/TC10/TC12
+
+Fixes applied:
+- **TC3** (medium userfriendly): §2.1 heading "four-phase pipeline" → "three-phase pipeline" (TOC + h2). Three phases — seed/update/verify — match the three table rows; the implicit commit happens at transaction boundaries, not as a user-visible phase, so it doesn't deserve its own row.
+- **TC5** (medium userfriendly): §2.5 (now §2.3) prose example `"orders:testdata/scenario08-orders"` / `"testdata/scenario08-customers"` → `"ordersPU:testdata/orders"` / `"testdata/customers"`. The `scenario08-` slug appeared nowhere in the source tree; new prose matches the PU short-names and folder paths used in listing 04.
+- **TC8** (low userfriendly): §2.1 trailing clause "same for dbExpected/ after the method" → fleshed out to "and the same in-order rule applies to dbExpected/ once the test method has returned (every entry's verify phase runs in entry order during afterEach)."
+- **TC9** (low names): listing 03 test methods renamed `firstMethodReadsFixturesM01` → `basePathIsAppliedAsPrefixToTestData_m01` (same shape for m02) in both source and HTML pre-block. Tests pass.
+- **TC10** (low names): listing 03 fixture row NAMEs `item-1`/`item-2` → `item-from-m01`/`item-from-m02` across all four XML files (m01 dbIn+dbExpected, m02 dbIn+dbExpected) so each row identifies which method consumed it. Tests pass.
+- **TC12** (low ordering): §2 sub-section reorder — multi-PU routing (was 2.5) moved to 2.3 so the three listing-bearing sections sit contiguously after §2.1/§2.2; startScopes (was 2.3) → 2.4 and requireDbExpected (was 2.4) → 2.5 as prose-only tail. TOC + heading numbers + ids unchanged (only positions and numeric prefixes).
