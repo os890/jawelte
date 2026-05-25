@@ -20,6 +20,13 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
+/**
+ * Trivial entity used to prove that a row persisted inside one
+ * UserTransaction-driven transaction is visible to the next one.
+ * Listing 01 uses Customer (id + name); this listing uses Marker
+ * because the test is about transaction lifecycle, not domain
+ * shape — every column would be noise.
+ */
 @Entity
 public class Marker {
 

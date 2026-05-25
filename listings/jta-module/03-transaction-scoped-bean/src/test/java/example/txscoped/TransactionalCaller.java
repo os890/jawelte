@@ -20,13 +20,13 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 @ApplicationScoped
-public class PerTxBeanReader {
+public class TransactionalCaller {
 
     @Inject
     PerTxBean perTxBean;
 
     @Transactional
-    public String readIdInsideJtaTx() {
+    public String enterTxAndReadBeanId() {
         return perTxBean.getId();
     }
 }

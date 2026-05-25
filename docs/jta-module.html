@@ -107,8 +107,10 @@
     <li class="depth-2"><a href="#qs-hello">1.2 hello-world</a></li>
     <li class="depth-2"><a href="#qs-maven">1.3 maven setup</a></li>
     <li><a href="#detailed">2. detailed</a></li>
-    <li class="depth-2"><a href="#dt-priority">2.1 priority-based selection</a></li>
-    <li class="depth-2"><a href="#dt-tm">2.2 picking a transaction manager</a></li>
+    <li class="depth-2"><a href="#dt-usertx">2.1 programmatic UserTransaction</a></li>
+    <li class="depth-2"><a href="#dt-txscoped">2.2 @TransactionScoped CDI bean</a></li>
+    <li class="depth-2"><a href="#dt-tm">2.3 picking a transaction manager</a></li>
+    <li class="depth-2"><a href="#dt-priority">2.4 priority-based strategy selection</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
@@ -121,7 +123,12 @@
 <p>jpa-module's default transaction strategy is <code>RESOURCE_LOCAL</code>: one persistence-unit transaction at a time, no cross-resource enlistment, no two-phase commit. That's enough for most tests, but anything that needs more &mdash; a write to two persistence units in one transaction, an XA-enrolled message queue, a code path that relies on <code>UserTransaction</code> &mdash; needs JTA. jta-module swaps the strategy out via <code>@Priority</code> so the rest of the framework keeps working without changes; the new strategy talks JTA underneath.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
-<p>An <code>@ApplicationScoped</code> service whose method is <code>@Transactional</code>, plus a <code>persistence.xml</code> with <code>transaction-type="JTA"</code>. The test method itself is <em>not</em> <code>@Transactional</code> &mdash; the transaction boundary lives inside the service, exactly as it would in production. Each <code>@Transactional</code> service call opens a fresh JTA transaction and commits on return.</p>
+<p>The setup expectations:</p>
+<ul>
+  <li>An <code>@ApplicationScoped</code> service whose method is <code>@Transactional</code> &mdash; the transaction boundary lives in production-shaped code, not in the test method.</li>
+  <li>A <code>persistence.xml</code> with <code>transaction-type="JTA"</code> &mdash; JPA enlists its <code>EntityManager</code> into the JTA transaction the strategy opens.</li>
+  <li>The test method itself is <em>not</em> <code>@Transactional</code> &mdash; the service call is the transaction boundary, exactly as it would be in production. Each call opens a fresh JTA transaction and commits on return.</li>
+</ul>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jta-module/01 · hello-world</span><a href="../listings/jta-module/01-hello-world/">listings/jta-module/01-hello-world/</a></div>
@@ -211,7 +218,7 @@
 <p>What changed compared to <a href="jpa-module.html">jpa-module</a>'s hello-world: nothing in the user-facing code shape. The bean still injects <code>EntityManager</code>, the method is still annotated <code>@Transactional</code>. The two visible differences are the <code>persistence.xml</code> attribute (<code>JTA</code> instead of <code>RESOURCE_LOCAL</code>) and the dependency list (jta-module + a TM + a JNDI provider, see <a href="#qs-maven">1.3</a>).</p>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
-<p>jta-module's api / impl, a JTA TM jar (Geronimo here), and a JNDI provider. xbean-naming is the lightest free JNDI implementation; any other registered <code>InitialContextFactory</code> works.</p>
+<p>jta-module's api / impl, a JTA TM jar (Geronimo here), and a JNDI provider. <em>Why a JNDI provider:</em> JTA <code>TransactionManager</code>s are conventionally published under JNDI names like <code>java:/TransactionManager</code>; jta-module's <code>JndiArtifactBinder</code> publishes Geronimo there at startup and looks the TM up via JNDI when the strategy needs it. xbean-naming is the lightest free <code>InitialContextFactory</code>; any other registered provider works just as well.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/jta-module/01-hello-world/pom.xml">listings/jta-module/01-hello-world/pom.xml</a></div>
@@ -243,17 +250,8 @@
 
 <h1 id="detailed">2. detailed</h1>
 
-<h2 id="dt-priority">2.1 priority-based selection</h2>
-<p>jpa-module ships a default <code>TransactionStrategy</code> at the lowest priority. jta-module ships <code>JtaTransactionStrategy</code> at a higher priority. Both are registered as <code>ServiceLoader</code> providers; the active resolver picks the highest-priority one whenever <code>TestContext.loadService(TransactionStrategy.class)</code> runs. So:</p>
-<ul>
-  <li>core + cdi-module + jpa-module on the classpath &rarr; RESOURCE_LOCAL active.</li>
-  <li>Add jta-module to the classpath &rarr; JTA active. No annotation change in the tests, no <code>persistence.xml</code> rewrite (transaction-type stays whatever you want it; the strategy doesn't care).</li>
-  <li>Remove jta-module &rarr; back to RESOURCE_LOCAL.</li>
-</ul>
-<p>This is the same priority-resolver pattern documented in <a href="core.html#spi-priority-resolver">core docs section 3.8</a>; jta-module is the canonical example of one module shadowing another via priority.</p>
-
-<h3>programmatic UserTransaction</h3>
-<p>When you need a transaction boundary outside of <code>@Transactional</code> &mdash; e.g. a setup helper that has to run partially inside a tx and partially outside &mdash; inject <code>UserTransaction</code>. jta-module exposes it as a CDI bean wired to the same <code>TransactionManager</code> the <code>@Transactional</code> interceptor drives.</p>
+<h2 id="dt-usertx">2.1 programmatic UserTransaction</h2>
+<p>When you need a transaction boundary outside of <code>@Transactional</code> &mdash; e.g. a setup helper that has to run partially inside a tx and partially outside &mdash; inject <code>UserTransaction</code>. jta-module exposes it as a CDI bean wired to the same <code>TransactionManager</code> the <code>@Transactional</code> interceptor drives, so <code>begin()</code>/<code>commit()</code>/<code>rollback()</code> by hand have the same effect on the database as the annotation.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jta-module/02 · user-transaction</span><a href="../listings/jta-module/02-user-transaction/">listings/jta-module/02-user-transaction/</a></div>
@@ -302,10 +300,12 @@
 }</pre>
 </div>
 
-<p>The listing adds <code>narayana-jta</code> to the test classpath alongside Geronimo. Geronimo is still the TM (bound via JNDI by jta-module's <code>JndiArtifactBinder</code>); uber-Narayana supplies the CDI <code>@TransactionScoped</code> integration that activates the EntityManager's transaction-scoped context when the TM signals begin/commit.</p>
+<p>The listing's pom adds <code>narayana-jta</code> alongside Geronimo to bring in the CDI <code>@TransactionScoped</code> integration that the <code>EntityManager</code> proxy itself depends on &mdash; details in <a href="#dt-txscoped">§2.2</a>.</p>
 
-<h3>@TransactionScoped CDI bean</h3>
-<p>A <code>@TransactionScoped</code> bean lives one instance per JTA transaction. The instance is created lazily on first dereference inside the transaction and destroyed (with <code>@PreDestroy</code>) when the transaction completes &mdash; on both commit and rollback. The jpa-module's <code>EntityManager</code> proxy is itself a <code>@TransactionScoped</code> bean.</p>
+<h2 id="dt-txscoped">2.2 @TransactionScoped CDI bean</h2>
+<p>A <code>@TransactionScoped</code> bean lives one instance per JTA transaction. The instance is created lazily on first dereference inside the transaction and destroyed (with <code>@PreDestroy</code>) when the transaction completes &mdash; on both commit and rollback. The jpa-module's <code>EntityManager</code> proxy is itself a <code>@TransactionScoped</code> bean, which is how UserTransaction-driven boundaries (above) end up sharing the same EM with <code>@Transactional</code>-driven ones.</p>
+
+<p><em>Why the Narayana dependency matters:</em> Geronimo TM remains the underlying transaction manager (jta-module's <code>JndiArtifactBinder</code> publishes it via JNDI). Geronimo by itself doesn't ship the CDI <code>@TransactionScoped</code> context. uber-Narayana brings the missing CDI integration &mdash; the context activator that listens to the TM's begin/commit/rollback signals and (de)activates the transaction-scoped store accordingly. With Narayana on the classpath the <code>@TransactionScoped</code> bean injection works regardless of whether you opened the transaction with <code>@Transactional</code> or with raw <code>UserTransaction</code>.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jta-module/03 · transaction-scoped-bean</span><a href="../listings/jta-module/03-transaction-scoped-bean/">listings/jta-module/03-transaction-scoped-bean/</a></div>
@@ -333,15 +333,15 @@
     }
 }
 
-<span class="cm">// src/test/java/example/txscoped/PerTxBeanReader.java   (provides the @Transactional boundary)</span>
+<span class="cm">// src/test/java/example/txscoped/TransactionalCaller.java   (provides the @Transactional boundary)</span>
 <span class="an">@ApplicationScoped</span>
-<span class="kw">public class</span> <span class="ty">PerTxBeanReader</span> {
+<span class="kw">public class</span> <span class="ty">TransactionalCaller</span> {
 
     <span class="an">@Inject</span>
     <span class="ty">PerTxBean</span> perTxBean;
 
     <span class="an">@Transactional</span>
-    <span class="kw">public</span> <span class="ty">String</span> readIdInsideJtaTx() {
+    <span class="kw">public</span> <span class="ty">String</span> enterTxAndReadBeanId() {
         <span class="kw">return</span> perTxBean.getId();
     }
 }
@@ -351,14 +351,14 @@
 <span class="kw">class</span> <span class="ty">PerTxBeanTest</span> {
 
     <span class="an">@Inject</span>
-    <span class="ty">PerTxBeanReader</span> reader;
+    <span class="ty">TransactionalCaller</span> transactionalCaller;
 
     <span class="an">@Test</span>
     <span class="kw">void</span> eachJtaTransactionGetsItsOwnInstance() {
         <span class="ty">PerTxBean</span>.PRE_DESTROY_COUNT.set(<span class="kw">0</span>);
 
-        <span class="ty">String</span> firstTxId = reader.readIdInsideJtaTx();
-        <span class="ty">String</span> secondTxId = reader.readIdInsideJtaTx();
+        <span class="ty">String</span> firstTxId = transactionalCaller.enterTxAndReadBeanId();
+        <span class="ty">String</span> secondTxId = transactionalCaller.enterTxAndReadBeanId();
 
         assertThat(firstTxId).isNotBlank();
         assertThat(secondTxId).isNotBlank().isNotEqualTo(firstTxId);
@@ -369,7 +369,7 @@
 }</pre>
 </div>
 
-<h2 id="dt-tm">2.2 picking a transaction manager</h2>
+<h2 id="dt-tm">2.3 picking a transaction manager</h2>
 <p>jta-module doesn't ship a transaction manager itself &mdash; just the integration glue. Choose one of three based on your project:</p>
 <ul>
   <li><strong>Geronimo (<code>org.apache.geronimo.components:geronimo-transaction</code>)</strong> &mdash; lightest, fewest moving parts, the default in jawelte's own test sweep. Good for tests that just need JTA semantics, not the full XA recovery story.</li>
@@ -377,6 +377,16 @@
   <li><strong>Atomikos (<code>com.atomikos:atomikos-util</code> + the Jakarta-namespace classifier artifacts)</strong> &mdash; another XA-capable choice with its own configuration surface; jta-module's <code>TransactionManagerProvider</code> SPI lets you supply an Atomikos-specific provider (no concrete pom fragment in this listing set yet).</li>
 </ul>
 <p>All three publish their <code>TransactionManager</code> via JNDI; jta-module's <code>JndiArtifactBinder</code> looks the TM up at startup via a known set of JNDI names. You need <em>some</em> JNDI provider on the classpath for the lookup to resolve &mdash; xbean-naming is the easiest; any other <code>InitialContextFactory</code> works.</p>
+
+<h2 id="dt-priority">2.4 priority-based strategy selection</h2>
+<p><em>Mechanism note &mdash; useful when debugging which strategy is active or when you want to ship a custom <code>TransactionStrategy</code>.</em></p>
+<p>jpa-module ships a default <code>TransactionStrategy</code> at <code>@Priority(Integer.MAX_VALUE)</code> (the lowest-wins fallback). jta-module ships <code>JtaTransactionStrategy</code> at <code>@Priority(Integer.MAX_VALUE - 100)</code> &mdash; a lower numeric value, so it wins the ascending sort. Both are <code>ServiceLoader</code> providers; the active resolver picks the entry with the <em>lowest</em> numeric <code>@Priority</code> whenever <code>TestContext.loadService(TransactionStrategy.class)</code> runs &mdash; matching Jakarta's "lower number = higher priority" convention. So:</p>
+<ul>
+  <li>core + cdi-module + jpa-module on the classpath &rarr; RESOURCE_LOCAL active (only the default fallback is registered).</li>
+  <li>Add jta-module to the classpath &rarr; JTA active (jta-module's lower-numeric priority wins the sort). No annotation change in the tests; the <code>persistence.xml</code> <code>transaction-type="JTA"</code> must already be set for JPA to enlist its EntityManager into the JTA transaction (see <a href="#qs-hello">§1.2</a>).</li>
+  <li>Remove jta-module &rarr; back to RESOURCE_LOCAL.</li>
+</ul>
+<p>This is the same priority-resolver pattern documented in <a href="core.html#spi-priority-resolver">core docs &middot; ServicePriorityResolver</a>; jta-module is the canonical example of one module shadowing another via a lower numeric priority value.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
 
@@ -414,7 +424,7 @@
 example.tmprovider.RecordingTransactionManagerProvider</pre>
 </div>
 
-<p>The default <code>AutoSelectTransactionManagerProvider</code> carries <code>@Priority(Integer.MAX_VALUE)</code>; <code>@Priority(1)</code> on the custom impl wins the sort and becomes the active provider. The test injects <code>UserTransaction</code>, calls <code>begin/commit</code>, then asserts <code>CREATE_COUNT &gt; 0</code> &mdash; proof that the custom <code>create()</code> was invoked.</p>
+<p>A recording wrapper is the simplest way to verify SPI priority wiring &mdash; counting every <code>create()</code> call lets the test prove the priority sort picked the custom impl over the default. The default <code>AutoSelectTransactionManagerProvider</code> carries <code>@Priority(Integer.MAX_VALUE)</code>; <code>@Priority(1)</code> on the custom impl has a lower numeric value, wins the ascending sort, and becomes the active provider (see <a href="#dt-priority">§2.4</a>). The test injects <code>UserTransaction</code>, calls <code>begin/commit</code>, then asserts <code>CREATE_COUNT &gt; 0</code> &mdash; proof that the custom <code>create()</code> was invoked.</p>
 
 <p>Everything else jta-module adds (the <code>JtaTransactionStrategy</code> itself, the JNDI binder, the persistence-property override that switches Hibernate to JTA mode) is internal &mdash; the user-facing customization knob is the TM choice plus this one port.</p>
 

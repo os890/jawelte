@@ -26,14 +26,14 @@ import org.os890.jawelte.core.api.EnableTestBeans;
 class PerTxBeanTest {
 
     @Inject
-    PerTxBeanReader reader;
+    TransactionalCaller transactionalCaller;
 
     @Test
     void eachJtaTransactionGetsItsOwnInstance() {
         PerTxBean.PRE_DESTROY_COUNT.set(0);
 
-        String firstTxId = reader.readIdInsideJtaTx();
-        String secondTxId = reader.readIdInsideJtaTx();
+        String firstTxId = transactionalCaller.enterTxAndReadBeanId();
+        String secondTxId = transactionalCaller.enterTxAndReadBeanId();
 
         assertThat(firstTxId).isNotBlank();
         assertThat(secondTxId).isNotBlank().isNotEqualTo(firstTxId);
