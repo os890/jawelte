@@ -115,9 +115,9 @@
     <li class="depth-2"><a href="#qs-maven">1.3 maven setup</a></li>
     <li><a href="#detailed">2. detailed</a></li>
     <li class="depth-2"><a href="#dt-enable">2.1 @EnableWireMock</a></li>
-    <li class="depth-2"><a href="#dt-endpoint">2.2 @WireMockEndpoint &mdash; per-endpoint qualifiers</a></li>
-    <li class="depth-2"><a href="#dt-priority">2.3 @Priority &mdash; the implicit default</a></li>
-    <li class="depth-2"><a href="#dt-reset">2.4 stubs reset between methods</a></li>
+    <li class="depth-2"><a href="#dt-reset">2.2 stubs reset between methods</a></li>
+    <li class="depth-2"><a href="#dt-endpoint">2.3 @WireMockEndpoint &mdash; per-endpoint qualifiers</a></li>
+    <li class="depth-2"><a href="#dt-priority">2.4 @Priority &mdash; the implicit default</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
@@ -127,7 +127,8 @@
 <h1 id="quick-start">1. quick-start</h1>
 
 <h2 id="qs-purpose">1.1 purpose</h2>
-<p>The standard WireMock setup &mdash; build a <code>WireMockServer</code>, start it in <code>@BeforeAll</code>, stop it in <code>@AfterAll</code>, reset stubs in <code>@BeforeEach</code>, propagate the port to the system under test &mdash; is the same scaffolding every time. wiremock-module collapses it into one annotation: <code>@EnableWireMock</code> handles the lifecycle, a CDI producer injects the server / stub-registration client, the lifecycle adapter resets stubs between test methods.</p>
+<p>The standard WireMock setup &mdash; build a <code>WireMockServer</code>, start it in <code>@BeforeAll</code>, stop it in <code>@AfterAll</code>, reset stubs in <code>@BeforeEach</code>, propagate the port to the system under test &mdash; is the same scaffolding every time. wiremock-module collapses it into one annotation: <code>@EnableWireMock</code> handles the lifecycle, a CDI producer injects the server / stub-registration client, and a <code>TestModuleLifecyclePort</code> adapter (a <a href="core.html#spi-lifecycle-port">core-module SPI hook</a>) resets stubs between test methods.</p>
+<p><strong>Upstream WireMock types.</strong> <code>WireMockServer</code>, <code>WireMock</code>, and <code>WireMockRuntimeInfo</code> are all upstream <code>com.github.tomakehurst.wiremock.*</code> classes from the WireMock library &mdash; jawelte just publishes them as CDI beans. The matcher and response-builder syntax (<code>get(urlEqualTo(...))</code>, <code>aResponse().withStatus(...)</code>) is exactly what the WireMock upstream docs describe; nothing is jawelte-specific.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
 <p>One annotation on the test class, one <code>@Inject WireMockRuntimeInfo</code> field. The runtime-info bean is WireMock's read-only metadata handle &mdash; live port, base URL, recorded request log. Injecting it is the smallest proof that <code>@EnableWireMock</code> actually booted the server.</p>
@@ -155,7 +156,7 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing wiremock-module/02 &middot; stub-and-call</span><a href="../listings/wiremock-module/02-stub-and-call/">listings/wiremock-module/02-stub-and-call/</a></div>
-<pre><span class="cm">// src/test/java/example/stubcall/StubAndCallTest.java</span>
+<pre><span class="cm">// src/test/java/example/wiremock/stubcall/StubAndCallTest.java</span>
 <span class="an">@EnableWireMock</span>
 <span class="kw">class</span> <span class="ty">StubAndCallTest</span> {
 
@@ -223,9 +224,12 @@
 
 <h2 id="dt-enable">2.1 @EnableWireMock</h2>
 <p><code>@EnableWireMock</code> is a class-level marker with <em>no attributes</em>. Endpoint configuration (port, qualifier) lives on the <code>@WireMockEndpoint</code> meta-qualifier &mdash; not on the activator. The annotation is meta-annotated with <code>@Inherited</code>, so a test class that extends a base class carrying <code>@EnableWireMock</code> picks up the activation automatically.</p>
-<p>The lifecycle hook runs at JUnit Jupiter <code>@Priority(75)</code> &mdash; same band as <a href="jaxrs-module.html">jaxrs-module</a>, between testcontrol-module (50) and scope-module (100). It reads the annotation off the test class in <code>beforeAll</code>, boots one <code>WireMockServer</code> per discovered <code>@WireMockEndpoint</code> qualifier (or a single default server when no qualifier was found), and shuts them down in <code>afterAll</code>.</p>
+<p>It reads the annotation off the test class in <code>beforeAll</code>, boots one <code>WireMockServer</code> per discovered <code>@WireMockEndpoint</code> qualifier (or a single default server when no qualifier was found), and shuts them down in <code>afterAll</code>. The lifecycle hook is registered as a <code>TestModuleLifecyclePort</code> at <code>@Priority(75)</code> &mdash; same band as <a href="jaxrs-module.html">jaxrs-module</a>, between testcontrol-module (50) and scope-module (100). This <code>@Priority</code> orders modules against each other inside <a href="core.html#dt-ordering">jawelte's lifecycle chain</a>; it is unrelated to the <code>@jakarta.annotation.Priority</code> on a CDI qualifier that section 2.4 uses for default-bean selection.</p>
 
-<h2 id="dt-endpoint">2.2 @WireMockEndpoint &mdash; per-endpoint qualifiers</h2>
+<h2 id="dt-reset">2.2 stubs reset between methods</h2>
+<p>The lifecycle adapter calls <code>WireMockServer.resetAll()</code> in its <code>beforeEach</code>, so stubs you register in one method don't leak into the next. This is independent of CDI scope destruction &mdash; even if <a href="testcontrol-module.html">testcontrol-module</a> vetoes scopes for a method, stubs are still reset. Per-method isolation is the contract; no opt-out is necessary or available.</p>
+
+<h2 id="dt-endpoint">2.3 @WireMockEndpoint &mdash; per-endpoint qualifiers</h2>
 <p>Multi-upstream tests declare one user <code>@Qualifier</code> annotation per endpoint, each meta-annotated <code>@WireMockEndpoint</code>:</p>
 
 <pre>@WireMockEndpoint(port = 0)
@@ -272,7 +276,8 @@ public @interface InventoryApi { }</pre>
 
 <p><b>Auto-mock interaction.</b> Multi-endpoint listings need <code>mockito-core</code> on the test classpath and an MP Config exclude entry &mdash; <code>org.os890.jawelte.module.cdi.auto-mock.exclude-packages=com.github.tomakehurst.wiremock.</code> &mdash; because cdi-module's auto-mock extension and wiremock-module's CDI extension both fire in <code>AfterBeanDiscovery</code> with no defined ordering; without the exclude, auto-mock can synthesise a mock for the qualified <code>WireMockServer</code> IPs and collide with wiremock-module's real beans (AmbiguousResolutionException at validation). See the linked listing's pom + <code>microprofile-config.properties</code> for the recipe.</p>
 
-<h2 id="dt-priority">2.3 @Priority &mdash; the implicit default</h2>
+<h2 id="dt-priority">2.4 @Priority &mdash; the implicit default</h2>
+<p><em>Note:</em> the <code>@jakarta.annotation.Priority</code> on a qualifier discussed here is a CDI-level mechanism for picking which bean wins the implicit <code>@Default</code>, evaluated at deployment time. It is unrelated to the <code>@Priority(75)</code> on wiremock-module's lifecycle adapter mentioned in §2.1 (which orders the module against other <code>TestModuleLifecyclePort</code> participants during <code>beforeAll</code>).</p>
 <p>In multi-endpoint mode, an unqualified <code>@Inject WireMockServer</code> is ambiguous by default. Add <code>@jakarta.annotation.Priority</code> to one of the qualifiers and that qualifier's server becomes the implicit default:</p>
 
 <pre>@WireMockEndpoint(port = 0)
@@ -317,9 +322,6 @@ class MyTest {
     }
 }</pre>
 </div>
-
-<h2 id="dt-reset">2.4 stubs reset between methods</h2>
-<p>The lifecycle adapter calls <code>WireMockServer.resetAll()</code> in its <code>beforeEach</code>, so stubs you register in one method don't leak into the next. This is independent of CDI scope destruction &mdash; even if <a href="testcontrol-module.html">testcontrol-module</a> vetoes scopes for a method, stubs are still reset.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
 <p>wiremock-module ships <strong>no SPI / port of its own</strong>. The api jar contains exactly two annotations: <code>@EnableWireMock</code> and <code>@WireMockEndpoint</code>. Customization happens through:</p>
