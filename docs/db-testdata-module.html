@@ -116,8 +116,8 @@
     <li><a href="#detailed">2. detailed</a></li>
     <li class="depth-2"><a href="#dt-dbseed">2.1 DbSeed</a></li>
     <li class="depth-2"><a href="#dt-dbdiff">2.2 DbDiff</a></li>
-    <li class="depth-2"><a href="#dt-factories">2.3 factory choice</a></li>
-    <li class="depth-2"><a href="#dt-el">2.4 EL interpolation</a></li>
+    <li class="depth-2"><a href="#dt-el">2.3 EL interpolation</a></li>
+    <li class="depth-2"><a href="#dt-factories">2.4 factory choice</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
@@ -134,7 +134,16 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing db-testdata-module/01 &middot; hello-world</span><a href="../listings/db-testdata-module/01-hello-world/">listings/db-testdata-module/01-hello-world/</a></div>
-<pre><span class="cm">// src/test/resources/products/dbIn.xml</span>
+<pre><span class="cm">// src/test/resources/products/dbIn.xml &mdash; the seed input</span>
+&lt;dataset&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"1"</span> NAME=<span class="st">"apple"</span>/&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"2"</span> NAME=<span class="st">"banana"</span>/&gt;
+    &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"3"</span> NAME=<span class="st">"cherry"</span>/&gt;
+&lt;/dataset&gt;
+
+<span class="cm">// src/test/resources/products/dbExpected.xml &mdash; what we assert the DB contains</span>
+<span class="cm">//   identical to dbIn here because no application logic mutates the rows between</span>
+<span class="cm">//   seed and assert. Later listings (02 seed-modes, 03 dbdiff-ignoring) show divergent files.</span>
 &lt;dataset&gt;
     &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"1"</span> NAME=<span class="st">"apple"</span>/&gt;
     &lt;<span class="ty">PRODUCT</span> ID=<span class="st">"2"</span> NAME=<span class="st">"banana"</span>/&gt;
@@ -148,7 +157,7 @@
 
     <span class="an">@Test</span>
     <span class="an">@Transactional</span>
-    <span class="kw">void</span> dbSeedClearsAndInsertsThenDbDiffPasses() {
+    <span class="kw">void</span> cleanInsertsThenDbDiffPasses() {
         <span class="ty">DbSeed</span>.forPersistenceUnit()
                 .dataset(<span class="st">"products/dbIn.xml"</span>)
                 .cleanInsert()
@@ -162,7 +171,7 @@
 </div>
 
 <h2 id="qs-maven">1.3 maven setup</h2>
-<p>db-testdata-module's api / impl, plus jpa-module to supply the persistence-unit connection. The dbunit transitive pulls in an older junit-platform-suite-engine that clashes with junit-jupiter 6.0.0; exclude it (see the listing pom for the comment).</p>
+<p>db-testdata-module's api / impl on top of the usual stack. The fragment below shows only the db-testdata-specific additions; the underlying <a href="core.html#qs-maven">core-docs maven setup</a> (jawelte-core + cdi-module + JUnit + AssertJ + a CDI runtime) and the <a href="jpa-module.html#qs-maven">jpa-module maven setup</a> (jpa-module + Hibernate + H2 + xbean / asm) must already be on the classpath &mdash; db-testdata-module reaches into jpa-module's <code>EntityManagerFactory</code> to resolve persistence-unit connections. The dbunit transitive pulls in an older <code>junit-platform-suite-engine</code> that clashes with junit-jupiter 6.0.0; exclude it (see the listing pom for the full comment).</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">pom.xml fragment</span><a href="../listings/db-testdata-module/01-hello-world/pom.xml">listings/db-testdata-module/01-hello-world/pom.xml</a></div>
@@ -199,7 +208,7 @@
     <tr><td><code>.refresh()</code></td><td>REFRESH</td><td>Upsert by PK. Safe under circular FK dependencies because no DELETE step fires.</td></tr>
   </tbody>
 </table>
-<p>Builders are single-use. The dataset is either a classpath path (<code>.dataset("path/to/file.xml")</code>) or an inline string (<code>.datasetContent("...")</code>); the two are mutually exclusive. <code>.withValues(Map)</code> attaches EL bindings (see <a href="#dt-el">2.4</a>).</p>
+<p>Builders are single-use &mdash; calling <code>.execute()</code> on the same builder twice raises <code>IllegalStateException</code>. The dataset is either a classpath path (<code>.dataset("path/to/file.xml")</code>) or an inline string (<code>.datasetContent("...")</code>); the two are mutually exclusive &mdash; calling both on the same builder raises <code>IllegalStateException</code> from the second call. <code>.withValues(Map)</code> attaches EL bindings (see <a href="#dt-el">2.3</a>).</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing db-testdata-module/02 · seed-modes</span><a href="../listings/db-testdata-module/02-seed-modes/">listings/db-testdata-module/02-seed-modes/</a></div>
@@ -229,10 +238,10 @@
 <table class="config">
   <thead><tr><th>Builder method</th><th>Effect</th></tr></thead>
   <tbody>
-    <tr><td><code>.expected("path.xml")</code> / <code>.expectedContent("...")</code></td><td>The expected dataset. Mutually exclusive.</td></tr>
+    <tr><td><code>.expected("path.xml")</code> / <code>.expectedContent("...")</code></td><td>The expected dataset. Mutually exclusive &mdash; calling both on the same builder raises <code>IllegalStateException</code> from the second call.</td></tr>
     <tr><td><code>.ignoring("PRODUCT.LAST_MODIFIED", "*.AUDIT_TS")</code></td><td>Skip these columns from the diff. Supports table+column or wildcard.</td></tr>
     <tr><td><code>.subsetOnly()</code></td><td>Allow the database to contain rows not in the expected file; only assert the expected rows are present.</td></tr>
-    <tr><td><code>.unorderedTables("ORDERS")</code></td><td>For tables without a meaningful row order, compare as multisets.</td></tr>
+    <tr><td><code>.unorderedTables("ORDER_ROW")</code></td><td>For tables without a meaningful row order, compare as multisets.</td></tr>
     <tr><td><code>.withValues(Map) / .withBean(name, instance) / .withFunction(...)</code></td><td>EL bindings, beans, and static functions usable in <code>${...}</code> expressions and predicate cells.</td></tr>
     <tr><td><code>.assertEquals()</code></td><td>Run the comparison. Use <code>.assertRowCount(table, n)</code> for a quick count-only check.</td></tr>
   </tbody>
@@ -295,35 +304,7 @@
 }</pre>
 </div>
 
-<h2 id="dt-factories">2.3 factory choice</h2>
-<p>Both <code>DbSeed</code> and <code>DbDiff</code> ship four entry-point factories. Pick the one that matches how the calling test resolves its database connection:</p>
-<table class="config">
-  <thead><tr><th>Factory</th><th>Source of the JDBC connection</th></tr></thead>
-  <tbody>
-    <tr><td><code>forConnection(connection)</code></td><td>The supplied JDBC connection. db-testdata-module never closes / commits / rolls it back &mdash; you own the lifecycle.</td></tr>
-    <tr><td><code>forPersistenceUnit()</code></td><td>Reads <code>@PersistenceConfig(persistenceUnitName)</code> off the active test class. Non-empty &rarr; named PU; empty &rarr; delegate to <code>forCurrentPersistenceUnit()</code>. Default for jpa-module users (every listing on this page).</td></tr>
-    <tr><td><code>forCurrentPersistenceUnit()</code></td><td>The single PU currently active on the calling thread (via <code>PersistenceUnitConnectionResolver</code>). Zero or multiple active PUs raise <code>IllegalStateException</code>.</td></tr>
-    <tr><td><code>forPersistenceUnit(name)</code></td><td>Explicitly named PU, regardless of annotation.</td></tr>
-  </tbody>
-</table>
-
-<p>One-line examples covering each factory:</p>
-<pre style="background: #f0f0f0; padding: 12px 16px; font-size: 12.5px; border-left: 3px solid #88a; border-radius: 3px; overflow: auto; margin: 12px 0; line-height: 1.6;"><span class="cm">// Default — reads @PersistenceConfig off the test class.</span>
-<span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/initial.xml"</span>).cleanInsert().execute();
-
-<span class="cm">// Named PU — overrides @PersistenceConfig, useful in multi-PU tests.</span>
-<span class="ty">DbSeed</span>.forPersistenceUnit(<span class="st">"customersPU"</span>).dataset(<span class="st">"customers.xml"</span>).cleanInsert().execute();
-
-<span class="cm">// Current active PU — fails if zero or multiple PUs are active on the thread.</span>
-<span class="ty">DbSeed</span>.forCurrentPersistenceUnit().dataset(<span class="st">"products.xml"</span>).refresh().execute();
-
-<span class="cm">// Raw JDBC — bypass JPA entirely; caller manages the connection lifecycle.</span>
-<span class="kw">try</span> (<span class="ty">Connection</span> c = dataSource.getConnection()) {
-    <span class="ty">DbSeed</span>.forConnection(c).dataset(<span class="st">"products.xml"</span>).cleanInsert().execute();
-    c.commit();
-}</pre>
-
-<h2 id="dt-el">2.4 EL interpolation</h2>
+<h2 id="dt-el">2.3 EL interpolation</h2>
 <p>Dataset cells (and column values in <code>DbDiff</code>'s predicate columns) may contain <code>${expression}</code>. The expressions resolve against:</p>
 <ul>
   <li><strong>Values</strong> passed via <code>.withValues(Map)</code> &mdash; resolved by key.</li>
@@ -338,6 +319,8 @@
 &lt;/dataset&gt;</pre>
 
 <p>Plain string cells compare literally; cells containing <code>${...}</code> become predicate cells when the expression returns <code>boolean</code>, or value-substitution cells when it returns anything else.</p>
+
+<p><strong>Prerequisite:</strong> EL interpolation requires <code>jakarta.el-api</code> + an EL provider (Tomcat's <code>tomcat-embed-el</code> here; Expressly works too) on the test classpath. Without an EL provider, any <code>${...}</code> placeholder in a dataset raises an EL-resolution error from <code>JakartaELInterpolator</code>. The listing below ships both as <code>&lt;scope&gt;test&lt;/scope&gt;</code> dependencies in its pom.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing db-testdata-module/04 · el-interpolation</span><a href="../listings/db-testdata-module/04-el-interpolation/">listings/db-testdata-module/04-el-interpolation/</a></div>
@@ -369,7 +352,35 @@
 }</pre>
 </div>
 
-<p>One dataset file, parameterised through <code>.withValues(Map)</code> — different test methods seed different concrete rows without producing new XML files. Add <code>jakarta.el-api</code> + an EL provider (Tomcat's <code>tomcat-embed-el</code> here) to the test classpath.</p>
+<p>One dataset file, parameterised through <code>.withValues(Map)</code> &mdash; different test methods seed different concrete rows without producing new XML files.</p>
+
+<h2 id="dt-factories">2.4 factory choice</h2>
+<p>Both <code>DbSeed</code> and <code>DbDiff</code> ship four entry-point factories. The listings above all use <code>forPersistenceUnit()</code> &mdash; the table below covers the alternatives you reach for when the calling test resolves its database connection differently:</p>
+<table class="config">
+  <thead><tr><th>Factory</th><th>Source of the JDBC connection</th></tr></thead>
+  <tbody>
+    <tr><td><code>forConnection(connection)</code></td><td>The supplied JDBC connection. db-testdata-module never closes / commits / rolls it back &mdash; you own the lifecycle.</td></tr>
+    <tr><td><code>forPersistenceUnit()</code></td><td>Reads <code>@PersistenceConfig(persistenceUnitName)</code> off the active test class. Non-empty &rarr; named PU; empty &rarr; delegate to <code>forCurrentPersistenceUnit()</code>. Default for jpa-module users (every listing on this page).</td></tr>
+    <tr><td><code>forCurrentPersistenceUnit()</code></td><td>The single PU currently active on the calling thread (via <code>PersistenceUnitConnectionResolver</code>). Zero or multiple active PUs raise <code>IllegalStateException</code>.</td></tr>
+    <tr><td><code>forPersistenceUnit(name)</code></td><td>Explicitly named PU, regardless of annotation.</td></tr>
+  </tbody>
+</table>
+
+<p>One-line examples covering each factory:</p>
+<pre style="background: #f0f0f0; padding: 12px 16px; font-size: 12.5px; border-left: 3px solid #88a; border-radius: 3px; overflow: auto; margin: 12px 0; line-height: 1.6;"><span class="cm">// Default — reads @PersistenceConfig off the test class.</span>
+<span class="ty">DbSeed</span>.forPersistenceUnit().dataset(<span class="st">"products/initial.xml"</span>).cleanInsert().execute();
+
+<span class="cm">// Named PU — overrides @PersistenceConfig, useful in multi-PU tests.</span>
+<span class="ty">DbSeed</span>.forPersistenceUnit(<span class="st">"customersPU"</span>).dataset(<span class="st">"customers.xml"</span>).cleanInsert().execute();
+
+<span class="cm">// Current active PU — fails if zero or multiple PUs are active on the thread.</span>
+<span class="ty">DbSeed</span>.forCurrentPersistenceUnit().dataset(<span class="st">"products.xml"</span>).refresh().execute();
+
+<span class="cm">// Raw JDBC — bypass JPA entirely; caller manages the connection lifecycle.</span>
+<span class="kw">try</span> (<span class="ty">Connection</span> c = dataSource.getConnection()) {
+    <span class="ty">DbSeed</span>.forConnection(c).dataset(<span class="st">"products.xml"</span>).cleanInsert().execute();
+    c.commit();
+}</pre>
 
 <h1 id="spi">3. spi / port reference</h1>
 <p>db-testdata-module ships <strong>four ports</strong>, all resolved through core's <code>ServicePriorityResolver</code> + ServiceLoader chain:</p>

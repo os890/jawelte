@@ -29,7 +29,7 @@ class ProductsTest {
 
     @Test
     @Transactional
-    void dbSeedClearsAndInsertsThenDbDiffPasses() {
+    void cleanInsertsThenDbDiffPasses() {
         DbSeed.forPersistenceUnit()
                 .dataset("products/dbIn.xml")
                 .cleanInsert()

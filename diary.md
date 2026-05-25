@@ -7065,3 +7065,14 @@ canonical source. Source-side fixes were limited to:
 
 All affected listings `mvn test` clean on JDK 25.
 
+
+## 2026-05-22 — docs/db-testdata-module.html: pending findings D7/D8/D9/D10/D12/D13/D15
+
+Fixes applied:
+- **D7** (medium userfriendly): §1.3 maven setup rewrite — fragment is now explicitly a delta on `core-docs maven setup` + `jpa-module maven setup`, with anchor links to both as classpath baselines.
+- **D8** (medium userfriendly): DbSeed prose and DbDiff table row now name the failure mode: builders single-use → `IllegalStateException` on second `.execute()`; dataset/expected mutually exclusive → `IllegalStateException` from the second call.
+- **D9** (medium userfriendly): hello-world listing pre-block now shows BOTH dbIn.xml AND dbExpected.xml with explicit comments — dbIn is "the seed input", dbExpected is "what we assert the DB contains", and a comment notes the two are identical here because no app logic mutates rows between seed and assert (with pointer to 02/03 for divergent cases).
+- **D10** (low names): §2.2 DbDiff feature table example `.unorderedTables("ORDERS")` → `.unorderedTables("ORDER_ROW")` to match the listing 03 `OrderRow` entity table.
+- **D12** (low names): test method `dbSeedClearsAndInsertsThenDbDiffPasses` → `cleanInsertsThenDbDiffPasses` in both `ProductsTest.java` (listing 01) and the HTML pre-block. Tests pass.
+- **D13** (low userfriendly): EL provider prerequisite (jakarta.el-api + Tomcat embed EL or Expressly) moved to a `<strong>Prerequisite:</strong>` paragraph above listing 04, mentioning the failure mode (`JakartaELInterpolator` resolution error).
+- **D15** (low ordering): §2.3 ↔ §2.4 swap — EL interpolation now §2.3 (right after DbDiff which references it via `.withValues`), factory choice moved to §2.4 (last in the detailed section, framed as "the listings all use forPersistenceUnit() — here are the alternatives"). TOC entries + the §2.1 cross-link to EL section updated accordingly.
