@@ -7178,3 +7178,21 @@ Restructure:
 - Listings 05 + 18 source unchanged; ran both `mvn test` after the doc move — 2/2 pass.
 
 Result: page now reads as quick-start → detailed annotations + lifecycle → SPI / port reference → @ConfigBean pattern. Listing 18 ends up as the very last sample on the page; listing 05 sits immediately above it. Both at the back, where the user wanted them.
+
+## 2026-05-22 — docs/core.html manageContainer prose clarification
+
+User feedback: the §2.1 "manageContainer" paragraph said "When false, those calls are skipped" right next to the words "beforeAll" and "afterAll", which made it sound like JUnit's `@BeforeAll` / `@AfterAll` user methods get skipped. JUnit always calls those — the doc was ambiguous.
+
+Verified the actual behaviour against `core/impl/.../DelegatingJUnitExtension.java`:
+- Line 107-109: `if (manageContainer) containerPort.beforeAll(testContext);`
+- Line 193-199: same conditional around `containerPort.afterAll(testContext)`
+- `TestModuleLifecyclePort.beforeAll`/`afterAll` calls (lines 110-113 and 186-192) run unconditionally.
+
+The doc's claim was technically accurate but reading-friendly only if you already knew "TestBeanContainerPort.beforeAll" was a method name on a framework port and not JUnit's `@BeforeAll`. Listing 07 ExternalContainerTest in fact declares its own `@BeforeAll bootCdi()` + `@AfterAll shutdownCdi()` and JUnit calls them — the listing contradicted the prose if read literally.
+
+Rewrite:
+- Lead sentence explicitly says "this flag has no effect on JUnit's own lifecycle — your @BeforeAll / @AfterAll methods are always called by JUnit, regardless of the flag".
+- One paragraph for the `true` case naming `TestBeanContainerPort.beforeAll(TestContext)` and `afterAll(TestContext)` as the port-side calls jawelte makes from inside JUnit's beforeAll/afterAll, with a §3.2 cross-link.
+- One paragraph for the `false` case spelling out exactly what's skipped (the two port invocations — the boot and the shutdown), what the user is expected to do instead (boot from @BeforeAll, close from @AfterAll), and what else still runs: `TestModuleLifecyclePort.beforeAll`/`afterAll` on every registered lifecycle port, `postProcessTestInstance`, `beforeEach`, `afterEach`.
+
+Listing 07 source unchanged; mvn test passes (1/1).

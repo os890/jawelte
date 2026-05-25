@@ -660,7 +660,11 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
 </div>
 
 <h3>manageContainer (default true)</h3>
-<p>When <code>true</code>, jawelte calls <code>TestBeanContainerPort.beforeAll</code> and <code>afterAll</code> to boot and shut down the CDI container. When <code>false</code>, those calls are skipped — the test owns the container lifecycle (e.g., via <code>SeContainerInitializer</code>). The per-method scope activation and field injection still happen.</p>
+<p>Controls whether <em>jawelte</em> boots and shuts down the CDI container. This flag has no effect on JUnit's own lifecycle — your <code>@BeforeAll</code> / <code>@AfterAll</code> methods on the test class are always called by JUnit, regardless of the flag.</p>
+
+<p>With <code>manageContainer = true</code> (default) jawelte's <code>DelegatingJUnitExtension</code> calls <code>TestBeanContainerPort.beforeAll(TestContext)</code> from inside JUnit's <code>beforeAll</code> phase (the call that boots the CDI container) and <code>TestBeanContainerPort.afterAll(TestContext)</code> from inside <code>afterAll</code> (the call that shuts it down). See <a href="#spi-container-port">§3.2 TestBeanContainerPort</a> for the port itself.</p>
+
+<p>With <code>manageContainer = false</code> jawelte skips just those two port invocations &mdash; the boot and the shutdown. You're expected to boot the container yourself from a <code>@BeforeAll</code> method (typically via <code>SeContainerInitializer</code>) and close it from <code>@AfterAll</code>; the listing below shows the exact shape. Everything else jawelte does still runs: <code>TestModuleLifecyclePort.beforeAll</code> / <code>afterAll</code> still fire on every registered lifecycle port, and per-method behaviour is unchanged &mdash; <code>postProcessTestInstance</code> (field injection on the test instance), <code>beforeEach</code> (scope activation), and <code>afterEach</code> (scope deactivation) all happen as before.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing core · external-container</span><a href="../listings/core/07-external-container/">listings/core/07-external-container/</a></div>
