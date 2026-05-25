@@ -7149,3 +7149,15 @@ Fixes applied:
 - **C1** (high ordering): dropped the numeric prefix from every "listing core/NN · name" label across the page. Labels now read as "listing core · hello-world", "listing core · auto-mock", etc. The `<a href>` still points at `listings/core/01-hello-world/` etc., so folder structure on disk is unchanged — no listing-source rewires, no cross-link breakage. A reader scrolling through no longer sees "core/17" followed by "core/04" and wonders whether 5-16 were skipped.
 - **C4** (medium ordering): the "@TestBean — replace a qualified injection point" h3 + listing 17 moved from the middle of §1.3 (where it appeared between alternative and static-field) to the *end* of §1.3 (after @ConfigBean). Heading also gained an "(advanced)" suffix and the prose now explicitly says "this is a sub-mode of the plain @Alternative pattern above; skip on a first read unless you're already comfortable with CDI qualifiers".
 - **C7** (low ordering): §3.8 ServicePriorityResolver caveat moved from after the listing to *before* it. The "scope of effect" paragraph now explains up front that the resolver applies only to `TestContext.loadService(...)`-driven ports, NOT to `TestModuleLifecyclePort` (which `DelegatingJUnitExtension` sorts via hardcoded `PriorityComparator`). The reader sees the constraint before the example, not after.
+
+## 2026-05-22 — docs/core.html test-bean-static-field clarification
+
+User feedback: in the original listing 04 the @TestBean static fields AND the matching @Inject sat on the same test class. That made the example readable as "a static-field reference" rather than "a CDI bean visible to the whole container".
+
+Fixes:
+- Added `WelcomeService` (`@ApplicationScoped`) under `listings/core/04-test-bean-static-field/src/main/java/example/staticfield/` as a production-shaped consumer that `@Inject`s `Greeting` + `Clock`. It has no knowledge of tests; under jawelte the container hands it the values from the test class's @TestBean static fields.
+- Rewrote `GreetingTest`:
+  - Primary test `serviceReceivesTheStaticFieldsViaCdi` exercises the service path — `welcomeService.compose()` composes a string from both injected beans (literal Greeting + stubbed-mock Clock).
+  - Secondary test `staticFieldValueIsTheSameInstanceTheContainerHandsOut` keeps the identity check (`isSameAs(WELCOME_GREETING)`) so the "field VALUE is the bean" property remains demonstrated.
+- Updated docs/core.html pre-block to match. Added an explanatory paragraph above the listing — "Where the injection point lives is the key" — that calls out *why* the production-shaped service is part of the listing.
+- Tests pass: 2/2 in 0.5s.

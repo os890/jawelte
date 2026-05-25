@@ -435,6 +435,8 @@
 <h3>@TestBean — pre-built value on a static field</h3>
 <p>Put <code>@TestBean</code> on a <code>static final</code> field whose initialiser yields the bean instance. No <code>@Alternative</code>, no producer — the field value IS the bean. Idiomatic for "register this exact object as the bean". The two static fields below show the two most common shapes side by side: a literal value (<code>new Greeting(…)</code>) and a Mockito mock (<code>Mockito.mock(Clock.class)</code>) wired in via the same static-field recipe.</p>
 
+<p><strong>Where the injection point lives is the key:</strong> a production-shaped <code>@ApplicationScoped</code> service (<code>WelcomeService</code>, in <code>src/main</code>) <code>@Inject</code>s <code>Greeting</code> and <code>Clock</code> &mdash; it has no idea those values came from a test class's static fields. The test exercises the service, and the service receives the static-field values because they're registered as CDI beans. Putting the <code>@Inject</code> on the test class itself would still work, but blurs the lesson &mdash; readers might think it's just a static-field reference, not a container-managed injection.</p>
+
 <div class="listing">
   <div class="listing-bar"><span class="label">listing core · test-bean-static-field</span><a href="../listings/core/04-test-bean-static-field/">listings/core/04-test-bean-static-field/</a></div>
 <pre><span class="cm">// src/main/java/example/staticfield/Greeting.java</span>
@@ -447,6 +449,21 @@
     <span class="ty">Instant</span> now();
 }
 
+<span class="cm">// src/main/java/example/staticfield/WelcomeService.java   (production-shaped consumer)</span>
+<span class="an">@ApplicationScoped</span>
+<span class="kw">public class</span> <span class="ty">WelcomeService</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">Greeting</span> greeting;
+
+    <span class="an">@Inject</span>
+    <span class="ty">Clock</span> clock;
+
+    <span class="kw">public</span> <span class="ty">String</span> compose() {
+        <span class="kw">return</span> greeting.text() + <span class="st">" @ "</span> + clock.now();
+    }
+}
+
 <span class="cm">// src/test/java/example/staticfield/GreetingTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="kw">class</span> <span class="ty">GreetingTest</span> {
@@ -457,30 +474,32 @@
     <span class="an">@TestBean</span>
     <span class="kw">public static final</span> <span class="ty">Clock</span> CLOCK = mock(<span class="ty">Clock</span>.<span class="kw">class</span>);
 
+    <span class="cm">// Injection point lives in a production-shaped bean (above), not on the test class.</span>
     <span class="an">@Inject</span>
-    <span class="ty">Greeting</span> greeting;
-
-    <span class="an">@Inject</span>
-    <span class="ty">Clock</span> clock;
+    <span class="ty">WelcomeService</span> welcomeService;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> literalIsInjected() {
-        assertThat(greeting).isSameAs(WELCOME_GREETING);
-        assertThat(greeting.text()).isEqualTo(<span class="st">"hello-from-static-field"</span>);
+    <span class="kw">void</span> serviceReceivesTheStaticFieldsViaCdi() {
+        <span class="ty">Instant</span> pinned = <span class="ty">Instant</span>.parse(<span class="st">"2026-05-20T12:00:00Z"</span>);
+        when(CLOCK.now()).thenReturn(pinned);
+
+        assertThat(welcomeService.compose())
+                .as(<span class="st">"WelcomeService composed its String from the @TestBean Greeting + the stubbed @TestBean Clock"</span>)
+                .isEqualTo(<span class="st">"hello-from-static-field @ 2026-05-20T12:00:00Z"</span>);
     }
 
-    <span class="an">@Test</span>
-    <span class="kw">void</span> mockitoMockIsInjected() {
-        <span class="ty">Instant</span> pinned = <span class="ty">Instant</span>.parse(<span class="st">"2026-05-20T12:00:00Z"</span>);
-        when(clock.now()).thenReturn(pinned);
+    <span class="cm">// Secondary identity check — the field value IS the bean instance, no copy / no proxy.</span>
+    <span class="an">@Inject</span>
+    <span class="ty">Greeting</span> greetingDirect;
 
-        assertThat(clock).isSameAs(CLOCK);
-        assertThat(clock.now()).isEqualTo(pinned);
+    <span class="an">@Test</span>
+    <span class="kw">void</span> staticFieldValueIsTheSameInstanceTheContainerHandsOut() {
+        assertThat(greetingDirect).isSameAs(WELCOME_GREETING);
     }
 }</pre>
 </div>
 
-<p>Both static-field declarations register their respective values once at class-load time — <code>WELCOME_GREETING</code> stays the same literal record across the whole test class; <code>CLOCK</code> stays the same Mockito mock instance, with stubs reset between methods by Mockito's <code>@Singleton</code>-scoped instance receiving fresh <code>when(…)</code> wiring at the top of each <code>@Test</code>. Because the field VALUE is the bean, there is no scope proxying — <code>@Singleton</code> by default; the test asserting <code>.isSameAs(WELCOME_GREETING)</code> proves it.</p>
+<p>Both static-field declarations register their respective values once at class-load time — <code>WELCOME_GREETING</code> stays the same literal record across the whole test class; <code>CLOCK</code> stays the same Mockito mock instance, with stubs reset between methods by Mockito's <code>@Singleton</code>-scoped instance receiving fresh <code>when(…)</code> wiring at the top of each <code>@Test</code>. Because the field VALUE is the bean, there is no scope proxying — <code>@Singleton</code> by default; the second test's <code>.isSameAs(WELCOME_GREETING)</code> proves it.</p>
 
 <h3>@ConfigBean — typed config facade</h3>
 <p>A <code>@ConfigBean</code>-annotated class is an <code>@ApplicationScoped</code> CDI bean (the annotation is a stereotype that contributes the scope). <code>@Inject</code> <code>ConfigResolver</code> and expose one public method per config key with parsing + default.</p>

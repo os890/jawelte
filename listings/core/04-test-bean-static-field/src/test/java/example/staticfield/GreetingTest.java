@@ -51,24 +51,37 @@ class GreetingTest {
     @TestBean
     public static final Clock CLOCK = mock(Clock.class);
 
+    /**
+     * The injection point lives in a production-shaped bean
+     * (WelcomeService, in src/main) — not on the test class. That
+     * is what makes this listing demonstrate "@TestBean publishes
+     * to the container" rather than just "static fields are
+     * accessible from anywhere".
+     */
     @Inject
-    Greeting greeting;
-
-    @Inject
-    Clock clock;
+    WelcomeService welcomeService;
 
     @Test
-    void literalIsInjected() {
-        assertThat(greeting).isSameAs(WELCOME_GREETING);
-        assertThat(greeting.text()).isEqualTo("hello-from-static-field");
+    void serviceReceivesTheStaticFieldsViaCdi() {
+        Instant pinned = Instant.parse("2026-05-20T12:00:00Z");
+        when(CLOCK.now()).thenReturn(pinned);
+
+        assertThat(welcomeService.compose())
+                .as("WelcomeService composed its String from the @TestBean Greeting + the stubbed @TestBean Clock")
+                .isEqualTo("hello-from-static-field @ 2026-05-20T12:00:00Z");
     }
 
-    @Test
-    void mockitoMockIsInjected() {
-        Instant pinned = Instant.parse("2026-05-20T12:00:00Z");
-        when(clock.now()).thenReturn(pinned);
+    /**
+     * Identity check: the bean instance the container hands to
+     * WelcomeService is the same object that lives on this test
+     * class's static field. The static field IS the bean — there
+     * is no copying or proxy wrapping for {@code @Singleton}.
+     */
+    @Inject
+    Greeting greetingDirect;
 
-        assertThat(clock).isSameAs(CLOCK);
-        assertThat(clock.now()).isEqualTo(pinned);
+    @Test
+    void staticFieldValueIsTheSameInstanceTheContainerHandsOut() {
+        assertThat(greetingDirect).isSameAs(WELCOME_GREETING);
     }
 }
