@@ -286,9 +286,8 @@
     <li><a href="#detailed">2. detailed</a></li>
     <li class="depth-2"><a href="#dt-enable">2.1 @EnableTestBeans</a></li>
     <li class="depth-2"><a href="#dt-test-bean">2.2 @TestBean modes</a></li>
-    <li class="depth-2"><a href="#dt-config-bean">2.3 @ConfigBean</a></li>
-    <li class="depth-2"><a href="#dt-events">2.4 events</a></li>
-    <li class="depth-2"><a href="#dt-ordering">2.5 lifecycle ordering</a></li>
+    <li class="depth-2"><a href="#dt-events">2.3 events</a></li>
+    <li class="depth-2"><a href="#dt-ordering">2.4 lifecycle ordering</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
     <li class="depth-2"><a href="#spi-test-context">3.1 TestContext</a></li>
     <li class="depth-2"><a href="#spi-container-port">3.2 TestBeanContainerPort</a></li>
@@ -300,6 +299,7 @@
     <li class="depth-2"><a href="#spi-priority-resolver">3.8 ServicePriorityResolver</a></li>
     <li class="depth-2"><a href="#spi-bootstrap">3.9 TestBeansExtension</a></li>
     <li class="depth-2"><a href="#spi-config-keys">3.10 config bootstrap keys</a></li>
+    <li><a href="#dt-config-bean">4. @ConfigBean &mdash; typed config facade pattern</a></li>
   </ol>
 </nav>
 
@@ -316,7 +316,7 @@
 <ul>
   <li><code>@EnableTestBeans</code> — switches the extension on for a class; carries two options (<code>limitToTestBeans</code>, <code>manageContainer</code>) covered in section 2.1.</li>
   <li><code>@TestBean</code> — picks per-test-class bean replacements (alternative class, producer-method class, or a pre-built value via a static field). Covered in 2.2.</li>
-  <li><code>@ConfigBean</code> — declares a typed configuration facade backed by jawelte's <code>ConfigResolver</code>. Covered in 2.3.</li>
+  <li><code>@ConfigBean</code> — declares a typed configuration facade backed by jawelte's <code>ConfigResolver</code>. Covered in <a href="#dt-config-bean">section 4</a> at the back of the page (it's a usage pattern on top of CDI + <code>ConfigResolver</code>, not a core mechanism).</li>
 </ul>
 
 <p>Two more layers sit underneath the annotations and matter once you're past hello-world:</p>
@@ -500,32 +500,6 @@
 </div>
 
 <p>Both static-field declarations register their respective values once at class-load time — <code>WELCOME_GREETING</code> stays the same literal record across the whole test class; <code>CLOCK</code> stays the same Mockito mock instance, with stubs reset between methods by Mockito's <code>@Singleton</code>-scoped instance receiving fresh <code>when(…)</code> wiring at the top of each <code>@Test</code>. Because the field VALUE is the bean, there is no scope proxying — <code>@Singleton</code> by default; the second test's <code>.isSameAs(WELCOME_GREETING)</code> proves it.</p>
-
-<h3>@ConfigBean — typed config facade</h3>
-<p>A <code>@ConfigBean</code>-annotated class is an <code>@ApplicationScoped</code> CDI bean (the annotation is a stereotype that contributes the scope). <code>@Inject</code> <code>ConfigResolver</code> and expose one public method per config key with parsing + default.</p>
-
-<div class="listing">
-  <div class="listing-bar"><span class="label">listing core · config-bean</span><a href="../listings/core/05-config-bean/">listings/core/05-config-bean/</a></div>
-<pre><span class="cm">// src/main/java/example/configbean/AppConfig.java</span>
-<span class="an">@ConfigBean</span>
-<span class="kw">public class</span> <span class="ty">AppConfig</span> {
-
-    <span class="an">@Inject</span>
-    <span class="ty">ConfigResolver</span> resolver;
-
-    <span class="kw">public</span> <span class="ty">String</span> greeting() {
-        <span class="kw">return</span> resolver.resolve(<span class="st">"app.greeting"</span>).orElse(<span class="st">"hi"</span>);
-    }
-
-    <span class="kw">public int</span> retries() {
-        <span class="kw">return</span> resolver.resolve(<span class="st">"app.retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElse(<span class="kw">3</span>);
-    }
-}
-
-<span class="cm">// src/main/resources/META-INF/microprofile-config.properties</span>
-app.greeting = hello from MicroProfile Config
-app.retries  = 5</pre>
-</div>
 
 <h3>@TestBean — replace a qualified injection point (advanced)</h3>
 <p>When the production injection point carries a CDI qualifier (<code>@Inject @FastCache Cache</code>, <code>@Inject @Premium PaymentService</code>, …), the alternative must declare the <em>same</em> qualifier on its own class. <code>@TestBean</code> does not name qualifiers explicitly &mdash; the qualifier travels with the alternative class declaration. This is a sub-mode of the plain <code>@Alternative</code> pattern above; skip on a first read unless you're already comfortable with CDI qualifiers.</p>
@@ -823,66 +797,7 @@ current version of Byte Buddy which officially supports Java 24 (68)</pre>
 
 <p>Pattern for larger test suites: keep one tiny meta-annotation per fixture (one stub each, one job each), then assemble them into named scenarios — <code>@WithFullStubBackend</code> here, but realistic suites grow concepts like <code>@WithSmtpAndAuditOff</code>, <code>@WithFrozenClockUtc</code>, <code>@WithReadOnlyDatabase</code>. The test classes apply exactly one such label and stay free of <code>@TestBean</code> wiring noise.</p>
 
-<h2 id="dt-config-bean">2.3 @ConfigBean</h2>
-<p><code>@ConfigBean</code> is a CDI <code>@Stereotype</code> that meta-applies <code>@ApplicationScoped</code>. A class annotated <code>@ConfigBean</code> is therefore a regular CDI bean with application scope; the user does not declare <code>@ApplicationScoped</code> explicitly.</p>
-
-<p>The intended usage pattern is to <code>@Inject</code> the <code>ConfigResolver</code> port into a <code>@ConfigBean</code> class and expose one public method per config key. Each method delegates the raw lookup to the resolver and is responsible for parsing / converting the <code>String</code> value and supplying a meaningful default. See <a href="#qs-use-cases">listing 05</a> in the quick-start for the canonical shape.</p>
-
-<p>The annotation defines no interceptors and no additional behavior beyond the stereotype's scope contribution. It also serves as a discovery marker so that, for example, <code>limitToTestBeans</code> can identify config beans.</p>
-
-<h3>realistic shape — multiple typed keys + required-key validation</h3>
-<p>Production config beans usually expose several keys with mixed types (<code>Duration</code>, <code>double</code>, <code>boolean</code>, &hellip;) and fail fast at startup when a required key is missing. A <code>@PostConstruct</code> guard is the idiomatic place &mdash; it runs once per bean lifetime, before any injection-point consumer sees the config bean. The defaults belong inside each getter, kept next to their key.</p>
-
-<div class="listing">
-  <div class="listing-bar"><span class="label">listing core · config-bean-multi-key</span><a href="../listings/core/18-config-bean-multi-key/">listings/core/18-config-bean-multi-key/</a></div>
-<pre><span class="cm">// src/test/java/example/backoff/BackoffConfig.java</span>
-<span class="an">@ConfigBean</span>
-<span class="kw">public class</span> <span class="ty">BackoffConfig</span> {
-
-    <span class="an">@Inject</span>
-    <span class="ty">ConfigResolver</span> resolver;
-
-    <span class="an">@PostConstruct</span>
-    <span class="kw">void</span> validate() {
-        <span class="kw">if</span> (resolver.resolve(<span class="st">"app.backoff.max-retries"</span>).isEmpty()) {
-            <span class="kw">throw new</span> <span class="ty">IllegalStateException</span>(
-                    <span class="st">"Required config key 'app.backoff.max-retries' is not set"</span>);
-        }
-    }
-
-    <span class="cm">/** Required — @PostConstruct throws if missing. */</span>
-    <span class="kw">public int</span> maxRetries() {
-        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.max-retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElseThrow();
-    }
-
-    <span class="cm">/** Default 100 ms. */</span>
-    <span class="kw">public</span> <span class="ty">Duration</span> initialDelay() {
-        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.initial-delay"</span>)
-                .map(<span class="ty">Duration</span>::parse)              <span class="cm">// ISO-8601: PT0.25S, PT500MS</span>
-                .orElse(<span class="ty">Duration</span>.ofMillis(<span class="kw">100</span>));
-    }
-
-    <span class="cm">/** Default 2.0. */</span>
-    <span class="kw">public double</span> factor() {
-        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.factor"</span>).map(<span class="ty">Double</span>::parseDouble).orElse(<span class="kw">2.0</span>);
-    }
-
-    <span class="cm">/** Default true (feature flag). */</span>
-    <span class="kw">public boolean</span> enabled() {
-        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.enabled"</span>).map(<span class="ty">Boolean</span>::parseBoolean).orElse(<span class="kw">true</span>);
-    }
-}
-
-<span class="cm">// src/main/resources/META-INF/microprofile-config.properties</span>
-app.backoff.max-retries   = 5
-app.backoff.initial-delay = PT0.25S
-app.backoff.factor        = 1.5
-app.backoff.enabled       = true</pre>
-</div>
-
-<p>Three patterns to notice. <strong>Typed conversion happens in the getter</strong>, not in <code>ConfigResolver</code> &mdash; the resolver always returns a raw <code>Optional&lt;String&gt;</code>. <strong>Defaults live with their key</strong>, inside the getter that uses them, so changing a default is a one-line edit. <strong>Required-key validation is concentrated in <code>@PostConstruct</code></strong>, not scattered across the getters &mdash; a missing required key fails container startup, not the first request that happens to read it.</p>
-
-<h2 id="dt-events">2.4 events</h2>
+<h2 id="dt-events">2.3 events</h2>
 <p>jawelte fires three CDI events at well-defined lifecycle points. Module code observes them with plain <code>@Observes</code>.</p>
 
 <h3>ContainerStarted</h3>
@@ -931,7 +846,7 @@ app.backoff.enabled       = true</pre>
 
 <p>See <a href="jpa-module.html#dt-events">jpa-module &middot; §2.5 transaction events</a> for the firing rules in the JPA case (paired with <code>TransactionStarted</code>) and <a href="jta-module.html">jta-module</a> for the JTA variant.</p>
 
-<h2 id="dt-ordering">2.5 lifecycle ordering</h2>
+<h2 id="dt-ordering">2.4 lifecycle ordering</h2>
 <p>jawelte invokes lifecycle callbacks in a specific order across the active ports:</p>
 <ul>
   <li><code>beforeAll</code> — <code>TestBeanContainerPort.beforeAll</code> first; then each <code>TestModuleLifecyclePort.beforeAll</code> in ascending <code>@Priority</code> order. Ports without <code>@Priority</code> get an effective priority of <code>Integer.MAX_VALUE</code> (run last).</li>
@@ -1213,6 +1128,93 @@ org.os890.jawelte.core.api.port.ServicePriorityResolver=com.example.MyResolver
 
 <span class="cm"># Or via shell env var (MP Config maps `_` to `.` for the lookup):</span>
 $ ORG_OS890_JAWELTE_CORE_API_PORT_SERVICEPRIORITYRESOLVER=com.example.MyResolver mvn test</pre>
+
+<h2 id="dt-config-bean">4. @ConfigBean &mdash; typed config facade pattern</h2>
+<p><em>This section ships at the back of the page on purpose:</em> <code>@ConfigBean</code> is a usage pattern layered on top of CDI + jawelte's <a href="#spi-config-resolver"><code>ConfigResolver</code></a> port &mdash; not a core mechanism the framework depends on. The two listings below show the canonical shape and a realistic multi-key variant. Everything they do can also be written by hand with a plain <code>@ApplicationScoped</code> class injecting <code>ConfigResolver</code>; the value of <code>@ConfigBean</code> is the convention, not the machinery.</p>
+
+<p><code>@ConfigBean</code> is a CDI <code>@Stereotype</code> that meta-applies <code>@ApplicationScoped</code>. A class annotated <code>@ConfigBean</code> is therefore a regular CDI bean with application scope; the user does not declare <code>@ApplicationScoped</code> explicitly.</p>
+
+<p>The intended usage pattern is to <code>@Inject</code> the <code>ConfigResolver</code> port into a <code>@ConfigBean</code> class and expose one public method per config key. Each method delegates the raw lookup to the resolver and is responsible for parsing / converting the <code>String</code> value and supplying a meaningful default.</p>
+
+<p>The annotation defines no interceptors and no additional behavior beyond the stereotype's scope contribution. It also serves as a discovery marker so that, for example, <code>limitToTestBeans</code> can identify config beans.</p>
+
+<h3>canonical shape &mdash; String + int with defaults</h3>
+<p>One <code>@Inject ConfigResolver</code>, one public getter per key. Each getter parses, applies its own default, and is the only place that knows the raw key string.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing core &middot; config-bean</span><a href="../listings/core/05-config-bean/">listings/core/05-config-bean/</a></div>
+<pre><span class="cm">// src/main/java/example/configbean/AppConfig.java</span>
+<span class="an">@ConfigBean</span>
+<span class="kw">public class</span> <span class="ty">AppConfig</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">ConfigResolver</span> resolver;
+
+    <span class="kw">public</span> <span class="ty">String</span> greeting() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.greeting"</span>).orElse(<span class="st">"hi"</span>);
+    }
+
+    <span class="kw">public int</span> retries() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElse(<span class="kw">3</span>);
+    }
+}
+
+<span class="cm">// src/main/resources/META-INF/microprofile-config.properties</span>
+app.greeting = hello from MicroProfile Config
+app.retries  = 5</pre>
+</div>
+
+<h3>realistic shape &mdash; multiple typed keys + required-key validation</h3>
+<p>Production config beans usually expose several keys with mixed types (<code>Duration</code>, <code>double</code>, <code>boolean</code>, &hellip;) and fail fast at startup when a required key is missing. A <code>@PostConstruct</code> guard is the idiomatic place &mdash; it runs once per bean lifetime, before any injection-point consumer sees the config bean. The defaults belong inside each getter, kept next to their key.</p>
+
+<div class="listing">
+  <div class="listing-bar"><span class="label">listing core &middot; config-bean-multi-key</span><a href="../listings/core/18-config-bean-multi-key/">listings/core/18-config-bean-multi-key/</a></div>
+<pre><span class="cm">// src/test/java/example/backoff/BackoffConfig.java</span>
+<span class="an">@ConfigBean</span>
+<span class="kw">public class</span> <span class="ty">BackoffConfig</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">ConfigResolver</span> resolver;
+
+    <span class="an">@PostConstruct</span>
+    <span class="kw">void</span> validate() {
+        <span class="kw">if</span> (resolver.resolve(<span class="st">"app.backoff.max-retries"</span>).isEmpty()) {
+            <span class="kw">throw new</span> <span class="ty">IllegalStateException</span>(
+                    <span class="st">"Required config key 'app.backoff.max-retries' is not set"</span>);
+        }
+    }
+
+    <span class="cm">/** Required &mdash; @PostConstruct throws if missing. */</span>
+    <span class="kw">public int</span> maxRetries() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.max-retries"</span>).map(<span class="ty">Integer</span>::parseInt).orElseThrow();
+    }
+
+    <span class="cm">/** Default 100 ms. */</span>
+    <span class="kw">public</span> <span class="ty">Duration</span> initialDelay() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.initial-delay"</span>)
+                .map(<span class="ty">Duration</span>::parse)              <span class="cm">// ISO-8601: PT0.25S, PT500MS</span>
+                .orElse(<span class="ty">Duration</span>.ofMillis(<span class="kw">100</span>));
+    }
+
+    <span class="cm">/** Default 2.0. */</span>
+    <span class="kw">public double</span> factor() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.factor"</span>).map(<span class="ty">Double</span>::parseDouble).orElse(<span class="kw">2.0</span>);
+    }
+
+    <span class="cm">/** Default true (feature flag). */</span>
+    <span class="kw">public boolean</span> enabled() {
+        <span class="kw">return</span> resolver.resolve(<span class="st">"app.backoff.enabled"</span>).map(<span class="ty">Boolean</span>::parseBoolean).orElse(<span class="kw">true</span>);
+    }
+}
+
+<span class="cm">// src/main/resources/META-INF/microprofile-config.properties</span>
+app.backoff.max-retries   = 5
+app.backoff.initial-delay = PT0.25S
+app.backoff.factor        = 1.5
+app.backoff.enabled       = true</pre>
+</div>
+
+<p>Three patterns to notice. <strong>Typed conversion happens in the getter</strong>, not in <code>ConfigResolver</code> &mdash; the resolver always returns a raw <code>Optional&lt;String&gt;</code>. <strong>Defaults live with their key</strong>, inside the getter that uses them, so changing a default is a one-line edit. <strong>Required-key validation is concentrated in <code>@PostConstruct</code></strong>, not scattered across the getters &mdash; a missing required key fails container startup, not the first request that happens to read it.</p>
 
 <div class="closing">
   <strong>jawelte / core</strong> &nbsp;·&nbsp; <a href="modules.html">modules</a> &nbsp;·&nbsp; back to <a href="index.html">overview</a>

@@ -7161,3 +7161,20 @@ Fixes:
   - Secondary test `staticFieldValueIsTheSameInstanceTheContainerHandsOut` keeps the identity check (`isSameAs(WELCOME_GREETING)`) so the "field VALUE is the bean" property remains demonstrated.
 - Updated docs/core.html pre-block to match. Added an explanatory paragraph above the listing — "Where the injection point lives is the key" — that calls out *why* the production-shaped service is part of the listing.
 - Tests pass: 2/2 in 0.5s.
+
+## 2026-05-22 — docs/core.html @ConfigBean relocation
+
+User feedback: "the listing 'listing core · config-bean' is quite special, because it's more like a usage-pattern. so we should move it to the back on the same page. as much as useful. if it isn't referenced by other samples we could use it even as the very last sample of the page."
+
+Verified no listing's source references listing 05's classes (only `15-config-resolver` happens to also name a class `AppConfig` in its own `example.customresolver` package — independent code). Within core.html, only the §2.3 dt-config-bean prose forward-referenced "listing 05 in the quick-start"; from other doc pages only `scope-module.html` linked `core.html#dt-config-bean` (anchor preserved).
+
+Restructure:
+- Removed the `<h3>@ConfigBean — typed config facade</h3>` + listing 05 from §1.3 common use-cases.
+- Removed the entire §2.3 dt-config-bean block from the middle of §2 (the topic intro + listing 18).
+- Renumbered §2.4 events → §2.3 (anchor `dt-events` unchanged) and §2.5 lifecycle ordering → §2.4 (anchor `dt-ordering` unchanged). TOC updated accordingly.
+- Added a new §4 "@ConfigBean — typed config facade pattern" at the very end of the page, just before the closing footer. Section flow inside §4: prose intro framing it as a pattern → canonical shape (listing 05 with String + int getters) → realistic shape (listing 18 with multi-key + @PostConstruct validation).
+- §1.1 purpose bullet updated: "Covered in 2.3" → "Covered in section 4 at the back of the page (it's a usage pattern on top of CDI + ConfigResolver, not a core mechanism)".
+- Anchor `dt-config-bean` reused on the new h2 so the cross-page link from `scope-module.html#dt-config-bean` still resolves.
+- Listings 05 + 18 source unchanged; ran both `mvn test` after the doc move — 2/2 pass.
+
+Result: page now reads as quick-start → detailed annotations + lifecycle → SPI / port reference → @ConfigBean pattern. Listing 18 ends up as the very last sample on the page; listing 05 sits immediately above it. Both at the back, where the user wanted them.
