@@ -114,11 +114,12 @@
     <li class="depth-2"><a href="#qs-hello">1.2 hello-world</a></li>
     <li class="depth-2"><a href="#qs-maven">1.3 maven setup</a></li>
     <li><a href="#detailed">2. detailed</a></li>
-    <li class="depth-2"><a href="#dt-discovery">2.1 discovery model</a></li>
+    <li class="depth-2"><a href="#dt-derived">2.1 derived query methods</a></li>
     <li class="depth-2"><a href="#dt-norepo">2.2 @NoRepositoryBean opt-out</a></li>
     <li class="depth-2"><a href="#dt-backoff">2.3 user @Produces back-off</a></li>
-    <li class="depth-2"><a href="#dt-scope">2.4 @RequestScoped lifetime</a></li>
-    <li class="depth-2"><a href="#dt-em">2.5 EntityManager dispatch &amp; multi-PU caveat</a></li>
+    <li class="depth-2"><a href="#dt-em">2.4 EntityManager dispatch &amp; multi-PU caveat</a></li>
+    <li class="depth-2"><a href="#dt-scope">2.5 @RequestScoped lifetime</a></li>
+    <li class="depth-2"><a href="#dt-discovery">2.6 discovery model</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
@@ -149,7 +150,7 @@
 
     <span class="an">@Test</span>
     <span class="an">@Transactional</span>
-    <span class="kw">void</span> savedCustomerIsRetrievable() {
+    <span class="kw">void</span> savedCustomerIsRetrievableAndCounted() {
         <span class="ty">Customer</span> saved = customerRepository.save(<span class="kw">new</span> <span class="ty">Customer</span>(<span class="st">"Alice"</span>));
 
         assertThat(saved.getId()).isNotNull();
@@ -184,16 +185,7 @@
 
 <h1 id="detailed">2. detailed</h1>
 
-<h2 id="dt-discovery">2.1 discovery model</h2>
-<p><code>SpringDataRepositoryExtension</code> is a CDI <code>Extension</code> discovered via <code>META-INF/services/jakarta.enterprise.inject.spi.Extension</code>. Its lifecycle phases:</p>
-<ol>
-  <li><strong><code>ProcessInjectionPoint</code></strong> &mdash; for every injection point in the deployment, the extension inspects the IP's declared type. If the type is an interface that transitively extends <code>Repository</code> and is not <code>@NoRepositoryBean</code>, it's added to the discovery set. (Using <code>ProcessInjectionPoint</code> rather than <code>ProcessAnnotatedType</code> is the right callback because repository interfaces are typically not in a bean archive under <code>bean-discovery-mode="annotated"</code> — <code>ProcessAnnotatedType</code> would never fire for them.)</li>
-  <li><strong><code>ProcessBean</code></strong> &mdash; accumulates every bean type the container processes, so the next phase can detect user-supplied producers and back off.</li>
-  <li><strong><code>AfterBeanDiscovery</code></strong> &mdash; for each discovered repository interface with no existing bean, registers a synthetic <code>@RequestScoped</code> CDI bean whose <code>produceWith</code> callback constructs <code>JpaRepositoryFactory</code> and returns <code>factory.getRepository(repositoryInterface)</code> &mdash; the same real implementation Spring Data ships.</li>
-</ol>
-<p>The synthetic bean's types are exactly the discovered interface + <code>Object</code>. Framework super-interfaces (<code>JpaRepository</code>, <code>CrudRepository</code>, &hellip;) are <em>not</em> added as bean types, so the synthetic beans never compete on framework super-types when multiple repositories ship together.</p>
-
-<h3>derived query methods</h3>
+<h2 id="dt-derived">2.1 derived query methods</h2>
 <p>The synthetic bean is the real Spring Data implementation, so all of Spring Data's query-derivation features are available &mdash; <code>findByName(String)</code>, <code>findByNameStartingWith(String)</code>, paged results, custom <code>@Query</code> JPQL/native, etc. The repository interface is the query DSL.</p>
 
 <div class="listing">
@@ -287,6 +279,8 @@
 }
 
 <span class="cm">// src/test/java/example/producesbackoff/UserProducesBackoffTest.java</span>
+<span class="kw">private static final</span> <span class="ty">String</span> COUNT_METHOD = <span class="st">"count"</span>;
+
 <span class="an">@Test</span>
 <span class="kw">void</span> userProducerWinsOverSynthetic() {
     <span class="kw">long</span> count = customerRepository.count();
@@ -296,17 +290,28 @@
             .isZero();
     assertThat(<span class="ty">CustomerRepositoryProducer</span>.LAST_METHOD_CALLED.get())
             .as(<span class="st">"the user's producer InvocationHandler recorded the count() call"</span>)
-            .isEqualTo(<span class="st">"count"</span>);
+            .isEqualTo(COUNT_METHOD);
 }</pre>
 </div>
 
-<h2 id="dt-scope">2.4 @RequestScoped lifetime</h2>
-<p>The synthetic bean is <code>@RequestScoped</code>, which means consumers receive a CDI client proxy and the underlying <code>JpaRepositoryFactory</code> is materialised lazily on first method call &mdash; always inside a <code>@Transactional</code> or programmatic-transaction boundary where the EM proxy can resolve a live <code>EntityManager</code>.</p>
-<p>Why request-scope, not application-scope: cdi-module's <code>CdiTestBeanContainer</code> activates a <code>RequestContextController</code> per test method, so each test gets a fresh factory. Any (theoretical) Spring Data metadata-cache mutation cannot leak between tests.</p>
-
-<h2 id="dt-em">2.5 EntityManager dispatch &amp; multi-PU caveat</h2>
-<p>The <code>produceWith</code> callback resolves the <code>@Default EntityManager</code> via <code>CDI.current().select(EntityManager.class).get()</code> &mdash; the per-call routing proxy registered by jpa-module-impl. Repository methods therefore participate in the caller's <code>@Transactional</code> boundary automatically.</p>
+<h2 id="dt-em">2.4 EntityManager dispatch &amp; multi-PU caveat</h2>
+<p>The <code>produceWith</code> callback resolves the <code>@Default EntityManager</code> via <code>CDI.current().select(EntityManager.class).get()</code>. The resolved bean is <a href="jpa-module.html#dt-tx-em">jpa-module</a>'s per-call routing proxy &mdash; the same proxy that injecting <code>@PersistenceContext EntityManager</code> in a regular bean would yield, dispatching each call to whichever PU is active on the calling thread. Repository methods therefore participate in the caller's <code>@Transactional</code> boundary automatically.</p>
 <p><strong>Caveat &mdash; the default EM is always used.</strong> Multi-persistence-unit routing is <em>not</em> built in. Consumers with multiple PUs must supply their own <code>@Produces CustomerRepository</code> per repository, with a <code>@PersistenceContext(unitName = "...")</code> field for the right EM. The extension's <code>@Produces</code>-back-off rule then keeps your hand-written producer instead of registering a synthetic.</p>
+
+<h2 id="dt-scope">2.5 @RequestScoped lifetime</h2>
+<p>The synthetic bean is <code>@RequestScoped</code>, which means consumers receive a CDI client proxy and the underlying <code>JpaRepositoryFactory</code> is materialised lazily on first method call &mdash; always inside a <code>@Transactional</code> or programmatic-transaction boundary where the EM proxy can resolve a live <code>EntityManager</code>.</p>
+<p>Why request-scope, not application-scope: <a href="cdi-module.html">cdi-module</a>'s <code>CdiTestBeanContainer</code> activates a <code>RequestContextController</code> (the standard CDI helper that opens / closes the request scope on demand) per test method, so each test gets a fresh factory. Any (theoretical) Spring Data metadata-cache mutation cannot leak between tests.</p>
+
+<h2 id="dt-discovery">2.6 discovery model</h2>
+<p><em>Advanced &mdash; only matters if you're writing your own CDI extension that interacts with spring-data-module, or debugging why an interface didn't get registered.</em> <code>SpringDataRepositoryExtension</code> is a CDI <code>Extension</code> discovered via <code>META-INF/services/jakarta.enterprise.inject.spi.Extension</code>. Its lifecycle phases:</p>
+<ol>
+  <li><strong><code>ProcessInjectionPoint</code></strong> &mdash; for every injection point in the deployment, the extension inspects the IP's declared type. If the type is an interface that transitively extends <code>Repository</code> and is not <code>@NoRepositoryBean</code>, it's added to the discovery set. <a href="#sd-pip-vs-pat">(why <code>ProcessInjectionPoint</code> and not <code>ProcessAnnotatedType</code> &mdash; footnote)</a></li>
+  <li><strong><code>ProcessBean</code></strong> &mdash; accumulates every bean type the container processes, so the next phase can detect user-supplied producers and back off.</li>
+  <li><strong><code>AfterBeanDiscovery</code></strong> &mdash; for each discovered repository interface with no existing bean, registers a synthetic <code>@RequestScoped</code> CDI bean whose <code>produceWith</code> callback constructs <code>JpaRepositoryFactory</code> and returns <code>factory.getRepository(repositoryInterface)</code> &mdash; the same real implementation Spring Data ships.</li>
+</ol>
+<p>The synthetic bean's types are exactly the discovered interface + <code>Object</code>. Framework super-interfaces (<code>JpaRepository</code>, <code>CrudRepository</code>, &hellip;) are <em>not</em> added as bean types, so the synthetic beans never compete on framework super-types when multiple repositories ship together.</p>
+
+<p id="sd-pip-vs-pat" style="font-size: 12.5px; color: var(--text-soft); border-left: 3px solid #ccc; padding-left: 12px; margin-top: 18px;"><strong>Footnote &mdash; <code>ProcessInjectionPoint</code> vs <code>ProcessAnnotatedType</code>:</strong> repository interfaces are typically not in a bean archive under <code>bean-discovery-mode="annotated"</code>, so <code>ProcessAnnotatedType</code> would never fire for them. Hooking off injection points is what makes "extend <code>JpaRepository</code> and inject it" work without any annotation on the interface itself.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
 <p>spring-data-module ships <strong>no SPI / port of its own</strong> and <strong>no annotation surface</strong>. The user-facing api is exactly "extend <code>JpaRepository</code> and inject the interface". Customization happens through standard CDI:</p>
@@ -315,7 +320,6 @@
   <li><strong>Overriding a synthetic bean</strong> &mdash; declare your own <code>@Produces CustomerRepository</code>. The extension observes the user producer and skips the synthetic registration for that interface.</li>
   <li><strong>Targeting a non-default persistence unit</strong> &mdash; combine the above two: <code>@NoRepositoryBean</code> on the interface plus a hand-written producer with <code>@PersistenceContext(unitName = "...")</code>.</li>
 </ul>
-<p>The module does ship a <code>ConfigKeyAliasProvider</code> service for the unsatisfied-injection-point auto-mock filter &mdash; <code>spring-data-module</code>'s framework-internal package prefixes are excluded so they don't show up as candidates for synthetic mocking. That's transparent to users; there's no knob to turn.</p>
 
 <div class="closing">
   <strong>jawelte / spring-data-module</strong> &nbsp;&middot;&nbsp; <a href="modules.html">modules</a> &nbsp;&middot;&nbsp; <a href="core.html">core</a> &nbsp;&middot;&nbsp; back to <a href="index.html">overview</a>

@@ -7096,3 +7096,15 @@ Fixes applied:
 - **CD8** (low userfriendly): §2.4 prose now lists the EL features explicitly — property navigation (`${order.id}`), nested property access (`${order.customer.name}`), method calls on bound beans — and points at listing 06 as the demonstration.
 
 Knock-on edit on §2.2 prose: added a sentence pointing at MP Config defaults so the reader knows inline `.ignoring(...)` stacks with the JVM-wide list. JSON-path dialect bullet now also calls out the recursive descent operator `$..audit.timestamp`.
+
+## 2026-05-22 — docs/spring-data-module.html + listings 01/04 (pending SD7..SD18)
+
+Fixes applied:
+- **SD7** (medium userfriendly): §2.4 "routing proxy" now linked to `jpa-module.html#dt-tx-em` with a clarifier — "the same proxy that injecting @PersistenceContext EntityManager in a regular bean would yield, dispatching each call to whichever PU is active on the calling thread."
+- **SD8** (medium userfriendly): ProcessInjectionPoint vs ProcessAnnotatedType aside moved out of the §2.6 discovery model body into a separate footnote paragraph (`#sd-pip-vs-pat`), so the main ordered list reads cleanly for someone who only wants the high-level lifecycle phases.
+- **SD10** (low userfriendly): listing 01 test `savedCustomerIsRetrievable` → `savedCustomerIsRetrievableAndCounted` in both source and HTML; name now covers all three assertions in the body. Test passes.
+- **SD11** (low userfriendly): §2.5 prose links cdi-module on first mention of `CdiTestBeanContainer`, and clarifies RequestContextController as "the standard CDI helper that opens / closes the request scope on demand".
+- **SD12** (low userfriendly): dropped the trailing §3 ConfigKeyAliasProvider / auto-mock paragraph entirely — it explicitly stated "transparent to users; there's no knob to turn", so it was noise on a reference page.
+- **SD15 + SD16** (low ordering): §2 fully reordered with user-actionable first. New layout: §2.1 derived query methods (promoted from h3 sub-head) · §2.2 @NoRepositoryBean · §2.3 @Produces back-off · §2.4 EntityManager dispatch & multi-PU caveat · §2.5 @RequestScoped lifetime · §2.6 discovery model (advanced, marked as such, footnote split out). TOC + ids updated.
+- **SD17** (low names): introduced `private static final String COUNT_METHOD = "count";` in listing 04's UserProducesBackoffTest (and matched in HTML pre-block). Magic string named.
+- **SD18** (low names): listing 04 Customer entity gained a `name` field + name-constructor + getId/getName, restoring parity with listings 01/02/03. Test still passes (the test only calls `customerRepository.count()`).

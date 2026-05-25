@@ -33,7 +33,7 @@ class CustomerRepositoryTest {
 
     @Test
     @Transactional
-    void savedCustomerIsRetrievable() {
+    void savedCustomerIsRetrievableAndCounted() {
         Customer saved = customerRepository.save(new Customer("Alice"));
 
         assertThat(saved.getId()).isNotNull();

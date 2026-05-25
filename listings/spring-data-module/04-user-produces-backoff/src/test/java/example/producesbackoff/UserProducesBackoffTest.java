@@ -27,6 +27,8 @@ import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 @PersistenceConfig(persistenceUnitName = "customersPU")
 class UserProducesBackoffTest {
 
+    private static final String COUNT_METHOD = "count";
+
     @Inject
     CustomerRepository customerRepository;
 
@@ -39,6 +41,6 @@ class UserProducesBackoffTest {
                 .isZero();
         assertThat(CustomerRepositoryProducer.LAST_METHOD_CALLED.get())
                 .as("the user's producer InvocationHandler recorded the count() call")
-                .isEqualTo("count");
+                .isEqualTo(COUNT_METHOD);
     }
 }
