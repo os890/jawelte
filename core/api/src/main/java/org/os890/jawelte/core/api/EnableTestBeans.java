@@ -78,14 +78,25 @@ public @interface EnableTestBeans {
      * Whether the framework should boot and shut down the CDI container
      * around the test class.
      *
-     * <p>When {@code true} (the default), the delegating extension
-     * calls {@code TestBeanContainerPort.beforeAll} and
-     * {@code afterAll}. When {@code false}, those two calls are
+     * <p>This flag has no effect on JUnit's own lifecycle &mdash; any
+     * {@code @BeforeAll} / {@code @AfterAll} methods on the test class
+     * are always called by JUnit regardless of the value.
+     *
+     * <p>When {@code true} (the default), the delegating extension calls
+     * {@code TestBeanContainerPort.beforeAll(TestContext)} from inside
+     * JUnit's {@code beforeAll} phase to boot the CDI container, and
+     * {@code TestBeanContainerPort.afterAll(TestContext)} from inside
+     * {@code afterAll} to shut it down.
+     *
+     * <p>When {@code false}, those two specific port invocations are
      * skipped; the user is responsible for booting the container (for
-     * example via {@code SeContainerInitializer}). The other lifecycle
-     * methods ({@code postProcessTestInstance}, {@code beforeEach},
-     * {@code afterEach}) still run against the externally managed
-     * container.
+     * example via {@code SeContainerInitializer} from a
+     * {@code @BeforeAll} method) and closing it from
+     * {@code @AfterAll}. Everything else jawelte does still runs:
+     * {@code TestModuleLifecyclePort.beforeAll} / {@code afterAll} on
+     * every registered lifecycle port, and the per-method port methods
+     * ({@code postProcessTestInstance}, {@code beforeEach},
+     * {@code afterEach}) against the externally managed container.
      *
      * @return whether the framework manages the container lifecycle;
      *         default {@code true}

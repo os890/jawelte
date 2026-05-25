@@ -209,7 +209,7 @@
   <li><code>restResources = {…}</code> &mdash; the array of <code>@Path</code>-annotated classes that go into the deployment. Required; an empty array means "no resources" and is rarely useful.</li>
   <li>Providers (<code>@Provider</code> classes &mdash; exception mappers, filters, message-body readers/writers) belong in the <em>same</em> <code>restResources</code> array. The JAX-RS runtime inspects each class for its declaring annotation and dispatches accordingly. There is no separate "applicationConfig" attribute today; the <code>restResources</code> array is the entire deployment surface.</li>
 </ul>
-<p>The annotation is read once per test class; the server starts in <code>beforeAll</code> and shuts down in <code>afterAll</code>.</p>
+<p>The annotation is read once per test class. jaxrs-module's lifecycle adapter starts the JAX-RS server from its <code>TestModuleLifecyclePort.beforeAll</code> hook (which runs during JUnit's <code>beforeAll</code> phase) and shuts it down from <code>TestModuleLifecyclePort.afterAll</code> (during JUnit's <code>afterAll</code> phase).</p>
 
 <h3>registering a provider — ExceptionMapper</h3>
 <p>The <code>restResources</code> array accepts both <code>@Path</code> resources and <code>@Provider</code> classes (exception mappers, filters, body readers/writers). Same array, no separate attribute &mdash; the JAX-RS impl scans the array and treats each class according to its annotations.</p>

@@ -246,7 +246,7 @@ public @interface InventoryApi { }</pre>
 
 <p>The qualifier doubles as the lookup key: <code>@Inject @PaymentApi WireMockServer paymentServer</code>, <code>@Inject @InventoryApi WireMock inventoryStubs</code>. Endpoint identity is a compile-time CDI qualifier, not a string name &mdash; typos are caught by the compiler.</p>
 <p><strong>port = 0</strong> &mdash; OS-assigned ephemeral port (recommended; no port-conflict flakiness when multiple suites run on the same host). The resolved port is then readable via <code>server.port()</code>.<br>
-<strong>port = N (N &gt; 0)</strong> &mdash; bind to a specific port. If already in use, <code>beforeAll</code> fails with a <code>BindException</code>.</p>
+<strong>port = N (N &gt; 0)</strong> &mdash; bind to a specific port. If already in use, wiremock-module's lifecycle adapter throws a <code>BindException</code> from its <code>TestModuleLifecyclePort.beforeAll</code> hook, which surfaces as a failure during JUnit's <code>beforeAll</code> phase.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing wiremock-module/03 &middot; multi-endpoint</span><a href="../listings/wiremock-module/03-multi-endpoint/">listings/wiremock-module/03-multi-endpoint/</a></div>

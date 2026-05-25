@@ -7196,3 +7196,20 @@ Rewrite:
 - One paragraph for the `false` case spelling out exactly what's skipped (the two port invocations — the boot and the shutdown), what the user is expected to do instead (boot from @BeforeAll, close from @AfterAll), and what else still runs: `TestModuleLifecyclePort.beforeAll`/`afterAll` on every registered lifecycle port, `postProcessTestInstance`, `beforeEach`, `afterEach`.
 
 Listing 07 source unchanged; mvn test passes (1/1).
+
+## 2026-05-22 — lifecycle-wording audit across docs + EnableTestBeans javadoc
+
+Following the manageContainer clarification, audited every mention of `beforeAll` / `afterAll` / `beforeEach` / `afterEach` across the docs to find similar ambiguity.
+
+**Findings:**
+- Only `manageContainer` had the truly load-bearing pattern: a user toggle + the word "skipped" + JUnit-shaped phase names without a subject. That was the dangerous combination; no other doc has it. `fileMode` (jpa-module) uses "skipped" but tied to "table cleanup", not a lifecycle hook — clear.
+- Most other lifecycle-word mentions are descriptive of WHEN something happens (e.g. "scope destroyed in afterEach"). That's accurate framing because the destruction really does happen during the JUnit afterEach phase — not ambiguous in context.
+- Three borderline cases name `beforeAll` / `beforeEach` without an explicit subject. They're descriptive ("X happens during phase Y"), not toggle-and-skip, but light sharpening helps:
+  - `wiremock-module.html:249` (port-N bind conflict): now "wiremock-module's lifecycle adapter throws a BindException from its TestModuleLifecyclePort.beforeAll hook, which surfaces as a failure during JUnit's beforeAll phase".
+  - `testcontrol-module.html:304` (requireDbExpected guard): now "testcontrol-module's lifecycle adapter checks the condition from its TestModuleLifecyclePort.beforeEach hook and throws... the failure surfaces during JUnit's beforeEach phase".
+  - `jaxrs-module.html:212` (server lifecycle): now "jaxrs-module's lifecycle adapter starts the JAX-RS server from its TestModuleLifecyclePort.beforeAll hook (which runs during JUnit's beforeAll phase) and shuts it down from TestModuleLifecyclePort.afterAll".
+
+**EnableTestBeans javadoc:**
+- The `manageContainer` javadoc on `@EnableTestBeans` (visible in IDE tooltips) was less ambiguous than the original HTML doc but didn't mention JUnit's `@BeforeAll`/`@AfterAll`. Updated it to match the new HTML wording: leads with "this flag has no effect on JUnit's own lifecycle", then names the two `TestBeanContainerPort` port-method calls for true / false explicitly. Source compiles.
+
+No listing source code touched.
