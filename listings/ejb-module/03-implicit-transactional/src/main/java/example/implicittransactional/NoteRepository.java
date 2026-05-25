@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package example.implicittx;
+package example.implicittransactional;
 
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;

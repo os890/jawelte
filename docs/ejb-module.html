@@ -196,7 +196,7 @@
 <p>The default mapper rewrites:</p>
 <ul>
   <li><code>@jakarta.ejb.Stateless</code> &rarr; <code>@Dependent</code> (per-injection-point fresh instance &mdash; matches the EJB stateless contract from the consumer's perspective; long-lived test scopes are not applied because a stateless bean does not benefit).</li>
-  <li><code>@jakarta.ejb.Singleton</code> &rarr; <code>@ApplicationScoped</code> by default. With scope-module also on the classpath the MP Config key <code>org.os890.jawelte.module.ejb.singleton.default-scope</code> rebinds it to <code>@TestClassScoped</code> &mdash; one shared instance per test class instead of one per JVM.</li>
+  <li><code>@jakarta.ejb.Singleton</code> &rarr; <code>@ApplicationScoped</code> by default. With <a href="scope-module.html">scope-module</a> also on the classpath, scope-module's <code>microprofile-config.properties</code> ships a default for the MP Config key <code>org.os890.jawelte.module.ejb.singleton.default-scope</code> that rebinds the mapping to <a href="scope-module.html#qs-class-scope"><code>@TestClassScoped</code></a> &mdash; one shared instance per test class instead of one per JVM. You only need to touch the MP Config key when you want a <em>different</em> binding from scope-module's default; just having scope-module on the classpath is enough to flip the default.</li>
 </ul>
 <p>The rewrite happens at <code>ProcessAnnotatedType</code> time; the source class keeps the EJB annotation, the CDI bean carries the mapped scope.</p>
 
@@ -233,7 +233,7 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing ejb-module/03 · implicit-transactional</span><a href="../listings/ejb-module/03-implicit-transactional/">listings/ejb-module/03-implicit-transactional/</a></div>
-<pre><span class="cm">// src/main/java/example/implicittx/NoteRepository.java</span>
+<pre><span class="cm">// src/main/java/example/implicittransactional/NoteRepository.java</span>
 <span class="cm">/**</span>
 <span class="cm"> * No @Transactional anywhere. ejb-module's interceptor wraps every</span>
 <span class="cm"> * method of a @Stateless / @Singleton bean in an implicit</span>
@@ -260,7 +260,7 @@
     }
 }
 
-<span class="cm">// src/test/java/example/implicittx/NoteRepositoryTest.java</span>
+<span class="cm">// src/test/java/example/implicittransactional/NoteRepositoryTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="an">@PersistenceConfig</span>(persistenceUnitName = <span class="st">"notesPU"</span>)
 <span class="kw">class</span> <span class="ty">NoteRepositoryTest</span> {
@@ -297,7 +297,12 @@
 <p>ejb-module ships one port:</p>
 
 <h3>EjbAnnotationMapper</h3>
-<p><strong>Single active impl, ServiceLoader + priority.</strong> Given an EJB-annotated <code>Class&lt;?&gt;</code>, returns the CDI scope to install and (optionally) extra annotations to add. Default impl handles <code>@Stateless</code> + <code>@Singleton</code> as documented above. Override to extend the mapping to <code>@MessageDriven</code>, vendor-specific EJB-like annotations, or to flip the default scopes to something your project's testing conventions prefer.</p>
+<p><strong>Single active impl, ServiceLoader + priority.</strong> Given an EJB-annotated <code>Class&lt;?&gt;</code>, returns the CDI scope to install and (optionally) extra annotations to add. Default impl handles <code>@Stateless</code> + <code>@Singleton</code> as documented above. Two override patterns exist:</p>
+<ul>
+  <li><strong>Flip the default scopes for the already-handled annotations</strong> &mdash; an MP Config change with no Java code. Set <code>org.os890.jawelte.module.ejb.singleton.default-scope</code> (or the <code>.stateless</code> counterpart) to the FQCN of a different scope annotation; the default mapper reads the keys at runtime and switches binding.</li>
+  <li><strong>Extend the mapping to additional EJB-like annotations</strong> (<code>@MessageDriven</code>, vendor-specific annotations, or as the listing below shows <code>@Stateful</code>) &mdash; this needs both a custom <code>EjbAnnotationMapper</code> implementation AND an MP Config entry that teaches the classpath scan to look for the new annotation type.</li>
+</ul>
+<p>The listing below demonstrates the second &mdash; more involved &mdash; case.</p>
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing ejb-module/04 · ejb-annotation-mapper</span><a href="../listings/ejb-module/04-ejb-annotation-mapper/">listings/ejb-module/04-ejb-annotation-mapper/</a></div>
@@ -349,6 +354,11 @@ org.os890.jawelte.module.ejb.bean-defining-annotations=\
 </div>
 
 <p>Three moving pieces. <strong>The user bean</strong> &mdash; an ordinary <code>@jakarta.ejb.Stateful</code> class in production code; nothing here is jawelte-specific. <strong>The mapper</strong> claims any <code>@Stateful</code> class and adds <code>@RequestScoped</code>; it returns <code>null</code> for any other class so the default mapper keeps handling <code>@Stateless</code> + <code>@Singleton</code>. <strong>The MP Config override</strong> teaches ejb-module's classpath scan to look for <code>@Stateful</code> &mdash; without it the scan only finds <code>@Singleton</code> + <code>@Stateless</code> and your <code>@Stateful</code> classes are never even seen by the CDI extension. All three are required to make a new EJB annotation injectable.</p>
+<p>Two CDI-extension idioms in the mapper deserve a closer look:</p>
+<ul>
+  <li><strong><code>@Priority(1)</code></strong> &mdash; the default <code>DefaultEjbAnnotationMapper</code> ships at <code>@Priority(Integer.MAX_VALUE)</code> (the highest numeric value, which the project's <code>ServicePriorityResolver</code> treats as the lowest priority &mdash; "run last"). A custom mapper at <code>@Priority(1)</code> therefore sorts before the default and gets to claim classes first. Any value strictly lower than <code>Integer.MAX_VALUE</code> wins; <code>1</code> is just a conventional "obvious user-defined override" pick.</li>
+  <li><strong><code>AnnotationLiteral&lt;RequestScoped&gt;</code></strong> &mdash; CDI's standard idiom for constructing an annotation <em>instance</em> at runtime. <code>EjbAnnotationMapper.mapBeanMetadata</code> has to return real <code>Annotation</code> objects (not <code>Class&lt;? extends Annotation&gt;</code> references), and Java has no syntax for materialising an annotation outside of source-level annotations. Subclassing <code>AnnotationLiteral&lt;X&gt; implements X</code> gives you exactly that instance; the inner <code>RequestScopedLiteral</code> class is the local one.</li>
+</ul>
 
 <div class="closing">
   <strong>jawelte / ejb-module</strong> &nbsp;&middot;&nbsp; <a href="modules.html">modules</a> &nbsp;&middot;&nbsp; <a href="core.html">core</a> &nbsp;&middot;&nbsp; back to <a href="index.html">overview</a>
