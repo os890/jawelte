@@ -32,23 +32,23 @@ import org.os890.jawelte.module.jpa.api.event.TransactionStarted;
  * own boilerplate.
  */
 @ApplicationScoped
-public class TransactionAuditLog {
+public class TransactionTimeline {
 
-    private final List<String> timeline = new CopyOnWriteArrayList<>();
+    private final List<String> events = new CopyOnWriteArrayList<>();
 
-    public List<String> timeline() {
-        return timeline;
+    public List<String> events() {
+        return events;
     }
 
     void onStart(@Observes TransactionStarted event) {
-        timeline.add("start:" + event.getPersistenceUnitName());
+        events.add("start:" + event.getPersistenceUnitName());
     }
 
     void onCommit(@Observes TransactionCommitted event) {
-        timeline.add("commit:" + event.getPersistenceUnitName());
+        events.add("commit:" + event.getPersistenceUnitName());
     }
 
     void onRollback(@Observes TransactionRolledBack event) {
-        timeline.add("rollback:" + event.getPersistenceUnitName());
+        events.add("rollback:" + event.getPersistenceUnitName());
     }
 }

@@ -32,17 +32,17 @@ class TransactionEventsTest {
     NoteService noteService;
 
     @Inject
-    TransactionAuditLog auditLog;
+    TransactionTimeline timeline;
 
     @BeforeEach
     void resetTimeline() {
-        auditLog.timeline().clear();
+        timeline.events().clear();
     }
 
     @Test
     void successfulTransactionFiresStartAndCommit() {
         noteService.persistNote("hi");
-        assertThat(auditLog.timeline()).containsExactly("start:notesPU", "commit:notesPU");
+        assertThat(timeline.events()).containsExactly("start:notesPU", "commit:notesPU");
     }
 
     @Test
@@ -52,6 +52,6 @@ class TransactionEventsTest {
         } catch (RuntimeException expected) {
             // forced
         }
-        assertThat(auditLog.timeline()).containsExactly("start:notesPU", "rollback:notesPU");
+        assertThat(timeline.events()).containsExactly("start:notesPU", "rollback:notesPU");
     }
 }
