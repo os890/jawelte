@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Set;
 
-import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.inject.spi.Bean;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.inject.Inject;
@@ -33,10 +33,25 @@ class BeanScopeMapperTest {
     @Inject
     BeanManager beanManager;
 
+    @Inject
+    UserPreferences userPreferences;
+
     @Test
-    void counterIsApplicationScoped() {
-        Set<Bean<?>> beans = beanManager.getBeans(Counter.class);
+    void sessionScopedBeanIsRemappedToRequestScoped() {
+        Set<Bean<?>> beans = beanManager.getBeans(UserPreferences.class);
         assertThat(beans).hasSize(1);
-        assertThat(beans.iterator().next().getScope()).isEqualTo(ApplicationScoped.class);
+        assertThat(beans.iterator().next().getScope())
+                .as("scope was rewritten from @SessionScoped to @RequestScoped at ProcessAnnotatedType time")
+                .isEqualTo(RequestScoped.class);
+    }
+
+    @Test
+    void remappedBeanIsInjectableAndUsableInsideATestMethod() {
+        // Under the original @SessionScoped, this injection would have no active
+        // context in a plain unit test (no servlet session). After the remap,
+        // the bean rides on @RequestScoped — activated by jawelte around every
+        // @Test method — and is usable like any other CDI bean.
+        userPreferences.setThemeName("dark");
+        assertThat(userPreferences.getThemeName()).isEqualTo("dark");
     }
 }

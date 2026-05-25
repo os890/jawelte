@@ -17,27 +17,30 @@ package example.scopemap;
 
 import java.lang.annotation.Annotation;
 
-import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.RequestScoped;
+import jakarta.enterprise.context.SessionScoped;
 
 import org.os890.jawelte.core.api.port.BeanScopeMapper;
 
 /**
- * Custom {@code BeanScopeMapper} provider. Rewrites every bean
- * directly annotated {@link RequestScoped @RequestScoped} into
- * {@link ApplicationScoped @ApplicationScoped} at
- * {@code ProcessAnnotatedType} time. ServiceLoader-registered via
- * {@code META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper}.
+ * Custom {@code BeanScopeMapper} provider. Every bean directly
+ * annotated {@link SessionScoped @SessionScoped} has its scope
+ * rewritten to {@link RequestScoped @RequestScoped} at
+ * {@code ProcessAnnotatedType} time — production keeps the web-tier
+ * scope, the test runtime gets a scope it can actually activate.
+ *
+ * <p>ServiceLoader-registered via {@code
+ * META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper}.
  */
-public class RequestToApplicationScoped implements BeanScopeMapper {
+public class SessionToRequestScopedMapper implements BeanScopeMapper {
 
     @Override
     public Class<? extends Annotation> trigger() {
-        return RequestScoped.class;
+        return SessionScoped.class;
     }
 
     @Override
     public Class<? extends Annotation> targetScope() {
-        return ApplicationScoped.class;
+        return RequestScoped.class;
     }
 }

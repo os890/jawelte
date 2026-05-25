@@ -979,23 +979,65 @@ example.factory.RecordingTestInstanceFactory
   <li><strong><code>BeanScopeMapperPort</code></strong> — <strong>single-impl, loaded via <code>TestContext.loadService</code>.</strong> The driven port that the fixed CDI extension delegates to. Default impl iterates the <code>BeanScopeMapper</code> providers; replace this port to install an entirely custom remap policy.</li>
 </ul>
 
+<p>A realistic use case: a web-tier bean is <code>@SessionScoped</code> in production, but a plain unit test has no servlet session context, so the bean is unusable as-is. A <code>BeanScopeMapper</code> on the test classpath rewrites the scope to <code>@RequestScoped</code> &mdash; which jawelte activates around every <code>@Test</code> method &mdash; and the same production source runs in tests with no code change. (scope-module ships this kind of remap as its built-in defaults; the listing below shows the SPI without depending on scope-module.)</p>
+
 <div class="listing">
   <div class="listing-bar"><span class="label">listing core · bean-scope-mapper</span><a href="../listings/core/14-bean-scope-mapper/">listings/core/14-bean-scope-mapper/</a></div>
-<pre><span class="kw">public class</span> <span class="ty">RequestToApplicationScoped</span> <span class="kw">implements</span> <span class="ty">BeanScopeMapper</span> {
+<pre><span class="cm">// src/main/java/example/scopemap/UserPreferences.java   (production web-tier bean)</span>
+<span class="an">@SessionScoped</span>
+<span class="kw">public class</span> <span class="ty">UserPreferences</span> <span class="kw">implements</span> <span class="ty">Serializable</span> {
+
+    <span class="kw">private</span> <span class="ty">String</span> themeName = <span class="st">"default"</span>;
+
+    <span class="kw">public</span> <span class="ty">String</span> getThemeName() { <span class="kw">return</span> themeName; }
+    <span class="kw">public void</span> setThemeName(<span class="ty">String</span> themeName) { <span class="kw">this</span>.themeName = themeName; }
+}
+
+<span class="cm">// src/test/java/example/scopemap/SessionToRequestScopedMapper.java</span>
+<span class="kw">public class</span> <span class="ty">SessionToRequestScopedMapper</span> <span class="kw">implements</span> <span class="ty">BeanScopeMapper</span> {
 
     <span class="an">@Override</span>
     <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; trigger() {
-        <span class="kw">return</span> <span class="ty">RequestScoped</span>.<span class="kw">class</span>;
+        <span class="kw">return</span> <span class="ty">SessionScoped</span>.<span class="kw">class</span>;
     }
 
     <span class="an">@Override</span>
     <span class="kw">public</span> <span class="ty">Class</span>&lt;? <span class="kw">extends</span> <span class="ty">Annotation</span>&gt; targetScope() {
-        <span class="kw">return</span> <span class="ty">ApplicationScoped</span>.<span class="kw">class</span>;
+        <span class="kw">return</span> <span class="ty">RequestScoped</span>.<span class="kw">class</span>;
     }
 }
 
 <span class="cm">// src/test/resources/META-INF/services/org.os890.jawelte.core.api.port.BeanScopeMapper</span>
-example.scopemap.RequestToApplicationScoped</pre>
+example.scopemap.SessionToRequestScopedMapper
+
+<span class="cm">// src/test/java/example/scopemap/BeanScopeMapperTest.java   (verifies both the SPI rewrite and the user-visible effect)</span>
+<span class="an">@EnableTestBeans</span>
+<span class="kw">class</span> <span class="ty">BeanScopeMapperTest</span> {
+
+    <span class="an">@Inject</span>
+    <span class="ty">BeanManager</span> beanManager;
+
+    <span class="an">@Inject</span>
+    <span class="ty">UserPreferences</span> userPreferences;
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> sessionScopedBeanIsRemappedToRequestScoped() {
+        <span class="ty">Set</span>&lt;<span class="ty">Bean</span>&lt;?&gt;&gt; beans = beanManager.getBeans(<span class="ty">UserPreferences</span>.<span class="kw">class</span>);
+        assertThat(beans.iterator().next().getScope())
+                .as(<span class="st">"scope was rewritten from @SessionScoped to @RequestScoped at ProcessAnnotatedType time"</span>)
+                .isEqualTo(<span class="ty">RequestScoped</span>.<span class="kw">class</span>);
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">void</span> remappedBeanIsInjectableAndUsableInsideATestMethod() {
+        <span class="cm">// Under the original @SessionScoped, this injection would have no active</span>
+        <span class="cm">// context in a plain unit test (no servlet session). After the remap, the</span>
+        <span class="cm">// bean rides on @RequestScoped — activated by jawelte around every @Test —</span>
+        <span class="cm">// and is usable like any other CDI bean.</span>
+        userPreferences.setThemeName(<span class="st">"dark"</span>);
+        assertThat(userPreferences.getThemeName()).isEqualTo(<span class="st">"dark"</span>);
+    }
+}</pre>
 </div>
 
 <p>The listing demonstrates the everyday <code>BeanScopeMapper</code> provider; almost no consumer replaces the driven <code>BeanScopeMapperPort</code> itself. The override pattern is the standard single-impl shape (<code>META-INF/services/...BeanScopeMapperPort</code> naming an FQCN with a public no-arg constructor) &mdash; do this only if you need to bypass the provider loop entirely (e.g. to plug a different annotation-rewrite algorithm).</p>

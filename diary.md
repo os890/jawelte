@@ -7213,3 +7213,19 @@ Following the manageContainer clarification, audited every mention of `beforeAll
 - The `manageContainer` javadoc on `@EnableTestBeans` (visible in IDE tooltips) was less ambiguous than the original HTML doc but didn't mention JUnit's `@BeforeAll`/`@AfterAll`. Updated it to match the new HTML wording: leads with "this flag has no effect on JUnit's own lifecycle", then names the two `TestBeanContainerPort` port-method calls for true / false explicitly. Source compiles.
 
 No listing source code touched.
+
+## 2026-05-22 — listing 14 bean-scope-mapper: replace artificial @RequestScoped → @ApplicationScoped example
+
+User feedback: the original sample mapped `@RequestScoped` → `@ApplicationScoped` — artificial (you'd never widen a per-request bean to live forever in real code). Replaced with the realistic production→test pattern this SPI actually exists for.
+
+New sample maps `@SessionScoped` → `@RequestScoped`:
+- `Counter.java` → `UserPreferences.java` (via `git mv`): production-shaped `@SessionScoped` web-tier bean (Serializable, themeName getter/setter, the canonical "user preferences during a session" shape).
+- `RequestToApplicationScoped.java` → `SessionToRequestScopedMapper.java` (via `git mv`): trigger SessionScoped, targetScope RequestScoped.
+- `META-INF/services/...BeanScopeMapper` updated to the new FQCN.
+- `BeanScopeMapperTest` rewritten to two methods:
+  - `sessionScopedBeanIsRemappedToRequestScoped`: BeanManager assertion that the active scope is RequestScoped (SPI-level proof).
+  - `remappedBeanIsInjectableAndUsableInsideATestMethod`: injection works + state round-trips (user-visible proof — under the original @SessionScoped this would have no active context in a plain test).
+
+Why this picks the example: it's the exact same shape scope-module ships as one of its built-in defaults (`@SessionScoped` → `@TestMethodScoped`). The listing demonstrates the SPI without depending on scope-module — core stands alone.
+
+`docs/core.html` §3.5 pre-block regenerated to match the new source; added a leading paragraph framing the use case before the code. Tests: 2/2 pass.
