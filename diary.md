@@ -7086,3 +7086,13 @@ Fixes applied:
 - **TC9** (low names): listing 03 test methods renamed `firstMethodReadsFixturesM01` → `basePathIsAppliedAsPrefixToTestData_m01` (same shape for m02) in both source and HTML pre-block. Tests pass.
 - **TC10** (low names): listing 03 fixture row NAMEs `item-1`/`item-2` → `item-from-m01`/`item-from-m02` across all four XML files (m01 dbIn+dbExpected, m02 dbIn+dbExpected) so each row identifies which method consumed it. Tests pass.
 - **TC12** (low ordering): §2 sub-section reorder — multi-PU routing (was 2.5) moved to 2.3 so the three listing-bearing sections sit contiguously after §2.1/§2.2; startScopes (was 2.3) → 2.4 and requireDbExpected (was 2.4) → 2.5 as prose-only tail. TOC + heading numbers + ids unchanged (only positions and numeric prefixes).
+
+## 2026-05-22 — docs/content-diff-module.html + listing 01 (pending CD1/CD6/CD7/CD8)
+
+Fixes applied:
+- **CD1** (high ordering): listing 03 ignoring-pattern moved out of §1.2 hello-world into §2.2 where the dialect is explained. §1.2 now reads "happy path + failing path" with listings 01/02 as the two sides of the basic feature; the cross-link to §2.2 invites the reader forward when they care about volatile fields.
+- **CD6** (low names): `HelloDiffTest` → `JsonHelloDiffTest` via `git mv` (renamed file + updated class name in source + updated HTML pre-block path comment). Test passes.
+- **CD7** (low userfriendly): §2.5 prose "prepended to whatever the caller supplies" → explicit "the configured patterns are *merged* with whatever the caller supplies … the union is what's skipped or treated as unordered. Inline patterns never remove a configured default." Names the semantics (additive union) and the non-semantics (inline can't override).
+- **CD8** (low userfriendly): §2.4 prose now lists the EL features explicitly — property navigation (`${order.id}`), nested property access (`${order.customer.name}`), method calls on bound beans — and points at listing 06 as the demonstration.
+
+Knock-on edit on §2.2 prose: added a sentence pointing at MP Config defaults so the reader knows inline `.ignoring(...)` stacks with the JVM-wide list. JSON-path dialect bullet now also calls out the recursive descent operator `$..audit.timestamp`.

@@ -18,7 +18,7 @@ package example.contentdiff;
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.module.contentdiff.api.ContentDiff;
 
-class HelloDiffTest {
+class JsonHelloDiffTest {
 
     @Test
     void semanticallyEqualJsonPassesSilently() {
