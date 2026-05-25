@@ -116,8 +116,8 @@
     <li><a href="#detailed">2. detailed</a></li>
     <li class="depth-2"><a href="#dt-enable">2.1 @EnableJaxRs</a></li>
     <li class="depth-2"><a href="#dt-testurl">2.2 TestUrl</a></li>
-    <li class="depth-2"><a href="#dt-responsediff">2.3 ResponseDiff</a></li>
-    <li class="depth-2"><a href="#dt-impl">2.4 picking a JAX-RS implementation</a></li>
+    <li class="depth-2"><a href="#dt-impl">2.3 picking a JAX-RS implementation</a></li>
+    <li class="depth-2"><a href="#dt-responsediff">2.4 ResponseDiff</a></li>
     <li><a href="#spi">3. spi / port reference</a></li>
   </ol>
 </nav>
@@ -127,7 +127,7 @@
 <h1 id="quick-start">1. quick-start</h1>
 
 <h2 id="qs-purpose">1.1 purpose</h2>
-<p>Unit-testing a JAX-RS resource by calling its method directly works for the bean logic but skips the entire HTTP layer &mdash; status-code mapping, content negotiation, exception mappers, message-body readers/writers, security filters. jaxrs-module gives you that layer back: <code>SeBootstrap</code> wraps your <code>@Path</code> resources in a Jetty (CXF) or Undertow (RESTEasy) server bound to an OS-assigned port, your test makes a real HTTP call, and the assertions cover the same surface area a production client would see.</p>
+<p>Unit-testing a JAX-RS resource by calling its method directly works for the bean logic but skips the entire HTTP layer &mdash; status-code mapping, content negotiation, exception mappers, message-body readers/writers, security filters. jaxrs-module gives you that layer back: Jakarta REST's standard <code>SeBootstrap</code> API (the Java-SE bootstrap entry-point added in JAX-RS 3.1) wraps your <code>@Path</code> resources in a Jetty (CXF) or Undertow (RESTEasy) server bound to an OS-assigned port, your test makes a real HTTP call, and the assertions cover the same surface area a production client would see.</p>
 
 <h2 id="qs-hello">1.2 hello-world</h2>
 <p>One <code>@Path</code> resource in <code>src/main</code>, a test annotated <code>@EnableJaxRs(restResources = {…})</code>, an <code>@Inject TestUrl</code> field for the live base URL.</p>
@@ -152,7 +152,7 @@
     <span class="ty">TestUrl</span> testUrl;
 
     <span class="an">@Test</span>
-    <span class="kw">void</span> getHelloReturnsTheStubbedBody() <span class="kw">throws</span> <span class="ty">Exception</span> {
+    <span class="kw">void</span> getHelloReturnsExpectedBodyOverHttp() <span class="kw">throws</span> <span class="ty">Exception</span> {
         <span class="ty">HttpResponse</span>&lt;<span class="ty">String</span>&gt; response;
         <span class="kw">try</span> (<span class="ty">HttpClient</span> client = <span class="ty">HttpClient</span>.newHttpClient()) {
             <span class="ty">HttpRequest</span> request = <span class="ty">HttpRequest</span>.newBuilder()
@@ -207,7 +207,7 @@
 <p><code>@EnableJaxRs</code> on the test class names the resource classes to deploy. Attributes:</p>
 <ul>
   <li><code>restResources = {…}</code> &mdash; the array of <code>@Path</code>-annotated classes that go into the deployment. Required; an empty array means "no resources" and is rarely useful.</li>
-  <li><code>applicationConfig = Application.class</code> by default &mdash; a custom <code>Application</code> subclass can be plugged in for non-trivial deployments that need providers, exception mappers, etc.</li>
+  <li>Providers (<code>@Provider</code> classes &mdash; exception mappers, filters, message-body readers/writers) belong in the <em>same</em> <code>restResources</code> array. The JAX-RS runtime inspects each class for its declaring annotation and dispatches accordingly. There is no separate "applicationConfig" attribute today; the <code>restResources</code> array is the entire deployment surface.</li>
 </ul>
 <p>The annotation is read once per test class; the server starts in <code>beforeAll</code> and shuts down in <code>afterAll</code>.</p>
 
@@ -216,12 +216,12 @@
 
 <div class="listing">
   <div class="listing-bar"><span class="label">listing jaxrs-module/02 · exception-mapper</span><a href="../listings/jaxrs-module/02-exception-mapper/">listings/jaxrs-module/02-exception-mapper/</a></div>
-<pre><span class="cm">// src/main/java/example/excmapper/TeapotException.java   (plain RuntimeException, no jawelte hook)</span>
+<pre><span class="cm">// src/main/java/example/exceptionmapper/TeapotException.java   (plain RuntimeException, no jawelte hook)</span>
 <span class="kw">public class</span> <span class="ty">TeapotException</span> <span class="kw">extends</span> <span class="ty">RuntimeException</span> {
     <span class="kw">public</span> <span class="ty">TeapotException</span>(<span class="ty">String</span> message) { <span class="kw">super</span>(message); }
 }
 
-<span class="cm">// src/main/java/example/excmapper/BrewResource.java   (the resource that throws)</span>
+<span class="cm">// src/main/java/example/exceptionmapper/BrewResource.java   (the resource that throws)</span>
 <span class="an">@Path</span>(<span class="st">"/brew"</span>)
 <span class="kw">public class</span> <span class="ty">BrewResource</span> {
     <span class="an">@GET</span>
@@ -230,7 +230,7 @@
     }
 }
 
-<span class="cm">// src/main/java/example/excmapper/TeapotExceptionMapper.java</span>
+<span class="cm">// src/main/java/example/exceptionmapper/TeapotExceptionMapper.java</span>
 <span class="an">@Provider</span>
 <span class="kw">public class</span> <span class="ty">TeapotExceptionMapper</span> <span class="kw">implements</span> <span class="ty">ExceptionMapper</span>&lt;<span class="ty">TeapotException</span>&gt; {
 
@@ -240,7 +240,7 @@
     }
 }
 
-<span class="cm">// src/test/java/example/excmapper/BrewResourceTest.java</span>
+<span class="cm">// src/test/java/example/exceptionmapper/BrewResourceTest.java</span>
 <span class="an">@EnableTestBeans</span>
 <span class="an">@EnableJaxRs</span>(restResources = {<span class="ty">BrewResource</span>.<span class="kw">class</span>, <span class="ty">TeapotExceptionMapper</span>.<span class="kw">class</span>})
 <span class="kw">class</span> <span class="ty">BrewResourceTest</span> {
@@ -264,7 +264,15 @@
 <h2 id="dt-testurl">2.2 TestUrl</h2>
 <p><code>TestUrl</code> is a <code>Supplier&lt;String&gt;</code> returning the base URL the embedded server bound to &mdash; typically <code>http://localhost:{port}</code> where <code>{port}</code> is OS-assigned (port 0). Inject it once per test class; concatenate with your resource paths to form the request URL.</p>
 
-<h2 id="dt-responsediff">2.3 ResponseDiff</h2>
+<h2 id="dt-impl">2.3 picking a JAX-RS implementation</h2>
+<p>jaxrs-module talks to JAX-RS through the standard <code>SeBootstrap</code> API, so any conformant implementation works. Two impls are tested in jawelte's own sweep:</p>
+<ul>
+  <li><strong>Apache CXF</strong> (default in every listing on this page): <code>org.apache.cxf:cxf-rt-frontend-jaxrs</code> + <code>org.apache.cxf:cxf-rt-transports-http-jetty</code>.</li>
+  <li><strong>RESTEasy</strong>: <code>org.jboss.resteasy:resteasy-undertow</code> + <code>org.jboss.resteasy:resteasy-core</code>. Drop those onto the test classpath in place of the two CXF jars and the same listing code runs unchanged &mdash; jaxrs-module's <code>SeBootstrap.start(...)</code> picks whichever provider is on the classpath.</li>
+</ul>
+<p>Pick by classpath dependency, no code change in the test.</p>
+
+<h2 id="dt-responsediff">2.4 ResponseDiff</h2>
 <p><code>ResponseDiff</code> (<code>org.os890.jawelte.module.jaxrs.api.ResponseDiff</code>) wraps a <code>jakarta.ws.rs.core.Response</code> and gives you fluent assertions on the status code, headers, and body. Useful when the test makes a JAX-RS <code>ClientBuilder</code> call and wants to assert on the resulting <code>Response</code> without manually pulling status / entity / Content-Type apart.</p>
 
 <div class="listing">
@@ -302,11 +310,9 @@
 
 <p><code>ResponseDiff</code> bridges to <a href="content-diff-module.html">content-diff-module</a> &mdash; same semantic-equality rules, same <code>ignoring()</code> + <code>unorderedArrays()</code> tolerance knobs. Add <code>content-diff-module-api/impl</code> + Jackson + Jakarta-EL to the test classpath.</p>
 
-<h2 id="dt-impl">2.4 picking a JAX-RS implementation</h2>
-<p>jaxrs-module talks to JAX-RS through the standard <code>SeBootstrap</code> API, so any conformant implementation works. The two impls tested in jawelte's own sweep are <strong>Apache CXF</strong> (default; <code>cxf-rt-frontend-jaxrs</code> + <code>cxf-rt-transports-http-jetty</code>) and <strong>RESTEasy</strong> (<code>resteasy-undertow</code> et al). Pick by classpath dependency, no code change in the test.</p>
 
 <h1 id="spi">3. spi / port reference</h1>
-<p>jaxrs-module ships <strong>no SPI / port of its own</strong>. The customization story is whatever <code>SeBootstrap</code> and the chosen JAX-RS implementation already expose. If you need to tweak the deployment (custom providers, JSON binding, security filters), do it via a custom <code>Application</code> subclass passed to <code>@EnableJaxRs(applicationConfig = ...)</code> &mdash; that's the standard JAX-RS extension point and jaxrs-module honors it as the override channel.</p>
+<p>jaxrs-module ships <strong>no SPI / port of its own</strong>. The customization story is whatever <code>SeBootstrap</code> and the chosen JAX-RS implementation already expose. For most cases (custom providers, exception mappers, JSON binding, security filters) the answer is to add the relevant <code>@Provider</code> classes to the <a href="#dt-enable"><code>restResources</code></a> array on <code>@EnableJaxRs</code>; the JAX-RS runtime walks the array and dispatches each class according to its annotations.</p>
 
 <div class="closing">
   <strong>jawelte / jaxrs-module</strong> &nbsp;&middot;&nbsp; <a href="modules.html">modules</a> &nbsp;&middot;&nbsp; <a href="core.html">core</a> &nbsp;&middot;&nbsp; back to <a href="index.html">overview</a>

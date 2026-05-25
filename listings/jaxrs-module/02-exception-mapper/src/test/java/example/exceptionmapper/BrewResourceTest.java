@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package example.excmapper;
+package example.exceptionmapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

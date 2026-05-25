@@ -37,7 +37,7 @@ class HelloResourceTest {
     TestUrl testUrl;
 
     @Test
-    void getHelloReturnsTheStubbedBody() throws Exception {
+    void getHelloReturnsExpectedBodyOverHttp() throws Exception {
         HttpResponse<String> response;
         try (HttpClient client = HttpClient.newHttpClient()) {
             HttpRequest request = HttpRequest.newBuilder()

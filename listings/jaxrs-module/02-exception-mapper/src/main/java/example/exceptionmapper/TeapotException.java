@@ -13,16 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package example.excmapper;
+package example.exceptionmapper;
 
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.Path;
+public class TeapotException extends RuntimeException {
 
-@Path("/brew")
-public class BrewResource {
-
-    @GET
-    public String brewCoffee() {
-        throw new TeapotException("I'm a teapot");
+    public TeapotException(String message) {
+        super(message);
     }
 }
