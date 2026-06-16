@@ -253,5 +253,33 @@
                 </dependency>
             </dependencies>
         </profile>
+        <profile>
+            <!--
+                Stub -Pquarkus profile. Quarkus owns the JAX-RS runtime
+                end-to-end (quarkus-rest / quarkus-resteasy-reactive
+                replaces both cxf and resteasy at the test level), so
+                no scenarios ship a *QuarkusTest companion yet — that
+                wiring is deferred per
+                docs/triple-runtime-architecture.md. The profile is
+                present so the verify-all matrix has a shape-correct
+                "quarkus" column for tests/jaxrs-module; surefire
+                filters to *QuarkusTest.java which currently matches
+                nothing, giving a 0-test report cell.
+            -->
+            <id>quarkus</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/*QuarkusTest.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>

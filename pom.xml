@@ -76,6 +76,12 @@
         <jakarta.transaction.version>2.0.1</jakarta.transaction.version>
         <jakarta.ejb.version>4.0.1</jakarta.ejb.version>
         <hibernate.orm.version>7.0.4.Final</hibernate.orm.version>
+        <!--
+            Quarkus version pulled in by the optional -Pquarkus runtime
+            (cdi-module/impl-arc + the per-module deployment jars). See
+            docs/triple-runtime-architecture.md.
+        -->
+        <quarkus.version>3.35.3</quarkus.version>
         <h2.version>2.3.232</h2.version>
         <asm.version>9.8</asm.version>
         <xbean.version>4.30</xbean.version>
@@ -238,7 +244,22 @@
                 CDI SE implementations. Both pinned in
                 <dependencyManagement> with scope=test; the active impl
                 is selected by Maven profile (-Powb default, -Pweld) on
-                the consuming module.
+                the consuming module. -Pquarkus selects a third path —
+                quarkus-junit5 boots ArC directly and the per-module
+                jawelte-*-impl-arc + jawelte-*-deployment jars take
+                over for ArC-native bean discovery.
+
+                quarkus-bom is intentionally NOT imported here. It
+                mediates dozens of transitive versions (smallrye-config-
+                core, jackson, jakarta APIs, …) and the resulting
+                version skew with the pinned `smallrye-config` 3.10
+                meta-artifact breaks the OWB / Weld CDI bootstrap (the
+                project's own scenario-04 multi-endpoint WireMock case
+                fails with AmbiguousResolutionException once the core
+                jumps to 3.17). Each Quarkus-using artifact imports
+                quarkus-bom locally: every modules/*/deployment/pom.xml
+                does, and every tests/*/pom.xml's -Pquarkus profile
+                pulls quarkus-junit5 directly.
             -->
             <dependency>
                 <groupId>org.apache.openwebbeans</groupId>
@@ -264,6 +285,16 @@
                 <artifactId>jawelte-cdi-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-cdi-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-cdi-module-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal scope-module cross-references -->
             <dependency>
@@ -274,6 +305,16 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-scope-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-scope-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-scope-module-deployment</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -288,6 +329,16 @@
                 <artifactId>jawelte-jpa-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jpa-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jpa-module-deployment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal jta-module cross-references -->
             <dependency>
@@ -300,6 +351,11 @@
                 <artifactId>jawelte-jta-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-jta-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal ejb-module cross-references -->
             <dependency>
@@ -310,6 +366,16 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-ejb-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-ejb-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-ejb-module-deployment</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -336,6 +402,11 @@
                 <artifactId>jawelte-db-testdata-module-impl</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-db-testdata-module-impl-arc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- Internal testcontrol-module cross-references -->
             <dependency>
@@ -346,6 +417,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-testcontrol-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-testcontrol-module-impl-arc</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -370,6 +446,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-wiremock-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-wiremock-module-impl-arc</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -1033,4 +1114,30 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Root-level -Pquarkus profile. Only adds quarkus-bom to
+            dependencyManagement when -Pquarkus is explicitly active —
+            keeping the BOM out of the default classpath avoids the
+            smallrye-config 3.10 / -core 3.17 split that breaks
+            OWB/Weld CDI bootstraps. Test poms under -Pquarkus inherit
+            this management and resolve quarkus-junit5 + every
+            transitive Quarkus jar at the BOM-pinned version.
+        -->
+        <profile>
+            <id>quarkus</id>
+            <dependencyManagement>
+                <dependencies>
+                    <dependency>
+                        <groupId>io.quarkus</groupId>
+                        <artifactId>quarkus-bom</artifactId>
+                        <version>${quarkus.version}</version>
+                        <type>pom</type>
+                        <scope>import</scope>
+                    </dependency>
+                </dependencies>
+            </dependencyManagement>
+        </profile>
+    </profiles>
 </project>

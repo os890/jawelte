@@ -16,9 +16,11 @@
 package org.os890.jawelte.core.api;
 
 import java.lang.annotation.ElementType;
+import java.lang.annotation.Inherited;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -31,10 +33,9 @@ import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
-import org.junit.jupiter.api.extension.TestInstanceFactory;
-import org.junit.jupiter.api.extension.TestInstanceFactoryContext;
+import org.junit.jupiter.api.extension.InvocationInterceptor;
+import org.junit.jupiter.api.extension.ReflectiveInvocationContext;
 import org.junit.jupiter.api.extension.TestInstancePostProcessor;
-import org.junit.jupiter.api.extension.TestInstantiationException;
 import org.os890.jawelte.core.api.port.TestBeansExtension;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
@@ -52,9 +53,20 @@ import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
  *
  * <p>Zero or multiple {@link TestBeansExtension} providers cause the
  * proxy to throw an {@link IllegalStateException} on first use.
+ *
+ * <p><b>Inheritance.</b> Marked {@link Inherited} so a subclass picks
+ * the annotation up automatically. JUnit's
+ * {@code AnnotationSupport.findAnnotation} already walks the class
+ * hierarchy independent of {@code @Inherited}, but the framework's
+ * own reflective lookups (e.g. {@code Class.getAnnotation}) only see
+ * inherited annotations on the subclass when the meta-annotation is
+ * present — required for the {@code @QuarkusTest}-subclass pattern
+ * documented in
+ * {@code docs/triple-runtime-architecture.md}.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
+@Inherited
 @ExtendWith(EnableTestBeans.Proxy.class)
 public @interface EnableTestBeans {
 
@@ -112,7 +124,7 @@ public @interface EnableTestBeans {
                        TestInstancePostProcessor,
                        AfterEachCallback,
                        AfterAllCallback,
-                       TestInstanceFactory {
+                       InvocationInterceptor {
 
         private TestBeansExtension delegate;
 
@@ -152,42 +164,79 @@ public @interface EnableTestBeans {
         }
 
         @Override
-        public Object createTestInstance(
-                TestInstanceFactoryContext factoryContext,
-                ExtensionContext extensionContext) {
-            Class<?> testClass = factoryContext.getTestClass();
-            TestInstanceFactoryPort port = resolveTestInstancePort();
+        public <T> T interceptTestClassConstructor(
+                Invocation<T> invocation,
+                ReflectiveInvocationContext<Constructor<T>> invocationContext,
+                ExtensionContext extensionContext) throws Throwable {
+            // Implemented as an InvocationInterceptor rather than a
+            // JUnit TestInstanceFactory because @QuarkusTest registers
+            // its own TestInstanceFactory; JUnit allows only one per
+            // test class hierarchy. InvocationInterceptor is composable:
+            // when @QuarkusTest is present, Quarkus's interceptor handles
+            // the constructor and ours steps aside via invocation.proceed().
+            Class<?> testClass = invocationContext.getExecutable().getDeclaringClass();
+            Namespace namespace = Namespace.create(TestContext.class);
+            TestContext storedContext = extensionContext.getStore(namespace)
+                    .get(TestContext.class, TestContext.class);
             try {
+                if (hasQuarkusTestAnnotation(testClass)) {
+                    // Quarkus owns the instance lifecycle (its own
+                    // QuarkusTestExtension constructs the test through
+                    // an FCL-aware path and binds it as actualTestInstance
+                    // for downstream callbacks). Resolving through our
+                    // port here would short-circuit that and break
+                    // Quarkus's method-handle lookup. Step out of the
+                    // chain — let Quarkus and JUnit handle construction.
+                    return invocation.proceed();
+                }
+                TestInstanceFactoryPort port = resolveTestInstancePort();
                 if (port != null) {
                     Object portInstance = port.createInstance(testClass);
                     if (portInstance != null) {
-                        return portInstance;
+                        // Mark the invocation as handled — JUnit's
+                        // interceptor chain requires either proceed()
+                        // or skip() and reports "Chain of
+                        // InvocationInterceptors never called
+                        // invocation" otherwise.
+                        invocation.skip();
+                        @SuppressWarnings("unchecked")
+                        T cast = (T) portInstance;
+                        return cast;
                     }
                 }
-                var constructor = testClass.getDeclaredConstructor();
-                constructor.setAccessible(true);
-                return constructor.newInstance();
-            } catch (TestInstantiationException tie) {
-                throw tie;
-            } catch (Exception e) {
-                throw new TestInstantiationException(
-                        "Could not create a test instance for " + testClass.getName(), e);
+                // Port absent or returned null and no @QuarkusTest:
+                // JUnit invokes the constructor reflectively for an
+                // unmanaged instance.
+                return invocation.proceed();
             } finally {
                 // Close the bootstrap window for TestContext.get(): the
-                // factory has produced the instance, so consumers inside
-                // the test body must not see an active TestContext.
-                // Pulled from the JUnit Store (populated by
+                // interceptor chain has produced the instance, so
+                // consumers inside the test body must not see an active
+                // TestContext. Pulled from the JUnit Store (populated by
                 // DelegatingJUnitExtension.beforeAll) rather than via
-                // TestContext.get() because the latter routes through MP
-                // Config — and not every test classpath in the project
-                // ships an MP Config implementation.
-                Namespace namespace = Namespace.create(TestContext.class);
-                TestContext storedContext = extensionContext.getStore(namespace)
-                        .get(TestContext.class, TestContext.class);
+                // TestContext.get() because the latter routes through
+                // MP Config — and not every test classpath in the
+                // project ships an MP Config implementation.
                 if (storedContext != null) {
                     storedContext.reset();
                 }
             }
+        }
+
+        /**
+         * Probe by FQN string so {@code core/api} doesn't have a
+         * compile-time dependency on Quarkus. Mirrors the check in
+         * {@code DelegatingJUnitExtension.hasQuarkusTestAnnotation}.
+         */
+        private static boolean hasQuarkusTestAnnotation(Class<?> testClass) {
+            for (java.lang.annotation.Annotation annotation : testClass.getAnnotations()) {
+                String name = annotation.annotationType().getName();
+                if ("io.quarkus.test.junit.QuarkusTest".equals(name)
+                        || "io.quarkus.test.junit.QuarkusComponentTest".equals(name)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static TestInstanceFactoryPort resolveTestInstancePort() {

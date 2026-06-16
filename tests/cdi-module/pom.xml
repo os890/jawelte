@@ -119,11 +119,12 @@
             <artifactId>jawelte-cdi-module-api</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-cdi-module-impl</artifactId>
-            <scope>test</scope>
-        </dependency>
+        <!--
+            jawelte-cdi-module-impl is moved into the owb/weld profile
+            dependency blocks: under -Pquarkus the impl-arc variant
+            replaces it. Both jars share the same Java packages, so
+            only one may be on the classpath at a time.
+        -->
 
         <dependency>
             <groupId>jakarta.enterprise</groupId>
@@ -179,19 +180,143 @@
             </activation>
             <dependencies>
                 <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-cdi-module-impl</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
                     <groupId>org.apache.openwebbeans</groupId>
                     <artifactId>openwebbeans-se</artifactId>
                 </dependency>
             </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <!--
+                                *QuarkusTest.java imports
+                                io.quarkus.test.junit.QuarkusTest, which
+                                isn't on the classpath under -Powb. Skip
+                                those sources at test-compile time.
+                            -->
+                            <testExcludes>
+                                <exclude>**/*QuarkusTest.java</exclude>
+                            </testExcludes>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/*QuarkusTest.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
         <profile>
             <id>weld</id>
             <dependencies>
                 <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-cdi-module-impl</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
                     <groupId>org.jboss.weld.se</groupId>
                     <artifactId>weld-se-shaded</artifactId>
                 </dependency>
             </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <testExcludes>
+                                <exclude>**/*QuarkusTest.java</exclude>
+                            </testExcludes>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/*QuarkusTest.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>quarkus</id>
+            <dependencies>
+                <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-cdi-module-impl-arc</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>${project.groupId}</groupId>
+                    <artifactId>jawelte-cdi-module-deployment</artifactId>
+                    <scope>test</scope>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-junit5</artifactId>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <executions>
+                            <!--
+                                Quarkus's bootstrap dep-resolver
+                                (quarkus-test-common -> quarkus-bootstrap-
+                                maven-resolver -> maven-embedder) pulls
+                                javax.inject + javax.annotation
+                                transitively. The project-wide ban on
+                                javax.* doesn't apply to that bootstrap
+                                code path, which never reaches the
+                                Jakarta-namespaced runtime under test.
+                                Skip the enforcer under -Pquarkus
+                                rather than chasing exclusions through
+                                seven nested deps.
+                            -->
+                            <execution>
+                                <id>enforce-rules</id>
+                                <phase>none</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <!--
+                                -Pquarkus runs only the *QuarkusTest
+                                subclasses. The parent *Test classes
+                                would re-execute under the wrong runtime
+                                (they expect OWB/Weld to manage the
+                                container) — surefire restricts the
+                                include set to the Quarkus companions.
+                            -->
+                            <includes>
+                                <include>**/*QuarkusTest.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

@@ -36,5 +36,7 @@
     <modules>
         <module>api</module>
         <module>impl</module>
+        <module>impl-arc</module>
+        <module>deployment</module>
     </modules>
 </project>

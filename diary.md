@@ -5453,3 +5453,25 @@ scope so both `.class` literals (narayana + geronimo) resolve under
 every `jta-*` profile the script sweeps. Pre-existing scenario-56 bug —
 not a TICKET-016 regression — surfaced now because the wider sweep
 finally exercised the failing combo.
+ticket-015: EnableTestBeans.Proxy: TestInstanceFactory -> InvocationInterceptor
+
+@QuarkusTest registers its own TestInstanceFactory; JUnit allows only one per test class hierarchy. InvocationInterceptor is composable — Quarkus's interceptor handles the constructor under @QuarkusTest and ours steps aside via invocation.proceed(). Same flow under OWB/Weld via the TestInstanceFactoryPort SPI.
+
+ticket-015 triple-runtime layout: impl-arc + deployment infrastructure
+Per-module impl-arc/ submodules contain the ArC-native variants of the cdi-module/impl plumbing (ArcSeContainerInitializer, ArcSeContainerView, JaweltAutoMockBuildCompatibleExtension, MockBeanCreator family, ArcContextContributor SPI) and ports of the lifecycle adapters. cdi/jpa/scope-module also ship deployment/ submodules whose @BuildStep methods register context contributors / interceptor bindings / build-compatible extensions for @QuarkusTest. spring-data-module gets a flat ArcContextContributor implementation.
+
+ticket-015 triple-runtime layout: -Pquarkus profile in cdi-module tests
+Scenario01 demonstrates the subclass pattern under -Pquarkus. EnableTestBeans.Proxy now defers to invocation.proceed() when @QuarkusTest is present so Quarkus's interceptor can take over construction. Root pom adds quarkus-bom and the *-deployment depMgmt entries; tests/cdi-module/pom.xml gates impl vs impl-arc by profile and configures compile/surefire excludes (-Powb/-Pweld skip *QuarkusTest, -Pquarkus runs only those).
+
+ticket-015 triple-runtime layout: profile machinery across modules + scope-01 subclass
+Migrated 8 tests/{module}/pom.xml to the same -Powb/-Pweld/-Pquarkus profile split as cdi-module: impl deps move into owb+weld profiles, impl-arc + deployment + quarkus-junit5 in the quarkus profile, surefire/compiler filter *QuarkusTest.java per profile. JpaModuleProcessor now also registers @Transactional as a nonbinding interceptor binding (mirrors JpaArcContextContributor). docs/triple-runtime-architecture.md updated with per-module status — jpa/jta/db-testdata require Quarkus first-party extensions for end-to-end @QuarkusTest support; cdi-module + scope-module are self-contained. scope-module/scenario-01 verified passing under -Pquarkus.
+
+verify-all.sh: per-combo HTML report
+Each per-profile mvn phase now snapshots its scenarios' target/surefire-reports/TEST-*.xml into target/verify-report/data/<combo>/<module>/<scenario>/ before running mvn (so stale TEST-*.xml from a prior combo can't leak into the next snapshot). Phase 1 install stays no-snapshot (combo arg empty). An EXIT trap renders target/verify-report/index.html via verify-report.py — fires on success and failure paths. Full-matrix mode also extends the sweep: cdi/scope/jpa/ejb/testcontrol/spring-data/wiremock/db-testdata × {owb, weld, quarkus}; batch × {owb, weld}; jta × {owb,weld}×{geronimo,narayana} + quarkus; jaxrs × {owb,weld}×{cxf,resteasy} + quarkus. wip/lnp modes unchanged. tests/jaxrs-module gains a stub -Pquarkus profile (no scenarios yet) so the matrix has a shape-correct quarkus column for jaxrs.
+
+FIXED: move quarkus-bom import from root depMgmt into -Pquarkus profile
+Importing quarkus-bom at root level mediated smallrye-config-core/common to 3.17.2 while the explicit pin on smallrye-config (the metabundle) stayed at 3.10.0. That split broke OWB/Weld CDI bootstraps — visible as scenario-04 multi-endpoint wiremock failing with AmbiguousResolutionException on every test that used the SmallRye Config core under the (default) -Powb sweep. Moving the import into a root-level <profiles><profile id=quarkus> block contains the BOM mediation to runs that actually need it.
+
+FIXED: spring-data-module's compile-scope dep on cdi-module-impl-arc became transitive on consumers, pulling impl-arc onto -Powb/-Pweld test classpaths alongside impl. Same-FQN classes with different bytecode let ServiceLoader find the ArC BeanManager (UnsupportedOperationException on createAnnotatedType). Switched both impl-arc and arc-processor to scope=provided.
+
+Brought 80 POC-migrated scenarios (cdi 40 + scope 23 + jpa 10 + testcontrol 7) onto triple-runtime-layout via *QuarkusTest extends *Test subclasses. jpa-module + testcontrol-module quarkus profile gained quarkus-hibernate-orm/quarkus-jdbc-h2/quarkus-narayana-jta deps + hibernate.orm.version 7.3.2.Final override. 3 testcontrol scenarios that declare jpa-module-impl + db-testdata-module-impl directly at scenario level got profile-conditional dep blocks.

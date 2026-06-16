@@ -87,9 +87,21 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
     public DelegatingJUnitExtension() {
     }
 
+    /**
+     * JVM-wide system property carrying the FQN of the currently
+     * running test class. Read by ArC-side bridges that run inside
+     * Quarkus's runtime classloader (which doesn't share statics with
+     * this JUnit extension) — notably
+     * {@code ContainerStartedBridgeBean.resolveTestClass()} for the
+     * {@code ContainerStarted} event payload under @QuarkusTest.
+     */
+    public static final String CURRENT_TEST_CLASS_PROPERTY =
+            "org.os890.jawelte.cdi.bridge.current-test-class";
+
     @Override
     public void beforeAll(ExtensionContext extensionContext) throws Exception {
         Class<?> testClass = extensionContext.getRequiredTestClass();
+        System.setProperty(CURRENT_TEST_CLASS_PROPERTY, testClass.getName());
         boolean manageContainer = readManageContainer(testClass);
 
         TestContext testContext = new TestContextImpl(testClass);
@@ -205,6 +217,7 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
         // reset() is idempotent — does nothing if the slot is already
         // empty.
         testContext.reset();
+        System.clearProperty(CURRENT_TEST_CLASS_PROPERTY);
 
         rethrowAggregated(collected);
     }

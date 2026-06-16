@@ -55,7 +55,15 @@ MVN="$REPO_ROOT/mvnw"
 # `forkCount > 1` / `threadCount` surefire configuration in the
 # poms, every phase is fully sequential: one module at a time,
 # one test class at a time, one test method at a time.
-MVN_ARGS=(-B -ntp -T 1)
+#
+# -fae (--fail-at-end) lets the reactor keep walking the remaining
+# scenario modules after one fails. The phase still exits non-zero
+# (so verify-all detects the failure and the EXIT trap renders the
+# partial report) but the report covers every scenario the mvn
+# invocation reached, not just the modules before the first failure.
+# Important for the quarkus pass where many scenarios may fail in
+# parallel and we want the matrix-shape view of which pass / fail.
+MVN_ARGS=(-B -ntp -T 1 -fae)
 
 WIP_MODE=false
 LNP_MODE=false
@@ -89,12 +97,101 @@ if [ "$LNP_MODE" = true ]; then
     : > "$LNP_LOG"
 fi
 
+# Full-mode-only: every per-profile sweep snapshots its scenarios'
+# target/surefire-reports/TEST-*.xml into target/verify-report/data/
+# under a per-combo, per-module subdir. An EXIT trap walks that tree
+# and emits target/verify-report/index.html — installed even on
+# failure paths so the report shows which combo aborted the sweep.
+# In wip / LNP modes VERIFY_DATA_ROOT stays empty, snapshot_surefire
+# no-ops, and the trap finds nothing to render.
+VERIFY_REPORT_DIR="$REPO_ROOT/target/verify-report"
+VERIFY_DATA_ROOT=""
+if [ "$WIP_MODE" = false ] && [ "$LNP_MODE" = false ]; then
+    rm -rf "$VERIFY_REPORT_DIR"
+    VERIFY_DATA_ROOT="$VERIFY_REPORT_DIR/data"
+    mkdir -p "$VERIFY_DATA_ROOT"
+fi
+
+render_verify_report() {
+    local exit_code=$?
+    if [ -n "$VERIFY_DATA_ROOT" ] && [ -d "$VERIFY_DATA_ROOT" ]; then
+        local html_out="$VERIFY_REPORT_DIR/index.html"
+        if python3 "$REPO_ROOT/verify-report.py" \
+                "$VERIFY_DATA_ROOT" "$html_out" 2>/dev/null; then
+            echo
+            echo "verify-all overview written to file://$html_out"
+        else
+            echo "WARN: verify-report.py failed; raw data under $VERIFY_DATA_ROOT" >&2
+        fi
+    fi
+    return "$exit_code"
+}
+trap render_verify_report EXIT
+
+# Snapshot every target/surefire-reports/TEST-*.xml under $dir into
+# $VERIFY_DATA_ROOT/<combo-slug>/<module-slug>/<scenario-slug>/, plus a
+# `_meta.txt` capturing phase duration / exit code / label. No-op when
+# $VERIFY_DATA_ROOT is empty (wip / LNP mode).
+snapshot_surefire() {
+    local module_dir=$1
+    local combo=$2
+    local label=$3
+    local duration=$4
+    local exit_code=$5
+    [ -z "$VERIFY_DATA_ROOT" ] && return 0
+    local combo_slug=${combo//,/-}
+    [ -z "$combo_slug" ] && combo_slug="default"
+    local module_slug
+    module_slug=$(basename "$module_dir")
+    local dst_root="$VERIFY_DATA_ROOT/$combo_slug/$module_slug"
+    mkdir -p "$dst_root"
+    {
+        echo "label=$label"
+        echo "combo=$combo"
+        echo "module=$module_slug"
+        echo "duration=$duration"
+        echo "exit=$exit_code"
+    } > "$dst_root/_meta.txt"
+    # Each scenario submodule writes its own
+    # target/surefire-reports/TEST-*.xml. Aggregator poms have no
+    # surefire output of their own — skip them by name match against
+    # the module dir itself.
+    while IFS= read -r reports_dir; do
+        local scenario_dir
+        scenario_dir=$(dirname "$(dirname "$reports_dir")")
+        local scenario_slug
+        scenario_slug=$(basename "$scenario_dir")
+        if [ "$scenario_slug" = "$module_slug" ]; then
+            continue
+        fi
+        local dst="$dst_root/$scenario_slug"
+        mkdir -p "$dst"
+        find "$reports_dir" -maxdepth 1 -name 'TEST-*.xml' -exec cp {} "$dst/" \; 2>/dev/null || true
+    done < <(find "$module_dir" -path '*/target/surefire-reports' -type d 2>/dev/null)
+}
+
 run() {
     local label="$1"; shift
+    # Profile-combination tag used for the report grouping (e.g.
+    # "owb", "owb,jta-narayana", or empty for no-profile phases like
+    # tests/core / tests/content-diff-module / Phase 1 install).
+    local combo="$1"; shift
     local dir="$1"; shift
     phase=$((phase + 1))
     local phase_start
     phase_start=$(date +%s)
+    # Wipe scenario-level target/surefire-reports before the phase
+    # runs so snapshot_surefire only captures TEST-*.xml from THIS
+    # mvn invocation. Without this, an `-P quarkus` phase whose
+    # surefire <includes> matches only `**/*QuarkusTest.java` would
+    # still see leftover `TEST-*Test.xml` reports from the previous
+    # `-P owb` or `-P weld` phase and snapshot them into the wrong
+    # combo bucket. Aggregator/parent target/ is left alone — its
+    # surefire-reports is always empty in pom-packaging projects.
+    if [ -n "$VERIFY_DATA_ROOT" ]; then
+        find "$dir" -path '*/target/surefire-reports' -type d \
+            -exec rm -rf {} + 2>/dev/null || true
+    fi
     local banner
     banner=$(printf '\n==================================================================\n  Phase %02d: %s\n  in:   %s\n  args: %s\n==================================================================' "$phase" "$label" "$dir" "$*")
     echo "$banner"
@@ -104,22 +201,33 @@ run() {
     # without depending on the caller's external redirect.
     # `pipefail` is already on, so a non-zero from mvn surfaces through
     # the pipe.
+    local exit_code=0
     if [ -n "$LNP_LOG" ]; then
-        if ! ( cd "$dir" && "$MVN" "${MVN_ARGS[@]}" "$@" | tee -a "$LNP_LOG" ); then
-            echo
-            echo ">>> FAILED at phase $phase: $label" >&2
-            exit 1
-        fi
+        ( cd "$dir" && "$MVN" "${MVN_ARGS[@]}" "$@" | tee -a "$LNP_LOG" ) || exit_code=$?
     else
-        if ! ( cd "$dir" && "$MVN" "${MVN_ARGS[@]}" "$@" ); then
-            echo
-            echo ">>> FAILED at phase $phase: $label" >&2
-            exit 1
-        fi
+        ( cd "$dir" && "$MVN" "${MVN_ARGS[@]}" "$@" ) || exit_code=$?
     fi
     local phase_elapsed=$(( $(date +%s) - phase_start ))
+    # Snapshot regardless of exit code so the report includes the
+    # failing combo's partial data — surefire writes TEST-*.xml for
+    # every test class before the build aborts.
+    snapshot_surefire "$dir" "$combo" "$label" "$phase_elapsed" "$exit_code"
+    if [ "$exit_code" -ne 0 ]; then
+        # Record the failure and keep going. The end-of-script banner
+        # surfaces every failing phase, and the trap renders the
+        # report with every combo's outcome — without this, the first
+        # failing phase masks every subsequent combo on the matrix.
+        echo
+        echo ">>> FAILED at phase $phase: $label (exit $exit_code)" >&2
+        PHASE_FAILURES+=("$phase: $label (exit $exit_code)")
+        return 0
+    fi
     printf "  ok (%ds)\n" "$phase_elapsed"
 }
+
+# Collected via run() when a phase exits non-zero. The end-of-script
+# banner reports the full list rather than only the first.
+PHASE_FAILURES=()
 
 # --- Phase 1 ---------------------------------------------------------
 # Always `clean install` (not just `install`) — without `clean`,
@@ -151,10 +259,10 @@ run() {
 # every artifact the LNP sweeps need; the LNP scenarios run in
 # Phase 2+ with the explicit -P lnp profile.
 if [ "$LNP_MODE" = true ]; then
-    run "clean install full reactor [skipTests]" \
+    run "clean install full reactor [skipTests]" "" \
         "$REPO_ROOT/verify-all" -DskipTests clean install
 else
-    run "clean install full reactor" \
+    run "clean install full reactor" "" \
         "$REPO_ROOT/verify-all" clean install
 fi
 
@@ -189,7 +297,7 @@ if [ "$LNP_MODE" = true ]; then
     }
 
     for cdi in owb weld; do
-        run "tests/lnp-module [$cdi,lnp]" \
+        run "tests/lnp-module [$cdi,lnp]" "" \
             "$REPO_ROOT/tests/lnp-module" -P "$cdi,lnp" verify
         snapshot_gatling "$cdi-cxf"
     done
@@ -205,7 +313,7 @@ if [ "$LNP_MODE" = true ]; then
         for scen in scenario-05-full-crud-rest-with-dbunit \
                     scenario-06-full-crud-roundtrip \
                     scenario-07-full-crud-with-gatling; do
-            run "tests/lnp-module/$scen [$cdi,resteasy,lnp]" \
+            run "tests/lnp-module/$scen [$cdi,resteasy,lnp]" "" \
                 "$REPO_ROOT/tests/lnp-module/$scen" \
                 -P "$cdi,lnp,-cxf,resteasy" verify
         done
@@ -233,39 +341,57 @@ elif [ "$WIP_MODE" = true ]; then
     fi
 
     for wip_dir in "${wip_dirs[@]}"; do
-        run "$(basename "$wip_dir") [wip]" "$wip_dir" -P wip verify
+        run "$(basename "$wip_dir") [wip]" "" "$wip_dir" -P wip verify
     done
 else
     # --- full matrix mode --------------------------------------------
     # tests/core: no CDI / JTA profile to sweep.
-    run "tests/core" "$REPO_ROOT/tests/core" verify
+    run "tests/core" "" "$REPO_ROOT/tests/core" verify
 
     # tests/cdi-module, tests/scope-module, tests/jpa-module,
     # tests/ejb-module, tests/testcontrol-module,
-    # tests/spring-data-module: CDI-runtime sweep only (owb default
-    # + weld).
+    # tests/spring-data-module, tests/wiremock-module,
+    # tests/db-testdata-module: {owb, weld, quarkus} CDI-runtime sweep.
+    # `quarkus` activates the per-module -Pquarkus profile that pulls
+    # impl-arc + deployment + quarkus-junit5 and restricts surefire
+    # to **/*QuarkusTest.java — scenarios with no companion give a
+    # zero-test cell, which is the intended matrix-shape signal.
+    for cdi in owb weld quarkus; do
+        run "tests/cdi-module [$cdi]"         "$cdi" "$REPO_ROOT/tests/cdi-module"         -P "$cdi" verify
+        run "tests/scope-module [$cdi]"       "$cdi" "$REPO_ROOT/tests/scope-module"       -P "$cdi" verify
+        run "tests/jpa-module [$cdi]"         "$cdi" "$REPO_ROOT/tests/jpa-module"         -P "$cdi" verify
+        run "tests/ejb-module [$cdi]"         "$cdi" "$REPO_ROOT/tests/ejb-module"         -P "$cdi" verify
+        run "tests/testcontrol-module [$cdi]" "$cdi" "$REPO_ROOT/tests/testcontrol-module" -P "$cdi" verify
+        run "tests/spring-data-module [$cdi]" "$cdi" "$REPO_ROOT/tests/spring-data-module" -P "$cdi" verify
+        run "tests/wiremock-module [$cdi]"    "$cdi" "$REPO_ROOT/tests/wiremock-module"    -P "$cdi" verify
+        run "tests/db-testdata-module [$cdi]" "$cdi" "$REPO_ROOT/tests/db-testdata-module" -P "$cdi" verify
+    done
+
+    # tests/batch-module: {owb, weld} only. Quarkus has no first-party
+    # JSR-352 extension and the batchee/jberet split is already
+    # handled at the scenario level (each scenario's pom hardcodes
+    # one runtime), so the cdi-axis sweep alone covers both
+    # impls naturally.
     for cdi in owb weld; do
-        run "tests/cdi-module [$cdi]"         "$REPO_ROOT/tests/cdi-module"         -P "$cdi" verify
-        run "tests/scope-module [$cdi]"       "$REPO_ROOT/tests/scope-module"       -P "$cdi" verify
-        run "tests/jpa-module [$cdi]"         "$REPO_ROOT/tests/jpa-module"         -P "$cdi" verify
-        run "tests/ejb-module [$cdi]"         "$REPO_ROOT/tests/ejb-module"         -P "$cdi" verify
-        run "tests/testcontrol-module [$cdi]" "$REPO_ROOT/tests/testcontrol-module" -P "$cdi" verify
-        run "tests/spring-data-module [$cdi]" "$REPO_ROOT/tests/spring-data-module" -P "$cdi" verify
+        run "tests/batch-module [$cdi]" "$cdi" "$REPO_ROOT/tests/batch-module" -P "$cdi" verify
     done
 
     # tests/content-diff-module: utility library — does not bootstrap a
     # CDI container, so the owb/weld profiles are no-ops. One verify
     # pass covers every scenario.
-    run "tests/content-diff-module" "$REPO_ROOT/tests/content-diff-module" verify
+    run "tests/content-diff-module" "" "$REPO_ROOT/tests/content-diff-module" verify
 
-    # tests/jta-module: CDI-runtime × JTA-impl sweep.
-    # 4 combos: {owb, weld} × {jta-geronimo, jta-narayana}.
+    # tests/jta-module: {owb, weld} × {jta-geronimo, jta-narayana}
+    # plus a single `quarkus` cell (Narayana implicit via
+    # quarkus-narayana-jta).
     for cdi in owb weld; do
         for jta in jta-geronimo jta-narayana; do
-            run "tests/jta-module [$cdi,$jta]" \
+            run "tests/jta-module [$cdi,$jta]" "$cdi,$jta" \
                 "$REPO_ROOT/tests/jta-module" -P "$cdi,$jta" verify
         done
     done
+    run "tests/jta-module [quarkus]" "quarkus" \
+        "$REPO_ROOT/tests/jta-module" -P "quarkus" verify
 
     # Atomikos coverage is not a separate axis — scenarios 50 + 51
     # pin Atomikos's jakarta-classifier deps + an
@@ -274,6 +400,20 @@ else
     # {owb, weld} × {jta-geronimo, jta-narayana} phase above. The 32
     # general-purpose scenarios in the same phase remain on the
     # profile-active TM (Geronimo / Narayana) and are unaffected.
+
+    # tests/jaxrs-module: {owb, weld} × {cxf, resteasy} plus a single
+    # `quarkus` cell (Quarkus REST implicit, no cxf/resteasy axis
+    # under quarkus). The cxf profile is activeByDefault, so the
+    # explicit -Pcxf phases below also pass -P-cxf-disable not
+    # needed; the cdi+impl combo carries cxf or resteasy explicitly.
+    for cdi in owb weld; do
+        for jaxrs in cxf resteasy; do
+            run "tests/jaxrs-module [$cdi,$jaxrs]" "$cdi,$jaxrs" \
+                "$REPO_ROOT/tests/jaxrs-module" -P "$cdi,$jaxrs" verify
+        done
+    done
+    run "tests/jaxrs-module [quarkus]" "quarkus" \
+        "$REPO_ROOT/tests/jaxrs-module" -P "quarkus" verify
 
     # --- Coverage aggregation ----------------------------------------
     # Run from the verify-all aggregator (where coverage-report is a
@@ -297,7 +437,7 @@ else
     # nothing to recompile) so the overhead is single-digit seconds.
     # `-DskipTests` keeps Surefire from re-running tests we already
     # executed in the per-profile phases above.
-    run "coverage-report" "$REPO_ROOT/verify-all" \
+    run "coverage-report" "" "$REPO_ROOT/verify-all" \
         -pl :coverage-report -am -DskipTests verify
 fi
 
@@ -313,11 +453,24 @@ if [ "$LNP_MODE" = true ]; then
 elif [ "$WIP_MODE" = true ]; then
     printf "  WIP PASS GREEN  —  %d phase(s)  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+elif [ ${#PHASE_FAILURES[@]} -gt 0 ]; then
+    printf "  %d / %d PHASES FAILED  —  total %dm %ds\n" \
+           "${#PHASE_FAILURES[@]}" "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
+    echo   "  Failing phases:"
+    for f in "${PHASE_FAILURES[@]}"; do
+        echo "    - phase $f"
+    done
+    echo   "  Inspect target/verify-report/index.html for the per-scenario detail."
 else
     printf "  ALL %d PHASES GREEN  —  total %dm %ds\n" \
            "$phase" "$((total_elapsed / 60))" "$((total_elapsed % 60))"
 fi
 echo "=================================================================="
+# Exit non-zero if any phase failed so CI / CronCreate / callers see
+# the real outcome. The EXIT trap renders the HTML before this.
+if [ ${#PHASE_FAILURES[@]} -gt 0 ]; then
+    exit 1
+fi
 
 # LNP mode: append the final banner to the captured log so the html
 # report renders the green/fail banner, then render the html overview.
@@ -333,3 +486,8 @@ if [ "$LNP_MODE" = true ] && [ -n "$LNP_LOG" ]; then
         echo "LNP overview written to file://$LNP_HTML"
     fi
 fi
+
+# Full-mode verify-report.py rendering is handled by the EXIT trap
+# installed near the top of the script so it runs on both the
+# success path AND on phase failures (where `exit` short-circuits
+# this tail).
