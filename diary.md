@@ -7229,3 +7229,12 @@ New sample maps `@SessionScoped` → `@RequestScoped`:
 Why this picks the example: it's the exact same shape scope-module ships as one of its built-in defaults (`@SessionScoped` → `@TestMethodScoped`). The listing demonstrates the SPI without depending on scope-module — core stands alone.
 
 `docs/core.html` §3.5 pre-block regenerated to match the new source; added a leading paragraph framing the use case before the code. Tests: 2/2 pass.
+
+## 2026-06-27 — docs: align BeanScopeMapper SPI ordering wording with code
+
+Tightened two doc surfaces so the `BeanScopeMapper` provider-ordering story is consistent across the doc set (matching the fix on branch `fix/bean-scope-mapper-priority-ordering`, PR #38, which sorts the providers via `ServicePriorityResolver`):
+
+- `docs/core.html` §3.5 — the `BeanScopeMapper` bullet now states the fixed extension walks the providers **ordered by the active `ServicePriorityResolver`** (lowest `@Priority` first, missing `@Priority` last, class-name tiebreak), and that a consumer overrides a built-in remap for a shared trigger by shipping a higher-precedence provider — the same selection rule as every other multi-impl SPI.
+- `architecture.md` — the scope-override mechanism (1) clause now notes `ScopeRemapCdiExtension` walks the providers ordered by `@Priority` via `ServicePriorityResolver`.
+
+`scope-module.html` already promised the "higher-priority provider" override, so it needed no change; these edits remove the inconsistency where only `scope-module.html` documented the priority behaviour. `core.html` §3.5's separate port-replacement override (replace `BeanScopeMapperPort` for a custom algorithm) is left intact — it is the orthogonal policy-level hatch.
