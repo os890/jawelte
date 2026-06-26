@@ -18,6 +18,7 @@ package org.os890.jawelte.module.jaxrs.impl;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.os890.jawelte.module.jaxrs.api.TestUrl;
+import org.os890.jawelte.module.jaxrs.impl.adapter.extension.remap.JaxRsManagedScope;
 
 /**
  * CDI bean implementation of {@link TestUrl}. Stores the embedded
@@ -25,15 +26,22 @@ import org.os890.jawelte.module.jaxrs.api.TestUrl;
  * {@code JaxRsLifecycleAdapter} after {@code SeBootstrap.start}
  * completes; {@link #get()} is a single field read after that.
  *
- * <p><b>Scope.</b> Declared {@link ApplicationScoped}. When
- * testcontrol-module is on the classpath, {@code JaxRsCdiExtension}
- * rewrites the effective scope to {@code @TestClassScoped} at
- * {@code ProcessAnnotatedType} time — the bean's lifetime then
- * matches the per-test-class server lifetime exactly. Under
- * cdi-module's per-test-class CDI container the two scopes are
- * observably equivalent (one URL per test class either way), so
- * the upgrade is a cosmetic guarantee for the rare case where a
- * downstream consumer ships a per-method CDI container.
+ * <p><b>Scope.</b> Declared {@link ApplicationScoped} and marked
+ * {@link JaxRsManagedScope}. When scope-module is on the classpath,
+ * {@code TestUrlScopeRemap} (the {@code BeanScopeMapper} provider
+ * this module ships, triggered by the {@code @JaxRsManagedScope}
+ * marker) rewrites the effective scope to {@code @TestClassScoped}
+ * at {@code ProcessAnnotatedType} time — the bean's lifetime then
+ * matches the per-test-class server lifetime exactly. The marker
+ * keeps the remap limited to this single bean; no other
+ * {@code @ApplicationScoped} bean is affected. When scope-module is
+ * absent the remap resolves to {@code null} and is skipped, so the
+ * bean stays {@code @ApplicationScoped} — under cdi-module's
+ * per-test-class container the two scopes are observably equivalent
+ * (one URL per test class either way; {@code afterAll} also calls
+ * {@link #clear()} so no stale URL leaks), making the upgrade a
+ * tightening that matters mainly for a downstream per-method
+ * container.
  *
  * <p><b>State.</b> One {@code volatile String}. Set by the lifecycle
  * adapter in {@code beforeAll} (after the OS-assigned port is
@@ -43,6 +51,7 @@ import org.os890.jawelte.module.jaxrs.api.TestUrl;
  * regardless of which thread bound it.
  */
 @ApplicationScoped
+@JaxRsManagedScope
 public class TestUrlHolder implements TestUrl {
 
     private volatile String baseUrl;

@@ -46,11 +46,14 @@ import java.util.function.Supplier;
  *
  * <p>The implementing bean ({@code TestUrlHolder}, in
  * jaxrs-module/impl) is {@code @ApplicationScoped} by default; when
- * testcontrol-module is on the classpath, jaxrs-module's CDI
- * Extension upgrades it to {@code @TestClassScoped} so the lifetime
- * lines up with the per-test-class server lifetime. Under
- * cdi-module's per-test-class container, the two scopes are
- * observably equivalent (one URL per test class either way).
+ * scope-module is on the classpath, a {@code BeanScopeMapper}
+ * provider jaxrs-module ships ({@code TestUrlScopeRemap}, triggered
+ * by an impl-internal marker on the holder alone) upgrades it to
+ * {@code @TestClassScoped} so the lifetime lines up with the
+ * per-test-class server lifetime. Under cdi-module's per-test-class
+ * container the two scopes are observably equivalent (one URL per
+ * test class either way); without scope-module the bean stays
+ * {@code @ApplicationScoped}.
  */
 public interface TestUrl extends Supplier<String> {
 

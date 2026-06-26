@@ -31,7 +31,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (jaxrs-module/impl)</name>
-    <description>Implementation of jaxrs-module: JaxRsLifecycleAdapter (TestModuleLifecyclePort at @Priority(75) — between testcontrol at 50 and scope at 100; boots SeBootstrap on port 0 in beforeAll, shuts it down in afterAll); JaxRsCdiExtension (single CDI Extension carrying two ProcessAnnotatedType remap responsibilities — the unconditional @SessionScoped→@TestMethodScoped remap and the conditional TestUrlHolder→@TestClassScoped upgrade when testcontrol-module is on the classpath); TestUrlHolder (the TestUrl impl bean exposing the resolved base URL); CdiIntegrationFilter (a JAX-RS ContainerRequestFilter/ContainerResponseFilter pair activating @RequestScoped per HTTP request via RequestContextController). SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
+    <description>Implementation of jaxrs-module: JaxRsLifecycleAdapter (TestModuleLifecyclePort at @Priority(75) — between testcontrol at 50 and scope at 100; boots SeBootstrap on port 0 in beforeAll, shuts it down in afterAll); TestUrlHolder (the TestUrl impl bean exposing the resolved base URL, carrying the impl-internal @JaxRsManagedScope marker); TestUrlScopeRemap (a core/api BeanScopeMapper provider that, triggered by that marker, upgrades only TestUrlHolder to @TestClassScoped when scope-module is on the classpath — resolved reflectively via MP Config, so no compile-time dep on scope-module; the bean stays @ApplicationScoped otherwise); CdiIntegrationFilter (a JAX-RS ContainerRequestFilter/ContainerResponseFilter pair activating @RequestScoped per HTTP request via RequestContextController). SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
 
     <dependencies>
         <!--
@@ -58,22 +58,9 @@
         </dependency>
 
         <!--
-            scope-module/api supplies the @TestMethodScoped and
-            @TestClassScoped annotation literals used by
-            JaxRsCdiExtension when rewriting effective scopes during
-            ProcessAnnotatedType (the @SessionScoped→@TestMethodScoped
-            remap and the conditional TestUrlHolder upgrade).
-        -->
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-scope-module-api</artifactId>
-        </dependency>
-
-        <!--
-            jakarta.enterprise.cdi-api supplies the CDI Extension SPI
-            (ProcessAnnotatedType, AnnotatedTypeConfigurator) and
-            RequestContextController used by JaxRsCdiExtension and
-            CdiIntegrationFilter respectively. provided scope.
+            jakarta.enterprise.cdi-api supplies the RequestContextController
+            used by CdiIntegrationFilter to activate @RequestScoped per HTTP
+            request. provided scope.
         -->
         <dependency>
             <groupId>jakarta.enterprise</groupId>
