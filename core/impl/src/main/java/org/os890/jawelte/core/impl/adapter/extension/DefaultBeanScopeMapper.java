@@ -32,18 +32,32 @@ import jakarta.inject.Scope;
 
 import org.os890.jawelte.core.api.port.BeanScopeMapper;
 import org.os890.jawelte.core.api.port.BeanScopeMapperPort;
+import org.os890.jawelte.core.api.port.ServicePriorityResolver;
+import org.os890.jawelte.core.api.port.TestContext;
 
 /**
  * Default {@link BeanScopeMapperPort} implementation. Discovers
  * every {@link BeanScopeMapper} provider on the classpath via
- * {@link ServiceLoader} at construction time and caches the
- * resulting immutable list; each {@link #mapScope(Class)} call
- * walks that list and returns the first match.
+ * {@link ServiceLoader} at construction time, orders them through
+ * the active {@link ServicePriorityResolver} (lowest
+ * {@code @Priority} first; providers without {@code @Priority}
+ * sort last; ties broken by class name), and caches the resulting
+ * immutable list; each {@link #mapScope(Class)} call walks that
+ * ordered list and returns the first provider whose
+ * {@link BeanScopeMapper#trigger() trigger} is present.
  *
- * <p>Selection precedence: SL-registered at
- * {@link Integer#MAX_VALUE} priority so customer impls registered
- * with a lower (= higher precedence) priority value win the
- * priority-resolution call in
+ * <p>Ordering the inner provider list by priority — rather than
+ * leaving it in raw {@code ServiceLoader} enumeration order — lets
+ * a consumer override a built-in remap for a given trigger by
+ * shipping a higher-precedence (lower-numeric {@code @Priority})
+ * provider, consistent with every other multi-impl SPI in the
+ * framework (e.g. {@code EjbAnnotationMapper}).
+ *
+ * <p>Port-level selection precedence (distinct from the provider
+ * ordering above): this default is SL-registered at
+ * {@link Integer#MAX_VALUE} priority so a customer
+ * {@link BeanScopeMapperPort} registered with a lower (= higher
+ * precedence) priority value wins the priority-resolution call in
  * {@code TestContext.loadService(BeanScopeMapperPort.class)} and
  * this default steps aside.
  *
@@ -116,7 +130,16 @@ public class DefaultBeanScopeMapper implements BeanScopeMapperPort {
         for (BeanScopeMapper mapper : ServiceLoader.load(BeanScopeMapper.class)) {
             list.add(mapper);
         }
-        return List.copyOf(list);
+        // Order by @Priority through the project-wide resolver so a
+        // higher-precedence provider can override a built-in remap for
+        // a shared trigger — the same ordering every other multi-impl
+        // SPI goes through. Without this the list would stay in raw
+        // ServiceLoader/classpath order and the documented
+        // "ship a higher-priority provider" override could not work.
+        List<BeanScopeMapper> ordered = TestContext
+                .loadService(ServicePriorityResolver.class)
+                .sort(list);
+        return List.copyOf(ordered);
     }
 
     private static Set<Class<? extends Annotation>> directCdiScopesOn(Class<?> beanClass) {

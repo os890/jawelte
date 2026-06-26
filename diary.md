@@ -5453,3 +5453,9 @@ scope so both `.class` literals (narayana + geronimo) resolve under
 every `jta-*` profile the script sweeps. Pre-existing scenario-56 bug —
 not a TICKET-016 regression — surfaced now because the wider sweep
 finally exercised the failing combo.
+
+## 2026-06-26 — Fix: BeanScopeMapper providers now resolved by @Priority
+
+**Finding (project-review slide 1, High, confirmed):** `DefaultBeanScopeMapper.discoverMappers()` returned the discovered `BeanScopeMapper` providers in raw `ServiceLoader`/classpath order and `mapScope()` took the first trigger match. This bypassed the project-wide `ServicePriorityResolver` ordering that every other multi-impl SPI uses, so the documented override contract (scope-module.html: "ship your own higher-priority `BeanScopeMapper`" to replace a built-in remap) was unimplementable — a consumer could not win by a lower-numeric `@Priority`.
+
+**Fix:** `discoverMappers()` now sorts the discovered providers through `TestContext.loadService(ServicePriorityResolver.class).sort(...)` (lowest `@Priority` first, missing `@Priority` last, class-name tiebreak) — mirroring `EjbAnnotationExtension.resolveMapperChain()`. The bootstrap is cycle-free because `TestContext.loadService(ServicePriorityResolver.class)` is special-cased to resolve via its own FQCN key rather than recursing. Behaviour for the four shipped providers (distinct triggers) is unchanged; the change adds the priority-override capability the docs promise. Updated javadoc on `DefaultBeanScopeMapper` and the `BeanScopeMapper` SPI interface to state the ordering rule.

@@ -27,10 +27,19 @@ import java.lang.annotation.Annotation;
  * {@code META-INF/services/} line; no new CDI Extension class
  * per remap.
  *
+ * <p>Providers are ordered by {@link ServicePriorityResolver}
+ * (lowest {@code jakarta.annotation.Priority} first; providers
+ * without {@code @Priority} sort last; ties broken by class name)
+ * — the same selection rule as every other multi-impl SPI. A
+ * consumer therefore overrides a built-in remap for a given
+ * trigger by shipping a higher-precedence (lower-numeric
+ * {@code @Priority}) provider for that trigger.
+ *
  * <p>For every type the CDI runtime delivers as a
  * {@code ProcessAnnotatedType} event, the port walks the
- * registered providers and, on the first whose {@link #trigger()}
- * annotation is directly present on the type, applies the remap:
+ * registered providers in that priority order and, on the first
+ * whose {@link #trigger()} annotation is directly present on the
+ * type, applies the remap:
  *
  * <ol>
  *   <li>Optionally short-circuits when
