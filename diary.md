@@ -5527,3 +5527,13 @@ Verified GREEN: full tests/scope-module suite 46/46 under owb AND weld (incl. sc
 **Change (javadoc only, no behaviour change):** corrected `ConfigResolver.java` javadoc and `ConfigResolverAdapter.java` class comment to state the resolver is selected via `TestContext.loadService` (ServiceLoader + `@Priority`); to replace it, ship your own in the service file with a lower numeric `@Priority` (what `jpa-module` scenario-63 does). Noted the adapter is also `@ApplicationScoped` so application `@ConfigBean` code may `@Inject` it, but a CDI `@Alternative` only swaps that injection point, not the framework's pre-CDI selection.
 
 Follow-up on the documentation branch: `core.html` §3.6 wording and the `core/15-config-resolver` listing (which demos the `@Alternative` pattern) need the same alignment.
+
+## 2026-06-27 — fix(jpa): cleanup table resolver excludes SQL views
+
+**Finding (High, confirmed):** `InformationSchemaTableNameResolver` queried `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'PUBLIC'` with no `TABLE_TYPE` filter. On H2, `INFORMATION_SCHEMA.TABLES` lists `VIEW` rows alongside `BASE TABLE` rows, so any view in `PUBLIC` was handed to the default `DbCleanupStrategy`, which then ran `TRUNCATE`/`DELETE` against it — H2 rejects that on a view, aborting per-method cleanup. This is the pre-registered default path, so a single view broke the framework's core per-test-cleanup promise.
+
+**Fix:** add `AND TABLE_TYPE = 'BASE TABLE'` to the query (H2 is 2.3.232, where base tables report `'BASE TABLE'`). All intended cleanup targets (audit logs, join/collection tables, sequence bookkeeping) are base tables, so the "reach unmapped tables" goal is preserved; sequences live in separate metadata and were never in `TABLES`. Updated the resolver javadoc to document the `TABLE_TYPE` predicate.
+
+**Test:** new `tests/jpa-module/scenario-66-cleanup-skips-views` — an entity plus a SQL view created over its table; method 1's per-method cleanup must complete (it would `TRUNCATE` the view on the old query), method 2 confirms the base table was truncated and the view left intact. "Test the test": reverting the fix makes scenario-66 fail with H2's "Cannot truncate PUBLIC.WIDGET_VIEW"; with the fix it passes.
+
+Verified under OWB: scenario-66 plus the existing cleanup scenarios (30/50/51/61) all green. Full verify-all.sh run follows.

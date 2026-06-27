@@ -42,10 +42,16 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
  * allowlist, a non-H2 schema query, …) register at a lower numeric
  * {@code @Priority}.
  *
- * <p>H2-specific. The {@code INFORMATION_SCHEMA.TABLES} query uses
- * H2-style {@code TABLE_SCHEMA = 'PUBLIC'} filtering. Other providers
- * surface different system-catalog views; consumers running against
- * those swap in their own resolver.
+ * <p>H2-specific. The {@code INFORMATION_SCHEMA.TABLES} query filters
+ * {@code TABLE_SCHEMA = 'PUBLIC'} AND {@code TABLE_TYPE = 'BASE TABLE'}
+ * — the {@code TABLE_TYPE} predicate excludes {@code VIEW} rows, which
+ * {@code INFORMATION_SCHEMA.TABLES} also lists; a view handed to the
+ * cleanup strategy would make {@code TRUNCATE}/{@code DELETE} fail.
+ * All intended cleanup targets (audit logs, join/collection tables,
+ * sequence bookkeeping) are base tables, so this stays compatible with
+ * the "reach unmapped tables" goal. Other providers surface different
+ * system-catalog views; consumers running against those swap in their
+ * own resolver.
  *
  * <p>Connection sourced through {@link JdbcAccess} — borrows a
  * pooled connection from Hibernate's connection provider without
@@ -65,7 +71,9 @@ public class InformationSchemaTableNameResolver implements TableNameResolver {
             JdbcAccess.run(entityManagerFactory, connection -> {
                 try (Statement statement = connection.createStatement();
                         ResultSet resultSet = statement.executeQuery(
-                                "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'PUBLIC'")) {
+                                "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+                                        + "WHERE TABLE_SCHEMA = 'PUBLIC' "
+                                        + "AND TABLE_TYPE = 'BASE TABLE'")) {
                     while (resultSet.next()) {
                         tableNames.add(resultSet.getString(1));
                     }
