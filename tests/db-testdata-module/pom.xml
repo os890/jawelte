@@ -103,6 +103,7 @@
         <module>scenario-65-self-consistent-multi-table-diff</module>
         <module>scenario-66-clean-insert-advances-identity-counter</module>
         <module>scenario-67-for-pu-resolves-em-under-jta</module>
+        <module>scenario-68-el-expression-containing-brace</module>
     </modules>
 
     <dependencies>

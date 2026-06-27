@@ -75,6 +75,7 @@
         <module>scenario-39-xml-glob-single-segment-wildcard</module>
         <module>scenario-40-el-unbalanced-template</module>
         <module>scenario-41-unordered-structural-equality</module>
+        <module>scenario-42-el-expression-containing-brace</module>
     </modules>
 
     <dependencies>
