@@ -5477,3 +5477,7 @@ Note: the HTML doc-page alignment (`core.html` / `scope-module.html` wording) is
 **Why drop addExtensions (not the service file):** the service file is load-bearing — `@EnableTestBeans(manageContainer=false)` (tests/cdi-module/scenario-32) boots the container with a plain `SeContainerInitializer.newInstance().initialize()` and never calls addExtensions, so the extension is discovered ONLY via the service file; future Quarkus/ARC likewise consumes the service file at build time. In the managed path discovery is already enabled (no disableDiscovery), so addExtensions was redundant there. Net: one portable mechanism, no managed-path behaviour change, and Weld's double instantiation is eliminated.
 
 Full verify-all.sh (no lnp) run pending to confirm no regression.
+
+### Verification result (same day)
+
+Full `verify-all.sh` (default mode, no lnp): ALL 20 PHASES GREEN, 0 failures, 41m37s. scenario-32 (`manageContainer=false`) passes on every runtime, confirming the service-file discovery path still loads `TestBeansCdiExtension` after `addExtensions` was removed. No regression. Tracked as GitHub issue #41. The prior UNTESTED commit (a8a15f10) is confirmed WORKING.
