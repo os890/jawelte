@@ -25,9 +25,24 @@ import org.os890.jawelte.module.cdi.impl.adapter.extension.TestBeansCdiExtension
 
 /**
  * Default {@link CdiContainerPort} implementation. Wraps the Jakarta
- * CDI SE bootstrap API ({@link SeContainerInitializer}) and registers
- * {@link TestBeansCdiExtension} so the cdi-module's bean-discovery
- * machinery is in place for every test class.
+ * CDI SE bootstrap API ({@link SeContainerInitializer}) with automatic
+ * extension discovery left enabled, so the cdi-module's
+ * {@link TestBeansCdiExtension} is contributed through CDI's standard
+ * {@code ServiceLoader} mechanism (the
+ * {@code META-INF/services/jakarta.enterprise.inject.spi.Extension}
+ * file shipped in this module) — the same single registration path
+ * every other jawelte module uses.
+ *
+ * <p>The extension is deliberately <em>not</em> also added via
+ * {@code addExtensions(...)}: that would register it twice (once
+ * programmatically, once via discovery), which some CDI SE
+ * implementations de-duplicate and others do not, instantiating the
+ * extension twice. Relying on discovery alone is also the only path
+ * that works when the container is booted externally — e.g.
+ * {@code @EnableTestBeans(manageContainer=false)}, where this port's
+ * {@link #start(TestContext)} never runs and the user's own
+ * {@code SeContainerInitializer.newInstance().initialize()} discovers
+ * the extension from the service file.
  *
  * <p>Annotated {@code @Priority(Integer.MAX_VALUE)} so any
  * user-supplied implementation with a lower priority value
@@ -47,9 +62,10 @@ public class SeContainerCdiContainerPort implements CdiContainerPort {
 
     @Override
     public void start(TestContext testContext) {
-        SeContainerInitializer initializer = SeContainerInitializer.newInstance()
-                .addExtensions(TestBeansCdiExtension.class);
-        SeContainer container = initializer.initialize();
+        // Discovery is left enabled, so TestBeansCdiExtension is picked
+        // up from META-INF/services exactly once — no addExtensions(...),
+        // which would double-register it (see class javadoc).
+        SeContainer container = SeContainerInitializer.newInstance().initialize();
         testContext.bindMetadata(SeContainer.class, container);
     }
 

@@ -5467,3 +5467,13 @@ Added `tests/scope-module/scenario-32-higher-priority-mapper-overrides-builtin`:
 Verified GREEN: scenario-32 passes under both OWB and Weld; the full `tests/scope-module` suite is 79/79 on both runtimes (no regression to the built-in remaps, which use distinct triggers); `tests/wiremock-module` (the other `BeanScopeMapper` consumer) and `tests/core` build clean. The earlier UNTESTED core fix is therefore confirmed WORKING.
 
 Note: the HTML doc-page alignment (`core.html` / `scope-module.html` wording) is deferred — those pages live on the in-flight `docs/ticket-016` branch, not on `main`, so they are not present on this fix branch. The shipped javadoc (DefaultBeanScopeMapper + BeanScopeMapper SPI) is updated here.
+
+## 2026-06-27 — fix(cdi): stop double-registering TestBeansCdiExtension
+
+**Finding (project-review slide 4, confirmed premise):** `SeContainerCdiContainerPort.start` called `SeContainerInitializer.newInstance().addExtensions(TestBeansCdiExtension.class).initialize()` while discovery was left enabled AND cdi-module/impl ships a `META-INF/services/jakarta.enterprise.inject.spi.Extension` file naming the same class. So `TestBeansCdiExtension` was registered twice (programmatic + discovery). cdi-module was the only module doing this; every other module's extension is service-file-only. On Weld this instantiates the extension twice (confirmed via duplicated WELD-000411 observer-registration). No build break today (idempotent addAnnotatedType override + map.put bind), so the original "High" rating was overstated — this is a low-severity cleanliness + latent-portability fix.
+
+**Fix:** dropped the `addExtensions(...)` call; the extension now loads solely via ServiceLoader discovery, the single mechanism every other module uses.
+
+**Why drop addExtensions (not the service file):** the service file is load-bearing — `@EnableTestBeans(manageContainer=false)` (tests/cdi-module/scenario-32) boots the container with a plain `SeContainerInitializer.newInstance().initialize()` and never calls addExtensions, so the extension is discovered ONLY via the service file; future Quarkus/ARC likewise consumes the service file at build time. In the managed path discovery is already enabled (no disableDiscovery), so addExtensions was redundant there. Net: one portable mechanism, no managed-path behaviour change, and Weld's double instantiation is eliminated.
+
+Full verify-all.sh (no lnp) run pending to confirm no regression.
