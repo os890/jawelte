@@ -1,0 +1,37 @@
+/*
+ * Copyright 2026 os890
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.os890.jawelte.tests.jpa.scenario67;
+
+import jakarta.annotation.Priority;
+
+import org.os890.jawelte.module.jpa.impl.adapter.cleanup.NativeSqlDeleteDbCleanupStrategy;
+
+/**
+ * Test-only wrapper that forces the
+ * {@link NativeSqlDeleteDbCleanupStrategy} to win the
+ * {@code TestContext.loadService} priority sort over jpa-module's
+ * default {@code JdbcTruncateDbCleanupStrategy}, so this scenario
+ * exercises the native strategy's failure-fallback path.
+ *
+ * <p>{@code @Priority(50)} — lower number wins the sort.
+ */
+@Priority(50)
+public class TestScenarioForcedNativeSqlDeleteStrategy extends NativeSqlDeleteDbCleanupStrategy {
+
+    /** No-arg constructor required by ServiceLoader. */
+    public TestScenarioForcedNativeSqlDeleteStrategy() {
+    }
+}

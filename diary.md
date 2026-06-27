@@ -5537,3 +5537,40 @@ Follow-up on the documentation branch: `core.html` §3.6 wording and the `core/1
 **Test:** new `tests/jpa-module/scenario-66-cleanup-skips-views` — an entity plus a SQL view created over its table; method 1's per-method cleanup must complete (it would `TRUNCATE` the view on the old query), method 2 confirms the base table was truncated and the view left intact. "Test the test": reverting the fix makes scenario-66 fail with H2's "Cannot truncate PUBLIC.WIDGET_VIEW"; with the fix it passes.
 
 Verified under OWB: scenario-66 plus the existing cleanup scenarios (30/50/51/61) all green. Full verify-all.sh run follows.
+
+## NativeSqlDeleteDbCleanupStrategy: rollback + schema-recreate fallback
+
+**Problem.** `NativeSqlDeleteDbCleanupStrategy.cleanAllTables` drove its
+commit-vs-rollback decision off a single aggregated `RuntimeException`.
+Every failure — including the purely advisory "anonymous foreign key
+(null FK_NAME) cannot be dropped by name" note — fed that same reference,
+so an advisory condition triggered a full rollback that undid the
+successful DELETEs and then rethrew. The database was left holding the
+rows the cleanup was supposed to remove, and the test that triggered it
+saw a spurious failure.
+
+**Fix.**
+- Anonymous-FK notes are now genuinely advisory: collected into a
+  warnings list, logged at `WARNING` (naming the affected table), and no
+  longer escalated to a rollback. If they don't actually block the
+  deletes, the cleanup commits normally.
+- A real drop / delete / re-add failure now means "the fast path could
+  not guarantee an empty database". Instead of rethrowing on a dirty DB,
+  the transaction is rolled back and the cleanup falls back to dropping
+  and recreating the mapped schema via
+  `EntityManagerFactory.getSchemaManager()` (`drop(false)` then
+  `create(false)`). That guarantees a clean database and restores it
+  with named foreign keys, so the next cleanup takes the fast path again
+  (self-healing). An exception surfaces only if the schema recreate
+  itself fails (with the original failure attached as suppressed).
+
+**Test.** New `tests/jpa-module/scenario-67-native-sql-cleanup-fallback-recreate`.
+A custom `TableNameResolver` appends a non-existent table to the cleanup
+list so the fast-path `DELETE` fails deterministically on H2 (which
+auto-names every FK, so the anonymous-FK trigger can't be reproduced
+directly there; the missing table drives the same recovery path).
+Method 1 persists+commits a row, then its per-method cleanup hits the
+missing table and must recover via rollback + recreate without throwing;
+method 2 confirms the table is clean and queryable. Mutation check:
+reverting to the old "rethrow after rollback" behavior makes method 1
+error and method 2 see the leftover row (`expected 0L but was 1L`).
