@@ -74,12 +74,20 @@ import java.lang.annotation.Target;
  * full matrix.
  *
  * <p><b>Companion remap.</b> When scope-module is on the classpath,
- * its {@code ConfigBeanScopeRemapCdiExtension} unconditionally remaps
- * every {@code @ConfigBean}-stereotyped class from
- * {@code @ApplicationScoped} to {@code @TestClassScoped} during CDI
- * bootstrap. This remap is independent of {@code @TestControl} —
- * having any test method use {@code @TestControl} is <em>not</em>
- * required for the remap to occur, and there is no opt-out.
+ * its {@code ConfigBeanToTestClassScoped} {@code BeanScopeMapper} SPI
+ * provider — consumed by core's {@code ScopeRemapCdiExtension} through
+ * the {@code BeanScopeMapperPort} — remaps {@code @ConfigBean}-stereotyped
+ * classes from {@code @ApplicationScoped} to {@code @TestClassScoped}
+ * during CDI bootstrap. This remap is independent of
+ * {@code @TestControl} — having any test method use
+ * {@code @TestControl} is <em>not</em> required for the remap to occur.
+ *
+ * <p>There is a per-bean opt-out: a class that declares an explicit
+ * direct scope is left untouched (the mapper's
+ * {@code preserveExplicitDirectScopes()} short-circuit), so
+ * {@code @ConfigBean @RequestScoped MyConfig} stays {@code @RequestScoped}.
+ * To disable the remap entirely, ship a higher-priority
+ * {@code BeanScopeMapper}.
  */
 @Target(METHOD)
 @Retention(RUNTIME)
