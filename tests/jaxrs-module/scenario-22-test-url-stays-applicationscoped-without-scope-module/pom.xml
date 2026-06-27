@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <!--
+        scenario-22 verifies the DEFAULT behaviour: with jaxrs-module
+        on the classpath but scope-module ABSENT, TestUrlHolder keeps
+        its declared @ApplicationScoped scope (TestUrlScopeRemap's
+        targetScope() resolves to null because the MP Config key is
+        only shipped by scope-module). To run without scope-module
+        this module parents to tests/cdi-module/pom.xml directly
+        rather than the jaxrs-module test aggregator (which adds
+        scope-module to every child). The aggregator at
+        tests/jaxrs-module/pom.xml still lists this module for build
+        ordering / coverage aggregation.
+
+        No JAX-RS provider (CXF/RESTEasy) is needed: the test uses
+        @EnableTestBeans (not @EnableJaxRs), so JaxRsLifecycleAdapter
+        never boots a server. Only jakarta.ws.rs-api is required so
+        jaxrs-module-impl's classes load during bean discovery.
+    -->
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests-cdi-module</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+        <relativePath>../../cdi-module/pom.xml</relativePath>
+    </parent>
+    <artifactId>jawelte-tests-jaxrs-module-scenario-22-test-url-stays-applicationscoped-without-scope-module</artifactId>
+    <packaging>jar</packaging>
+    <name>jawelte tests/jaxrs-module scenario 22: TestUrlHolder stays @ApplicationScoped when scope-module is absent (default behaviour preserved)</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jaxrs-module-impl</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.ws.rs</groupId>
+            <artifactId>jakarta.ws.rs-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
