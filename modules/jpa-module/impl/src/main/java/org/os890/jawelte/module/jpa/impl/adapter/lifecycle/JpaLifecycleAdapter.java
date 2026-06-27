@@ -115,7 +115,16 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
 
     @Override
     public void afterEach(TestContext testContext) {
-        RuntimeException primary = null;
+        // Aggregate as Throwable (not RuntimeException) so an Error thrown by a
+        // synchronous AfterTestTransaction observer is captured rather than
+        // escaping early and skipping the table cleanup / EM-stack drain below;
+        // the original throwable is rethrown unchanged at the end. The bundled
+        // CDI implementations (OpenWebBeans, Weld) already wrap an observer's
+        // Error in jakarta.enterprise.event.ObserverException (a
+        // RuntimeException), so this is defence-in-depth for any implementation
+        // that instead rethrows the Error unwrapped — notably the AssertionError
+        // raised by testcontrol-module's dbExpected verify (DbDiff.assertEquals).
+        Throwable primary = null;
 
         primary = completeTransactionForTransactionalTestMethod(testContext, primary);
 
@@ -134,7 +143,7 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
 
         try {
             fireAfterTestTransaction(testContext);
-        } catch (RuntimeException eventFailure) {
+        } catch (Throwable eventFailure) {
             if (primary == null) {
                 primary = eventFailure;
             } else {
@@ -174,8 +183,26 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         }
 
         if (primary != null) {
-            throw primary;
+            throwUnchecked(primary);
         }
+    }
+
+    /**
+     * Rethrow {@code throwable} without wrapping it, using the
+     * generic-erasure "sneaky throw" idiom (cf. Apache DeltaSpike's
+     * {@code ExceptionUtils#throwAsRuntimeException}). This lets
+     * {@link #afterEach} aggregate failures as {@link Throwable} — so an
+     * {@link Error} from a synchronous observer is captured and cleanup
+     * still runs — and then surface the original throwable unchanged (no
+     * {@link RuntimeException} wrapper) once cleanup has completed.
+     *
+     * @param throwable the throwable to rethrow as-is
+     * @param <T>       inferred unchecked type; erasure makes the cast a
+     *                  no-op so {@code throwable} is thrown unchanged
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable throwable) throws T {
+        throw (T) throwable;
     }
 
     @Override
@@ -205,12 +232,12 @@ public class JpaLifecycleAdapter implements TestModuleLifecyclePort {
         testContext.bindMetadata(TestMethodTransactionMarker.class, TestMethodTransactionMarker.INSTANCE);
     }
 
-    private static RuntimeException completeTransactionForTransactionalTestMethod(
-            TestContext testContext, RuntimeException primaryIn) {
+    private static Throwable completeTransactionForTransactionalTestMethod(
+            TestContext testContext, Throwable primaryIn) {
         if (testContext.getMetadata(TestMethodTransactionMarker.class).isEmpty()) {
             return primaryIn;
         }
-        RuntimeException primary = primaryIn;
+        Throwable primary = primaryIn;
         try {
             TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
             if (strategy.isActive()) {
