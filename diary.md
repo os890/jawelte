@@ -5606,3 +5606,36 @@ brace-aware scan.
 Mutation check: reverting either interpolator to the first-'}' `indexOf`
 makes the corresponding scenario fail with exactly
 `Failed to parse the expression [${name.concat('}]` / `[${ {'a':1}]`.
+
+## testcontrol: failed beforeEach no longer leaks @TestControl(testData) across methods
+
+**Problem.** `TestDataHandler.seedAll` published `this.activeAnnotation =
+annotation` as its very FIRST statement — before `validateBaseFolders` and the
+`requireDbExpected` guard could throw. The verify phase (the
+`AfterTestTransaction` observer and the `afterEach` fallback) is gated solely
+on `activeAnnotation`, and `clearActive()` only runs from the lifecycle
+adapter's `afterEach`. But `DelegatingJUnitExtension` records a lifecycle port
+as "completed" only after its `beforeEach` returns; testcontrol is
+`@Priority(50)` (runs first), so when its `beforeEach` (seedAll) threw, it was
+never recorded and its `afterEach` — hence `clearActive()` — never ran. The
+annotation leaked on the `@ApplicationScoped` handler. A later untagged
+`@Transactional` method then had jpa-module fire `AfterTestTransaction`
+unconditionally → `verifyAll()` ran the previous method's stale `dbExpected`
+against the new method's database, producing a spurious / mis-attributed
+failure.
+
+**Fix.** `seedAll` now clears state up front and publishes `activeAnnotation`
+only at the very end, after the guards AND both seed phases have succeeded
+("clear first, publish last"). A guard/seed failure therefore leaves
+`activeAnnotation == null`, so a later method's `verifyAll()` is a no-op and the
+leak cannot occur. The success path is unchanged (the observer still sees the
+annotation in `afterEach`).
+
+**Test.** New `tests/testcontrol-module/scenario-29-failed-beforeeach-does-not-leak-testdata`.
+A subject class is driven through `EngineTestKit`: method 1 carries
+`@TestControl(testData=…)` pointing at a missing folder (fails in
+`beforeEach`); method 2 is an untagged `@Transactional` method whose
+jpa-fired `AfterTestTransaction` would verify method 1's stale testData on the
+leaked handler. The driver asserts exactly one success (method 2) and one
+failure (method 1). Mutation check: restoring the pre-guard assignment makes
+method 2 also fail (`succeeded expected: <1> but was: <0>`).
