@@ -5468,6 +5468,30 @@ Verified GREEN: scenario-32 passes under both OWB and Weld; the full `tests/scop
 
 Note: the HTML doc-page alignment (`core.html` / `scope-module.html` wording) is deferred — those pages live on the in-flight `docs/ticket-016` branch, not on `main`, so they are not present on this fix branch. The shipped javadoc (DefaultBeanScopeMapper + BeanScopeMapper SPI) is updated here.
 
+## 2026-06-27 — feat(jaxrs): implement the TestUrlHolder @TestClassScoped upgrade (was phantom JaxRsCdiExtension)
+
+**Finding (project-review slide 2, High, confirmed):** `TestUrl` (public API) and `TestUrlHolder` javadoc — plus both jaxrs poms and the tests aggregator — promised a `JaxRsCdiExtension` that "upgrades" `TestUrlHolder` from `@ApplicationScoped` to `@TestClassScoped`. No such extension existed; the holder stayed `@ApplicationScoped` unconditionally. Chosen resolution: implement the upgrade (make the docs true) rather than delete the claim.
+
+**Implementation (mirrors wiremock's registry-scope-remap pattern):**
+- New impl-internal marker `@JaxRsManagedScope` placed ONLY on `TestUrlHolder`. The remap triggers on this marker, never on `@ApplicationScoped` — so exactly one bean is upgraded; user `@ApplicationScoped` beans and `CdiIntegrationFilter` are untouched.
+- New `TestUrlScopeRemap implements BeanScopeMapper` (trigger = `@JaxRsManagedScope`, target = reflectively-loaded FQCN from MP Config key `org.os890.jawelte.module.jaxrs.test-url.default-scope`). Registered via `META-INF/services`. Returns null when the key is unset / scope-module absent → core/impl's `ScopeRemapCdiExtension` skips it → holder stays `@ApplicationScoped`. No compile-time dep on scope-module.
+- scope-module's `microprofile-config.properties` ships the key defaulting to `...scope.api.TestClassScoped` (alongside the existing cdi/wiremock/ejb keys).
+- Dropped the dead `scope-module-api` dependency from jaxrs-module/impl (it was justified only by the phantom extension; the remap loads the scope reflectively, matching wiremock-impl which has no such dep).
+- Corrected the docs to describe the real mechanism: `TestUrl` + `TestUrlHolder` javadoc, `modules/jaxrs-module/pom.xml`, `modules/jaxrs-module/impl/pom.xml`, and the tests aggregator description. Also fixed the mis-attributed `@SessionScoped→@TestMethodScoped` remap (that is scope-module's mapper, not a jaxrs one).
+
+**Tests (tests/jaxrs-module):**
+- scenario-21 (scope-module present): asserts `TestUrlHolder` resolves to `@TestClassScoped`, AND a plain unmarked `@ApplicationScoped` control bean stays `@ApplicationScoped` (proves marker-scoping).
+- scenario-22 (scope-module absent, re-parented to tests/cdi-module): asserts `TestUrlHolder` stays `@ApplicationScoped` — default behaviour preserved.
+
+Verified GREEN under owb+cxf: both new scenarios pass; full tests/jaxrs-module suite 22/22 (scenarios 01-20 now exercise the @TestClassScoped holder end-to-end with no regression). Full verify-all.sh matrix run follows.
+
+## 2026-06-27 — refactor(jaxrs): @JaxRsManaged stereotype (was @JaxRsManagedScope marker)
+
+Reworked the TestUrlHolder scope mechanism per review feedback. Instead of a plain marker annotation plus an explicit `@ApplicationScoped` on the bean, `@JaxRsManaged` is now a CDI `@Stereotype` meta-annotated `@ApplicationScoped` — the same shape as scope-module's `@ConfigBean`. `TestUrlHolder` carries just `@JaxRsManaged`; the stereotype supplies the default `@ApplicationScoped`, and `TestUrlScopeRemap` (unchanged) upgrades it to `@TestClassScoped` when scope-module is present (the directly-added scope wins over the stereotype-contributed one per CDI's class-scope-wins rule). No new dependency: the stereotype meta-annotates only core CDI's `@ApplicationScoped`, never `@TestClassScoped`; the upgrade target stays a reflective MP-Config FQCN. When scope-module is absent the remap resolves to null → bean keeps the stereotype's `@ApplicationScoped`.
+
+Renamed `@JaxRsManagedScope` → `@JaxRsManaged` (the old name read like a scope impl; it marks a managed bean, not a scope). wiremock-module still uses a plain `@WireMockManagedScope` marker — aligning it to the stereotype shape is left to a follow-up ticket.
+
+Verified GREEN under owb+cxf and weld+cxf: scenario-21 (upgrade + unmarked-bean-untouched) and scenario-22 (default @ApplicationScoped without scope-module) pass; full jaxrs suite green on both runtimes.
 ## 2026-06-27 — fix(cdi): stop double-registering TestBeansCdiExtension
 
 **Finding (project-review slide 4, confirmed premise):** `SeContainerCdiContainerPort.start` called `SeContainerInitializer.newInstance().addExtensions(TestBeansCdiExtension.class).initialize()` while discovery was left enabled AND cdi-module/impl ships a `META-INF/services/jakarta.enterprise.inject.spi.Extension` file naming the same class. So `TestBeansCdiExtension` was registered twice (programmatic + discovery). cdi-module was the only module doing this; every other module's extension is service-file-only. On Weld this instantiates the extension twice (confirmed via duplicated WELD-000411 observer-registration). No build break today (idempotent addAnnotatedType override + map.put bind), so the original "High" rating was overstated — this is a low-severity cleanliness + latent-portability fix.
