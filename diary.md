@@ -5517,3 +5517,13 @@ Full `verify-all.sh` (default mode, no lnp): ALL 20 PHASES GREEN, 0 failures, 41
 **Test:** new `tests/scope-module/scenario-33-nested-same-scope-bean-creation` — a chain of 10 `@TestClassScoped` beans each injecting + dereferencing the next in `@PostConstruct`, so resolving the root drives deep nested creation. "Test the test": reverting the fix makes scenario-33 fail deterministically with `IllegalStateException("Recursive update")`; with the fix it passes.
 
 Verified GREEN: full tests/scope-module suite 46/46 under owb AND weld (incl. scenarios 02/03 per-method create/destroy and 09/10 concurrent exactly-once). Full verify-all.sh run follows.
+
+## 2026-06-27 — docs(config-resolver): correct override javadoc to match the real wiring
+
+**Finding (High, confirmed):** `ConfigResolver`'s javadoc claimed users override the default with an `@Alternative @Priority` CDI bean and that "the framework does not use ServiceLoader for this SPI." Both claims are wrong. `core/impl` ships `META-INF/services/...ConfigResolver` (ServiceLoader IS used), and all consumers obtain it via `TestContext.loadService(ConfigResolver.class)` — ServiceLoader discovery ordered by `ServicePriorityResolver` (lowest `@Priority` wins). A CDI `@Alternative` is never consulted on that path, so the documented override does not affect the resolver the framework actually uses. `ConfigResolverAdapter`'s class comment repeated the same wrong claim.
+
+**Why ServiceLoader is the correct (not accidental) model:** config is read while CDI is still in `BeforeBeanDiscovery` (see `JpaCdiExtension.resolver()`), so `@Inject`/`@Alternative` is not available at the read sites — CDI-alternative override is infeasible. The fix is therefore to align the docs to the wiring, not the reverse.
+
+**Change (javadoc only, no behaviour change):** corrected `ConfigResolver.java` javadoc and `ConfigResolverAdapter.java` class comment to state the resolver is selected via `TestContext.loadService` (ServiceLoader + `@Priority`); to replace it, ship your own in the service file with a lower numeric `@Priority` (what `jpa-module` scenario-63 does). Noted the adapter is also `@ApplicationScoped` so application `@ConfigBean` code may `@Inject` it, but a CDI `@Alternative` only swaps that injection point, not the framework's pre-CDI selection.
+
+Follow-up on the documentation branch: `core.html` §3.6 wording and the `core/15-config-resolver` listing (which demos the `@Alternative` pattern) need the same alignment.
