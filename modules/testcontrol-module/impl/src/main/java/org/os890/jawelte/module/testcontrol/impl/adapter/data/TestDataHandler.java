@@ -161,7 +161,17 @@ public class TestDataHandler {
      *                                  not on the classpath
      */
     public void seedAll(TestControl annotation) {
-        this.activeAnnotation = annotation;
+        // Clear first, publish last. The verify phase (the
+        // AfterTestTransaction observer and the afterEach fallback) is
+        // gated on activeAnnotation, so it MUST be published only once
+        // seeding has fully succeeded. Publishing it up front — before the
+        // guards or the seed phases can throw — would leak this method's
+        // annotation: when beforeEach throws, the extension never records
+        // testcontrol as completed, so its afterEach (hence clearActive())
+        // never runs, and a later method's unconditional AfterTestTransaction
+        // would verify against this method's stale dbExpected on this
+        // @ApplicationScoped handler.
+        this.activeAnnotation = null;
         this.verifiedThisMethod = false;
         if (annotation == null || annotation.testData().length == 0) {
             return;
@@ -182,6 +192,7 @@ public class TestDataHandler {
                 CDI.current().select(TestDataSeedTransactionTemplate.class).get();
         runPhase(entries, DB_IN, DbSeed.Builder::cleanInsert, template);
         runPhase(entries, DB_UPDATE, DbSeed.Builder::update, template);
+        this.activeAnnotation = annotation;
     }
 
     private static boolean anyEntryContributesDbExpected(List<EntrySpec> entries) {

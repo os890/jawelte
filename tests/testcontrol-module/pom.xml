@@ -43,6 +43,7 @@
         <module>scenario-12-scope-filter-empty-allows-all</module>
         <module>scenario-24-testcontrol-inherited-from-superclass-method</module>
         <module>scenario-25-testcontrol-overridden-method-subclass-wins</module>
+        <module>scenario-29-failed-beforeeach-does-not-leak-testdata</module>
     </modules>
 
     <dependencies>
