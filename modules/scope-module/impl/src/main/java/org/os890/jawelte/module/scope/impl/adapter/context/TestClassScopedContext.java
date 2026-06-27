@@ -69,16 +69,12 @@ public class TestClassScopedContext implements AlterableContext {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public <T> T get(Contextual<T> contextual, CreationalContext<T> creationalContext) {
-        Map<Contextual<?>, ScopedBeanInstance<?>> beans = store.getOrCreateMap();
-        ScopedBeanInstance<?> existing = beans.computeIfAbsent(contextual,
-                key -> {
-                    Contextual<T> typedKey = (Contextual<T>) key;
-                    T instance = typedKey.create(creationalContext);
-                    return new ScopedBeanInstance<>(instance, creationalContext);
-                });
-        return (T) existing.instance();
+        // Delegates to the store, which serializes creation per
+        // Contextual (not via Map.computeIfAbsent) so a bean whose
+        // creation injects another @TestClassScoped bean can re-enter
+        // safely. See ScopeStore.getOrCreate.
+        return store.getOrCreate(contextual, creationalContext);
     }
 
     @Override
