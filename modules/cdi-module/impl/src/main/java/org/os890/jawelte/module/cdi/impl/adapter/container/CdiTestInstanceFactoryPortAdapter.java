@@ -28,8 +28,9 @@ import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
  * object, not a CDI proxy. Field injection happens during CDI's
  * normal instantiation path; JUnit receives the fully-populated bean.
  *
- * <p>Loaded by core's {@code DelegatingJUnitTestInstanceFactory} via
- * {@code ServiceLoader}; the registration ships in this module's
+ * <p>Loaded by core's {@code EnableTestBeans.Proxy} (the JUnit
+ * {@code TestInstanceFactory}) via {@code ServiceLoader}; the
+ * registration ships in this module's
  * {@code META-INF/services/org.os890.jawelte.core.api.port.TestInstanceFactoryPort}.
  *
  * <p>The lookup runs after

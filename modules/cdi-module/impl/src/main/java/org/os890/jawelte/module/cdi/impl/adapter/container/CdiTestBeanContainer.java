@@ -75,8 +75,9 @@ public class CdiTestBeanContainer implements TestBeanContainerPort {
 
     @Override
     public void postProcessTestInstance(TestContext testContext, Object testInstance) {
-        // No-op. The test instance comes from
-        // DelegatingJUnitTestInstanceFactory, which routes through
+        // No-op. The test instance comes from EnableTestBeans.Proxy
+        // (the TestInstanceFactory) via CdiTestInstanceFactoryPortAdapter,
+        // which routes through
         // CDI.current().select(testClass).get() so CDI's normal
         // bean-instantiation path populates the @Inject fields. Any
         // scenario where the test instance is NOT a CDI bean (e.g.

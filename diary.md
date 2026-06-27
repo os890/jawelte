@@ -5709,3 +5709,24 @@ requires exactly one implementation, so ordering doesn't apply.
 
 Mutation check: reverting `ServiceLoaderCache` to the priority-only comparator
 fails both (scenario-23 → [zulu, alpha]; scenario-24 → [50, 200]).
+
+## Fix stale phantom class-name references (DelegatingJUnitTestInstanceFactory)
+
+Three production files described the JUnit test-instance bridge in terms of a
+class named `DelegatingJUnitTestInstanceFactory` that does not exist anywhere in
+the tree. The real bridge is `EnableTestBeans.Proxy`, which implements
+`org.junit.jupiter.api.extension.TestInstanceFactory`, resolves the
+`TestInstanceFactoryPort` via `ServiceLoader`, creates the test instance, and
+closes the TICKET-016 `TestContext.reset()` bootstrap window in its `finally`.
+
+Replaced the phantom references with `EnableTestBeans.Proxy` in:
+- `DelegatingJUnitExtension` (two comments: the beforeAll ThreadLocal-lifetime
+  note and the afterAll reset safety-net note),
+- `CdiTestInstanceFactoryPortAdapter` javadoc ("Loaded by core's … via
+  ServiceLoader"),
+- `CdiTestBeanContainer.postProcessTestInstance` comment (now also naming the
+  `CdiTestInstanceFactoryPortAdapter` it routes through).
+
+Comment/javadoc-only; no behavioural change. Verified the two affected modules
+build clean (checkstyle + javadoc gates) and the full reactor `clean install`
+stays green.

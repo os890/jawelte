@@ -112,13 +112,13 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
             completed.add(port);
         }
         // TICKET-016: the TestContext ThreadLocal now lives until
-        // DelegatingJUnitTestInstanceFactory has finished creating
-        // the JUnit test instance (which may go through CDI and
-        // therefore needs the active TestContext to be visible to
-        // TestBeansCdiExtension). The factory calls reset() once the
-        // instance is in hand. If the factory isn't invoked (e.g. the
-        // test class isn't created through the JUnit auto-detected
-        // factory bridge), afterAll resets as a safety net.
+        // EnableTestBeans.Proxy (the JUnit TestInstanceFactory) has
+        // finished creating the JUnit test instance (which may go
+        // through CDI and therefore needs the active TestContext to be
+        // visible to TestBeansCdiExtension). The factory calls reset()
+        // once the instance is in hand. If the factory isn't invoked
+        // (e.g. the test class isn't created through the JUnit
+        // auto-detected factory bridge), afterAll resets as a safety net.
     }
 
     @Override
@@ -199,11 +199,11 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
         }
 
         // TICKET-016 safety net: clear the TestContext ThreadLocal in
-        // case DelegatingJUnitTestInstanceFactory didn't (the factory
-        // might be skipped under @QuarkusTest or for any test class
-        // that doesn't carry @EnableTestBeans). The instance's
-        // reset() is idempotent — does nothing if the slot is already
-        // empty.
+        // case EnableTestBeans.Proxy (the TestInstanceFactory) didn't
+        // (the factory might be skipped under @QuarkusTest or for any
+        // test class that doesn't carry @EnableTestBeans). The
+        // instance's reset() is idempotent — does nothing if the slot
+        // is already empty.
         testContext.reset();
 
         rethrowAggregated(collected);
