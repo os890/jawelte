@@ -5730,3 +5730,28 @@ Replaced the phantom references with `EnableTestBeans.Proxy` in:
 Comment/javadoc-only; no behavioural change. Verified the two affected modules
 build clean (checkstyle + javadoc gates) and the full reactor `clean install`
 stays green.
+
+## Fix @TestControl javadoc + scope-module pom: phantom remap class & false "no opt-out"
+
+Public testcontrol-api `TestControl` class javadoc ("Companion remap" paragraph)
+made two wrong claims that ship in the generated apidocs:
+1. It named a `ConfigBeanScopeRemapCdiExtension` class that does not exist. The
+   real mechanism is the `ConfigBeanToTestClassScoped` `BeanScopeMapper` SPI
+   provider (registered in scope-module's `META-INF/services`), consumed by
+   core/impl's `ScopeRemapCdiExtension` through the `BeanScopeMapperPort`
+   (`DefaultBeanScopeMapper`).
+2. It said the remap is unconditional with "no opt-out". In fact
+   `ConfigBeanToTestClassScoped.preserveExplicitDirectScopes()` returns true and
+   `DefaultBeanScopeMapper.mapScope` honors it (returns empty when an explicit
+   override scope is present), so `@ConfigBean @RequestScoped` is preserved — a
+   real per-bean opt-out.
+
+The same phantom name + "unconditionally remaps" wording also lived in
+`scope-module/impl/pom.xml`'s `<description>` (cross-module spread).
+
+Rewrote the `TestControl` paragraph to name the actual mechanism and document the
+`preserveExplicitDirectScopes` per-bean opt-out plus the higher-priority-mapper
+whole-remap override, and corrected the scope-module pom description to match.
+Documentation-only; no behavioural change. (Historical diary entries that mention
+the old name are left untouched — the class did exist under that name earlier in
+the project's history.)
