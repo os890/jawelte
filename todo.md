@@ -221,3 +221,29 @@ the contract is locked in.
 - Add a `@DisableAutoMock` annotation (cdi-module/api) that switches off cdi-module's auto-mock layer for the annotated test class or injection point, so consumers can opt out without going through the existing exclude-package config list.
 - Provide a general MicroProfile Config option (e.g. `org.os890.jawelte.module.cdi.auto-mock.disabled=true`) that disables auto-mocking JVM-wide. Useful for scenarios that already declare every dependency via `@TestBean` and want the cleanest container possible.
 - Both must compose with the existing `DefaultExcludedPackageFilter` / `framework-exclude-packages` infrastructure — annotation/config wins over the prefix list.
+
+## Exception type-preservation audit — dead `new RuntimeException(primary)` in aggregators
+
+Context: while hardening `JpaLifecycleAdapter.afterEach` to catch `Throwable`
+around the `AfterTestTransaction` event fire (so an observer `Error` — e.g.
+testcontrol's `dbExpected` `AssertionError` — can't skip the table cleanup / EM
+drain), audited every `new RuntimeException(...)` and broad catch in production.
+
+Findings:
+- No other site flattens a useful unchecked type. The interceptors
+  (`TransactionalInterceptor`, `ReadOnlyInterceptor`) rethrow the user body's
+  `Exception | Error` unchanged; the remaining `new RuntimeException(cause)`
+  wraps are legitimate checked→unchecked conversions (SQLException, IOException,
+  DBunit) with the cause preserved; `JaxRsLifecycleAdapter.probeJaxRsRuntime`
+  deliberately translates a missing-impl probe into a clear `IllegalStateException`.
+- Two aggregate-then-rethrow helpers already preserve `RuntimeException`/`Error`
+  unwrapped but end with an **unreachable** `throw new RuntimeException(primary)`:
+  - `core/impl/.../DelegatingJUnitExtension.rethrowAggregated` (~line 309)
+  - `modules/scope-module/impl/.../context/ScopeStore.rethrowAggregated` (~line 232)
+  Every `Throwable` is an `Exception` or `Error`, so the trailing wrap can never run.
+
+Optional cleanup (low priority, pure tidy — no behavioural change): drop the two
+unreachable lines, or replace each helper's tail with the same generic-erasure
+`throwUnchecked(primary)` "sneaky throw" idiom now used in `JpaLifecycleAdapter`
+so the three lifecycle aggregators share one rethrow shape. Leave as-is if not
+worth the churn; the current code is already type-correct.
