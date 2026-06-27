@@ -46,6 +46,8 @@
         <module>scenario-20-multiple-aftereach-failures</module>
         <module>scenario-21-test-fail-and-aftereach-fail</module>
         <module>scenario-22-beforeall-throws-afterall-runs</module>
+        <module>scenario-23-equal-priority-classname-tiebreak</module>
+        <module>scenario-24-custom-resolver-orders-lifecycle-ports</module>
         <module>scenario-proxy-no-provider</module>
         <module>scenario-proxy-multi-provider</module>
         <module>scenario-config-01-dot-key-resolves</module>

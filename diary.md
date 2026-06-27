@@ -5672,3 +5672,40 @@ transactional path), method 2 asserts the table is empty. It locks the
 "verify failure -> clean database" contract as a regression guard. Documented
 explicitly as passing on the pre-change code too (because the container wraps the
 Error), so it is a contract guard, not a mutation-backed bug reproduction.
+
+## Lifecycle-port ordering routes through the active ServicePriorityResolver
+
+**Problem.** The framework had two independent priority-ordering paths.
+`TestContext.loadService` routes through the swappable `ServicePriorityResolver`
+(default: ascending `@Priority` with a full-class-name tiebreak). But
+`ServiceLoaderCache.resolveLifecyclePorts()` sorted `TestModuleLifecyclePort`s
+with a separate `PriorityComparator` — `@Priority` value only, NO class-name
+tiebreak, and never routed through the resolver. Consequences: two lifecycle
+adapters that tie on `@Priority` (e.g. `JaxRsLifecycleAdapter` and
+`WireMockLifecycleAdapter`, both `@Priority(75)`) had non-deterministic
+before/after ordering, and a custom `ServicePriorityResolver` installed via MP
+Config had zero effect on lifecycle ordering — contradicting the resolver's
+javadoc ("every other SPI selection then automatically follows the new rule").
+
+**Fix.** `ServiceLoaderCache` now orders lifecycle ports through
+`TestContext.loadService(ServicePriorityResolver.class).sort(...)`, the same
+single source of truth as every other prioritized SPI — so the class-name
+tiebreak and any custom resolver apply uniformly. `PriorityComparator` is
+deleted (it was the only user). MicroProfile Config is `provided`-scope, so a
+minimal runtime may lack it (and the resolver is selected via MP Config); when
+it can't be loaded the code falls back to `DefaultServicePriorityResolver`
+directly (same `@Priority` + class-name rule; a custom resolver isn't
+expressible without MP Config anyway). The container-port path is unchanged — it
+requires exactly one implementation, so ordering doesn't apply.
+
+**Tests.**
+- core `scenario-23-equal-priority-classname-tiebreak`: two `@Priority(75)`
+  ports listed in reverse class-name order in the service file; asserts the
+  class-name tiebreak order ([alpha, zulu]). No MP Config on the classpath, so
+  it also pins the fallback path.
+- core `scenario-24-custom-resolver-orders-lifecycle-ports`: a reverse-`@Priority`
+  resolver installed via MP Config; asserts lifecycle order follows it
+  ([200, 50]). Pins the resolver-routing / javadoc-promise path.
+
+Mutation check: reverting `ServiceLoaderCache` to the priority-only comparator
+fails both (scenario-23 → [zulu, alpha]; scenario-24 → [50, 200]).

@@ -21,8 +21,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ServiceLoader;
 
+import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestBeanContainerPort;
+import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
+import org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver;
 
 /**
  * Per-classloader cache of the SPI implementations the delegating
@@ -36,9 +39,13 @@ import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
  * TICKET-001's SPI section.
  *
  * <p>{@link TestModuleLifecyclePort} allows zero or more
- * implementations; the cached list is sorted in ascending
- * {@code @Priority} order via {@link PriorityComparator}. Implementations
- * without {@code @Priority} sort last.
+ * implementations; the cached list is ordered by the active
+ * {@link ServicePriorityResolver} (obtained via
+ * {@link TestContext#loadService(Class)}), exactly like every other
+ * prioritized SPI in the project — ascending {@code @Priority} with
+ * the class-name tiebreak, and any custom resolver installed via MP
+ * Config applies here too. Implementations without {@code @Priority}
+ * sort last.
  */
 public abstract class ServiceLoaderCache {
 
@@ -78,8 +85,8 @@ public abstract class ServiceLoaderCache {
 
     /**
      * Resolve and cache all {@link TestModuleLifecyclePort}
-     * implementations on the classpath, sorted by ascending
-     * {@code @Priority}.
+     * implementations on the classpath, ordered by the active
+     * {@link ServicePriorityResolver}.
      *
      * @return an unmodifiable, priority-sorted list (possibly empty)
      */
@@ -128,7 +135,30 @@ public abstract class ServiceLoaderCache {
         while (iterator.hasNext()) {
             providers.add(iterator.next());
         }
-        providers.sort(new PriorityComparator<>());
-        return Collections.unmodifiableList(providers);
+        return Collections.unmodifiableList(sortByActiveResolver(providers));
+    }
+
+    /**
+     * Order providers through the active {@link ServicePriorityResolver}
+     * (same single source of truth as {@link TestContext#loadService(Class)}),
+     * so the class-name tiebreak and any custom resolver apply to lifecycle
+     * ordering too.
+     *
+     * <p>MicroProfile Config is a {@code provided}-scope dependency, so a
+     * minimal runtime may not have it on the classpath — and the resolver is
+     * selected via MP Config. When it (or the resolver) cannot be loaded, fall
+     * back to the built-in {@link DefaultServicePriorityResolver}: it applies
+     * the same ascending-{@code @Priority} + class-name-tiebreak rule, and a
+     * custom resolver isn't expressible without MP Config anyway.
+     */
+    private static List<TestModuleLifecyclePort> sortByActiveResolver(
+            List<TestModuleLifecyclePort> providers) {
+        ServicePriorityResolver resolver;
+        try {
+            resolver = TestContext.loadService(ServicePriorityResolver.class);
+        } catch (RuntimeException | LinkageError microProfileConfigUnavailable) {
+            resolver = new DefaultServicePriorityResolver();
+        }
+        return resolver.sort(providers);
     }
 }
