@@ -5574,3 +5574,35 @@ missing table and must recover via rollback + recreate without throwing;
 method 2 confirms the table is clean and queryable. Mutation check:
 reverting to the old "rethrow after rollback" behavior makes method 1
 error and method 2 see the leftover row (`expected 0L but was 1L`).
+
+## EL interpolator: brace-aware ${...} scan (content-diff + db-testdata)
+
+**Problem.** Both `JakartaELInterpolator`s located the end of a `${...}`
+expression with `template.indexOf('}', index + 2)` — the FIRST '}' after
+'${'. Any EL expression that legitimately contains a '}' (a string literal
+such as `${name.concat('}')}`, or a nested map/set/list literal such as
+`${ {'a':1}['a'] }`) was truncated and handed to the EL parser malformed,
+throwing `ELException: Failed to parse the expression [${name.concat('}]`.
+Plain expressions have no interior '}', so the gap was silent until a test
+used a brace-containing literal. The same root-cause bug existed in both
+content-diff-module/impl and db-testdata-module/impl (the latter also
+covering its `#{...}` syntax).
+
+**Fix.** Replaced the first-'}' `indexOf` with a brace-aware
+`findExpressionEnd(template, openBraceIndex)` in both interpolators: it
+tracks brace depth and skips over single- and double-quoted EL string
+literals (honouring backslash escapes), returning the index of the
+*matching* '}'. It still returns -1 for an unbalanced opener, so the
+existing "copy the remainder verbatim" behaviour (content-diff
+scenario-40) is preserved unchanged. Class javadoc updated to document the
+brace-aware scan.
+
+**Tests.**
+- content-diff `scenario-42-el-expression-containing-brace`: string literal
+  containing '}' (via concat) and a nested map literal, both in JSON.
+- db-testdata `scenario-68-el-expression-containing-brace`: the same two
+  shapes interpolated into an XML dataset, diffed against H2.
+
+Mutation check: reverting either interpolator to the first-'}' `indexOf`
+makes the corresponding scenario fail with exactly
+`Failed to parse the expression [${name.concat('}]` / `[${ {'a':1}]`.

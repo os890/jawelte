@@ -67,6 +67,15 @@ import org.os890.jawelte.module.dbtestdata.api.port.ELInterpolator.Context.Funct
  * by default. Consumers register a competing impl at a lower
  * priority to override.
  *
+ * <p>The <code>${...}</code> / <code>#{...}</code> scan is
+ * brace-aware: a closing brace inside the expression's own nested
+ * braces (map / set / list literals) or inside a single- or
+ * double-quoted EL string literal does not end the expression, so
+ * <code>${name.concat('}')}</code> and <code>${ {'a':1}['a'] }</code>
+ * are passed to the EL parser intact. An opener with no matching
+ * closing brace is treated as an unbalanced template: the remainder
+ * is copied verbatim.
+ *
  * <p>Stateless and thread-safe — a fresh {@link ExpressionFactory}
  * and {@link StandardELContext} are constructed per call.
  */
@@ -80,6 +89,12 @@ public class JakartaELInterpolator implements ELInterpolator {
     private static final char OPENING_BRACE = '{';
 
     private static final char CLOSING_BRACE = '}';
+
+    private static final char SINGLE_QUOTE = '\'';
+
+    private static final char DOUBLE_QUOTE = '"';
+
+    private static final char BACKSLASH = '\\';
 
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public JakartaELInterpolator() {
@@ -189,7 +204,7 @@ public class JakartaELInterpolator implements ELInterpolator {
                     && index + 1 < template.length()
                     && template.charAt(index + 1) == OPENING_BRACE;
             if (dollarOpen || hashOpen) {
-                int closing = template.indexOf(CLOSING_BRACE, index + 2);
+                int closing = findExpressionEnd(template, index + 1);
                 if (closing == -1) {
                     output.append(template, index, template.length());
                     break;
@@ -206,6 +221,45 @@ public class JakartaELInterpolator implements ELInterpolator {
             }
         }
         return output.toString();
+    }
+
+    /**
+     * Find the index of the {@code '}'} that closes the EL expression
+     * whose opening {@code '{'} is at {@code openBraceIndex}. Braces
+     * nested inside the expression (map / set / list literals) and
+     * braces appearing inside single- or double-quoted EL string
+     * literals do not end the expression. Returns {@code -1} when the
+     * expression is unbalanced (no matching {@code '}'}), so the caller
+     * copies the remainder of the template verbatim.
+     *
+     * @param template       the full template being scanned
+     * @param openBraceIndex index of the {@code '{'} of the opener
+     *                       ({@code ${} or {@code #{}) being scanned
+     * @return index of the matching {@code '}'}, or {@code -1} if none
+     */
+    private static int findExpressionEnd(String template, int openBraceIndex) {
+        int depth = 0;
+        char openQuote = 0;
+        for (int i = openBraceIndex; i < template.length(); i++) {
+            char current = template.charAt(i);
+            if (openQuote != 0) {
+                if (current == BACKSLASH) {
+                    i++; // skip the escaped character (e.g. \' or \")
+                } else if (current == openQuote) {
+                    openQuote = 0;
+                }
+            } else if (current == SINGLE_QUOTE || current == DOUBLE_QUOTE) {
+                openQuote = current;
+            } else if (current == OPENING_BRACE) {
+                depth++;
+            } else if (current == CLOSING_BRACE) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     private static Method resolveStaticMethod(FunctionDescriptor descriptor) {
