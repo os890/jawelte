@@ -99,6 +99,7 @@
         <module>scenario-64-launcher-session-listener-opt-in</module>
         <module>scenario-65-cross-bean-tx-propagation-no-em-on-outer</module>
         <module>scenario-66-cleanup-skips-views</module>
+        <module>scenario-67-native-sql-cleanup-fallback-recreate</module>
     </modules>
 
     <dependencies>

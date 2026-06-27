@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.cleanup;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -29,6 +31,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import jakarta.annotation.Priority;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.SchemaManager;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jpa.api.port.DbCleanupStrategy;
@@ -68,10 +71,27 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
  *       transaction's rollback would NOT undo the drops.</li>
  * </ol>
  *
- * <p>Per-step failures aggregate per the project exception policy
- * (TICKET-001): the first failure becomes the primary, subsequent
- * failures (and any rollback failure) attach via
- * {@link Throwable#addSuppressed(Throwable)}.
+ * <p><strong>Failure handling.</strong> An anonymous foreign key
+ * (null {@code FK_NAME}) can't be dropped by name, so it is skipped
+ * with a logged {@code WARNING} naming the table; if it does not
+ * block the deletes the cleanup still commits. Any drop / delete /
+ * re-add failure, however, means the fast path could not guarantee an
+ * empty database, so the transaction is rolled back and the cleanup
+ * <strong>falls back to dropping and recreating the schema</strong>
+ * via {@link jakarta.persistence.EntityManagerFactory#getSchemaManager()}
+ * ({@code drop(false)} then {@code create(false)}). That guarantees a
+ * clean database and restores it with named foreign keys, so the next
+ * cleanup uses the fast path again (self-healing). The original
+ * failure is logged at {@code WARNING}; an exception is thrown only if
+ * the schema recreate itself fails.
+ *
+ * <p><strong>Fallback scope.</strong> The schema recreate covers the
+ * persistence unit's mapped objects (entities and their
+ * Hibernate-managed {@code @JoinTable} / {@code @ElementCollection} /
+ * sequence tables). Unmapped tables with no JPA mapping (e.g.
+ * trigger-populated audit logs) are cleaned by the fast path but not
+ * by the recreate fallback; the fallback only runs on the rare
+ * un-droppable-FK error path.
  *
  * <p><strong>NOT pre-registered</strong> via {@code META-INF/services}.
  * The H2-targeted {@link JdbcTruncateDbCleanupStrategy} is the only
@@ -106,6 +126,8 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
 @Priority(Integer.MAX_VALUE)
 public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
 
+    private static final Logger LOG = System.getLogger(NativeSqlDeleteDbCleanupStrategy.class.getName());
+
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public NativeSqlDeleteDbCleanupStrategy() {
     }
@@ -118,12 +140,14 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
             return;
         }
         AtomicReference<RuntimeException> primary = new AtomicReference<>();
+        List<String> advisoryWarnings = new ArrayList<>();
         try {
             JdbcAccess.run(entityManagerFactory, connection -> {
                 boolean originalAutoCommit = connection.getAutoCommit();
                 connection.setAutoCommit(false);
                 try {
-                    runDropDeleteAndReadd(connection, tableNames, persistenceUnitName, primary);
+                    runDropDeleteAndReadd(
+                            connection, tableNames, persistenceUnitName, primary, advisoryWarnings);
                     if (primary.get() == null) {
                         connection.commit();
                     } else {
@@ -138,28 +162,61 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
                 }
             });
         } catch (SQLException sqlFailure) {
-            RuntimeException current = primary.get();
-            RuntimeException wrapped = new RuntimeException(
+            aggregateFailure(primary,
                     "JDBC connection lifecycle failed during cleanup of persistence unit '"
                             + persistenceUnitName + "'", sqlFailure);
-            if (current == null) {
-                primary.set(wrapped);
-            } else {
-                current.addSuppressed(wrapped);
-            }
         }
-        if (primary.get() != null) {
-            throw primary.get();
+
+        // Anonymous FKs that couldn't be dropped by name are informational:
+        // if they didn't block the deletes the cleanup already committed.
+        for (String warning : advisoryWarnings) {
+            LOG.log(Level.WARNING, warning);
         }
+
+        RuntimeException fastPathFailure = primary.get();
+        if (fastPathFailure == null) {
+            return;
+        }
+
+        // The fast path failed and was rolled back, so the database may still
+        // hold rows. Fall back to dropping and recreating the schema: that
+        // guarantees an empty database AND restores it with named foreign keys
+        // (so the next cleanup uses the fast path again). Only surface an
+        // exception if the recreate itself fails.
+        LOG.log(Level.WARNING,
+                "Native-SQL drop/delete/re-add cleanup failed for persistence unit '"
+                        + persistenceUnitName + "'; rolled back and falling back to a schema "
+                        + "drop+recreate. Cause: " + fastPathFailure.getMessage(),
+                fastPathFailure);
+        try {
+            recreateSchema(entityManagerFactory);
+        } catch (RuntimeException recreateFailure) {
+            recreateFailure.addSuppressed(fastPathFailure);
+            throw recreateFailure;
+        }
+    }
+
+    /**
+     * Drop and recreate the persistence unit's mapped schema via the
+     * JPA {@link SchemaManager}. {@code drop(false)} removes the mapped
+     * tables (and their constraints), {@code create(false)} re-creates
+     * them — Hibernate emits named foreign keys, so a subsequent
+     * cleanup can take the fast drop-by-name path.
+     */
+    private static void recreateSchema(EntityManagerFactory entityManagerFactory) {
+        SchemaManager schemaManager = entityManagerFactory.getSchemaManager();
+        schemaManager.drop(false);
+        schemaManager.create(false);
     }
 
     private static void runDropDeleteAndReadd(
             Connection connection,
             List<String> tableNames,
             String persistenceUnitName,
-            AtomicReference<RuntimeException> primary) throws SQLException {
+            AtomicReference<RuntimeException> primary,
+            List<String> advisoryWarnings) throws SQLException {
         List<ForeignKeyDefinition> capturedForeignKeys =
-                captureForeignKeys(connection, tableNames, persistenceUnitName, primary);
+                captureForeignKeys(connection, tableNames, persistenceUnitName, advisoryWarnings);
         try (Statement statement = connection.createStatement()) {
             dropForeignKeys(statement, capturedForeignKeys, persistenceUnitName, primary);
             try {
@@ -176,7 +233,7 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
             Connection connection,
             List<String> tableNames,
             String persistenceUnitName,
-            AtomicReference<RuntimeException> primary) throws SQLException {
+            List<String> advisoryWarnings) throws SQLException {
         // FKs that span multiple columns surface as multiple metadata rows
         // sharing the same FK_NAME — group by name to collapse them into one
         // ADD CONSTRAINT statement with the column lists in KEY_SEQ order.
@@ -187,13 +244,16 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
                 while (importedKeys.next()) {
                     String fkName = importedKeys.getString("FK_NAME");
                     if (fkName == null) {
-                        // Anonymous FK — can't drop by name; record + skip.
-                        aggregateFailure(
-                                primary,
-                                "Skipping anonymous foreign key on table '" + tableName
+                        // Anonymous FK — can't drop by name; record as advisory
+                        // and skip. If it doesn't block the deletes the cleanup
+                        // still commits; if it does, the resulting delete failure
+                        // triggers the schema-recreate fallback (which heals it
+                        // into a named constraint).
+                        advisoryWarnings.add(
+                                "Anonymous foreign key on table '" + tableName
                                         + "' of persistence unit '" + persistenceUnitName
-                                        + "' — drop-and-readd requires a named constraint",
-                                null);
+                                        + "' cannot be dropped by name; skipped (drop-and-readd "
+                                        + "requires a named constraint)");
                         continue;
                     }
                     ForeignKeyBuilder builder = byName.computeIfAbsent(
