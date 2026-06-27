@@ -5639,3 +5639,36 @@ jpa-fired `AfterTestTransaction` would verify method 1's stale testData on the
 leaked handler. The driver asserts exactly one success (method 2) and one
 failure (method 1). Mutation check: restoring the pre-guard assignment makes
 method 2 also fail (`succeeded expected: <1> but was: <0>`).
+
+## jpa-module afterEach: aggregate observer Throwable (defence-in-depth)
+
+**Context.** A review finding claimed that on testcontrol's transactional verify
+path, the dbExpected AssertionError (from DbDiff.assertEquals, an Error) escapes
+JpaLifecycleAdapter.afterEach's `catch (RuntimeException)` around the event fire,
+skipping the table cleanup and EM-stack drain and bleeding state into the next
+method.
+
+**Investigation (refutes the live-bug claim).** Reproduced end-to-end and
+instrumented afterEach: under BOTH OpenWebBeans and Weld the CDI container wraps
+the synchronous observer's AssertionError in
+jakarta.enterprise.event.ObserverException (a RuntimeException). The existing
+`catch (RuntimeException)` therefore already catches it and runCleanup() runs —
+the next method sees a clean database. The data-bleed does not occur with the
+bundled CDI implementations, so the finding is refuted as a live defect (and no
+mutation can make the scenario below fail under these engines).
+
+**Change (defence-in-depth, by request).** afterEach now aggregates failures as
+Throwable and catches Throwable around the event fire, so cleanup still runs even
+if a CDI implementation rethrows an observer Error unwrapped (a strict reading of
+the spec). The aggregated throwable is rethrown unchanged at the end via a
+generic-erasure "sneaky throw" helper (cf. DeltaSpike ExceptionUtils), preserving
+the original AssertionError rather than wrapping it. completeTransactionFor
+TransactionalTestMethod's accumulator was widened from RuntimeException to
+Throwable to match.
+
+**Test.** New tests/testcontrol-module/scenario-30 drives a subject via
+EngineTestKit: method 1's dbExpected mismatches (AssertionError on the
+transactional path), method 2 asserts the table is empty. It locks the
+"verify failure -> clean database" contract as a regression guard. Documented
+explicitly as passing on the pre-change code too (because the container wraps the
+Error), so it is a contract guard, not a mutation-backed bug reproduction.

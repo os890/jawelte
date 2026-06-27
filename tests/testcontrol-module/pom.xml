@@ -44,6 +44,7 @@
         <module>scenario-24-testcontrol-inherited-from-superclass-method</module>
         <module>scenario-25-testcontrol-overridden-method-subclass-wins</module>
         <module>scenario-29-failed-beforeeach-does-not-leak-testdata</module>
+        <module>scenario-30-dbexpected-failure-still-cleans-database</module>
     </modules>
 
     <dependencies>
