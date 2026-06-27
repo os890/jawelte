@@ -120,8 +120,7 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
  * {@code DbCleanupStrategy} at a lower {@code @Priority}.
  *
  * <p>Connection sourced through {@link JdbcAccess} — borrows a
- * pooled connection without allocating an {@code EntityManager}
- * (punch-list §2.4).
+ * pooled connection without allocating an {@code EntityManager}.
  */
 @Priority(Integer.MAX_VALUE)
 public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {

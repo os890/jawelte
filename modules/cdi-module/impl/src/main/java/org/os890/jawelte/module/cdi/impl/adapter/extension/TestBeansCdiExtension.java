@@ -351,7 +351,7 @@ public class TestBeansCdiExtension implements Extension {
      * test class invisible to CDI's regular bean-discovery pipeline:
      * its {@code @Inject} fields never fire
      * {@code ProcessInjectionPoint} events, mirroring the unmanaged
-     * shape jawelte used before TICKET-016. The auto-mock collector
+     * shape jawelte used previously. The auto-mock collector
      * sees those IPs via the explicit
      * {@link #addTestClassInjectionPoints(BeanManager)} walk above
      * instead.

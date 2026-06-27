@@ -155,7 +155,7 @@ public class TransactionScopedContext implements AlterableContext {
      * entry. Called by
      * {@code TransactionalInterceptor.aroundInvoke} unconditionally
      * in its {@code finally} block. Per-bean failures aggregate per
-     * the project exception policy (TICKET-001): the first failure
+     * the project exception policy: the first failure
      * becomes the primary, subsequent failures are attached via
      * {@link Throwable#addSuppressed(Throwable)}.
      */

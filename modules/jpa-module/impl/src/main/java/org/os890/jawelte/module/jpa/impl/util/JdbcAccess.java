@@ -45,7 +45,7 @@ import org.hibernate.engine.spi.SessionFactoryImplementor;
  * dance, this saves the per-call EntityManager allocation,
  * persistence-context setup, and teardown — typically a few
  * milliseconds per cleanup × every test method × every persistence
- * unit. Bounded but real (punch-list §2.4).
+ * unit. Bounded but real.
  *
  * <p>Hibernate-specific: the {@link SessionFactoryImplementor} +
  * {@link JdbcServices} unwrap is a Hibernate SPI hop. The cleanup

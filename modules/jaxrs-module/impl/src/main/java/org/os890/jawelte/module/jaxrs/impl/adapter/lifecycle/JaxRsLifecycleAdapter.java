@@ -90,7 +90,7 @@ import org.os890.jawelte.module.jaxrs.impl.adapter.filter.CdiIntegrationFilter;
  * {@link TestContext#getMetadata(Class)}, calls {@code stop()},
  * waits up to {@value #SERVER_STOP_TIMEOUT_SECONDS} seconds for
  * draining, and then clears the {@link TestUrlHolder}. Stop
- * failures are logged at WARNING and swallowed (per TICKET-011
+ * failures are logged at WARNING and swallowed (per the module's
  * cleanup contract); the metadata is always unbound in
  * {@code finally}.
  *

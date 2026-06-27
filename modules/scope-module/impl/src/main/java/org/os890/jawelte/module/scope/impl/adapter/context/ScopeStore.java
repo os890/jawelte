@@ -162,7 +162,7 @@ public abstract class ScopeStore {
      * Destroy every entry in the map via
      * {@link Contextual#destroy(Object, jakarta.enterprise.context.spi.CreationalContext)}
      * and null the map reference. Exceptions are aggregated per the
-     * project-wide TICKET-001 policy: the first thrown becomes the
+     * project-wide exception policy: the first thrown becomes the
      * primary, the rest are attached via
      * {@link Throwable#addSuppressed(Throwable)}, and the aggregate
      * is rethrown after the loop. The map reference is nulled

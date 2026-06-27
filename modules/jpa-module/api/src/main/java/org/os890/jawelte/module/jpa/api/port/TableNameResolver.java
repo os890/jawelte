@@ -35,9 +35,8 @@ import jakarta.persistence.EntityManagerFactory;
  *
  * <p>The default implementation shipped by jpa-module/impl
  * ({@code InformationSchemaTableNameResolver}) walks H2's
- * {@code INFORMATION_SCHEMA.TABLES} for the {@code PUBLIC} schema —
- * the same approach the original POC used. An optional
- * metamodel-backed alternative
+ * {@code INFORMATION_SCHEMA.TABLES} for the {@code PUBLIC} schema.
+ * An optional metamodel-backed alternative
  * ({@code JpaMetamodelTableNameResolver}) ships in jpa-module/impl
  * but is <em>not</em> pre-registered through {@code META-INF/services};
  * consumers who explicitly want metamodel-only cleanup register it

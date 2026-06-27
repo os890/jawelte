@@ -24,9 +24,9 @@ import org.os890.jawelte.module.contentdiff.api.JsonBuilder;
 import org.os890.jawelte.module.contentdiff.api.XmlBuilder;
 
 /**
- * Thin adapter bridging a JAX-RS {@link Response} to TICKET-008's
- * {@link ContentDiff} builders. Reads the response entity as a
- * {@code String} and forwards it to
+ * Thin adapter bridging a JAX-RS {@link Response} to
+ * content-diff-module's {@link ContentDiff} builders. Reads the
+ * response entity as a {@code String} and forwards it to
  * {@link ContentDiff#forJson(String)} or
  * {@link ContentDiff#forXml(String)}; everything else (engine
  * selection, default-ignore-pattern resolution via MicroProfile

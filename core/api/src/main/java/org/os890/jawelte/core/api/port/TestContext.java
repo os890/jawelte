@@ -49,7 +49,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
  * metadata under the key {@code ExtensionContext.class} and refreshed
  * on every callback so the value is always the current JUnit context.
  *
- * <h2>Static accessors (TICKET-001 addendum, introduced in TICKET-003)</h2>
+ * <h2>Static accessors</h2>
  *
  * <p>{@link #get()} returns the {@code TestContext} active on the
  * current thread. It resolves the accessor implementation class via

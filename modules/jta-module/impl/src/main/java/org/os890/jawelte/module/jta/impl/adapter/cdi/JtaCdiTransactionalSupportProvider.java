@@ -47,7 +47,7 @@ public class JtaCdiTransactionalSupportProvider implements CdiTransactionalSuppo
      * {@code com.arjuna.ats.jta.cdi.*} package, present only in the
      * uber {@code narayana-jta} artifact). Quarkus embeds the same
      * classes, so the same probe lights up under
-     * {@code quarkus-arc-module} once TICKET-015 lands.
+     * {@code quarkus-arc-module} once that module lands.
      */
     private static final String NARAYANA_CDI_EXTENSION_CLASS =
             "com.arjuna.ats.jta.cdi.TransactionExtension";

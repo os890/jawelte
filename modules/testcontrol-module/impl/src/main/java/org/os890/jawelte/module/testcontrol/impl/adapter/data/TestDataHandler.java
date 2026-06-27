@@ -49,7 +49,7 @@ import org.os890.jawelte.module.testcontrol.api.TestControl;
 /**
  * {@code @ApplicationScoped} CDI bean that owns the per-method
  * test-data pipeline declared by {@code @TestControl(testData=…)}.
- * The pipeline has four phases (per TICKET-010):
+ * The pipeline has four phases:
  *
  * <ol>
  *   <li><b>Seed</b> — for every entry in array order, call

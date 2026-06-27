@@ -5755,3 +5755,29 @@ whole-remap override, and corrected the scope-module pom description to match.
 Documentation-only; no behavioural change. (Historical diary entries that mention
 the old name are left untouched — the class did exist under that name earlier in
 the project's history.)
+
+## Strip internal TICKET-xxx / POC references from published javadoc
+
+Public api-module javadoc (which ships in the generated apidocs) embedded
+internal ticket / POC vocabulary, and some references were load-bearing:
+`TestControl` pointed users at a "testDataBasePath Precedence table" and a
+"testData Processing Order" in TICKET-010 — a git-ignored local document, so the
+referenced semantics were unreachable to consumers.
+
+Changes:
+- api modules (published surface): removed TICKET-/POC tokens from
+  `TestContext`, `TimeoutHandler`, `DbCleanupStrategy`, `TableNameResolver`,
+  `ResponseDiff`, and `TestControl`. For `TestControl` the two load-bearing
+  TICKET-010 pointers were replaced by inlining the actual contract: a 3-step
+  base-path precedence list (MP Config key → annotation attribute → empty
+  string) and a self-contained processing-order paragraph (all dbIn before any
+  dbUpdate, entries in array order, files alphabetical, dbExpected after the
+  method).
+- impl modules: stripped TICKET-/POC tokens from `/** */` javadoc only (these
+  can ship in generated apidocs), across core/impl, scope, jpa, testcontrol,
+  jaxrs, wiremock, jta, cdi, batch. Plain `//` traceability line-comments were
+  left intact by request.
+
+Documentation-only; no behavioural change. Verified via grep that no
+TICKET-/POC token remains in any api source or in any impl `/** */` javadoc, and
+the full reactor `clean install` (javadoc / checkstyle / RAT gates) stays green.

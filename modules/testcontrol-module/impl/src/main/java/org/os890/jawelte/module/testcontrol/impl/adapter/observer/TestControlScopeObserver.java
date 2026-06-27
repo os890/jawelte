@@ -54,7 +54,7 @@ import org.os890.jawelte.core.api.event.BeforeScopeStarted;
  * therefore stay active regardless of {@code startScopes}.
  *
  * <p><b>Thread-safety.</b> {@code volatile} state plus a single-test
- * thread model. Per TICKET-010 the per-method allow-list is not safe
+ * thread model. The per-method allow-list is not safe
  * for parallel test methods.
  */
 @ApplicationScoped
