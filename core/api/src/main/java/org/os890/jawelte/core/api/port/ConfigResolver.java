@@ -37,10 +37,28 @@ import java.util.Optional;
  *       ({@code .} replaced with {@code _}).</li>
  * </ol>
  *
- * <p>Users provide their own {@code ConfigResolver} bean with
- * {@code @Alternative @Priority(...)} to replace the default. The
- * framework does not use {@code ServiceLoader} for this SPI; it is a
- * normal CDI bean overridable via standard CDI mechanisms.
+ * <p><strong>Selection.</strong> The framework resolves the active
+ * {@code ConfigResolver} through {@code TestContext.loadService(...)}
+ * — {@code ServiceLoader}-discovered and ordered by the
+ * {@code ServicePriorityResolver} (lowest {@code @Priority} wins) —
+ * exactly like the other prioritized SPIs. This is mandatory rather
+ * than incidental: config is read while CDI is still in
+ * {@code BeforeBeanDiscovery} (so {@code @Inject} is not yet
+ * available), which is why selection cannot go through CDI bean
+ * resolution. To replace the resolver the framework uses, ship your
+ * own implementation registered in
+ * {@code META-INF/services/org.os890.jawelte.core.api.port.ConfigResolver}
+ * with a lower numeric {@code @Priority} than the {@code core/impl}
+ * default.
+ *
+ * <p>The default implementation is additionally an
+ * {@code @ApplicationScoped} bean, so application-level
+ * {@code @ConfigBean} code that runs after the container is up may
+ * also {@code @Inject} a {@code ConfigResolver} directly. Note that a
+ * CDI {@code @Alternative} only swaps such an injection point — it
+ * does NOT change the resolver the framework selects via
+ * {@code loadService}; use the {@code ServiceLoader}/{@code @Priority}
+ * route above for that.
  *
  * <p>For configuration that several modules can contribute to under
  * one umbrella concept (for example, the auto-mock exclude-packages

@@ -55,10 +55,19 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
  * application, so caching the reference is safe and required by
  * TICKET-002's performance NFR.
  *
- * <p>Users replace this default by providing their own
- * {@code ConfigResolver} bean annotated with
- * {@code @Alternative @Priority(...)} — standard CDI mechanics, no
- * {@code ServiceLoader} involved for the resolver itself.
+ * <p>This default is registered in
+ * {@code META-INF/services/org.os890.jawelte.core.api.port.ConfigResolver}
+ * and selected by the framework through
+ * {@code TestContext.loadService(ConfigResolver.class)}
+ * ({@code ServiceLoader} discovery ordered by
+ * {@code ServicePriorityResolver}, lowest {@code @Priority} wins) —
+ * config is read pre-CDI, so selection cannot go through CDI bean
+ * resolution. Users replace it by shipping their own
+ * {@code ConfigResolver} via the same service file with a lower
+ * numeric {@code @Priority}. The {@code @ApplicationScoped} qualifier
+ * additionally makes it injectable for application {@code @ConfigBean}
+ * code, but a CDI {@code @Alternative} would only swap such an
+ * injection point, not the framework's {@code loadService} selection.
  *
  * <p>{@link #resolveAliasKeysFor(String)} on the other hand walks
  * {@link ConfigKeyAliasProvider} instances discovered via
