@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.spi.Contextual;
+import jakarta.enterprise.context.spi.CreationalContext;
 
 /**
  * Bean-store base for jawelte's test-lifecycle CDI scopes. Holds the
@@ -91,6 +92,56 @@ public abstract class ScopeStore {
                 this.map = new ConcurrentHashMap<>();
             }
             return this.map;
+        }
+    }
+
+    /**
+     * Return the live contextual instance for {@code contextual},
+     * creating and storing it on first request. Creation is
+     * serialized per {@link Contextual} via the contextual's own
+     * monitor with a double-check — deliberately NOT through
+     * {@code Map.computeIfAbsent}.
+     *
+     * <p>{@code Contextual.create()} runs the bean's constructor and
+     * {@code @Inject} resolution, which may resolve ANOTHER bean in
+     * this same scope (the cdi/wiremock/ejb/config remaps all land in
+     * one store and can inject one another). Here that nested request
+     * is a plain {@code get}/{@code put} on the
+     * {@link ConcurrentHashMap}, so it never re-enters
+     * {@code computeIfAbsent} from within its own mapping function —
+     * which {@code ConcurrentHashMap} forbids (it throws
+     * {@code IllegalStateException("Recursive update")} for a colliding
+     * bin and is undefined otherwise). {@code create()} runs while
+     * holding only the per-{@code Contextual} monitor, never a
+     * map-structural lock.
+     *
+     * <p>Concurrent first access for the SAME {@code Contextual} still
+     * constructs exactly once: contending threads block on the
+     * monitor and observe the stored instance after the double-check
+     * (so {@code @PostConstruct} fires once — see scope-module test
+     * scenarios 09 / 10). Distinct {@code Contextual}s use distinct
+     * monitors, so unrelated beans still create concurrently.
+     *
+     * @param contextual        the bean to obtain
+     * @param creationalContext the creational context to create from
+     * @param <T>               the bean type
+     * @return the live (possibly freshly created) instance
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getOrCreate(Contextual<T> contextual, CreationalContext<T> creationalContext) {
+        Map<Contextual<?>, ScopedBeanInstance<?>> beans = getOrCreateMap();
+        ScopedBeanInstance<?> existing = beans.get(contextual);
+        if (existing != null) {
+            return (T) existing.instance();
+        }
+        synchronized (contextual) {
+            existing = beans.get(contextual);
+            if (existing != null) {
+                return (T) existing.instance();
+            }
+            T instance = contextual.create(creationalContext);
+            beans.put(contextual, new ScopedBeanInstance<>(instance, creationalContext));
+            return instance;
         }
     }
 

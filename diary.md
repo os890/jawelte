@@ -5505,3 +5505,15 @@ Full verify-all.sh (no lnp) run pending to confirm no regression.
 ### Verification result (same day)
 
 Full `verify-all.sh` (default mode, no lnp): ALL 20 PHASES GREEN, 0 failures, 41m37s. scenario-32 (`manageContainer=false`) passes on every runtime, confirming the service-file discovery path still loads `TestBeansCdiExtension` after `addExtensions` was removed. No regression. Tracked as GitHub issue #41. The prior UNTESTED commit (a8a15f10) is confirmed WORKING.
+
+## 2026-06-27 — fix(scope): nested same-scope bean creation no longer re-enters ConcurrentHashMap.computeIfAbsent
+
+**Finding (project-review slide 5, High, confirmed):** `TestMethodScopedContext.get` and `TestClassScopedContext.get` both ran `Contextual.create()` inside `ConcurrentHashMap.computeIfAbsent(...)`. `create()` runs the bean's constructor + `@Inject` resolution, which can resolve another bean in the SAME scope (the cdi/wiremock/ejb/config remaps all share one store), re-entering `get()` → `computeIfAbsent` on the same map mid-computation. CHM forbids that — it throws `IllegalStateException("Recursive update")` when the nested key shares a bin, undefined otherwise.
+
+**Fix:** added `ScopeStore.getOrCreate(contextual, creationalContext)` and both contexts now delegate to it (also retires the get() duplication noted in slide-era review). It serializes creation **per `Contextual`** via the contextual's own monitor with a double-check, and runs `create()` OUTSIDE any map-structural lock — a nested request for a different `Contextual` is a plain `get`/`put` on the CHM, never a nested `computeIfAbsent`.
+
+**Why not the slide's suggested `putIfAbsent`-and-destroy-the-loser:** that double-constructs under concurrent first access, which would break the "@PostConstruct fires exactly once" guarantee asserted by scenarios 09 and 10. The per-`Contextual` monitor preserves exactly-once while still allowing nested creation of distinct beans.
+
+**Test:** new `tests/scope-module/scenario-33-nested-same-scope-bean-creation` — a chain of 10 `@TestClassScoped` beans each injecting + dereferencing the next in `@PostConstruct`, so resolving the root drives deep nested creation. "Test the test": reverting the fix makes scenario-33 fail deterministically with `IllegalStateException("Recursive update")`; with the fix it passes.
+
+Verified GREEN: full tests/scope-module suite 46/46 under owb AND weld (incl. scenarios 02/03 per-method create/destroy and 09/10 concurrent exactly-once). Full verify-all.sh run follows.
