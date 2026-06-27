@@ -39,8 +39,7 @@ import org.os890.jawelte.core.api.port.TestInstanceFactoryPort;
  * {@code PER_METHOD} lifecycle invokes {@code TestInstanceFactory}
  * after {@code @BeforeAll}); under the alternative
  * {@code PER_CLASS} lifecycle the container isn't booted yet when the
- * factory runs, which is a known limitation documented in
- * TICKET-016's open questions.
+ * factory runs, which is a known limitation.
  */
 public class CdiTestInstanceFactoryPortAdapter implements TestInstanceFactoryPort {
 

@@ -38,8 +38,8 @@ import java.lang.annotation.Target;
  *       (<i>seed → update → commit → verify</i>) over classpath
  *       folders that contain optional {@code dbIn/}, {@code dbUpdate/},
  *       {@code dbExpected/} sub-directories. The seed and update phases
- *       feed TICKET-009's {@code DbSeed}; the verify phase feeds
- *       TICKET-009's {@code DbDiff}.</li>
+ *       feed db-testdata-module's {@code DbSeed}; the verify phase
+ *       feeds its {@code DbDiff}.</li>
  * </ul>
  *
  * <p><b>Target.</b> Method-only ({@code @Target(METHOD)}). The
@@ -65,13 +65,16 @@ import java.lang.annotation.Target;
  *       shadowed by the override and is <em>not</em> merged.</li>
  * </ul>
  *
- * <p><b>Base-path precedence.</b> When both
- * {@link #testDataBasePath()} and the MicroProfile Config key
- * {@code org.os890.jawelte.module.testcontrol.api.TestControl.base-path}
- * are set, the MP Config value wins. The annotation attribute is the
- * fallback when MP Config does not supply the key. See the
- * <i>testDataBasePath Precedence</i> table in TICKET-010 for the
- * full matrix.
+ * <p><b>Base-path precedence.</b> The base path prepended to every
+ * entry is resolved in this order:
+ * <ol>
+ *   <li>the MicroProfile Config key
+ *       {@code org.os890.jawelte.module.testcontrol.api.TestControl.base-path},
+ *       when set to a non-empty value;</li>
+ *   <li>otherwise the {@link #testDataBasePath()} annotation
+ *       attribute;</li>
+ *   <li>otherwise the empty string (entry paths are used as-is).</li>
+ * </ol>
  *
  * <p><b>Companion remap.</b> When scope-module is on the classpath,
  * its {@code ConfigBeanToTestClassScoped} {@code BeanScopeMapper} SPI
@@ -141,11 +144,12 @@ public @interface TestControl {
      *       {@code afterEach} otherwise).</li>
      * </ul>
      *
-     * <p>Files within each sub-directory are processed in alphabetical
-     * order (natural {@code String} sort of filenames). Across multiple
-     * entries, all {@code dbIn/} phases complete before any
-     * {@code dbUpdate/} phase starts (see <i>testData Processing
-     * Order</i> in TICKET-010).
+     * <p>Processing order: all {@code dbIn/} phases (across every
+     * entry, in array order) complete before any {@code dbUpdate/}
+     * phase starts; within each sub-directory the {@code *.xml} files
+     * are processed in alphabetical order (natural {@code String} sort
+     * of filenames). The {@code dbExpected/} verify phase runs after
+     * the test method completes.
      *
      * <p>The default empty array {@code {}} disables both seeding and
      * verification — no folder scanning occurs.

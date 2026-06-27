@@ -45,7 +45,7 @@ import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopedConte
  * {@link TestModuleLifecyclePort} chain — after framework-wide
  * policy modules ({@code @Priority < 100}) and before higher-numbered
  * modules that need active scopes for their own setup. {@code afterEach}
- * / {@code afterAll} run in reverse (LIFO) order per TICKET-001, so
+ * / {@code afterAll} run in reverse (LIFO) order, so
  * the adapter deactivates after the higher-numbered modules tear down.
  *
  * <p>The {@code BeforeScopeStarted(TestMethodScoped.class)} event

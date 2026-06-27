@@ -30,7 +30,7 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
 /**
  * Default {@link TableNameResolver} shipped by jpa-module — queries
  * H2's {@code INFORMATION_SCHEMA.TABLES} for tables in the
- * {@code PUBLIC} schema. Mirrors the POC's approach: cleanup targets
+ * {@code PUBLIC} schema. Cleanup targets
  * are derived from the actual database schema, not from the JPA
  * metamodel, so unmapped tables (trigger-populated audit logs,
  * {@code @JoinTable} / {@code @ElementCollection} backing tables,
@@ -55,7 +55,7 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
  *
  * <p>Connection sourced through {@link JdbcAccess} — borrows a
  * pooled connection from Hibernate's connection provider without
- * allocating an {@code EntityManager} (punch-list §2.4).
+ * allocating an {@code EntityManager}.
  */
 @Priority(Integer.MAX_VALUE)
 public class InformationSchemaTableNameResolver implements TableNameResolver {

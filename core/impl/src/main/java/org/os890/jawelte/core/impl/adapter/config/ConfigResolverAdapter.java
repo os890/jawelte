@@ -53,7 +53,7 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
  * <p>The MicroProfile Config specification guarantees that a
  * {@code Config} instance is valid for the lifetime of the
  * application, so caching the reference is safe and required by
- * TICKET-002's performance NFR.
+ * the project's performance NFR.
  *
  * <p>This default is registered in
  * {@code META-INF/services/org.os890.jawelte.core.api.port.ConfigResolver}

@@ -51,10 +51,10 @@ import org.os890.jawelte.module.batch.api.BatchExecution;
  * the observer caches the resolved instance in a static field.
  *
  * <p>This module ships the alternative
- * {@code PopulateLatestSnapshotTimeoutHandler} (POC-style
- * behaviour: populate event with the latest snapshot and return
- * without throwing) in {@code batch-module/impl} for consumers to
- * register; it is <strong>not</strong> active by default.
+ * {@code PopulateLatestSnapshotTimeoutHandler} (populate the event
+ * with the latest snapshot and return without throwing) in
+ * {@code batch-module/impl} for consumers to register; it is
+ * <strong>not</strong> active by default.
  */
 public interface TimeoutHandler {
 

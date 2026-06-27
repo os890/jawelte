@@ -43,8 +43,8 @@ public interface DbCleanupStrategy {
      * Called once per active persistence unit per test method.
      *
      * <p>Per-table failures aggregate per the project's exception
-     * policy (TICKET-001): the first failure becomes the primary,
-     * subsequent failures are attached via
+     * policy: the first failure becomes the primary, subsequent
+     * failures are attached via
      * {@link Throwable#addSuppressed(Throwable)}.
      *
      * @param persistenceUnitName    the persistence unit name to clean

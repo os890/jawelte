@@ -38,7 +38,7 @@ import org.os890.jawelte.core.impl.loader.ServiceLoaderCache;
  * Single {@link TestBeansExtension} provider on the classpath; loaded
  * by {@code EnableTestBeans.Proxy} via {@code ServiceLoader}.
  *
- * <p>Per TICKET-001:
+ * <p>Responsibilities:
  * <ul>
  *   <li>Creates a {@link TestContext} in {@code beforeAll}, binds the
  *       current JUnit {@code ExtensionContext} as metadata, and stores
@@ -61,8 +61,8 @@ import org.os890.jawelte.core.impl.loader.ServiceLoaderCache;
  *       only ports that completed their corresponding {@code before*}
  *       receive an {@code after*} call (cleanup guarantee).</li>
  *   <li>Aggregates exceptions during {@code afterEach} / {@code afterAll}
- *       per the contracts in TICKET-001 ("Exception Aggregation Policy"
- *       and "Unconditional Cleanup Guarantees"): the first thrown
+ *       per the project's exception-aggregation and
+ *       unconditional-cleanup contracts: the first thrown
  *       exception is the primary; the rest are attached via
  *       {@link Throwable#addSuppressed(Throwable)}.
  *       {@link TestBeanContainerPort#afterEach(TestContext)} and

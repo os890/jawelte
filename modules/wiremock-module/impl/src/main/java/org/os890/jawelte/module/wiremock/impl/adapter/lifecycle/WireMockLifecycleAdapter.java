@@ -68,7 +68,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
  * throws after one or more earlier servers have already started,
  * the already-started servers are stopped (best-effort, suppressing
  * any individual stop failure) before the original exception
- * propagates. TICKET-001 does not call {@code afterAll} for the
+ * propagates. The framework does not call {@code afterAll} for the
  * failing adapter, so this self-cleanup is the only way to release
  * the OS ports.
  *

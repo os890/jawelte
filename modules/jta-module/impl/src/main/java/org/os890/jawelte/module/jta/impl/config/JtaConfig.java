@@ -54,7 +54,7 @@ public class JtaConfig {
      * {@code CoreEnvironmentBean.setDefaultTimeout(int)}, Atomikos's
      * {@code com.atomikos.icatch.default_jta_timeout} property
      * (converted to milliseconds at the boundary). The shipped
-     * default 120s matches the POC's chosen value and is short enough
+     * default 120s is short enough
      * for a test bench where stuck transactions should fail fast
      * rather than hang the suite. There is no portable
      * "set JVM-default timeout" API in the JTA spec —

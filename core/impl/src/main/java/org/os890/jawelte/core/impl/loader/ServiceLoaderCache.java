@@ -36,7 +36,7 @@ import org.os890.jawelte.core.impl.adapter.spi.DefaultServicePriorityResolver;
  * <p>{@link TestBeanContainerPort} requires exactly one implementation
  * on the classpath; zero or multiple implementations result in an
  * {@link IllegalStateException} with the messages mandated by
- * TICKET-001's SPI section.
+ * the project's SPI contract.
  *
  * <p>{@link TestModuleLifecyclePort} allows zero or more
  * implementations; the cached list is ordered by the active
