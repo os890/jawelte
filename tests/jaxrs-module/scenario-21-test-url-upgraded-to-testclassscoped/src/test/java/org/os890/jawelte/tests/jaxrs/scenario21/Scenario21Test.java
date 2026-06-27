@@ -29,8 +29,9 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
 
 /**
  * Scenario 21 — with scope-module on the classpath, the
- * {@code TestUrlHolder} bean (declared {@code @ApplicationScoped} and
- * carrying the impl-internal {@code @JaxRsManagedScope} marker) has
+ * {@code TestUrlHolder} bean (carrying the impl-internal
+ * {@code @JaxRsManaged} stereotype, which contributes
+ * {@code @ApplicationScoped} by default) has
  * its resolved CDI scope upgraded to
  * {@link TestClassScoped @TestClassScoped} by jaxrs-module's
  * {@code TestUrlScopeRemap} {@code BeanScopeMapper} provider, driven
@@ -56,7 +57,7 @@ class Scenario21Test {
                 .as("exactly one TestUrlHolder bean is registered")
                 .isNotNull();
         assertThat(bean.getScope())
-                .as("@JaxRsManagedScope → @TestClassScoped remap applied when scope-module is present")
+                .as("@JaxRsManaged → @TestClassScoped remap applied when scope-module is present")
                 .isEqualTo(TestClassScoped.class);
     }
 
@@ -68,7 +69,7 @@ class Scenario21Test {
                 .as("the control bean is registered")
                 .isNotNull();
         assertThat(bean.getScope())
-                .as("a plain @ApplicationScoped bean without @JaxRsManagedScope is NOT remapped")
+                .as("a plain @ApplicationScoped bean without @JaxRsManaged is NOT remapped")
                 .isEqualTo(ApplicationScoped.class);
     }
 }

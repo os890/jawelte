@@ -5484,3 +5484,11 @@ Note: the HTML doc-page alignment (`core.html` / `scope-module.html` wording) is
 - scenario-22 (scope-module absent, re-parented to tests/cdi-module): asserts `TestUrlHolder` stays `@ApplicationScoped` — default behaviour preserved.
 
 Verified GREEN under owb+cxf: both new scenarios pass; full tests/jaxrs-module suite 22/22 (scenarios 01-20 now exercise the @TestClassScoped holder end-to-end with no regression). Full verify-all.sh matrix run follows.
+
+## 2026-06-27 — refactor(jaxrs): @JaxRsManaged stereotype (was @JaxRsManagedScope marker)
+
+Reworked the TestUrlHolder scope mechanism per review feedback. Instead of a plain marker annotation plus an explicit `@ApplicationScoped` on the bean, `@JaxRsManaged` is now a CDI `@Stereotype` meta-annotated `@ApplicationScoped` — the same shape as scope-module's `@ConfigBean`. `TestUrlHolder` carries just `@JaxRsManaged`; the stereotype supplies the default `@ApplicationScoped`, and `TestUrlScopeRemap` (unchanged) upgrades it to `@TestClassScoped` when scope-module is present (the directly-added scope wins over the stereotype-contributed one per CDI's class-scope-wins rule). No new dependency: the stereotype meta-annotates only core CDI's `@ApplicationScoped`, never `@TestClassScoped`; the upgrade target stays a reflective MP-Config FQCN. When scope-module is absent the remap resolves to null → bean keeps the stereotype's `@ApplicationScoped`.
+
+Renamed `@JaxRsManagedScope` → `@JaxRsManaged` (the old name read like a scope impl; it marks a managed bean, not a scope). wiremock-module still uses a plain `@WireMockManagedScope` marker — aligning it to the stereotype shape is left to a follow-up ticket.
+
+Verified GREEN under owb+cxf and weld+cxf: scenario-21 (upgrade + unmarked-bean-untouched) and scenario-22 (default @ApplicationScoped without scope-module) pass; full jaxrs suite green on both runtimes.

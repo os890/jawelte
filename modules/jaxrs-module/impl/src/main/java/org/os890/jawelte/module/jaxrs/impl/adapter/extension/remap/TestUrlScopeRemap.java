@@ -23,12 +23,12 @@ import org.os890.jawelte.core.api.port.BeanScopeMapper;
 
 /**
  * {@link BeanScopeMapper} provider that remaps the single type
- * carrying the impl-internal {@link JaxRsManagedScope} marker
+ * carrying the impl-internal {@link JaxRsManaged} stereotype
  * ({@code TestUrlHolder}) to the CDI scope configured under MP
  * Config key {@value #TARGET_SCOPE_KEY}.
  *
  * <p><b>Scoped to the marked bean only.</b> The trigger is the
- * {@code @JaxRsManagedScope} marker, not {@code @ApplicationScoped},
+ * {@code @JaxRsManaged} stereotype, not {@code @ApplicationScoped},
  * so exactly one bean — {@code TestUrlHolder} — is affected. No other
  * {@code @ApplicationScoped} bean (user-defined or jaxrs-module's own
  * {@code CdiIntegrationFilter}) is remapped.
@@ -46,13 +46,14 @@ import org.os890.jawelte.core.api.port.BeanScopeMapper;
  * is unset, or the configured class isn't on the runtime classpath
  * (typically scope-module absent), {@link #targetScope()} returns
  * {@code null} and the active {@code BeanScopeMapperPort} skips this
- * provider — {@code TestUrlHolder} keeps its declared
- * {@code @ApplicationScoped} scope. This is the default-behaviour
+ * provider — {@code TestUrlHolder} keeps the
+ * {@code @ApplicationScoped} scope contributed by its
+ * {@code @JaxRsManaged} stereotype. This is the default-behaviour
  * path: jaxrs-module on its own performs no remap.
  *
  * <p>{@link #preserveExplicitDirectScopes()} returns {@code false}
- * (inherited default): {@code @JaxRsManagedScope} is an impl-private
- * marker placed only on the jaxrs-module-owned holder, so user
+ * (inherited default): {@code @JaxRsManaged} is an impl-private
+ * stereotype placed only on the jaxrs-module-owned holder, so user
  * override semantics don't apply.
  *
  * <p>Discovered via
@@ -82,7 +83,7 @@ public class TestUrlScopeRemap implements BeanScopeMapper {
 
     @Override
     public Class<? extends Annotation> trigger() {
-        return JaxRsManagedScope.class;
+        return JaxRsManaged.class;
     }
 
     @Override

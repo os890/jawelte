@@ -54,7 +54,7 @@ class Scenario22Test {
                 .as("exactly one TestUrlHolder bean is registered")
                 .isNotNull();
         assertThat(bean.getScope())
-                .as("without scope-module the @JaxRsManagedScope remap is skipped — "
+                .as("without scope-module the @JaxRsManaged remap is skipped — "
                         + "TestUrlHolder keeps @ApplicationScoped")
                 .isEqualTo(ApplicationScoped.class);
     }

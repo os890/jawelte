@@ -20,8 +20,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 /**
  * Control bean for scenario 21: a plain {@code @ApplicationScoped}
  * bean that does NOT carry jaxrs-module's impl-internal
- * {@code @JaxRsManagedScope} marker. It exists to prove the
- * TestUrlHolder scope upgrade is keyed on the marker, not on
+ * {@code @JaxRsManaged} stereotype. It exists to prove the
+ * TestUrlHolder scope upgrade is keyed on that stereotype, not on
  * {@code @ApplicationScoped} — this bean must stay
  * {@code @ApplicationScoped} even with scope-module on the classpath.
  */
