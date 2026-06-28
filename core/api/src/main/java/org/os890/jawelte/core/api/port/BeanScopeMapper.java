@@ -44,10 +44,14 @@ import java.lang.annotation.Annotation;
  * <ol>
  *   <li>Optionally short-circuits when
  *       {@link #preserveExplicitDirectScopes()} is {@code true}
- *       AND the type's direct annotations include a CDI scope
- *       that is neither the trigger itself nor the trigger's
- *       stereotype-contributed scope (i.e. the user explicitly
- *       declared a different scope and wants it preserved).</li>
+ *       AND the type carries a CDI scope that is neither the
+ *       trigger itself nor the trigger's stereotype-contributed
+ *       scope (i.e. the user declared a different scope and wants
+ *       it preserved). "Carries" follows CDI's effective-scope
+ *       view, so a scope inherited from a base class via
+ *       {@link java.lang.annotation.Inherited} also short-circuits
+ *       the remap — see {@link #preserveExplicitDirectScopes()}
+ *       for the rationale and the subclass-override remedy.</li>
  *   <li>Otherwise removes every direct CDI scope annotation
  *       from the type and adds the {@link #targetScope()} as a
  *       direct annotation. The {@code remove} step affects only
@@ -119,8 +123,8 @@ public interface BeanScopeMapper {
 
     /**
      * Whether the remap should be skipped when the bean's class
-     * directly carries an explicit CDI scope other than the
-     * trigger or the trigger's stereotype-contributed scope.
+     * already carries an explicit CDI scope other than the trigger
+     * or the trigger's stereotype-contributed scope.
      *
      * <p>Useful for stereotype-style triggers (e.g.
      * {@code @ConfigBean}) where the user might add an explicit
@@ -131,10 +135,30 @@ public interface BeanScopeMapper {
      * there is no separate user-override semantic to preserve
      * since the trigger IS the scope.
      *
+     * <p><strong>Inherited scopes count.</strong> "Carries a scope"
+     * follows CDI's effective-scope view, i.e. it includes a scope
+     * <em>inherited from a base class</em> via
+     * {@link java.lang.annotation.Inherited} — and all built-in CDI
+     * scopes ({@code @RequestScoped}, {@code @SessionScoped},
+     * {@code @ApplicationScoped}, …) are {@code @Inherited}. So a
+     * trigger-annotated subclass that extends a scoped base (e.g.
+     * {@code @ConfigBean class Sub extends @RequestScoped Base}) is
+     * treated as already having a defined scope and is left
+     * untouched. That is deliberate and CDI-consistent: per CDI's
+     * own rules {@code Sub} genuinely resolves to the base's scope,
+     * and our rule is to not remap a bean whose scope is already
+     * defined. If a subclass needs the remap target instead (e.g.
+     * {@code @TestClassScoped}), the user declares that scope
+     * <em>directly on the subclass</em>; a directly-declared scope
+     * overrides the base's inherited one (CDI's
+     * class-level-scope-wins rule), giving the subclass the intended
+     * scope regardless of this short-circuit.
+     *
      * @return {@code true} to skip the remap when an explicit
-     *         non-default scope is directly declared on the type;
-     *         {@code false} (the default) to always apply the
-     *         remap when the trigger is present
+     *         non-default CDI scope is present on the type — declared
+     *         directly <em>or</em> inherited from a base class;
+     *         {@code false} (the default) to always apply the remap
+     *         when the trigger is present
      */
     default boolean preserveExplicitDirectScopes() {
         return false;

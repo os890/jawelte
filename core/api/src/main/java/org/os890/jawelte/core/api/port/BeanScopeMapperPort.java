@@ -121,15 +121,19 @@ public interface BeanScopeMapperPort {
      *       CDI scope (meta-annotated
      *       {@code jakarta.enterprise.context.NormalScope} or
      *       {@code jakarta.inject.Scope}).</li>
-     *   <li>{@link #annotationsToRemove()} — the exact set of
-     *       existing annotation types to strip from the type
-     *       before adding the new scope. Typically the bean
-     *       class's directly-declared CDI scopes (so the remap
-     *       doesn't end up with two scopes — a CDI deployment
-     *       error). May be empty when the trigger is a stereotype
-     *       contributing the scope indirectly (no direct scope to
-     *       remove; the directly-added target wins via CDI's
-     *       class-level-scope-wins rule).</li>
+     *   <li>{@link #annotationsToRemove()} — the set of existing
+     *       annotation types to strip from the type before adding
+     *       the new scope, so the remap doesn't end up with two
+     *       scopes (a CDI deployment error). This is the bean
+     *       class's CDI scopes per CDI's effective-scope view (so it
+     *       may include a scope inherited from a base via
+     *       {@link java.lang.annotation.Inherited}); the
+     *       {@code AnnotatedTypeConfigurator.remove(...)} step only
+     *       affects directly-declared annotations, so an inherited
+     *       entry is a harmless no-op. May be empty when the trigger
+     *       is a stereotype contributing the scope indirectly (no
+     *       direct scope to remove; the directly-added target wins
+     *       via CDI's class-level-scope-wins rule).</li>
      * </ul>
      *
      * <p>Records are intentional: the mapping is immutable and
