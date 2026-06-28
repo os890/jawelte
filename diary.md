@@ -6149,3 +6149,19 @@ Docs-only updates (no behaviour change):
   remedy.
 Note: docs/core.html (line ~978 "directly-declared CDI scopes") lives on the docs/ticket-016
 branch, not main; update it there when that branch lands. Verified via full-reactor clean install.
+
+## Perf: cache ConfigKeyAliasProvider discovery in ConfigResolverAdapter
+
+ConfigResolverAdapter.resolveAliasKeysFor ran ServiceLoader.load(ConfigKeyAliasProvider.class) on
+every call, re-enumerating and re-instantiating all providers each time. The provider set is fixed
+for the JVM (classpath discovery) and providers are stateless, so they are now enumerated once and
+cached in an instance field (cachedAliasProviders(), mirroring the existing cachedConfig() lazy
+style); resolveAliasKeysFor iterates the cached list. Behaviour is unchanged (same discovery order,
+same aliases). Updated the class javadoc.
+
+Test: tests/core/scenario-25-config-alias-providers-cached drives ConfigResolverAdapter directly
+(no container) with a counting test ConfigKeyAliasProvider registered via META-INF/services. Two
+resolveAliasKeysFor calls must (a) return the same aliases and (b) construct the provider exactly
+once. Test-the-test: reverting to per-call ServiceLoader.load makes the count 2 ("expected: 1 but
+was: 2"). Registered scenario-25 in the core aggregator; added previously-missing scenario-23/24 +
+new 25 to coverage-report.
