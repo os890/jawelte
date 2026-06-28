@@ -6101,3 +6101,23 @@ retained by a pooled thread until reuse/death (not a correctness bug). Also corr
 class-javadoc that claimed reset() was called "in the beforeAll finally block" (it's the
 TestInstanceFactory + afterAll safety net) and reinforced the overwrite-as-backstop note on the
 constructor javadoc. No behaviour change; verified via full-reactor clean install.
+
+## Doc/diagnostics fix: instantiateConfigured CDI-fallback intent + DEBUG log
+
+TestContext.instantiateConfigured's tryCdiFirst branch catches RuntimeException broadly and falls
+back to a reflective no-arg instance. The review flagged this as conflating "container absent"
+with "container up but bean broken" and suggested narrowing the catch. Investigated and found the
+broad catch is LOAD-BEARING: the only tryCdiFirst=true consumer is ServicePriorityResolver, and
+the default DefaultServicePriorityResolver is @ApplicationScoped — so it is NOT a registered bean
+during the CDI bootstrap window (BeforeBeanDiscovery etc.) where loadService(ServicePriorityResolver)
+is called. There, CDI.current().select(...).get() throws UnsatisfiedResolutionException, and the
+reflective fallback is the correct/required behavior (the default resolver is stateless). Narrowing
+the catch (the slide's suggestion) would let that propagate and break container startup.
+
+So this is a logging/docs topic, not a control-flow fix. Corrected the misleading "// CDI is not
+up" comment to document BOTH legitimate fallback cases (container absent + bean not yet resolvable
+during bootstrap) and why the broad catch is intentional rather than narrowed; updated the method
+javadoc; and added a DEBUG-level log of the swallowed exception so a genuinely broken custom
+@ApplicationScoped resolver (unsatisfied injection points) is diagnosable without failing startup.
+No control-flow change; the fallback path is exercised by every scenario's bootstrap. Verified via
+full-reactor clean install.
