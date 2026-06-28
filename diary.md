@@ -5866,3 +5866,36 @@ its own value — the first-container-wins regression):
 - wiremock `scenario-26`: two `WireMockRegistryScopeRemap` instances with the
   config changed between them; asserts each reports its own target scope.
 Mutation: reverting each field to static makes its scenario fail.
+
+## Thread-safe collections in CDI lifecycle-observer extensions
+
+Two extensions mutated plain (non-thread-safe) collections from
+`ProcessInjectionPoint` / `ProcessBean` observers, which Weld's parallel deployer
+dispatches on multiple (ForkJoinPool) threads — a data race that can silently
+drop an auto-mock candidate or a discovered repository (lost element / resize
+corruption), surfacing later as an unsatisfied-injection failure or a missing
+synthetic bean.
+
+- `TestBeansCdiExtension.unsatisfiedCandidateIps` (LinkedHashSet) — mutated in
+  `onProcessInjectionPoint`.
+- `SpringDataRepositoryExtension.discoveredRepositories` (LinkedHashSet) — mutated
+  in `onProcessInjectionPoint`; `existingBeanTypes` (HashSet) — mutated in
+  `onProcessBean`.
+
+All three are now `ConcurrentHashMap.newKeySet()` (matching the project's
+existing `ConcurrentHashMap` use in `ScopeRemapCdiExtension` for the same
+lifecycle-phase reason). Insertion order was already non-deterministic under
+parallel dispatch and is not relied on, so the unordered concurrent set is fine.
+
+Test: load-and-performance only (skipped in the normal suite; run via `-Plnp`).
+`tests/lnp-module/scenario-10-concurrent-lifecycle-observer-sets` drives the
+REAL observer methods exactly as the container would — pre-creating a distinct
+event per element (hand-rolled fakes, not Mockito, so no per-mock lock serialises
+the burst), invoking the package-private observers reflectively from a tight
+concurrent burst across 8 threads, and asserting the collecting set kept every
+element. Covers `TestBeansCdiExtension.onProcessInjectionPoint` and
+`SpringDataRepositoryExtension.onProcessBean`. Mutation: reverting either set to
+a plain HashSet/LinkedHashSet loses ~half the elements under the burst, failing
+the assertion. (spring-data's `onProcessInjectionPoint`/discoveredRepositories
+needs distinct Repository sub-interfaces, which can't be synthesised in bulk; it
+carries the identical fix and the same observer-add shape exercised here.)

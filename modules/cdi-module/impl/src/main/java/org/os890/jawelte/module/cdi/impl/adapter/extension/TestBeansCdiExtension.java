@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.context.NormalScope;
@@ -118,7 +119,9 @@ public class TestBeansCdiExtension implements Extension {
     // Resolved per container in onBeforeBeanDiscovery (not once per JVM)
     // so each test class's MP Config layer selects the auto-mock scope.
     private Class<? extends Annotation> autoMockNonJdkScope;
-    private final Set<IpKey> unsatisfiedCandidateIps = new LinkedHashSet<>();
+    // Concurrent: Weld dispatches ProcessInjectionPoint events on multiple
+    // (ForkJoinPool) threads, so this set is mutated from several threads.
+    private final Set<IpKey> unsatisfiedCandidateIps = ConcurrentHashMap.newKeySet();
     private final List<ProducedTestInstance> producedTestInstances = new ArrayList<>();
 
     /** No-arg constructor required by the CDI runtime. */
