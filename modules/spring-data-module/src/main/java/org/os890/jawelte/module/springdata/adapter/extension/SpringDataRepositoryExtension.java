@@ -18,9 +18,8 @@ package org.os890.jawelte.module.springdata.adapter.extension;
 import java.lang.System.Logger;
 import java.lang.reflect.Field;
 import java.lang.reflect.Type;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.enterprise.event.Observes;
@@ -129,9 +128,12 @@ public class SpringDataRepositoryExtension implements Extension {
 
     private static final String SPRING_DATA_PACKAGE_PREFIX = "org.springframework.data";
 
-    private final Set<Class<?>> discoveredRepositories = new LinkedHashSet<>();
+    // Concurrent: Weld dispatches ProcessInjectionPoint / ProcessBean events
+    // on multiple (ForkJoinPool) threads, so these sets are mutated from
+    // several threads during the deployment lifecycle phase.
+    private final Set<Class<?>> discoveredRepositories = ConcurrentHashMap.newKeySet();
 
-    private final Set<Type> existingBeanTypes = new HashSet<>();
+    private final Set<Type> existingBeanTypes = ConcurrentHashMap.newKeySet();
 
     /** No-arg constructor required by the CDI runtime. */
     public SpringDataRepositoryExtension() {
