@@ -140,8 +140,21 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
         TestBeanContainerPort containerPort = ServiceLoaderCache.resolveContainerPort();
         List<TestModuleLifecyclePort> lifecyclePorts = ServiceLoaderCache.resolveLifecyclePorts();
 
+        // No eager teardown here: this beforeEach does NOT clean up its own
+        // partial work if a port below throws. Cleanup is paired with
+        // #afterEach, which JUnit invokes even when a BeforeEachCallback
+        // throws (the AfterEachCallbacks for an already-registered extension
+        // always run). #afterEach calls containerPort.afterEach
+        // unconditionally — so the request scope activated just below is
+        // deactivated regardless of how far this loop got — and LIFO-cleans
+        // exactly the ports recorded in `completed`. A port that throws is
+        // therefore added to `completed` only after it returns, so a
+        // half-run port is never torn down.
         containerPort.beforeEach(testContext);
 
+        // Each port is recorded only after its beforeEach returns, so if
+        // port N throws, ports N+1.. never run and only 0..N-1 (plus the
+        // container, handled unconditionally in afterEach) are cleaned up.
         for (TestModuleLifecyclePort port : lifecyclePorts) {
             port.beforeEach(testContext);
             completed.add(port);
@@ -166,6 +179,16 @@ public class DelegatingJUnitExtension implements TestBeansExtension {
                 collected.add(t);
             }
         }
+        // Container teardown runs UNCONDITIONALLY — independent of `completed`
+        // and even when this afterEach fires because a beforeEach threw. This
+        // is the cleanup pairing for the request-scope activation in
+        // containerPort.beforeEach: if a lifecycle port's beforeEach throws,
+        // JUnit skips the remaining beforeEach callbacks and the test body but
+        // still invokes this afterEach, so the request scope is deactivated
+        // here rather than leaking into the (skipped) test or a later method.
+        // containerPort.afterEach is idempotent — it deactivates + unbinds the
+        // RequestContextController only if one is bound — so it is safe even if
+        // containerPort.beforeEach never activated one.
         try {
             ServiceLoaderCache.resolveContainerPort().afterEach(testContext);
         } catch (Throwable t) {
