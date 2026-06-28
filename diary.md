@@ -5925,3 +5925,23 @@ for the JTA bean graph. The JVM-global TM leak it can leave is the separate
 Matrix-only verification (no dedicated test): a bootstrap-cost change with no
 behavioural difference; the jta phases (owb/weld × geronimo/narayana) exercise
 JtaCdiExtension end-to-end.
+
+## Doc fix: auto-mock exclude-packages owner key is an extension channel, not override
+
+`DefaultExcludedPackageFilter.readPrefixes` builds the effective exclude list as
+the additive union of every `ConfigKeyAliasProvider` contributor's value plus the
+owner key's value — there is no dedup or removal step. So a user can ADD prefixes
+via the owner key but cannot SUPPRESS a framework-contributed prefix through it; a
+contributor default is removed only by overriding that contributor's own
+module-specific key in a higher-ordinal MP Config source.
+
+Two javadocs called the owner key the "user-override channel", overstating it.
+Reworded both (`DefaultExcludedPackageFilter` class javadoc and
+`ConfigKeyAliasProvider`) to describe it as the user-EXTENSION channel (additive
+union, no removal) and to document the contributor-key route for removing a
+default. Behaviour unchanged — the additive design is intentional (the slide's
+alternative, making the owner key replace contributor aliases, would silently drop
+framework-internal exclusions like Weld/OWB decorators and expose them to
+auto-mocking).
+
+Documentation-only; verified via the full-reactor clean install (javadoc gates).

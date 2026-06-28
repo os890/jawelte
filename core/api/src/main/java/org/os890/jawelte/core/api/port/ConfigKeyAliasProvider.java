@@ -23,12 +23,18 @@ import java.util.List;
  * owned by another module.
  *
  * <p>The owning module reads its own MP Config key directly via
- * {@link ConfigResolver#resolve(String)} — that key remains the
- * user-override channel for the logical concept. Contributor
- * modules ship a {@code ConfigKeyAliasProvider} via
+ * {@link ConfigResolver#resolve(String)} — that key is the user's
+ * <em>extension</em> channel for the logical concept: its value is
+ * merged <strong>additively</strong> with the contributor values, not
+ * substituted for them. Contributor modules ship a
+ * {@code ConfigKeyAliasProvider} via
  * {@code META-INF/services/org.os890.jawelte.core.api.port.ConfigKeyAliasProvider}
  * mapping the logical key to one or more contributor-specific keys
- * that the owner then merges into its final value.
+ * that the owner then merges into its final value. Because the merge
+ * is additive (a union, with no removal step), the owner key cannot
+ * suppress a contributor-supplied value; a contributor default is
+ * removed by overriding that contributor's own key in a
+ * higher-ordinal MP Config source.
  *
  * <p>Example: cdi-module's {@code DefaultExcludedPackageFilter}
  * owns the logical key {@code auto-mock.exclude-packages}; the

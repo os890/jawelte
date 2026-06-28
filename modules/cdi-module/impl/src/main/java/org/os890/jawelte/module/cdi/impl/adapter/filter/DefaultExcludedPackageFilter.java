@@ -37,13 +37,21 @@ import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
  *   <li>{@link #DOT_KEY} feeds {@link #isExcluded(Class)} — a target
  *       type is excluded when any class in its supertype hierarchy
  *       lives under one of the configured prefixes. The owner key
- *       ({@code DOT_KEY}) is the consumer's user-override channel;
- *       contributing modules (jpa-module, spring-data-module, …)
- *       extend the list via the
- *       {@link ConfigKeyAliasProvider} SPI, mapping
+ *       ({@code DOT_KEY}) is the consumer's user-<em>extension</em>
+ *       channel: its prefixes are <strong>added to</strong> (not
+ *       substituted for) the framework-contributed ones. Contributing
+ *       modules (jpa-module, spring-data-module, …) extend the list
+ *       via the {@link ConfigKeyAliasProvider} SPI, mapping
  *       {@code DOT_KEY} to their own module-specific MP Config keys
  *       that ship their framework-owned package prefixes as
- *       defaults.</li>
+ *       defaults. The effective list is the union of every
+ *       contributor's value and the owner key's value — there is no
+ *       removal step, so the owner key cannot suppress a
+ *       framework-contributed prefix. To drop a contributor default,
+ *       override that contributor's own module-specific key (e.g.
+ *       {@code org.os890.jawelte.module.springdata.auto-mock.framework-exclude-packages})
+ *       to a narrower or empty value in a higher-ordinal MP Config
+ *       source.</li>
  *   <li>{@link #OWNING_BEAN_DOT_KEY} feeds
  *       {@link #isOwningBeanExcluded(Class)} — an IP is dropped
  *       when its owning bean's package starts with one of the

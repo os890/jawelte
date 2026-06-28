@@ -247,3 +247,39 @@ unreachable lines, or replace each helper's tail with the same generic-erasure
 `throwUnchecked(primary)` "sneaky throw" idiom now used in `JpaLifecycleAdapter`
 so the three lifecycle aggregators share one rethrow shape. Leave as-is if not
 worth the churn; the current code is already type-correct.
+
+## Centralize the reflective-FQCN-scope loader (currently duplicated 3×)
+
+Context (maintainability): the "reflectively load an optional CDI scope annotation
+by FQCN, read from MP Config, for cross-module decoupling from scope-module"
+pattern is implemented three times with subtly divergent behaviour:
+
+- `TestBeansCdiExtension.resolveAutoMockNonJdkScope` (cdi-module/impl) — falls
+  back to `RequestScoped.class`, uses the **thread context** ClassLoader.
+- `WireMockRegistryScopeRemap.loadTargetScope` (wiremock-module/impl) — falls
+  back to `null`, uses **its own class's** ClassLoader.
+- `DefaultEjbAnnotationMapper.loadSingletonScope` (ejb-module/impl) — falls back
+  to `null`, uses **its own class's** ClassLoader. Its javadoc even states it
+  follows "the same pattern used by `WireMockRegistryScopeRemap`", confirming the
+  copy-paste lineage.
+
+Two problems:
+1. **Divergent fallbacks and ClassLoaders** — the three sites disagree on the
+   absence-fallback and on which ClassLoader resolves the FQCN, so behaviour
+   differs across modules for the same conceptual operation.
+2. **No scope validation** — all three accept the loaded class on
+   `Annotation.class.isAssignableFrom(loaded)` alone; none verifies the class is
+   actually a CDI scope (meta-annotated `@NormalScope`/`@Scope`). A user who
+   misconfigures the key to a non-scope annotation gets it accepted here and a
+   confusing CDI **bootstrap** failure later instead of a clear config error.
+
+All three name keys whose single default ships from scope-module's properties
+file, so this is genuinely one cross-module concept.
+
+Suggested fix: extract one shared helper (core/api or a small core util) that
+does resolve-key (via `ConfigResolver`, with documented fallback) →
+trim/blank-check → `Class.forName` → **scope-annotation validation** → documented
+absence fallback. Have all three sites call it so ClassLoader choice, fallback
+discipline, and scope validation are uniform. Settle the canonical ClassLoader
+and absence-fallback semantics as part of the design (the three current choices
+differ — pick one and document why).
