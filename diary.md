@@ -5781,3 +5781,55 @@ Changes:
 Documentation-only; no behavioural change. Verified via grep that no
 TICKET-/POC token remains in any api source or in any impl `/** */` javadoc, and
 the full reactor `clean install` (javadoc / checkstyle / RAT gates) stays green.
+
+## @Dependent test instance + dependents are now released (@PreDestroy fires)
+
+**Problem.** The test class is registered as a `@Dependent` synthetic bean whose
+producer (`TestBeansCdiExtension.instantiate`) hand-rolled an `InjectionTarget` +
+`createCreationalContext(null)`, produced/injected/`@PostConstruct`-ed the
+instance, and returned it while discarding that `CreationalContext` — and the
+synthetic bean had no `destroyWith`. The factory
+(`CdiTestInstanceFactoryPortAdapter`) also dropped its `Instance<?>` handle.
+Nothing balanced it: `CdiTestBeanContainer` never destroyed the instance (zero
+`destroy()`/`release()` calls in core/impl + cdi-module/impl). So the `@Dependent`
+objects injected into the test (JDK-type auto-mocks, any `@Dependent`
+collaborators) were dependents of the abandoned `CreationalContext`, and their
+`@PreDestroy` — and the test instance's own `@PreDestroy` — never ran, leaking
+until GC across a suite.
+
+**Fix.** The producer now hands the `InjectionTarget` + instance +
+`CreationalContext` to a per-thread `ProducedTestInstanceHolder`.
+`CdiTestBeanContainer.afterEach` releases it — `preDestroy(instance)` →
+`dispose(instance)` → `CreationalContext.release()` — while the request context is
+still active, then deactivates the request context in a `finally`. The release
+fires `@PreDestroy` on the test instance and cascades to every `@Dependent`
+object injected into it. Per-method (matches the supported PER_METHOD lifecycle),
+portable across OWB and Weld, no accumulation.
+
+**Test.** New `tests/cdi-module/scenario-58-dependent-instance-predestroy`: a
+`@Dependent` `RecordingCollaborator` (with `@PreDestroy`) is injected into a
+`@Dependent` subject (also with `@PreDestroy`); driven via `EngineTestKit`, the
+driver asserts both `@PreDestroy` callbacks fired. Green under owb and weld.
+Mutation: removing the `capture(...)` call (old abandoned-CC behavior) makes
+neither callback fire and the scenario fails.
+
+## (rework) @Dependent test-instance release moved to the container-bound extension
+
+Reworked the previous fix per review feedback: the per-thread
+`ProducedTestInstanceHolder` workaround is removed. The produced `@Dependent`
+test instance + its `InjectionTarget` / `CreationalContext` are now recorded on
+the `TestBeansCdiExtension` instance itself — which is bound to the CDI
+container's lifecycle — and released from the extension's
+`@Observes BeforeShutdown` observer (preDestroy / dispose /
+`CreationalContext.release()`, best-effort with first-failure-rethrow). So the
+test instance and every `@Dependent` injected into it are destroyed (their
+`@PreDestroy` runs) when the container shuts down, with no thread-local state and
+`CdiTestBeanContainer.afterEach` left untouched.
+
+Note on the per-method alternative: making the test instance `@RequestScoped` /
+`@TestMethodScoped` would let a scope context clean it up per method, but those
+are `@NormalScope` (client-proxied) and the JUnit `TestInstanceFactory` bridge
+needs the *real* test instance, not a proxy — so `@Dependent` + container-lifecycle
+release is the fit. scenario-58 still validates the contract (it asserts the
+`@PreDestroy` callbacks fired after the subject's full run, which includes
+container shutdown).
