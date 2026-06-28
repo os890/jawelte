@@ -31,7 +31,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (spring-data-module)</name>
-    <description>Single-jar CDI side-car that auto-discovers Spring Data repository interfaces from the test classpath during CDI bootstrap and registers real Spring Data implementations as @ApplicationScoped CDI beans, dispatching to jpa-module's transaction-scoped EntityManager. No api/impl split, no TestModuleLifecyclePort adapter, no SPI ports: discovery is implicit (ship the jar, the extension does the rest). The only place org.springframework.data.* types appear; the CDI runtime discovers the extension via META-INF/services/jakarta.enterprise.inject.spi.Extension.</description>
+    <description>Single-jar CDI side-car that auto-discovers Spring Data repository interfaces from the test classpath during CDI bootstrap and registers real Spring Data implementations as @RequestScoped CDI beans, dispatching to jpa-module's transaction-scoped EntityManager. No api/impl split, no TestModuleLifecyclePort adapter, no SPI ports: discovery is implicit (ship the jar, the extension does the rest). The only place org.springframework.data.* types appear; the CDI runtime discovers the extension via META-INF/services/jakarta.enterprise.inject.spi.Extension.</description>
 
     <dependencies>
         <!--

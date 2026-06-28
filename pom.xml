@@ -115,7 +115,14 @@
         <jacoco.plugin.version>0.8.13</jacoco.plugin.version>
         <maven.javadoc.plugin.version>3.11.2</maven.javadoc.plugin.version>
 
-        <!-- Quality gate thresholds (project-wide; enforced in coverage-report module) -->
+        <!--
+            Quality gate thresholds (project-wide). Advisory for now: the
+            parent jacoco plugin runs prepare-agent + report only, and the
+            coverage-report aggregator runs report-aggregate without a check
+            goal, so no build currently fails on these numbers. Faithful
+            aggregate enforcement is deferred (see the note in
+            coverage-report/pom.xml).
+        -->
         <jacoco.line.coverage.minimum>0.80</jacoco.line.coverage.minimum>
         <jacoco.branch.coverage.minimum>0.70</jacoco.branch.coverage.minimum>
     </properties>

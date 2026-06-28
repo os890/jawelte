@@ -5973,3 +5973,32 @@ probe can't reliably reverse-map a normalized env name):
   for an exact key; softened the interface intro and the contract bullet to match.
 
 Verified via the full-reactor clean install (javadoc gates).
+
+## Doc fix: pom-description consistency + honest JaCoCo-gate comment
+
+Three build/doc inaccuracies corrected (all verified against current main):
+- Root pom: the quality-gate-thresholds comment claimed they were "enforced in
+  coverage-report module". They are not — the parent jacoco plugin runs prepare-agent +
+  report only, and coverage-report runs report-aggregate with no check goal, so nothing
+  fails on the 0.80/0.70 numbers. Reworded the comment to say the thresholds are advisory
+  and faithful aggregate enforcement is deferred (matching coverage-report's own note).
+- wiremock-module parent pom: description claimed "scope-module is a hard compile dep of
+  wiremock-module/impl for the @TestClassScoped class reference" — false. The target scope
+  is resolved reflectively via an MP Config FQCN (Class.forName); wiremock/impl's own pom
+  already says "No compile dep on scope-module". Reworded to reflect the reflective load
+  and the no-op-when-absent behaviour.
+- spring-data-module pom: description said beans are registered @ApplicationScoped — code
+  uses @RequestScoped (.scope(RequestScoped.class), with a "Why @RequestScoped" javadoc
+  section). Corrected.
+
+Already-fixed sub-claim (no action): scope-module/impl pom previously named a phantom
+ConfigBeanScopeRemapCdiExtension — fixed earlier in b30a1fd2; the description now correctly
+names the real core/impl ScopeRemapCdiExtension.
+
+Decision on the JaCoCo gate itself: the aggregated suite passes (line ≈81.2%, branch
+≈70.4%), but jacoco can't natively gate report-aggregate output (check needs local class
+files, the aggregator has none), and a faithful merge+unpack+check must exactly reproduce
+report-aggregate's class set (~179 vs ~375 on disk). With only a +0.4pt branch margin a
+hastily-wired gate would be fragile/misleading, so wiring the faithful gate is recorded in
+todo.md as a follow-up rather than rushed here. Docs-only change; verified via full-reactor
+clean install.
