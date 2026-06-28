@@ -52,9 +52,11 @@ import org.os890.jawelte.core.api.port.BeanScopeMapper;
  * shipped in this module. The active
  * {@code BeanScopeMapperPort} (default impl lives in
  * {@code core/impl}) walks every {@code BeanScopeMapper} provider
- * on the classpath via {@code ServiceLoader.load(...)} once at
- * extension load time and applies the remap during
- * {@code ProcessAnnotatedType} through {@code ScopeRemapCdiExtension}.
+ * on the classpath via {@code ServiceLoader.load(...)} and applies
+ * the remap during {@code ProcessAnnotatedType} through
+ * {@code ScopeRemapCdiExtension}. A fresh provider is instantiated per
+ * container, so the target scope is resolved from the active MP Config
+ * layer each time rather than frozen for the JVM.
  */
 public class WireMockRegistryScopeRemap implements BeanScopeMapper {
 
@@ -68,7 +70,10 @@ public class WireMockRegistryScopeRemap implements BeanScopeMapper {
     public static final String TARGET_SCOPE_KEY =
             "org.os890.jawelte.module.wiremock.registry.default-scope";
 
-    private static final Class<? extends Annotation> TARGET_SCOPE = loadTargetScope();
+    // Resolved per instance — and a fresh provider is created per
+    // container — so each container picks up its own MP Config layer
+    // rather than the value frozen by the first container in the JVM.
+    private final Class<? extends Annotation> targetScope = loadTargetScope();
 
     /** No-arg constructor required by {@code ServiceLoader}. */
     public WireMockRegistryScopeRemap() {
@@ -81,7 +86,7 @@ public class WireMockRegistryScopeRemap implements BeanScopeMapper {
 
     @Override
     public Class<? extends Annotation> targetScope() {
-        return TARGET_SCOPE;
+        return targetScope;
     }
 
     @SuppressWarnings("unchecked")
