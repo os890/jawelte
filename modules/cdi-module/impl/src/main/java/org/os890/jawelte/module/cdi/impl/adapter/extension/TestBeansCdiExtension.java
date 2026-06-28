@@ -20,6 +20,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -44,6 +45,7 @@ import jakarta.enterprise.inject.spi.AnnotatedField;
 import jakarta.enterprise.inject.spi.AnnotatedType;
 import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.BeforeBeanDiscovery;
+import jakarta.enterprise.inject.spi.BeforeShutdown;
 import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.InjectionPoint;
 import jakarta.enterprise.inject.spi.InjectionTarget;
@@ -116,6 +118,7 @@ public class TestBeansCdiExtension implements Extension {
     private ExcludedPackageFilter excludedPackageFilter;
     private MockFactory mockFactory;
     private final Set<IpKey> unsatisfiedCandidateIps = new LinkedHashSet<>();
+    private final List<ProducedTestInstance> producedTestInstances = new ArrayList<>();
 
     /** No-arg constructor required by the CDI runtime. */
     public TestBeansCdiExtension() {
@@ -397,7 +400,7 @@ public class TestBeansCdiExtension implements Extension {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Object instantiate(BeanManager beanManager, Class<?> testClass) {
+    private Object instantiate(BeanManager beanManager, Class<?> testClass) {
         AnnotatedType<?> annotatedType = beanManager.createAnnotatedType(testClass);
         InjectionTarget injectionTarget = beanManager
                 .getInjectionTargetFactory(annotatedType)
@@ -406,7 +409,48 @@ public class TestBeansCdiExtension implements Extension {
         Object instance = injectionTarget.produce(context);
         injectionTarget.inject(instance, context);
         injectionTarget.postConstruct(instance);
+        // Record the produced @Dependent test instance + its CDI machinery on
+        // this (container-scoped) extension so it is released when the container
+        // shuts down. Otherwise this CreationalContext — and the @Dependent
+        // objects injected into the test (incl. JDK auto-mocks) — would be
+        // abandoned and their @PreDestroy would never run.
+        producedTestInstances.add(new ProducedTestInstance(injectionTarget, instance, context));
         return instance;
+    }
+
+    /**
+     * Release every {@code @Dependent} test instance produced by
+     * {@link #instantiate(BeanManager, Class)} when the container shuts
+     * down: fire its {@code @PreDestroy}, dispose it, and release its
+     * {@link CreationalContext} so every {@code @Dependent} object
+     * injected into the test is destroyed (its {@code @PreDestroy} runs
+     * too). Best-effort: every instance is released even if one throws;
+     * the first failure is rethrown with the rest suppressed.
+     */
+    void onBeforeShutdown(@Observes BeforeShutdown event) {
+        RuntimeException primary = null;
+        for (ProducedTestInstance produced : producedTestInstances) {
+            try {
+                releaseProduced(produced);
+            } catch (RuntimeException releaseFailure) {
+                if (primary == null) {
+                    primary = releaseFailure;
+                } else {
+                    primary.addSuppressed(releaseFailure);
+                }
+            }
+        }
+        producedTestInstances.clear();
+        if (primary != null) {
+            throw primary;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void releaseProduced(ProducedTestInstance produced) {
+        produced.injectionTarget.preDestroy(produced.instance);
+        produced.injectionTarget.dispose(produced.instance);
+        produced.creationalContext.release();
     }
 
     private void addTestClassInjectionPoints(BeanManager beanManager) {
@@ -743,6 +787,28 @@ public class TestBeansCdiExtension implements Extension {
                 }
             }
             return h;
+        }
+    }
+
+    /**
+     * A {@code @Dependent} test instance produced for the active
+     * container, plus the {@link InjectionTarget} and
+     * {@link CreationalContext} that built it, retained so the instance
+     * (and its {@code @Dependent} dependents) can be released on
+     * container shutdown.
+     */
+    @SuppressWarnings("rawtypes")
+    private static class ProducedTestInstance {
+
+        private final InjectionTarget injectionTarget;
+        private final Object instance;
+        private final CreationalContext creationalContext;
+
+        private ProducedTestInstance(
+                InjectionTarget injectionTarget, Object instance, CreationalContext creationalContext) {
+            this.injectionTarget = injectionTarget;
+            this.instance = instance;
+            this.creationalContext = creationalContext;
         }
     }
 }
