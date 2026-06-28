@@ -41,9 +41,39 @@ import org.os890.jawelte.core.api.port.TestContext;
  * </ol>
  *
  * <p>Cleanup of the per-thread registration is the framework-internal
- * {@link #reset()} method, called by {@code DelegatingJUnitExtension}
- * on its own local per-test reference in the {@code beforeAll}
- * {@code finally} block.
+ * {@link #reset()} method. It is called primarily by
+ * {@code EnableTestBeans.Proxy} (the JUnit {@code TestInstanceFactory})
+ * once the test instance has been created, and again as a safety net by
+ * {@code DelegatingJUnitExtension.afterAll} (covering test classes that
+ * are not created through the factory bridge — e.g. {@code @QuarkusTest}
+ * or a class without {@code @EnableTestBeans}). {@code reset()} is
+ * idempotent and best-effort same-thread: it clears the slot only when
+ * the calling thread's {@code CURRENT} still holds this instance.
+ *
+ * <p><strong>Threading model (same-thread assumption).</strong>
+ * {@code CURRENT} is set in {@link #TestContextImpl(Class)} on the
+ * {@code beforeAll} thread, read by every CDI extension via
+ * {@link TestContext#get()} during the container bootstrap that
+ * {@code beforeAll} drives <em>synchronously</em> (so on that same
+ * thread), and cleared by {@link #reset()} on the
+ * {@code TestInstanceFactory} / {@code afterAll} thread. Under the
+ * framework's supported execution model — single-threaded, one test
+ * class per JVM, no JUnit parallel execution ({@code -T 1}, no parallel
+ * Surefire config) — all of these run on the <em>same</em> thread, so
+ * the set-here / clear-there split is exact and the slot is always
+ * cleared.
+ *
+ * <p>If a consumer were to enable JUnit parallel execution and JUnit
+ * ran {@code beforeAll} and the factory/{@code afterAll} on different
+ * threads, the cross-thread {@link #reset()} would no-op (a
+ * {@link ThreadLocal} can only clear the calling thread's slot), leaving
+ * the {@code beforeAll} thread's slot populated. That is <em>not</em> a
+ * correctness hazard for {@link TestContext#get()}: the constructor's
+ * {@code CURRENT.set(this)} overwrites any stale slot, and JUnit always
+ * runs a test class's {@code beforeAll} (hence the constructor) before
+ * any {@code get()} on that thread — so {@code get()} never returns a
+ * leaked context. The only residue is the prior instance being retained
+ * by the pooled thread until it is reused (overwritten) or dies.
  */
 public class TestContextImpl implements TestContext {
 
@@ -68,7 +98,11 @@ public class TestContextImpl implements TestContext {
      * {@code DelegatingJUnitExtension.beforeAll}. Self-registers on
      * the class-level static {@link ThreadLocal} so that
      * {@link TestContext#get()} returns this instance to any caller on
-     * the same thread, until {@link #reset()} clears the slot.
+     * the same thread, until {@link #reset()} clears the slot. The
+     * {@code CURRENT.set(this)} call <em>overwrites</em> any slot left
+     * uncleared by a prior test on this thread, which is the
+     * self-healing backstop should a cross-thread {@link #reset()} ever
+     * have no-opped (see the class-level threading note).
      *
      * @param testClass the test class annotated with
      *                  {@code @EnableTestBeans}; must not be {@code null}
