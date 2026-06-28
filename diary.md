@@ -6063,3 +6063,22 @@ PU + key; (2) same name + identical config -> cached factory reused, supplier no
 divergence). Test-the-test: disabling the divergence throw makes (1) fail ("Expecting code to
 raise a throwable"). Registered scenario-68 in the jpa aggregator; added the previously-missing
 scenario-66/67 + new 68 to coverage-report.
+
+## Doc fix: document DelegatingJUnitExtension beforeEach/afterEach cleanup pairing
+
+DelegatingJUnitExtension.beforeEach activates the CDI request scope (containerPort.beforeEach)
+and then runs each lifecycle port's beforeEach, recording it in `completed` only after it
+returns. It does NOT eagerly tear down its partial work if a port throws. That is correct but
+non-obvious: cleanup is paired with afterEach, which JUnit invokes even when a BeforeEachCallback
+throws (AfterEachCallbacks for an already-registered extension always run). afterEach LIFO-cleans
+the recorded ports and calls containerPort.afterEach UNCONDITIONALLY — so the request scope is
+deactivated regardless of how far the beforeEach loop got — and containerPort.afterEach is
+idempotent (deactivates + unbinds the RequestContextController only if one is bound).
+
+The code already recovers from a failed beforeEach; the gap the review flagged was purely that
+this dependency on JUnit's afterEach-after-failed-beforeEach guarantee was undocumented, so a
+reader couldn't see what pairs the request-scope activation with its deactivation. Added
+comments to beforeEach (why no eager teardown; ports recorded only after returning) and afterEach
+(why container teardown is unconditional + that it's idempotent). No behaviour change — a
+defensive eager-teardown guard would be untestable (JUnit always invokes afterEach, so guarded
+and unguarded code behave identically in any runnable test). Verified via full-reactor clean install.
