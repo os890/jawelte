@@ -6002,3 +6002,31 @@ report-aggregate's class set (~179 vs ~375 on disk). With only a +0.4pt branch m
 hastily-wired gate would be fragile/misleading, so wiring the faithful gate is recorded in
 todo.md as a follow-up rather than rushed here. Docs-only change; verified via full-reactor
 clean install.
+
+## Fix: XaDataSourceWrapper no-tx defensive path leaked the physical XAConnection
+
+XaDataSourceWrapper.managedConnection's defensive no-transaction branch opened an
+XAConnection and returned only xaConnection.getConnection() (the logical handle),
+dropping the XAConnection reference. Per the JDBC PooledConnection/XAConnection
+contract, closing the logical handle does NOT close the underlying physical
+XAConnection — and on the no-tx path no Synchronization is ever registered to close
+it later (unlike the in-tx branch, which caches + closes via TxScopedCleanupSynchronization).
+So every time the defensive path ran, the physical XAConnection + socket leaked. The
+path is expected to run (the class javadoc calls it a defensive fallback for
+diagnostic tooling / connection-validation probes; currentTransactionOrNull() can also
+return null transiently because it swallows SystemException/RuntimeException to null).
+
+Fix: on the no-tx path, attach a ConnectionEventListener to the XAConnection that closes
+it when the caller closes (connectionClosed) or errors on (connectionErrorOccurred) the
+logical handle. Keeps the path functional (refusing the call would break the legitimate
+validation/diagnostic probes the javadoc describes). Generalised closeQuietly to take a
+context string; updated the two enlistment-failure callers. Updated the class javadoc.
+
+Test: tests/jta-module/scenario-57-no-tx-path-closes-xaconnection. A counting XADataSource
+(CountingXaDataSource + CountingXaConnection) wraps H2 and tracks physical-XAConnection
+open vs close. The test drives XaDataSourceWrapper directly with no active JTA tx (so the
+defensive branch is taken deterministically — currentTransactionOrNull resolves to null),
+gets a handle, closes it, and asserts the physical XAConnection was closed (open=1,
+closed=1). Test-the-test: removing the listener makes the test fail (closed stays 0,
+"expected: 1 but was: 0"). Also registered scenario-56 (previously missing) + scenario-57
+in coverage-report.

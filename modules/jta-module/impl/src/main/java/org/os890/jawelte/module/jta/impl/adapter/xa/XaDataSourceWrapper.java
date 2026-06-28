@@ -24,6 +24,8 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import javax.sql.ConnectionEvent;
+import javax.sql.ConnectionEventListener;
 import javax.sql.DataSource;
 import javax.sql.XAConnection;
 import javax.sql.XADataSource;
@@ -67,6 +69,12 @@ import org.os890.jawelte.module.jpa.api.port.TransactionStrategy;
  * provider must not call this wrapper outside a JTA transaction in
  * JTA-coordinator mode, so the path exists only as a defensive
  * fallback for diagnostic tooling and connection-validation calls.
+ * Because no {@code Synchronization} is registered on that path, the
+ * wrapper instead attaches a {@link ConnectionEventListener} so the
+ * underlying {@link XAConnection} is closed when the caller closes
+ * (or errors on) the logical handle — closing the handle alone would
+ * not release the physical {@code XAConnection} (JDBC
+ * {@code PooledConnection} contract), leaking it otherwise.
  *
  * <p>Cleanup is driven by the registered {@code Synchronization}:
  * its {@code afterCompletion} removes the entry from both caches and
@@ -184,7 +192,26 @@ public class XaDataSourceWrapper implements DataSource {
             // non-cached connection. Hibernate's JTA coordinator
             // should never ask for one outside a tx — but connection
             // validation / startup probes might.
+            //
+            // No tx means no Synchronization will ever fire to release
+            // the underlying XAConnection, and closing the logical
+            // handle does NOT close the physical XAConnection (JDBC
+            // PooledConnection contract). Bridge the two: close the
+            // XAConnection when the caller closes (or errors on) the
+            // handle, so this defensive path doesn't leak the physical
+            // connection + its socket.
             XAConnection xaConnection = openXa(user, password);
+            xaConnection.addConnectionEventListener(new ConnectionEventListener() {
+                @Override
+                public void connectionClosed(ConnectionEvent event) {
+                    closeQuietly(xaConnection, "after no-transaction connection handle closed");
+                }
+
+                @Override
+                public void connectionErrorOccurred(ConnectionEvent event) {
+                    closeQuietly(xaConnection, "after no-transaction connection error");
+                }
+            });
             return xaConnection.getConnection();
         }
         Connection cached = cachedConnections.get(transaction);
@@ -203,14 +230,14 @@ public class XaDataSourceWrapper implements DataSource {
         } catch (RollbackException | SystemException jtaFailure) {
             cachedConnections.remove(transaction);
             cachedXaConnections.remove(transaction);
-            closeQuietly(xaConnection);
+            closeQuietly(xaConnection, "after enlistment failure");
             throw new SQLException(
                     "Failed to enlist XAResource for persistence unit '" + persistenceUnitName + "'",
                     jtaFailure);
         } catch (RuntimeException | SQLException unexpected) {
             cachedConnections.remove(transaction);
             cachedXaConnections.remove(transaction);
-            closeQuietly(xaConnection);
+            closeQuietly(xaConnection, "after enlistment failure");
             throw unexpected;
         }
     }
@@ -231,12 +258,11 @@ public class XaDataSourceWrapper implements DataSource {
         }
     }
 
-    private static void closeQuietly(XAConnection xaConnection) {
+    private static void closeQuietly(XAConnection xaConnection, String context) {
         try {
             xaConnection.close();
         } catch (SQLException loggedAndIgnored) {
-            LOG.log(Level.WARNING, "Failed to close XAConnection after enlistment failure",
-                    loggedAndIgnored);
+            LOG.log(Level.WARNING, "Failed to close XAConnection " + context, loggedAndIgnored);
         }
     }
 

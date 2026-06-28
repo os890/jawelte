@@ -1231,6 +1231,16 @@
             <artifactId>jawelte-tests-jta-module-scenario-55-geronimo-multi-pu-xa</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jta-module-scenario-56-framework-packages-not-auto-mocked</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jta-module-scenario-57-no-tx-path-closes-xaconnection</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!-- ejb-module test scenarios — TICKET-007 -->
         <dependency>
