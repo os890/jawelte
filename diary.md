@@ -6121,3 +6121,31 @@ javadoc; and added a DEBUG-level log of the swallowed exception so a genuinely b
 @ApplicationScoped resolver (unsatisfied injection points) is diagnosable without failing startup.
 No control-flow change; the fallback path is exercised by every scenario's bootstrap. Verified via
 full-reactor clean install.
+
+## Doc fix: BeanScopeMapper preserves INHERITED scopes too (CDI-consistent), not just direct
+
+Review flagged DefaultBeanScopeMapper using getAnnotations() (which includes @Inherited superclass
+scopes) while the contract said "directly-declared". Confirmed the behavioral consequence: a
+@ConfigBean subclass extending a base whose built-in (@Inherited) scope differs from @ConfigBean's
+contributed @ApplicationScoped (e.g. @ConfigBean class Sub extends @RequestScoped Base) has its
+@TestClassScoped remap skipped, keeping the base's scope.
+
+Decision (per user): this is intended/CDI-consistent, NOT a code bug. An @Inherited scope on a base
+genuinely makes the subclass that-scoped per CDI's own rules, and our rule is "don't remap a bean
+whose scope is already defined". So getAnnotations() (CDI's effective-scope view) is correct; the
+defect was only the misleading "directly-declared" wording. Remedy for users who want the remap
+target on such a subclass: declare the desired scope directly on the subclass (a directly-declared
+scope overrides the base's inherited one — CDI's class-level-scope-wins rule).
+
+Docs-only updates (no behaviour change):
+- BeanScopeMapper.preserveExplicitDirectScopes() javadoc + class-javadoc short-circuit step: state
+  that "carries a scope" follows CDI's effective view incl. @Inherited from a base, with the
+  subclass-override remedy.
+- BeanScopeMapperPort.ScopeMappingMetadata.annotationsToRemove() javadoc: the set is CDI's
+  effective scopes (may include inherited); remove() only affects directly-declared so inherited
+  entries are a harmless no-op.
+- DefaultBeanScopeMapper: comment explaining getAnnotations() is deliberate (CDI-effective).
+- ConfigBeanToTestClassScoped javadoc: document the inherited-base case + the direct-on-subclass
+  remedy.
+Note: docs/core.html (line ~978 "directly-declared CDI scopes") lives on the docs/ticket-016
+branch, not main; update it there when that branch lands. Verified via full-reactor clean install.

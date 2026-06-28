@@ -142,6 +142,16 @@ public class DefaultBeanScopeMapper implements BeanScopeMapperPort {
         return List.copyOf(ordered);
     }
 
+    // Both scope checks below intentionally use getAnnotations() (CDI's
+    // effective-scope view), NOT getDeclaredAnnotations(): all built-in CDI
+    // scopes are @Inherited, so a scope inherited from a base class applies
+    // to the subclass per CDI's own rules and therefore counts as a defined
+    // scope. hasExplicitOverrideScope thus skips the remap for a
+    // trigger-annotated subclass that extends a scoped base — see
+    // BeanScopeMapper.preserveExplicitDirectScopes() for the rationale and
+    // the subclass-override remedy. In annotationsToRemove the inherited
+    // entries are a harmless no-op (AnnotatedTypeConfigurator.remove only
+    // affects directly-declared annotations).
     private static Set<Class<? extends Annotation>> directCdiScopesOn(Class<?> beanClass) {
         Set<Class<? extends Annotation>> scopes = new HashSet<>();
         for (Annotation annotation : beanClass.getAnnotations()) {

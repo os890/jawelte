@@ -37,6 +37,16 @@ import org.os890.jawelte.module.scope.api.TestClassScoped;
  * scope alongside {@code @ConfigBean} (e.g.
  * {@code @ConfigBean @RequestScoped class}), the remap is
  * skipped and the user's choice is honoured.
+ *
+ * <p>This also applies to a scope <em>inherited</em> from a base
+ * class: because the built-in CDI scopes are {@code @Inherited},
+ * {@code @ConfigBean class Sub extends @RequestScoped Base} resolves
+ * (per CDI's own rules) to {@code @RequestScoped}, so the remap to
+ * {@code @TestClassScoped} is skipped and {@code Sub} keeps the
+ * base's scope. If {@code @TestClassScoped} is wanted on such a
+ * subclass, declare it directly on the subclass
+ * ({@code @ConfigBean @TestClassScoped class Sub extends Base}); a
+ * directly-declared scope overrides the base's inherited one.
  */
 public class ConfigBeanToTestClassScoped implements BeanScopeMapper {
 
