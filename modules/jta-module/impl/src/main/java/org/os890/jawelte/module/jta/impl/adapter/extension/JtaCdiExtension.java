@@ -120,6 +120,15 @@ public class JtaCdiExtension implements Extension {
 
     private volatile Set<String> vendorVetoAllowlist;
 
+    /**
+     * The active {@link CdiTransactionalSupportProvider}, resolved once
+     * per container in {@link #onBeforeBeanDiscovery} (not once per
+     * scanned type via {@code loadService}). Per container — not a
+     * JVM-wide static — so a JVM that runs both RESOURCE_LOCAL and JTA
+     * test classes resolves the right provider for each.
+     */
+    private CdiTransactionalSupportProvider supportProvider;
+
     /** No-arg constructor required by the CDI runtime. */
     public JtaCdiExtension() {
     }
@@ -144,7 +153,10 @@ public class JtaCdiExtension implements Extension {
     void onBeforeBeanDiscovery(
             @Observes jakarta.enterprise.inject.spi.BeforeBeanDiscovery event,
             jakarta.enterprise.inject.spi.BeanManager beanManager) {
-        if (!supportProvider().platformProvidesTransactionalInterceptor()) {
+        // Resolve the support provider once for this container; reused by the
+        // per-type PAT veto observer and the AfterBeanDiscovery helpers.
+        this.supportProvider = TestContext.loadService(CdiTransactionalSupportProvider.class);
+        if (!supportProvider.platformProvidesTransactionalInterceptor()) {
             return;
         }
         try {
@@ -164,7 +176,7 @@ public class JtaCdiExtension implements Extension {
         if (matchesVendorVetoAllowlist(className)) {
             return;
         }
-        boolean delegating = supportProvider().platformProvidesTransactionalInterceptor();
+        boolean delegating = supportProvider.platformProvidesTransactionalInterceptor();
         if (delegating && JPA_TRANSACTIONAL_INTERCEPTOR_CLASS_NAME.equals(className)) {
             // jpa-module's own @Transactional interceptor must not
             // double-fire alongside the vendor's (Narayana's). The
@@ -221,8 +233,8 @@ public class JtaCdiExtension implements Extension {
      *
      * <p>Reflection-only; no compile-time dependency on Narayana.
      */
-    private static void registerSyntheticJtaEnvironmentBeanIfNeeded(AfterBeanDiscovery event) {
-        if (!supportProvider().platformProvidesTransactionalInterceptor()) {
+    private void registerSyntheticJtaEnvironmentBeanIfNeeded(AfterBeanDiscovery event) {
+        if (!supportProvider.platformProvidesTransactionalInterceptor()) {
             return;
         }
         try {
@@ -268,8 +280,8 @@ public class JtaCdiExtension implements Extension {
      * Geronimo (because {@code NarayanaTransactionManager} still
      * gets constructed by CDI and reads the field).
      */
-    private static void seedNarayanaJtaEnvironmentBeanIfPresent() {
-        if (!supportProvider().platformProvidesTransactionalInterceptor()) {
+    private void seedNarayanaJtaEnvironmentBeanIfPresent() {
+        if (!supportProvider.platformProvidesTransactionalInterceptor()) {
             return;
         }
         try {
@@ -334,9 +346,5 @@ public class JtaCdiExtension implements Extension {
                     return prefixes;
                 })
                 .orElseGet(LinkedHashSet::new);
-    }
-
-    private static CdiTransactionalSupportProvider supportProvider() {
-        return TestContext.loadService(CdiTransactionalSupportProvider.class);
     }
 }
