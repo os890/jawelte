@@ -212,7 +212,10 @@ public interface TestContext {
      * own FQCN, dot-then-underscore fallback applies), reflectively
      * load the class, and instantiate. When {@code tryCdiFirst} is
      * {@code true}, attempt {@code CDI.current().select(...).get()}
-     * before reflective instantiation.
+     * before reflective instantiation, falling back to a reflective
+     * no-arg instance when the container is absent <em>or</em> the bean
+     * is not yet resolvable (the bootstrap window) — see the inline note
+     * for why that fallback is intentional rather than narrowed.
      */
     private static <T> T instantiateConfigured(Class<T> portType, boolean tryCdiFirst) {
         Config config = ConfigProvider.getConfig();
@@ -251,8 +254,29 @@ public interface TestContext {
             try {
                 Object cdiInstance = CDI.current().select(configuredClass).get();
                 return portType.cast(cdiInstance);
-            } catch (RuntimeException ignored) {
-                // CDI is not up (typical during pre-container windows). Fall through.
+            } catch (RuntimeException cdiUnavailable) {
+                // Two legitimate reasons land here, both of which must fall
+                // through to the reflective no-arg instance below:
+                //   1. The container is not up (pre-container windows) —
+                //      CDI.current() itself throws IllegalStateException.
+                //   2. The container IS up but the configured bean is not
+                //      resolvable yet — most commonly the CDI bootstrap
+                //      window (e.g. BeforeBeanDiscovery), where the only
+                //      consumer of this path, the @ApplicationScoped default
+                //      ServicePriorityResolver, is not a registered bean yet,
+                //      so select(...).get() throws UnsatisfiedResolutionException.
+                // The catch is intentionally broad: narrowing it to the
+                // container-absent signal would let case 2 propagate and break
+                // bootstrap-window resolution. For the stateless default
+                // resolver the reflective fallback is fully correct. Logged at
+                // DEBUG (not swallowed silently) so a genuinely broken custom
+                // bean — e.g. an @ApplicationScoped resolver with unsatisfied
+                // injection points — is still diagnosable without failing start.
+                System.getLogger(TestContext.class.getName()).log(
+                        System.Logger.Level.DEBUG,
+                        () -> "CDI lookup of " + configuredClassName + " (" + portType.getName()
+                                + ") unavailable; falling back to a reflective no-arg instance",
+                        cdiUnavailable);
             }
         }
 
