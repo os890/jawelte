@@ -283,3 +283,36 @@ absence fallback. Have all three sites call it so ClassLoader choice, fallback
 discipline, and scope validation are uniform. Settle the canonical ClassLoader
 and absence-fallback semantics as part of the design (the three current choices
 differ — pick one and document why).
+
+## Wire a faithful project-wide JaCoCo coverage gate
+
+Context: the parent properties `jacoco.line.coverage.minimum=0.80` /
+`jacoco.branch.coverage.minimum=0.70` are advisory only — the parent jacoco plugin
+runs `prepare-agent` + `report`, and the `coverage-report` aggregator runs
+`report-aggregate` without any `check` goal, so no build fails on those numbers.
+The current aggregated coverage passes them (line ≈81.2%, branch ≈70.4%) but the
+branch margin is razor-thin (+0.4 pts).
+
+The hard part (why it's deferred): `jacoco:check` analyzes the **local** module's
+class files against an exec file, and the aggregator has none, so it cannot gate the
+`report-aggregate` output directly. A merge+unpack+check workaround (merge all
+`**/target/jacoco.exec`, unpack the production jars' classes into a scan dir, run
+`check` against the merged data) is implementable, but the unpacked class set must
+**exactly match** what `report-aggregate` counts — on disk there are ~375 production
+`.class` files vs the ~179 the official aggregate reports, so naïve includes would
+compute a different % and (given the thin branch margin) either falsely fail or, worse,
+falsely pass while measuring the wrong thing.
+
+When picking this up:
+- Pin down report-aggregate's exact class-selection (inner classes, no-source/generated
+  classes, api-vs-impl) and reproduce it in the `check` includes/excludes so the gated
+  number equals the published aggregate number.
+- Consider giving branch coverage headroom before turning the gate on (raise branch
+  coverage, or set a realistic interim branch floor and ratchet up) so the gate isn't
+  fragile at +0.4 pts.
+- Land it together with the run-scripts (per the testing-foundational rule), and update
+  the `coverage-report/pom.xml` enforcement note + the parent pom's advisory comment to
+  say the gate is now enforced.
+- Alternative to the merge+unpack+check hack: an external coverage gate that parses the
+  aggregate `jacoco.xml` and fails below threshold (simpler, but adds a non-Maven-native
+  tool).
