@@ -5945,3 +5945,31 @@ framework-internal exclusions like Weld/OWB decorators and expose them to
 auto-mocking).
 
 Documentation-only; verified via the full-reactor clean install (javadoc gates).
+
+## Doc fix: persistence-property.* prefix walk is not env-var-safe; resolveKeys() over-promised
+
+JpaCdiExtension.readAdditionalPersistenceProperties is the framework's only
+prefix-walk consumer of the config universe: it iterates ConfigResolver.resolveKeys()
+(= Config.getPropertyNames()) and keeps keys under the dotted prefix
+org.os890.jawelte.module.jpa.persistence-property. Per the MP Config spec,
+getPropertyNames() is best-effort and source-dependent — env-var sources surface keys
+in UPPER_UNDERSCORE form (if at all), which the dotted prefix never matches. The
+dot-then-underscore fallback that protects single-key resolve() cannot apply to prefix
+iteration, and env normalization is lossy (separators + case unrecoverable), so the JPA
+property name couldn't be reconstructed even if the key did appear. So a persistence
+property set via env var is silently dropped.
+
+Confirmed it's a real portability/doc gap (not jpa-local): single-key reads are
+env-safe, the one prefix walk is not, and the resolveKeys() javadoc over-promised
+("returns every configured key").
+
+Docs-only fix (the additive prefix-walk behaviour stays — a best-effort underscore
+probe can't reliably reverse-map a normalized env name):
+- JpaCdiExtension: documented persistence-property.* as settable only via
+  key-enumerating dot-form sources (properties files, system properties), not env vars,
+  on both the prefix constant and readAdditionalPersistenceProperties.
+- ConfigResolver: softened resolveKeys() to state enumeration is best-effort /
+  source-dependent and that a prefix/pattern walk may miss keys resolve() would find
+  for an exact key; softened the interface intro and the contract bullet to match.
+
+Verified via the full-reactor clean install (javadoc gates).
