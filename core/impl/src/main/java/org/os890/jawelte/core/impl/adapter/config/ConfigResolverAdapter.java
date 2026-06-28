@@ -74,12 +74,23 @@ import org.os890.jawelte.core.api.port.ConfigResolver;
  * {@link ServiceLoader} (one provider per contributing module is
  * the typical layout) and returns the concatenation of every
  * provider's {@code aliasesFor(logicalKey)} result in discovery
- * order. The returned list is unmodifiable.
+ * order. The returned list is unmodifiable. The provider set is
+ * fixed for the JVM and the providers are stateless, so they are
+ * enumerated once and cached rather than re-loaded on every call.
  */
 @ApplicationScoped
 public class ConfigResolverAdapter implements ConfigResolver {
 
     private Config config;
+
+    /**
+     * Cached {@link ConfigKeyAliasProvider} instances. The provider set
+     * is fixed for the JVM (classpath {@code ServiceLoader} discovery)
+     * and the providers are stateless, so they are enumerated once and
+     * reused rather than re-loaded on every
+     * {@link #resolveAliasKeysFor(String)} call.
+     */
+    private List<ConfigKeyAliasProvider> aliasProviders;
 
     /**
      * No-arg constructor used both by the CDI runtime and by direct
@@ -111,7 +122,7 @@ public class ConfigResolverAdapter implements ConfigResolver {
     public List<String> resolveAliasKeysFor(String logicalKey) {
         Objects.requireNonNull(logicalKey, "logicalKey");
         List<String> aliases = new ArrayList<>();
-        for (ConfigKeyAliasProvider provider : ServiceLoader.load(ConfigKeyAliasProvider.class)) {
+        for (ConfigKeyAliasProvider provider : cachedAliasProviders()) {
             List<String> contributed = provider.aliasesFor(logicalKey);
             if (contributed == null || contributed.isEmpty()) {
                 continue;
@@ -141,6 +152,19 @@ public class ConfigResolverAdapter implements ConfigResolver {
         if (local == null) {
             local = ConfigProvider.getConfig();
             this.config = local;
+        }
+        return local;
+    }
+
+    private List<ConfigKeyAliasProvider> cachedAliasProviders() {
+        List<ConfigKeyAliasProvider> local = this.aliasProviders;
+        if (local == null) {
+            List<ConfigKeyAliasProvider> discovered = new ArrayList<>();
+            for (ConfigKeyAliasProvider provider : ServiceLoader.load(ConfigKeyAliasProvider.class)) {
+                discovered.add(provider);
+            }
+            local = List.copyOf(discovered);
+            this.aliasProviders = local;
         }
         return local;
     }

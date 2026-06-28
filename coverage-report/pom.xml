@@ -229,6 +229,21 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-23-equal-priority-classname-tiebreak</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-24-custom-resolver-orders-lifecycle-ports</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-core-scenario-25-config-alias-providers-cached</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-core-scenario-proxy-no-provider</artifactId>
             <version>${project.version}</version>
         </dependency>

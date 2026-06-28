@@ -48,6 +48,7 @@
         <module>scenario-22-beforeall-throws-afterall-runs</module>
         <module>scenario-23-equal-priority-classname-tiebreak</module>
         <module>scenario-24-custom-resolver-orders-lifecycle-ports</module>
+        <module>scenario-25-config-alias-providers-cached</module>
         <module>scenario-proxy-no-provider</module>
         <module>scenario-proxy-multi-provider</module>
         <module>scenario-config-01-dot-key-resolves</module>
