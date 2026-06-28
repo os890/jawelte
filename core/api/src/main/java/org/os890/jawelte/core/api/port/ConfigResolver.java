@@ -24,8 +24,10 @@ import java.util.Optional;
  * {@link #resolve(String)} for every single-key lookup; for any
  * caller that needs to walk the configuration (prefix matches,
  * regex filters, exact-key sets, …) {@link #resolveKeys()} returns the
- * full universe of configured keys, and the caller resolves each
- * value via {@link #resolve(String)} as needed.
+ * configured keys the resolver can enumerate, and the caller resolves
+ * each value via {@link #resolve(String)} as needed. Key enumeration
+ * is best-effort for sources that do not list their keys in the
+ * requested form (see {@link #resolveKeys()}).
  *
  * <p>The default implementation lives in {@code core/impl}
  * ({@code ConfigResolverAdapter}) and looks up the key via
@@ -80,9 +82,10 @@ import java.util.Optional;
  *   <li>{@link #resolve(String)} returns {@link Optional#empty()}
  *       when no value is found for the key after all fallback
  *       attempts.</li>
- *   <li>{@link #resolveKeys()} returns every configured key the
- *       resolver knows about, in an unspecified but stable order;
- *       never {@code null}.</li>
+ *   <li>{@link #resolveKeys()} returns the configured keys the
+ *       resolver can enumerate (best-effort for sources that do not
+ *       list their keys in dot form — see the method javadoc), in an
+ *       unspecified but stable order; never {@code null}.</li>
  *   <li>{@code logicalKey} on
  *       {@link #resolveAliasKeysFor(String)} must not be
  *       {@code null}; passing {@code null} throws
@@ -108,18 +111,35 @@ public interface ConfigResolver {
     Optional<String> resolve(String dotKey);
 
     /**
-     * The full universe of configuration keys the resolver knows
-     * about. Callers that need any key-iteration use case (prefix
-     * matches, regex filters, hand-curated allowlists, …) walk this
-     * sequence and resolve each value via {@link #resolve(String)};
-     * the port stays single-key-resolve + all-keys-list rather than
-     * carrying domain-specific iteration helpers.
+     * The configuration keys the resolver can enumerate. Callers that
+     * need any key-iteration use case (prefix matches, regex filters,
+     * hand-curated allowlists, …) walk this sequence and resolve each
+     * value via {@link #resolve(String)}; the port stays
+     * single-key-resolve + keys-list rather than carrying
+     * domain-specific iteration helpers.
+     *
+     * <p><strong>Enumeration is best-effort.</strong> The default
+     * MicroProfile Config-backed implementation delegates to
+     * {@code Config.getPropertyNames()}, which the MP Config spec
+     * defines as best-effort and source-dependent: a config source may
+     * decline to list its keys, or list them in a normalized form
+     * rather than the original dot-separated form. Environment-variable
+     * sources in particular commonly surface keys as
+     * {@code UPPER_UNDERSCORE} (or not at all). Consequently a
+     * <em>prefix or pattern walk</em> over this sequence may miss keys
+     * that {@link #resolve(String)} would still find for an exact key
+     * — the dot-then-underscore fallback that protects single-key
+     * lookups cannot be applied to enumeration, and env-var
+     * normalization is lossy (separators and case are unrecoverable).
+     * Callers that must iterate a key family should document it as
+     * settable only via key-enumerating, dot-form sources (properties
+     * files, system properties).
      *
      * <p>Order is unspecified but stable for a given resolver
      * instance. Callers must not assume a particular ordering.
      *
-     * @return every configured key; never {@code null}; empty when
-     *         the underlying configuration is empty
+     * @return the enumerable configured keys; never {@code null};
+     *         empty when the underlying configuration enumerates none
      */
     Iterable<String> resolveKeys();
 

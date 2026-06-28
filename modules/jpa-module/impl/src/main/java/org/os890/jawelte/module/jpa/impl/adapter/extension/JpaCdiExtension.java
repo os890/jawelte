@@ -140,6 +140,23 @@ public class JpaCdiExtension implements Extension {
      * MP Config prefix whose remainder maps onto JPA bootstrap
      * properties verbatim. Every key under this prefix contributes
      * to the EMF property bag with the prefix stripped.
+     *
+     * <p><strong>Source restriction.</strong> Unlike single-key
+     * reads, this family is consumed by a <em>prefix walk</em> over
+     * {@link ConfigResolver#resolveKeys()}, so it is settable only via
+     * config sources that enumerate their keys in the original
+     * dot-separated form — {@code microprofile-config.properties},
+     * other properties files, and JVM system properties
+     * ({@code -Dorg.os890.jawelte.module.jpa.persistence-property.…}).
+     * Environment variables are <em>not</em> supported for this key
+     * family: MP Config's key enumeration is best-effort and
+     * env-var sources surface keys in normalized {@code UPPER_UNDERSCORE}
+     * form (if at all), which the dotted prefix never matches; the
+     * dot-then-underscore fallback that protects single-key
+     * {@link ConfigResolver#resolve(String)} cannot apply to prefix
+     * iteration, and the normalization is lossy (separator and case
+     * are unrecoverable), so the JPA property name could not be
+     * reconstructed anyway.
      */
     private static final String PERSISTENCE_PROPERTY_PREFIX =
             "org.os890.jawelte.module.jpa.persistence-property.";
@@ -614,6 +631,12 @@ public class JpaCdiExtension implements Extension {
      * active {@link ConfigResolver} so a consumer-supplied resolver
      * controls the full set of keys jpa-module reads, including this
      * prefix walk.
+     *
+     * <p>This is the framework's only prefix-iteration config read, so
+     * the env-var caveat documented on {@link #PERSISTENCE_PROPERTY_PREFIX}
+     * applies: only key-enumerating, dot-form sources (properties
+     * files, system properties) feed this walk; environment variables
+     * are not picked up here.
      */
     private static Map<String, String> readAdditionalPersistenceProperties() {
         ConfigResolver configResolver = resolver();
