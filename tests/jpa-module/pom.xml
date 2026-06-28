@@ -100,6 +100,7 @@
         <module>scenario-65-cross-bean-tx-propagation-no-em-on-outer</module>
         <module>scenario-66-cleanup-skips-views</module>
         <module>scenario-67-native-sql-cleanup-fallback-recreate</module>
+        <module>scenario-68-emf-cache-divergent-config-fails</module>
     </modules>
 
     <dependencies>

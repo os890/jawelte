@@ -6030,3 +6030,36 @@ gets a handle, closes it, and asserts the physical XAConnection was closed (open
 closed=1). Test-the-test: removing the listener makes the test fail (closed stays 0,
 "expected: 1 but was: 0"). Also registered scenario-56 (previously missing) + scenario-57
 in coverage-report.
+
+## Fix: EmfCache fails fast on same-PU-name / divergent-config reuse (test-isolation)
+
+EmfCache is a JVM-wide EntityManagerFactory cache keyed by persistence-unit NAME only, and
+reused across test classes for the whole JVM (the per-JVM caching is intentional and stays —
+re-bootstrapping an EMF is heavy and, with recent Hibernate, churning EMFs risks a memory
+leak). The gap: because the key is the name alone, getOrCreate(name, supplier) invoked the
+supplier only on cache miss, so a second test class declaring the SAME PU name with DIFFERENT
+resolved properties (extra persistence-property.* keys, a JTA<->RESOURCE_LOCAL flip, file vs
+in-mem) silently reused the first class's factory — its recomputed properties (incl. the
+in-mem H2 URL, which unlike file mode is not class-scoped) were discarded. Not a leak (EMFs
+are closed by the shutdown hook + evict); a silent test-isolation/correctness defect.
+
+Fix (chosen approach: fail-fast + document, preserving the per-JVM single-EMF-per-PU caching
+exactly — no extra EMFs): getOrCreate now also takes the resolved properties, snapshots the
+stable value-typed config on cache miss (object-valued entries like
+jakarta.persistence.bean.manager are per-bootstrap references and excluded), and on a
+subsequent same-name hit throws IllegalStateException naming the PU + the differing keys
+(keys only, never values, so no secret leak) when the config diverges. Identical config (the
+normal case) still reuses the cached factory. evict()/closeAll() keep the new config map in
+lock-step. Documented the contract on getOrCreate's javadoc.
+
+Verified the whole test base is unaffected: every lnp module (the only multi-class-per-JVM
+case, 100+ classes/JVM) uses a single, uniquely-named PU with no @PersistenceConfig, so all
+classes resolve identical config -> reuse, no throw.
+
+Test: tests/jpa-module/scenario-68-emf-cache-divergent-config-fails drives EmfCache directly
+(no container) with stub EMFs: (1) same name + divergent URL -> IllegalStateException naming
+PU + key; (2) same name + identical config -> cached factory reused, supplier not invoked;
+(3) object-valued entries ignored (different bean.manager refs don't trigger a false
+divergence). Test-the-test: disabling the divergence throw makes (1) fail ("Expecting code to
+raise a throwable"). Registered scenario-68 in the jpa aggregator; added the previously-missing
+scenario-66/67 + new 68 to coverage-report.

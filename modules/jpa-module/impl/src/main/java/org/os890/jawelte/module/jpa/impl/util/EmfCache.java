@@ -21,7 +21,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -35,10 +39,10 @@ import jakarta.persistence.EntityManagerFactory;
  * warm-up); reusing the same instance across every test class is
  * the main jpa-module performance win.
  *
- * <p>{@link #getOrCreate(String, Supplier)} atomically returns the
- * cached instance or invokes the supplied factory function on cache
- * miss; the caller chooses whether the new factory is built via the
- * spec
+ * <p>{@link #getOrCreate(String, Map, Supplier)} atomically returns
+ * the cached instance or invokes the supplied factory function on
+ * cache miss; the caller chooses whether the new factory is built via
+ * the spec
  * {@code Persistence.createEntityManagerFactory(name, props)} path
  * or via Hibernate's
  * {@code HibernatePersistenceProvider.createContainerEntityManagerFactory(unitInfo, props)}
@@ -55,6 +59,17 @@ public abstract class EmfCache {
 
     private static final Map<String, EntityManagerFactory> CACHE = new ConcurrentHashMap<>();
 
+    /**
+     * Per-PU snapshot of the configuration that bootstrapped the cached
+     * {@link EntityManagerFactory}, used to fail fast when a later
+     * caller asks for the same PU name with a divergent configuration.
+     * Only stable, value-typed properties are recorded (object-valued
+     * entries such as {@code jakarta.persistence.bean.manager} are
+     * per-bootstrap references, not configuration). Kept in lock-step
+     * with {@link #CACHE} by every mutator.
+     */
+    private static final Map<String, Map<String, String>> CACHED_CONFIG = new ConcurrentHashMap<>();
+
     private static final AtomicBoolean SHUTDOWN_HOOK_REGISTERED = new AtomicBoolean(false);
 
     /**
@@ -69,30 +84,107 @@ public abstract class EmfCache {
     /**
      * Return the cached {@link EntityManagerFactory} for the given
      * persistence unit, invoking the supplied factory function on
-     * cache miss. Subsequent calls return the same instance
-     * regardless of the supplied function — the cache is keyed by
-     * name only.
+     * cache miss. The cache is keyed by name only and is reused across
+     * test classes for the whole JVM lifetime — bootstrapping an
+     * {@code EntityManagerFactory} is heavy, so this reuse is the main
+     * jpa-module performance win.
+     *
+     * <p>Because the key is the name alone, two test classes that
+     * declare the same persistence-unit name must resolve to the
+     * <strong>same</strong> configuration; otherwise the second class
+     * would silently run against the first class's factory (and, in the
+     * in-memory case, the first class's database). To make that mistake
+     * loud instead of silent, this method records the resolved
+     * configuration on cache miss and, on a subsequent hit, throws an
+     * {@link IllegalStateException} if {@code resolvedProperties}
+     * differs from what bootstrapped the cached factory. Identical
+     * configuration (the normal case) reuses the cached factory as
+     * before. The comparison ignores object-valued entries (e.g.
+     * {@code jakarta.persistence.bean.manager}), which are per-bootstrap
+     * references rather than configuration.
      *
      * @param persistenceUnitName the persistence unit name
+     * @param resolvedProperties  the fully resolved EMF properties for
+     *                            this request; used to detect a
+     *                            divergent same-name configuration
      * @param entityManagerFactorySupplier a function that builds the
      *                            {@code EntityManagerFactory} on
      *                            cache miss
      * @return the cached {@code EntityManagerFactory}
+     * @throws IllegalStateException if the persistence unit is already
+     *         cached in this JVM with a different resolved configuration
      */
     public static EntityManagerFactory getOrCreate(
-            String persistenceUnitName, Supplier<EntityManagerFactory> entityManagerFactorySupplier) {
+            String persistenceUnitName,
+            Map<String, Object> resolvedProperties,
+            Supplier<EntityManagerFactory> entityManagerFactorySupplier) {
         registerShutdownHookOnce();
+        Map<String, String> requestedConfig = configSnapshot(resolvedProperties);
+        EntityManagerFactory existing = CACHE.get(persistenceUnitName);
+        if (existing != null) {
+            Map<String, String> cachedConfig = CACHED_CONFIG.getOrDefault(persistenceUnitName, Map.of());
+            if (!cachedConfig.equals(requestedConfig)) {
+                throw new IllegalStateException(
+                        "Persistence unit '" + persistenceUnitName + "' is already bootstrapped in this JVM "
+                                + "with a different configuration. The EntityManagerFactory cache is keyed by "
+                                + "persistence-unit name only (reused across test classes for performance), so "
+                                + "two test classes that declare the same persistence unit must resolve to the "
+                                + "identical configuration. Differing keys: "
+                                + differingKeys(cachedConfig, requestedConfig) + ". Use distinct persistence-unit "
+                                + "names, or align the @PersistenceConfig / persistence-property.* configuration "
+                                + "across the classes.");
+            }
+            return existing;
+        }
         return CACHE.computeIfAbsent(persistenceUnitName, name -> {
             long startNanos = System.nanoTime();
             LOG.log(Level.INFO,
                     "Bootstrapping EntityManagerFactory for persistence unit '" + name + "'");
             EntityManagerFactory factory = entityManagerFactorySupplier.get();
+            CACHED_CONFIG.put(name, requestedConfig);
             long durationMillis = (System.nanoTime() - startNanos) / 1_000_000L;
             LOG.log(Level.INFO,
                     "Bootstrapped EntityManagerFactory for persistence unit '" + name
                             + "' in " + durationMillis + "ms");
             return factory;
         });
+    }
+
+    /**
+     * Snapshot the stable, value-typed configuration entries that
+     * define an {@link EntityManagerFactory}, dropping object-valued
+     * entries (e.g. the deferred {@code jakarta.persistence.bean.manager})
+     * that change every bootstrap and are not configuration.
+     */
+    private static Map<String, String> configSnapshot(Map<String, Object> resolvedProperties) {
+        Map<String, String> snapshot = new TreeMap<>();
+        for (Map.Entry<String, Object> entry : resolvedProperties.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof String || value instanceof Number
+                    || value instanceof Boolean || value instanceof Character) {
+                snapshot.put(entry.getKey(), String.valueOf(value));
+            }
+        }
+        return snapshot;
+    }
+
+    /**
+     * The sorted, comma-joined set of keys whose values differ between
+     * the cached and requested configurations (keys present in only one
+     * side count as differing). Reports keys only, never values, so a
+     * password or URL is not leaked into the exception message.
+     */
+    private static String differingKeys(Map<String, String> cached, Map<String, String> requested) {
+        Set<String> allKeys = new TreeSet<>();
+        allKeys.addAll(cached.keySet());
+        allKeys.addAll(requested.keySet());
+        List<String> differing = new ArrayList<>();
+        for (String key : allKeys) {
+            if (!Objects.equals(cached.get(key), requested.get(key))) {
+                differing.add(key);
+            }
+        }
+        return String.join(", ", differing);
     }
 
     /**
@@ -119,6 +211,7 @@ public abstract class EmfCache {
      */
     public static void evict(String persistenceUnitName) {
         EntityManagerFactory removed = CACHE.remove(persistenceUnitName);
+        CACHED_CONFIG.remove(persistenceUnitName);
         if (removed == null) {
             return;
         }
@@ -177,6 +270,7 @@ public abstract class EmfCache {
             }
         }
         CACHE.clear();
+        CACHED_CONFIG.clear();
         if (primary != null) {
             // Aggregate per the project-wide TICKET-001 exception policy:
             // first failure is the primary cause, every subsequent failure
