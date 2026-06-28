@@ -5899,3 +5899,29 @@ a plain HashSet/LinkedHashSet loses ~half the elements under the burst, failing
 the assertion. (spring-data's `onProcessInjectionPoint`/discoveredRepositories
 needs distinct Repository sub-interfaces, which can't be synthesised in bulk; it
 carries the identical fix and the same observer-add shape exercised here.)
+
+## JtaCdiExtension: resolve CdiTransactionalSupportProvider once per container
+
+`JtaCdiExtension.onProcessAnnotatedTypeForVendorVeto` is a broad
+`ProcessAnnotatedType` observer (no `@WithAnnotations`), so it fires for every
+annotated type scanned — and it called `supportProvider()` =
+`TestContext.loadService(CdiTransactionalSupportProvider.class)` (a full
+ServiceLoader.load + priority sort + reflective instantiation) on each one. No
+correctness bug, but bootstrap CPU scaled with classpath size on every test-class
+container boot.
+
+Now resolved once per container in `onBeforeBeanDiscovery` into an instance field
+and reused by the per-type PAT veto observer and the `AfterBeanDiscovery` helpers
+(which became instance methods). Per container — not a JVM-wide static — so a JVM
+that runs both RESOURCE_LOCAL and JTA test classes resolves the right provider for
+each (the finding #23 principle).
+
+The eager `getTransactionManager()` in `AfterBeanDiscovery` was left as-is: it is
+a once-per-container call, RESOURCE_LOCAL returns `null` (no TM/JNDI bootstrap, so
+RESOURCE_LOCAL coexistence pays nothing), and under JTA it must seed the TM/JNDI
+for the JTA bean graph. The JVM-global TM leak it can leave is the separate
+`provider.shutdown()` dead-code finding, not this one.
+
+Matrix-only verification (no dedicated test): a bootstrap-cost change with no
+behavioural difference; the jta phases (owb/weld × geronimo/narayana) exercise
+JtaCdiExtension end-to-end.
