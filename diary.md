@@ -6082,3 +6082,22 @@ comments to beforeEach (why no eager teardown; ports recorded only after returni
 (why container teardown is unconditional + that it's idempotent). No behaviour change — a
 defensive eager-teardown guard would be untestable (JUnit always invokes afterEach, so guarded
 and unguarded code behave identically in any runnable test). Verified via full-reactor clean install.
+
+## Doc fix: document TestContext ThreadLocal same-thread assumption + fix stale reset javadoc
+
+TestContextImpl.CURRENT (static ThreadLocal) is set in the TestContextImpl(Class) constructor on
+the beforeAll thread, read by CDI extensions via TestContext.get() during the synchronous
+container bootstrap (same thread), and cleared by reset() on the TestInstanceFactory thread
+(EnableTestBeans.Proxy, primary) + afterAll (safety net). reset() is best-effort same-thread
+(clears only if CURRENT.get() == this on the caller).
+
+Under the supported execution model (single-threaded, one class/JVM, -T 1, no JUnit parallel
+execution) all these run on the same thread, so the set-here/clear-there split is exact. The
+review asked what guarantees that. Documented: the same-thread assumption + that get() self-heals
+even under a hypothetical thread handoff (JUnit parallel execution, which the framework doesn't
+use) because the constructor's CURRENT.set(this) overwrites any stale slot before any get() on
+that thread — so get() never returns a leaked context; the only residue is the prior instance
+retained by a pooled thread until reuse/death (not a correctness bug). Also corrected a stale
+class-javadoc that claimed reset() was called "in the beforeAll finally block" (it's the
+TestInstanceFactory + afterAll safety net) and reinforced the overwrite-as-backstop note on the
+constructor javadoc. No behaviour change; verified via full-reactor clean install.
