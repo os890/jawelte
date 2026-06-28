@@ -1032,6 +1032,21 @@
             <artifactId>jawelte-tests-jpa-module-scenario-65-cross-bean-tx-propagation-no-em-on-outer</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-66-cleanup-skips-views</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-67-native-sql-cleanup-fallback-recreate</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-68-emf-cache-divergent-config-fails</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             tests/jta-module scenarios (TICKET-006). Same role as the

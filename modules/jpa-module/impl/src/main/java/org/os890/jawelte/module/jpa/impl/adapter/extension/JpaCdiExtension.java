@@ -224,7 +224,7 @@ public class JpaCdiExtension implements Extension {
             // reference an Extension observer holds.
             properties.put("jakarta.persistence.bean.manager", deferredBeanManager);
             persistenceUnitProperties.put(unit.name(), properties);
-            EmfCache.getOrCreate(unit.name(),
+            EmfCache.getOrCreate(unit.name(), properties,
                     () -> bootstrapEntityManagerFactory(unit, properties, emfTransactionType));
         }
         activePersistenceUnits = resolvedActivePersistenceUnits;
