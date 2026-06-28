@@ -109,14 +109,15 @@ public class TestBeansCdiExtension implements Extension {
     public static final String AUTO_MOCK_DEFAULT_SCOPE_KEY =
             "org.os890.jawelte.module.cdi.auto-mock.default-scope";
 
-    private static final Class<? extends Annotation> AUTO_MOCK_NON_JDK_SCOPE = resolveAutoMockNonJdkScope();
-
     private TestContext activeContext;
     private TestBeanScanner.Result scanResult;
     private boolean limitToTestBeans;
     private WhitelistFilter whitelistFilter;
     private ExcludedPackageFilter excludedPackageFilter;
     private MockFactory mockFactory;
+    // Resolved per container in onBeforeBeanDiscovery (not once per JVM)
+    // so each test class's MP Config layer selects the auto-mock scope.
+    private Class<? extends Annotation> autoMockNonJdkScope;
     private final Set<IpKey> unsatisfiedCandidateIps = new LinkedHashSet<>();
     private final List<ProducedTestInstance> producedTestInstances = new ArrayList<>();
 
@@ -147,6 +148,10 @@ public class TestBeansCdiExtension implements Extension {
         this.whitelistFilter = TestContext.loadService(WhitelistFilter.class);
         this.excludedPackageFilter = TestContext.loadService(ExcludedPackageFilter.class);
         this.mockFactory = TestContext.loadService(MockFactory.class);
+        // Resolve the auto-mock default scope here (per container, on the
+        // bootstrap thread) so the active MP Config layer wins and the
+        // reflective Class.forName runs under the bootstrap ClassLoader.
+        this.autoMockNonJdkScope = resolveAutoMockNonJdkScope();
 
         // Warm both filter caches on the bootstrap thread. Weld dispatches
         // ProcessInjectionPoint events on ForkJoinPool worker threads whose
@@ -280,10 +285,10 @@ public class TestBeansCdiExtension implements Extension {
         //      annotation class; resolved reflectively.
         //   2. cdi-module's @RequestScoped fallback (when the key is
         //      unset or the configured class isn't loadable).
-        // The scope is resolved once at class-load time into
-        // AUTO_MOCK_NON_JDK_SCOPE; ConfigProvider.getConfig() runs
-        // exactly once per JVM for this extension regardless of how
-        // many test classes bootstrap a CDI container.
+        // The scope was resolved per container in onBeforeBeanDiscovery
+        // (into the autoMockNonJdkScope field), so each test class's
+        // MP Config layer selects it rather than the value frozen by the
+        // first container in the JVM.
         for (IpKey key : unsatisfiedCandidateIps) {
             Type targetType = key.targetType;
             Class<?> rawType = rawClassOf(targetType);
@@ -314,7 +319,7 @@ public class TestBeansCdiExtension implements Extension {
             SyntheticBeanUtil.registerAutoMockBean(
                     event, rawType, targetType, qualifiers,
                     () -> mockFactory.create(rawType),
-                    AUTO_MOCK_NON_JDK_SCOPE);
+                    autoMockNonJdkScope);
         }
 
         // Finally, register the test class as a synthetic @Dependent
@@ -621,11 +626,11 @@ public class TestBeansCdiExtension implements Extension {
 
     /**
      * Resolve the default CDI scope for auto-mock synthetic beans
-     * of non-JDK target types. Invoked exactly once per JVM (per
-     * ClassLoader) from the {@link #AUTO_MOCK_NON_JDK_SCOPE} static
-     * initializer; subsequent reads on every CDI bootstrap consult
-     * the cached static field, so {@link ConfigProvider#getConfig()}
-     * runs only once for this extension.
+     * of non-JDK target types. Invoked once per container from
+     * {@code onBeforeBeanDiscovery} into the
+     * {@code autoMockNonJdkScope} field, so each test class's
+     * {@link ConfigProvider#getConfig()} layer selects the scope
+     * rather than a value frozen for the JVM.
      *
      * <p>Reads MP Config key
      * {@value #AUTO_MOCK_DEFAULT_SCOPE_KEY}; the value is the FQCN

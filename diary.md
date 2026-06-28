@@ -5833,3 +5833,36 @@ needs the *real* test instance, not a proxy — so `@Dependent` + container-life
 release is the fit. scenario-58 still validates the contract (it asserts the
 `@PreDestroy` callbacks fired after the subject's full run, which includes
 container shutdown).
+
+## Per-container SPI/scope resolution (no more static-final freeze)
+
+Three modules independently froze per-test-class-configurable state in a static
+initializer that runs once per JVM, contradicting the "extension/adapter
+re-instantiated per SeContainer, all per-test-class state per container" model.
+The first test class to load each class won; later classes with a different MP
+Config layer or higher-priority SPI silently reused the stale value (load-order
+coupling).
+
+Fixed all three to resolve per container:
+- `TestBeansCdiExtension.AUTO_MOCK_NON_JDK_SCOPE` (static) → instance field
+  `autoMockNonJdkScope`, resolved in `onBeforeBeanDiscovery` (per container, on
+  the bootstrap thread).
+- `BatchExecutionObserver.TIMEOUT_HANDLER` (static) → instance field
+  `timeoutHandler`, resolved in `@PostConstruct` (the bean is `@ApplicationScoped`
+  = one instance per SeContainer).
+- `WireMockRegistryScopeRemap.TARGET_SCOPE` (static) → instance field
+  `targetScope` resolved at construction (a fresh `BeanScopeMapper` provider is
+  instantiated per container via `ServiceLoader` through the per-container
+  `ScopeRemapCdiExtension` → `loadService(BeanScopeMapperPort)`).
+Config-KEY constants stay static; only the resolved VALUES moved.
+
+Tests (each driven so two containers boot in one JVM, asserting the second sees
+its own value — the first-container-wins regression):
+- cdi `scenario-59`: per-container `auto-mock.default-scope` via a system
+  property; asserts an auto-mock bean's actual scope follows each container.
+- batch `scenario-16`: a `CountingTimeoutHandler` whose construction count equals
+  the number of `loadService` calls; asserts 2 resolutions across 2 containers
+  (static = 1).
+- wiremock `scenario-26`: two `WireMockRegistryScopeRemap` instances with the
+  config changed between them; asserts each reports its own target scope.
+Mutation: reverting each field to static makes its scenario fail.

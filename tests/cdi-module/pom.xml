@@ -91,6 +91,7 @@
         <module>scenario-55-deltaspike-partial-bean-binding-skip</module>
         <module>scenario-56-deltaspike-whitelist-allow</module>
         <module>scenario-58-dependent-instance-predestroy</module>
+        <module>scenario-59-auto-mock-scope-resolved-per-container</module>
     </modules>
 
     <dependencies>

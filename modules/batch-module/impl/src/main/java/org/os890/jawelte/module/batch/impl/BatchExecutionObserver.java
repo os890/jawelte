@@ -18,6 +18,7 @@ package org.os890.jawelte.module.batch.impl;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.batch.operations.JobOperator;
 import jakarta.batch.runtime.BatchStatus;
 import jakarta.batch.runtime.JobExecution;
@@ -52,8 +53,9 @@ import org.os890.jawelte.module.batch.api.port.TimeoutHandler;
  * <p><b>Timeout behavior.</b> When the cumulative wall-clock time
  * since the first {@code JobOperator.start(...)} exceeds
  * {@link BatchExecution#getTimeout()}, the observer delegates to
- * the configured {@link TimeoutHandler} SPI (resolved once per JVM
- * via {@code TestContext.loadService(TimeoutHandler.class)}). The
+ * the configured {@link TimeoutHandler} SPI (resolved per container
+ * in {@code @PostConstruct} via
+ * {@code TestContext.loadService(TimeoutHandler.class)}). The
  * default handler throws {@link IllegalStateException} naming the
  * job, the timeout, and the last observed status; consumers swap
  * the behaviour by registering an alternative {@code TimeoutHandler}
@@ -74,14 +76,21 @@ public class BatchExecutionObserver {
     private static final Logger LOG =
             System.getLogger(BatchExecutionObserver.class.getName());
 
-    private static final TimeoutHandler TIMEOUT_HANDLER =
-            TestContext.loadService(TimeoutHandler.class);
-
     @Inject
     private JobOperator jobOperator;
 
+    // Resolved per container (this is an @ApplicationScoped bean, one
+    // instance per SeContainer) rather than once per JVM, so each test
+    // class's MP Config layer / SPI priority selects the active handler.
+    private TimeoutHandler timeoutHandler;
+
     /** No-arg constructor required by the CDI runtime. */
     public BatchExecutionObserver() {
+    }
+
+    @PostConstruct
+    void resolveTimeoutHandler() {
+        this.timeoutHandler = TestContext.loadService(TimeoutHandler.class);
     }
 
     /**
@@ -113,7 +122,7 @@ public class BatchExecutionObserver {
 
             long elapsed = System.currentTimeMillis() - startMs;
             if (elapsed >= timeoutMs) {
-                TIMEOUT_HANDLER.onTimeout(event, executionId, snapshot);
+                timeoutHandler.onTimeout(event, executionId, snapshot);
                 return;
             }
 
