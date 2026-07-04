@@ -76,9 +76,13 @@ public abstract class ScopeStore {
 
     /**
      * Returns the live bean map, allocating a fresh one if the store
-     * is currently empty. Backs the lazy "first dereference creates
-     * the store" path on test-method-scoped beans accessed outside a
-     * test method (e.g. from {@code @BeforeAll}).
+     * is currently empty. In normal use the map is already allocated
+     * before any bean is created — by the lifecycle adapter in
+     * {@code beforeEach} for the test-method-scoped store, and by the
+     * constructor for the test-class-scoped store — because a context
+     * is active (and thus its beans reachable) only once its store is
+     * allocated. The lazy allocation here is therefore a defensive
+     * fallback rather than the expected first-access path.
      *
      * @return a non-{@code null} live map
      */
