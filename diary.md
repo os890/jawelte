@@ -6265,3 +6265,24 @@ governs it and listing it in startScopes has no effect. Corrected the paragraph 
 @TestMethodScoped is affected and to state @TestClassScoped emits none. Docs-only; the
 TestControl.startScopes() javadoc + todo.md already documented this from the #46 work. Verified via
 full-reactor clean install.
+
+## Doc fix: @TestMethodScoped is not accessible from @BeforeAll (leak path already closed)
+
+TestMethodScopeStore + ScopeStore.getOrCreateMap() javadoc advertised a "first dereference from
+outside a test method (e.g. @BeforeAll) lazily creates the store + beans" path. That was the basis
+of a reported leak: the first beforeEach's allocate() overwrote the map, orphaning any @BeforeAll-
+created @TestMethodScoped bean without @PreDestroy.
+
+Verified (owb + weld) that the earlier scope-filter fix (PR #94) already closed the leak: since
+isActive() now returns
+store.isAllocated(), the @TestMethodScoped context is INACTIVE during @BeforeAll (store not yet
+allocated), so dereferencing such a bean there throws ContextNotActiveException — no bean is created,
+nothing is orphaned. The getOrCreateMap() lazy-allocate branch is consequently unreachable for the
+method store (access requires isActive == map allocated).
+
+Per review decision (docs-only): corrected the stale javadoc. TestMethodScopeStore now states the
+map is allocated by the adapter in beforeEach and that @TestMethodScoped beans are reachable only
+within a test method (accessing from @BeforeAll throws ContextNotActiveException; use
+@TestClassScoped for cross-method fixtures). ScopeStore.getOrCreateMap() now describes its lazy
+allocation as a defensive fallback, not the expected first-access path. No behaviour change;
+verified via full-reactor clean install.

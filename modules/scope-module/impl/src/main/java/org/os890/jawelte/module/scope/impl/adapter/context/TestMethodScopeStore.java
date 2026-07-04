@@ -24,17 +24,21 @@ package org.os890.jawelte.module.scope.impl.adapter.context;
  * class as the metadata key.
  *
  * <p>The constructor intentionally leaves the underlying map
- * {@code null}; the first allocation happens either when the
- * lifecycle adapter calls {@link #allocate()} per {@code beforeEach}
- * or when the first dereference from outside a test method (e.g.
- * from {@code @BeforeAll}) triggers
- * {@link ScopeStore#getOrCreateMap()}.
+ * {@code null}; the lifecycle adapter allocates it via
+ * {@link #allocate()} in {@code beforeEach} (unless the
+ * {@code BeforeScopeStarted} event is vetoed). The context is active
+ * only while the map is allocated, so a {@code @TestMethodScoped} bean
+ * is reachable only from within a test method: dereferencing one
+ * outside a method — e.g. from {@code @BeforeAll}, before any
+ * {@code beforeEach} has run — throws {@code ContextNotActiveException}.
+ * Use {@code @TestClassScoped} for fixtures that must live across a
+ * test class's methods.
  */
 public class TestMethodScopeStore extends ScopeStore {
 
     /**
-     * Construct a store with no live map. Allocation is driven by
-     * the lifecycle adapter or by lazy first access.
+     * Construct a store with no live map. Allocation is driven by the
+     * lifecycle adapter's {@code allocate()} in {@code beforeEach}.
      */
     public TestMethodScopeStore() {
     }
