@@ -6286,3 +6286,21 @@ within a test method (accessing from @BeforeAll throws ContextNotActiveException
 @TestClassScoped for cross-method fixtures). ScopeStore.getOrCreateMap() now describes its lazy
 allocation as a defensive fallback, not the expected first-access path. No behaviour change;
 verified via full-reactor clean install.
+
+## Doc fix: @TestMethodScoped parallel-methods unsupported + correct stale activation javadoc
+
+Two doc corrections in scope-module:
+- Parallel test methods: documented that @TestMethodScoped is not parallel-safe across methods.
+  There is one TestMethodScopeStore per CDI container (per test class), shared across threads; the
+  ConcurrentHashMap makes intra-method concurrency safe, but between parallel methods there is no
+  isolation — the framework runs methods sequentially, and one method's afterEach destroyAll() would
+  tear down beans another concurrent method is still using. Stated on TestMethodScoped (api) and
+  ScopeStore (impl), mirroring testcontrol's existing single-threaded assumption.
+- Stale activation claim: TestMethodScoped's javadoc still said isActive()==true for the whole
+  container lifetime and that bean access never throws ContextNotActiveException. That was left stale
+  by the scope-filter veto-honoring work (PR #94): isActive() now returns store.isAllocated() (active
+  only during a test method), and access throws ContextNotActiveException outside a method (e.g.
+  @BeforeAll) or when the BeforeScopeStarted activation was vetoed. Corrected the javadoc to match,
+  pointing @BeforeAll-lifetime fixtures at @TestClassScoped.
+
+Docs-only, no behaviour change; verified via full-reactor clean install.
