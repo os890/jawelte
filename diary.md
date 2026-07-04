@@ -6254,3 +6254,14 @@ the context's activate()/deactivate() API. Revised to keep the context as the pr
   deactivate(). Restored those methods on the context-impl; the store stays encapsulated.
 - isActive() still returns store.isAllocated() (unchanged from the accepted fix).
 Behaviour identical; scenario-06/31/32 still green under owb+weld. Re-running the full matrix.
+
+## Doc fix: TestControlScopeObserver "scope of influence" — @TestClassScoped emits no BeforeScopeStarted
+
+After the #46 veto-honoring work, TestControlScopeObserver's class javadoc still listed
+@TestClassScoped alongside @TestMethodScoped as a "BeforeScopeStarted-emitting scope ... affected"
+by startScopes. That is inaccurate: scope-module fires BeforeScopeStarted only for @TestMethodScoped
+(per method); @TestClassScoped is class-lifetime and emits no such event, so the observer never
+governs it and listing it in startScopes has no effect. Corrected the paragraph to say only
+@TestMethodScoped is affected and to state @TestClassScoped emits none. Docs-only; the
+TestControl.startScopes() javadoc + todo.md already documented this from the #46 work. Verified via
+full-reactor clean install.
