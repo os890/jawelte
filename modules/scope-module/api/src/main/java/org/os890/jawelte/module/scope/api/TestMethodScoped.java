@@ -32,14 +32,29 @@ import jakarta.enterprise.context.NormalScope;
  * {@code @Test} method; their {@code @PreDestroy} runs at the end of
  * each {@code afterEach}.
  *
- * <p>Semantically follows {@code @ApplicationScoped}: proxy-based,
- * lazy first-access creation, a single managed instance shared by
- * every thread that dereferences the proxy. The only difference
- * versus {@code @ApplicationScoped} is the bean instance lifetime —
- * destroyed per test method instead of at container shutdown. Bean
- * access never throws {@code ContextNotActiveException}: the context
- * reports {@code isActive() == true} for the whole CDI container's
- * lifetime, lazily allocating a fresh store between methods.
+ * <p>Semantically follows {@code @ApplicationScoped} within a test
+ * method: proxy-based, lazy first-access creation, a single managed
+ * instance shared by every thread that dereferences the proxy during
+ * that method. The difference versus {@code @ApplicationScoped} is the
+ * lifetime — the instance is destroyed at the end of each test method
+ * rather than at container shutdown.
+ *
+ * <p><strong>Activation.</strong> The context is active only while the
+ * per-method store is allocated — between the lifecycle adapter's
+ * {@code beforeEach} and {@code afterEach}. Dereferencing a
+ * {@code @TestMethodScoped} bean outside an active method (e.g. from
+ * {@code @BeforeAll}) or after its {@code BeforeScopeStarted} activation
+ * was vetoed (e.g. via {@code @TestControl(startScopes=…)}) throws
+ * {@code ContextNotActiveException}. Use {@code @TestClassScoped} for
+ * fixtures that must span a test class's methods.
+ *
+ * <p><strong>Parallel test methods are not supported.</strong> There is
+ * one store per CDI container (one per test class), shared across
+ * threads, and the framework runs test methods sequentially. Under JUnit
+ * {@code @Execution(CONCURRENT)} concurrent methods would share the same
+ * bean instances, and one method's {@code afterEach} teardown could
+ * destroy beans another method is still using. (testcontrol-module's
+ * scope-filter state carries the same single-threaded assumption.)
  *
  * <p>{@code passivating = false} — the test framework does not
  * passivate beans; long-running serialised state is out of scope.

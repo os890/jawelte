@@ -41,6 +41,15 @@ import jakarta.enterprise.context.spi.CreationalContext;
  * the constructor, mirroring {@code @ApplicationScoped} —
  * {@link TestClassScopeStore}) or lazily / per-method
  * ({@link TestMethodScopeStore}).
+ *
+ * <p>There is one store per CDI container (one per test class), shared
+ * across threads. The map itself is a {@link ConcurrentHashMap}, so
+ * concurrent access <em>within</em> a single test method is safe, but
+ * the store gives no isolation <em>between</em> parallel test methods:
+ * the framework runs methods sequentially, and {@code allocate()} /
+ * {@code destroyAll()} are driven per method, so a concurrent method's
+ * teardown would destroy beans another is still using. Parallel test
+ * methods (JUnit {@code @Execution(CONCURRENT)}) are not supported.
  */
 public abstract class ScopeStore {
 
