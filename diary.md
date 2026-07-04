@@ -5914,7 +5914,7 @@ Now resolved once per container in `onBeforeBeanDiscovery` into an instance fiel
 and reused by the per-type PAT veto observer and the `AfterBeanDiscovery` helpers
 (which became instance methods). Per container — not a JVM-wide static — so a JVM
 that runs both RESOURCE_LOCAL and JTA test classes resolves the right provider for
-each (the finding #23 principle).
+each (the per-container SPI-resolution principle).
 
 The eager `getTransactionManager()` in `AfterBeanDiscovery` was left as-is: it is
 a once-per-container call, RESOURCE_LOCAL returns `null` (no TM/JNDI bootstrap, so
@@ -5939,7 +5939,7 @@ Two javadocs called the owner key the "user-override channel", overstating it.
 Reworded both (`DefaultExcludedPackageFilter` class javadoc and
 `ConfigKeyAliasProvider`) to describe it as the user-EXTENSION channel (additive
 union, no removal) and to document the contributor-key route for removing a
-default. Behaviour unchanged — the additive design is intentional (the slide's
+default. Behaviour unchanged — the additive design is intentional (the
 alternative, making the owner key replace contributor aliases, would silently drop
 framework-internal exclusions like Weld/OWB decorators and expose them to
 auto-mocking).
@@ -6075,7 +6075,7 @@ the recorded ports and calls containerPort.afterEach UNCONDITIONALLY — so the 
 deactivated regardless of how far the beforeEach loop got — and containerPort.afterEach is
 idempotent (deactivates + unbinds the RequestContextController only if one is bound).
 
-The code already recovers from a failed beforeEach; the gap the review flagged was purely that
+The code already recovers from a failed beforeEach; the gap was purely that
 this dependency on JUnit's afterEach-after-failed-beforeEach guarantee was undocumented, so a
 reader couldn't see what pairs the request-scope activation with its deactivation. Added
 comments to beforeEach (why no eager teardown; ports recorded only after returning) and afterEach
@@ -6105,14 +6105,14 @@ constructor javadoc. No behaviour change; verified via full-reactor clean instal
 ## Doc/diagnostics fix: instantiateConfigured CDI-fallback intent + DEBUG log
 
 TestContext.instantiateConfigured's tryCdiFirst branch catches RuntimeException broadly and falls
-back to a reflective no-arg instance. The review flagged this as conflating "container absent"
-with "container up but bean broken" and suggested narrowing the catch. Investigated and found the
+back to a reflective no-arg instance. This was flagged as conflating "container absent"
+with "container up but bean broken", with a suggestion to narrow the catch. Investigated and found the
 broad catch is LOAD-BEARING: the only tryCdiFirst=true consumer is ServicePriorityResolver, and
 the default DefaultServicePriorityResolver is @ApplicationScoped — so it is NOT a registered bean
 during the CDI bootstrap window (BeforeBeanDiscovery etc.) where loadService(ServicePriorityResolver)
 is called. There, CDI.current().select(...).get() throws UnsatisfiedResolutionException, and the
 reflective fallback is the correct/required behavior (the default resolver is stateless). Narrowing
-the catch (the slide's suggestion) would let that propagate and break container startup.
+the catch (the originally-suggested change) would let that propagate and break container startup.
 
 So this is a logging/docs topic, not a control-flow fix. Corrected the misleading "// CDI is not
 up" comment to document BOTH legitimate fallback cases (container absent + bean not yet resolvable
@@ -6124,7 +6124,7 @@ full-reactor clean install.
 
 ## Doc fix: BeanScopeMapper preserves INHERITED scopes too (CDI-consistent), not just direct
 
-Review flagged DefaultBeanScopeMapper using getAnnotations() (which includes @Inherited superclass
+DefaultBeanScopeMapper used getAnnotations() (which includes @Inherited superclass
 scopes) while the contract said "directly-declared". Confirmed the behavioral consequence: a
 @ConfigBean subclass extending a base whose built-in (@Inherited) scope differs from @ConfigBean's
 contributed @ApplicationScoped (e.g. @ConfigBean class Sub extends @RequestScoped Base) has its
@@ -6175,8 +6175,8 @@ BeforeScopeStarted(RequestScoped) BEFORE the @Priority(50) testcontrol adapter r
 list for the current method. So a method following a restrictive @TestControl(startScopes=…)
 method evaluated its container-managed request scope against the PREVIOUS method's stale list and
 got RequestScoped wrongly vetoed → CdiTestBeanContainer skipped controller.activate() → any
-@RequestScoped access threw ContextNotActiveException. (This also underlies review Q #45: with
-scope-module absent, the @RequestScoped auto-mock fallback would then break too.)
+@RequestScoped access threw ContextNotActiveException. (This also underlies the auto-mock
+@RequestScoped-fallback question: with scope-module absent, that fallback would then break too.)
 
 Fix: TestControlLifecycleAdapter.afterEach now resets the observer's allow-list
 (configureScopeObserver(null)) so each method starts with a fresh context. Because the container
@@ -6243,7 +6243,7 @@ RequestScope veto) — all still green under owb.
 
 ## Design revision (review feedback): drive the context, not the store, from the adapter
 
-Initial #46 fix had ScopeLifecycleAdapter allocate/tear down the TestMethodScopeStore directly
+The initial veto-honoring fix had ScopeLifecycleAdapter allocate/tear down the TestMethodScopeStore directly
 (via TestContext metadata) because beanManager.getContext(TestMethodScoped) throws once isActive()
 reflects allocation. Per review, that leaked the store abstraction into the adapter and discarded
 the context's activate()/deactivate() API. Revised to keep the context as the proper API:
@@ -6257,11 +6257,11 @@ Behaviour identical; scenario-06/31/32 still green under owb+weld. Re-running th
 
 ## Doc fix: TestControlScopeObserver "scope of influence" — @TestClassScoped emits no BeforeScopeStarted
 
-After the #46 veto-honoring work, TestControlScopeObserver's class javadoc still listed
+After the scope-filter veto-honoring work (PR #94), TestControlScopeObserver's class javadoc still listed
 @TestClassScoped alongside @TestMethodScoped as a "BeforeScopeStarted-emitting scope ... affected"
 by startScopes. That is inaccurate: scope-module fires BeforeScopeStarted only for @TestMethodScoped
 (per method); @TestClassScoped is class-lifetime and emits no such event, so the observer never
 governs it and listing it in startScopes has no effect. Corrected the paragraph to say only
 @TestMethodScoped is affected and to state @TestClassScoped emits none. Docs-only; the
-TestControl.startScopes() javadoc + todo.md already documented this from the #46 work. Verified via
+TestControl.startScopes() javadoc + todo.md already documented this from that work. Verified via
 full-reactor clean install.
