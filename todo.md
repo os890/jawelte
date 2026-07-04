@@ -90,17 +90,19 @@ Decide later whether any/all of the three are worth doing.
 
 ## TICKET-010 follow-ups (post-implementation findings)
 
-### `BeforeScopeStarted` veto is currently advisory
+### `BeforeScopeStarted` veto for `@TestMethodScoped` — DONE
 
-scope-module's `ScopeLifecycleAdapter` fires `BeforeScopeStarted(TestMethodScoped.class)` and then activates the context unconditionally regardless of `event.isVetoed()` — the scope-module adapter docstring acknowledges: *"the 'usage-veto' semantics — telling consumers to skip use of @TestMethodScoped beans for a given method — are deferred to a follow-up ticket."*
+scope-module's `ScopeLifecycleAdapter.beforeEach` now honors `event.isVetoed()`: when
+`@TestMethodScoped` is vetoed (e.g. via `@TestControl(startScopes=…)`), it leaves the store
+unallocated so `TestMethodScopedContext.isActive()` is false and bean access throws
+`ContextNotActiveException`. Covered by `tests/testcontrol-module/scenario-32-startscopes-vetoes-testmethodscoped`.
 
-Also: scope-module never fires `BeforeScopeStarted` for `@TestClassScoped`; that scope is added at `AfterBeanDiscovery` and remains active for the whole test class. So vetoing `@TestClassScoped` per method is not currently expressible.
-
-Effect on TICKET-010: testcontrol's `TestControlScopeObserver` correctly emits `event.veto()` per the `@TestControl.startScopes` allow-list, but scope-module ignores the veto. The scope-filter affirmative scenarios (11, 13, 14, 15) cannot be expected to pass until scope-module is updated.
-
-Paths forward:
-- Update `ScopeLifecycleAdapter.beforeEach` to call `methodContext.activate()` only when `!event.isVetoed()`. Mirror change for any scope-module `BeforeScopeStarted` emission.
-- Fire `BeforeScopeStarted(TestClassScoped.class)` in `beforeAll` and gate `TestClassScopedContext` activation on its veto status.
+Remaining (still deferred): scope-module never fires `BeforeScopeStarted` for `@TestClassScoped`
+— it is a class-lifetime scope added at `AfterBeanDiscovery`, so vetoing it *per method* is not
+semantically expressible (a class-scoped context spans all the class's methods). If per-class
+suppression of `@TestClassScoped` is ever wanted, fire `BeforeScopeStarted(TestClassScoped.class)`
+in `beforeAll` and gate `TestClassScopedContext` activation on its veto status. Not currently
+required by any scenario.
 
 ### Per-entry flush in TestDataHandler error-handling
 

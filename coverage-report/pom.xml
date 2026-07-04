@@ -604,7 +604,7 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>jawelte-tests-scope-module-scenario-06-before-scope-veto-does-not-alter-activation</artifactId>
+            <artifactId>jawelte-tests-scope-module-scenario-06-before-scope-veto-suppresses-activation</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -1972,6 +1972,26 @@
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-tests-testcontrol-module-scenario-28-requireDbExpected-guard-fails-when-missing</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-29-failed-beforeeach-does-not-leak-testdata</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-30-dbexpected-failure-still-cleans-database</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-31-scope-filter-reset-between-methods</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-testcontrol-module-scenario-32-startscopes-vetoes-testmethodscoped</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

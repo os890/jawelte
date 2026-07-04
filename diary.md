@@ -6165,3 +6165,92 @@ resolveAliasKeysFor calls must (a) return the same aliases and (b) construct the
 once. Test-the-test: reverting to per-call ServiceLoader.load makes the count 2 ("expected: 1 but
 was: 2"). Registered scenario-25 in the core aggregator; added previously-missing scenario-23/24 +
 new 25 to coverage-report.
+
+## Fix: reset the scope-filter allow-list per test method (stale RequestScoped veto)
+
+TestControlScopeObserver is @ApplicationScoped (container lifetime) and its allow-list
+(configured from @TestControl.startScopes) was never reset between methods — only overwritten
+in the adapter's beforeEach. But CdiTestBeanContainer.beforeEach fires
+BeforeScopeStarted(RequestScoped) BEFORE the @Priority(50) testcontrol adapter reconfigures the
+list for the current method. So a method following a restrictive @TestControl(startScopes=…)
+method evaluated its container-managed request scope against the PREVIOUS method's stale list and
+got RequestScoped wrongly vetoed → CdiTestBeanContainer skipped controller.activate() → any
+@RequestScoped access threw ContextNotActiveException. (This also underlies review Q #45: with
+scope-module absent, the @RequestScoped auto-mock fallback would then break too.)
+
+Fix: TestControlLifecycleAdapter.afterEach now resets the observer's allow-list
+(configureScopeObserver(null)) so each method starts with a fresh context. Because the container
+fires BeforeScopeStarted(RequestScoped) before the per-method list is (re)applied and the list is
+now cleared after each method, RequestScoped is never vetoed — matching the documented intent.
+Also corrected the TestControlScopeObserver javadoc, which wrongly claimed RequestScoped "does
+not flow through this event" (it does — the container fires it; it just stays active because of
+the ordering + the reset).
+
+Test: tests/testcontrol-module/scenario-31-scope-filter-reset-between-methods — ordered methods:
+(1) @TestControl(startScopes={TestClassScoped}) accesses a @RequestScoped bean (RequestScoped
+stays active under a restrictive list for the declaring method); (2) no @TestControl, must still
+resolve the @RequestScoped bean. Test-the-test: removing the afterEach reset makes method 2 fail
+under Weld with ContextNotActiveException (OWB masks it via an ambient request context, so the
+mutation is verified under -Pweld). Registered scenario-31 in the testcontrol aggregator; added
+previously-missing scenario-29/30 + new 31 to coverage-report.
+
+Deferred (per review): take a closer look at the scope-module-absent @RequestScoped auto-mock
+fallback itself (separate follow-up).
+
+## Fix (same topic): scope-module now honors the BeforeScopeStarted veto for @TestMethodScoped
+
+Building on the reset fix above, scope-module's ScopeLifecycleAdapter previously fired
+BeforeScopeStarted(TestMethodScoped) and then activated the context UNCONDITIONALLY, and
+TestMethodScopedContext.isActive() hardcoded `return true` — so @TestControl(startScopes=…) could
+not actually suppress @TestMethodScoped (the veto was a documented-as-deferred no-op), contradicting
+the BeforeScopeStarted / TestControl.startScopes Javadoc contracts.
+
+Now: beforeEach honors event.isVetoed() — when vetoed it leaves the method-scope store unallocated;
+TestMethodScopedContext.isActive() returns store.isAllocated(), so a vetoed @TestMethodScoped bean
+throws ContextNotActiveException as the contract promises. Key subtlety: the adapter used to obtain
+the context via beanManager.getContext(TestMethodScoped), but with isActive() now reflecting
+allocation, getContext() throws ContextNotActiveException while the store is unallocated (a
+chicken-and-egg that would block activation). Fixed by driving the store DIRECTLY via
+testContext.getMetadata(TestMethodScopeStore.class) (TestScopeCdiExtension already binds it there),
+bypassing getContext(); removed the now-unused TestMethodScopedContext.activate()/deactivate() and
+the methodScopedContext() helper.
+
+@TestClassScoped is class-lifetime (allocated at AfterBeanDiscovery, no per-method
+BeforeScopeStarted), so it is not per-method vetoable — documented on TestControl.startScopes() and
+in todo.md; not required by any scenario.
+
+Updated Javadoc: ScopeLifecycleAdapter, TestMethodScopedContext, TestControl.startScopes() (now
+accurate — the veto is functional for @TestMethodScoped, with the @TestClassScoped caveat).
+
+Test: tests/testcontrol-module/scenario-32-startscopes-vetoes-testmethodscoped — method 1
+(@TestControl(startScopes={TestClassScoped})) asserts a @TestMethodScoped bean throws
+ContextNotActiveException; method 2 (unrestricted) resolves it normally. Test-the-test: making the
+adapter ignore the veto (activate unconditionally) makes method 1 fail ("Expecting code to raise a
+throwable") under both owb and weld. Registered scenario-32 in the aggregator + coverage-report.
+
+## Follow-on: update scope-module scenario-06 to the new veto-honoring contract
+
+The full matrix caught that scope-module scenario-06 pinned the OLD no-op contract
+(`scenario-06-before-scope-veto-does-not-alter-activation` / test
+`scopeActivatesEvenWhenBeforeScopeStartedIsVetoed`, asserting a vetoed @TestMethodScoped bean is
+still resolvable). That is exactly the behaviour we changed. Renamed the module to
+`scenario-06-before-scope-veto-suppresses-activation` and inverted the assertion: a vetoed
+BeforeScopeStarted(TestMethodScoped) now leaves the context inactive, so bean access throws
+ContextNotActiveException; the @AfterAll still verifies the veto propagates to the downstream
+observer. Updated the aggregator + coverage-report references. Spot-checked the other
+veto/BeforeScopeStarted scenarios (scope-07 event-fired, scope-17 class-scope-no-event, cdi-33
+RequestScope veto) — all still green under owb.
+
+## Design revision (review feedback): drive the context, not the store, from the adapter
+
+Initial #46 fix had ScopeLifecycleAdapter allocate/tear down the TestMethodScopeStore directly
+(via TestContext metadata) because beanManager.getContext(TestMethodScoped) throws once isActive()
+reflects allocation. Per review, that leaked the store abstraction into the adapter and discarded
+the context's activate()/deactivate() API. Revised to keep the context as the proper API:
+- TestScopeCdiExtension now also binds the TestMethodScopedContext instance on TestContext (the
+  same instance it registers via addContext).
+- ScopeLifecycleAdapter looks the context up from TestContext.getMetadata(TestMethodScopedContext.class)
+  (which does NOT gate on isActive, unlike beanManager.getContext) and calls context.activate()/
+  deactivate(). Restored those methods on the context-impl; the store stays encapsulated.
+- isActive() still returns store.isAllocated() (unchanged from the accepted fix).
+Behaviour identical; scenario-06/31/32 still green under owb+weld. Re-running the full matrix.

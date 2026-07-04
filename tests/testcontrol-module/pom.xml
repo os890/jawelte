@@ -45,6 +45,8 @@
         <module>scenario-25-testcontrol-overridden-method-subclass-wins</module>
         <module>scenario-29-failed-beforeeach-does-not-leak-testdata</module>
         <module>scenario-30-dbexpected-failure-still-cleans-database</module>
+        <module>scenario-31-scope-filter-reset-between-methods</module>
+        <module>scenario-32-startscopes-vetoes-testmethodscoped</module>
     </modules>
 
     <dependencies>

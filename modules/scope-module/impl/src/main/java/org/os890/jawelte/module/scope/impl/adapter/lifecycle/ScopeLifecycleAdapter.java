@@ -50,12 +50,18 @@ import org.os890.jawelte.module.scope.impl.adapter.context.TestMethodScopedConte
  *
  * <p>The {@code BeforeScopeStarted(TestMethodScoped.class)} event
  * fired in {@link #beforeEach(TestContext)} is observable for any
- * CDI observer in the chain. Its veto status does <strong>not</strong>
- * affect this adapter's behaviour: the adapter calls
- * {@link TestMethodScopedContext#activate()} unconditionally
- * afterwards. The "usage-veto" semantics — telling consumers to
- * skip use of {@code @TestMethodScoped} beans for a given method —
- * are deferred to a follow-up ticket.
+ * CDI observer in the chain, and its veto status <strong>is</strong>
+ * honored: if an observer vetoes it (e.g. testcontrol's
+ * {@code TestControlScopeObserver}, driven by
+ * {@code @TestControl(startScopes=…)}), the adapter leaves the
+ * {@code @TestMethodScoped} store unallocated, so the scope stays
+ * inactive and {@code @TestMethodScoped} bean access throws
+ * {@code ContextNotActiveException} for that method.
+ *
+ * <p>{@code @TestClassScoped} has a class lifetime (its store is
+ * allocated once at {@code AfterBeanDiscovery} and torn down in
+ * {@code afterAll}); no per-method {@code BeforeScopeStarted} event is
+ * fired for it, so it cannot be vetoed per method.
  *
  * <p>If the CDI container was not booted by jawelte (e.g.
  * {@code @EnableTestBeans(manageContainer=false)} where the user
@@ -85,23 +91,29 @@ public class ScopeLifecycleAdapter implements TestModuleLifecyclePort {
         if (beanManager.isEmpty()) {
             return;
         }
-        fireBeforeScopeStarted(beanManager.get(), TestMethodScoped.class);
-        TestMethodScopedContext methodContext = methodScopedContext(beanManager.get());
-        if (methodContext != null) {
-            methodContext.activate();
+        boolean vetoed = fireBeforeScopeStarted(beanManager.get(), TestMethodScoped.class);
+        if (vetoed) {
+            // Honor the BeforeScopeStarted veto: when an observer (e.g.
+            // testcontrol's TestControlScopeObserver, driven by
+            // @TestControl(startScopes=…)) vetoes @TestMethodScoped, skip
+            // activation. TestMethodScopedContext.isActive() is then false and
+            // @TestMethodScoped bean access throws ContextNotActiveException for
+            // this method — exactly what the BeforeScopeStarted contract promises.
+            return;
         }
+        // Look the context up from TestContext (TestScopeCdiExtension binds it),
+        // not via beanManager.getContext(TestMethodScoped) — the latter throws
+        // ContextNotActiveException while the context is inactive (its store
+        // unallocated), a chicken-and-egg that would block the very activation
+        // performed here.
+        testContext.getMetadata(TestMethodScopedContext.class).ifPresent(TestMethodScopedContext::activate);
     }
 
     @Override
     public void afterEach(TestContext testContext) {
-        Optional<BeanManager> beanManager = beanManagerFor(testContext);
-        if (beanManager.isEmpty()) {
-            return;
-        }
-        TestMethodScopedContext methodContext = methodScopedContext(beanManager.get());
-        if (methodContext != null) {
-            methodContext.deactivate();
-        }
+        // Deactivate through the context (see beforeEach for why it is looked up
+        // from TestContext rather than via beanManager.getContext).
+        testContext.getMetadata(TestMethodScopedContext.class).ifPresent(TestMethodScopedContext::deactivate);
     }
 
     @Override
@@ -120,25 +132,17 @@ public class ScopeLifecycleAdapter implements TestModuleLifecyclePort {
         return testContext.getMetadata(SeContainer.class).map(SeContainer::getBeanManager);
     }
 
-    private static void fireBeforeScopeStarted(
+    private static boolean fireBeforeScopeStarted(
             BeanManager beanManager, Class<? extends java.lang.annotation.Annotation> scope) {
         try {
-            beanManager.getEvent().fire(new BeforeScopeStarted(scope));
+            BeforeScopeStarted event = new BeforeScopeStarted(scope);
+            beanManager.getEvent().fire(event);
+            return event.isVetoed();
         } catch (RuntimeException ignored) {
             // Per TICKET-004: a CDI runtime in an unexpected state during
-            // event-firing is treated as "not vetoed". The unconditional
-            // activate() that follows still runs; any subsequent failure
-            // propagates per TICKET-001.
-        }
-    }
-
-    private static TestMethodScopedContext methodScopedContext(BeanManager beanManager) {
-        try {
-            return (TestMethodScopedContext) beanManager.getContext(TestMethodScoped.class);
-        } catch (RuntimeException missingContext) {
-            // Container did not load scope-module's CDI Extension (e.g.
-            // a user-managed container without our jar on the classpath).
-            return null;
+            // event-firing is treated as "not vetoed" — the caller activates
+            // the scope; any subsequent failure propagates per TICKET-001.
+            return false;
         }
     }
 
