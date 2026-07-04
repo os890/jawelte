@@ -46,9 +46,13 @@ import org.os890.jawelte.core.api.event.BeforeScopeStarted;
  * the adapter's update has already taken effect by the time this
  * observer fires.
  *
- * <p><b>Scope of influence.</b> In practice only scope-module's
- * {@code BeforeScopeStarted}-emitting scopes
- * ({@code @TestMethodScoped}, {@code @TestClassScoped}) are affected.
+ * <p><b>Scope of influence.</b> In practice only {@code @TestMethodScoped}
+ * is affected — it is the one scope-module scope for which a
+ * {@code BeforeScopeStarted} event is fired (per method, by
+ * {@code ScopeLifecycleAdapter.beforeEach}). {@code @TestClassScoped}
+ * has a class lifetime and emits <em>no</em> {@code BeforeScopeStarted}
+ * event, so this observer never governs it — listing it in
+ * {@code startScopes} has no effect.
  * Container-managed {@code @RequestScoped} <em>is</em> fired as a
  * {@code BeforeScopeStarted} event (by {@code CdiTestBeanContainer.beforeEach})
  * and so does reach this observer — but it stays active regardless of
