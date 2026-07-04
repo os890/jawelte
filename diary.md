@@ -6304,3 +6304,28 @@ Two doc corrections in scope-module:
   pointing @BeforeAll-lifetime fixtures at @TestClassScoped.
 
 Docs-only, no behaviour change; verified via full-reactor clean install.
+
+## Fix: PersistenceXmlParser test-classpath classification over-matched a bare "/test/" substring
+
+PersistenceXmlParser.isTestClasspath matched any URL path containing "/test-classes/" OR the bare
+substring "/test/". The "/test/" branch over-matched: any path with a directory literally named
+"test" (a dependency jar under /home/test/…, a CI /build/test/ workspace, a user path with a test
+segment) was classified as test-scoped. Because selectPreferred returns ONLY the test-classified
+URLs when that set is non-empty, one misclassified production persistence.xml silently discards the
+genuinely test-scoped one — defeating the "test classpath wins" protection the class documents.
+
+Fix: extracted a package-private isTestClasspathPath(String) that classifies by whole path segments
+(split on "/"), not a raw substring, and anchored to real build-output shapes:
+- Maven: a "test-classes" segment (…/target/test-classes/).
+- Gradle: a "test" segment that FOLLOWS a "classes" or "resources" segment
+  (…/build/classes/<lang>/test/, …/build/resources/test/).
+So a "test" segment elsewhere (home dir, CI workspace, jar path) no longer misclassifies — even a
+Gradle production path under a /home/test/ home stays production (its "test" home segment precedes
+"classes"). Updated the parseAll javadoc accordingly.
+
+Test: tests/jpa-module/scenario-69-persistence-xml-test-classpath-classification unit-tests the
+classifier directly (test placed in PersistenceXmlParser's package). Asserts real Maven/Gradle test
+output → test; production output → not test; and unrelated "test"-named segments (/home/test/ jar,
+/build/test/ CI, Gradle prod under /home/test/) → not test. Test-the-test: reverting to the bare
+"/test/" substring makes the misclassification case fail. Registered scenario-69 in the jpa
+aggregator + coverage-report.

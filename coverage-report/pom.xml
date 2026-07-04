@@ -1062,6 +1062,11 @@
             <artifactId>jawelte-tests-jpa-module-scenario-68-emf-cache-divergent-config-fails</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-69-persistence-xml-test-classpath-classification</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             tests/jta-module scenarios (TICKET-006). Same role as the

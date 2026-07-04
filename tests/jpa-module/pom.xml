@@ -101,6 +101,7 @@
         <module>scenario-66-cleanup-skips-views</module>
         <module>scenario-67-native-sql-cleanup-fallback-recreate</module>
         <module>scenario-68-emf-cache-divergent-config-fails</module>
+        <module>scenario-69-persistence-xml-test-classpath-classification</module>
     </modules>
 
     <dependencies>
