@@ -29,10 +29,11 @@ import java.lang.annotation.Target;
  *
  * <ul>
  *   <li><b>Scope filtering</b> via {@link #startScopes()} — restricts
- *       which scope-module scopes ({@code @TestMethodScoped},
- *       {@code @TestClassScoped}) are activated for this test method,
- *       by vetoing non-listed ones through the {@code BeforeScopeStarted}
- *       CDI event fired by scope-module's lifecycle adapter.</li>
+ *       which per-method scope-module scope ({@code @TestMethodScoped})
+ *       is activated for this test method, by vetoing it through the
+ *       {@code BeforeScopeStarted} CDI event fired by scope-module's
+ *       lifecycle adapter when it is not listed. See {@link #startScopes()}
+ *       for the {@code @TestClassScoped} (class-lifetime) caveat.</li>
  *   <li><b>Database fixture handling</b> via {@link #testData()} —
  *       drives the four-phase pipeline
  *       (<i>seed → update → commit → verify</i>) over classpath
@@ -98,17 +99,23 @@ import java.lang.annotation.Target;
 public @interface TestControl {
 
     /**
-     * Scope annotations to activate for this test method. Only scopes
-     * managed by scope-module's {@code BeforeScopeStarted} participant
-     * ({@code @TestMethodScoped}, {@code @TestClassScoped}) are
-     * affected; container-managed {@code @RequestScoped} and
-     * JPA-managed {@code @TransactionScoped} are never vetoed by this
-     * attribute.
+     * Scope annotations to activate for this test method. When set to a
+     * non-empty array, the {@code TestControlScopeObserver} vetoes the
+     * {@code BeforeScopeStarted} event for every scope <em>not</em>
+     * listed here, and the veto is honored:
+     * {@code @TestMethodScoped} is fired per method by scope-module, so
+     * omitting it leaves it inactive and its beans throw
+     * {@code ContextNotActiveException} for that method.
      *
-     * <p>When this attribute is set to a non-empty array, the
-     * {@code TestControlScopeObserver} vetoes the
-     * {@code BeforeScopeStarted} event for every scope-module scope
-     * <em>not</em> listed here.
+     * <p>Not affected by this attribute:
+     * <ul>
+     *   <li>{@code @TestClassScoped} — it has a <em>class</em> lifetime
+     *       (activated once at {@code AfterBeanDiscovery}); no per-method
+     *       {@code BeforeScopeStarted} is fired for it, so it cannot be
+     *       suppressed per method regardless of whether it is listed;</li>
+     *   <li>container-managed {@code @RequestScoped} and JPA-managed
+     *       {@code @TransactionScoped} — never vetoed by this attribute.</li>
+     * </ul>
      *
      * <p>The default empty array {@code {}} means
      * &quot;all scope-module scopes activate normally&quot; — no vetoing

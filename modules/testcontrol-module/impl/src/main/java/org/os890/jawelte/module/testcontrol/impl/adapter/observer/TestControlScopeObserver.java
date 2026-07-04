@@ -46,12 +46,21 @@ import org.os890.jawelte.core.api.event.BeforeScopeStarted;
  * the adapter's update has already taken effect by the time this
  * observer fires.
  *
- * <p><b>Scope of influence.</b> Only scope-module's
+ * <p><b>Scope of influence.</b> In practice only scope-module's
  * {@code BeforeScopeStarted}-emitting scopes
  * ({@code @TestMethodScoped}, {@code @TestClassScoped}) are affected.
- * Container-managed {@code @RequestScoped} and JPA-managed
- * {@code @TransactionScoped} do not flow through this event and
- * therefore stay active regardless of {@code startScopes}.
+ * Container-managed {@code @RequestScoped} <em>is</em> fired as a
+ * {@code BeforeScopeStarted} event (by {@code CdiTestBeanContainer.beforeEach})
+ * and so does reach this observer — but it stays active regardless of
+ * {@code startScopes} for two reasons working together: the container
+ * fires it <em>before</em> the {@code @Priority(50)} adapter applies
+ * this method's allow-list (so the list is not yet active), and the
+ * adapter clears the allow-list in {@code afterEach} so no previous
+ * method's list lingers. With no allow-list in effect at that point,
+ * {@link #onBeforeScopeStarted(BeforeScopeStarted)} returns early and
+ * never vetoes {@code @RequestScoped}. scope-module's own events, by
+ * contrast, fire at {@code @Priority(100)} — after the adapter has
+ * applied the list — so they are the ones the allow-list governs.
  *
  * <p><b>Thread-safety.</b> {@code volatile} state plus a single-test
  * thread model. The per-method allow-list is not safe

@@ -139,6 +139,14 @@ public class TestControlLifecycleAdapter implements TestModuleLifecyclePort {
                     handler.clearActive();
                 }
             } finally {
+                // Reset the scope-filter allow-list so the next test method
+                // starts with a fresh context. TestControlScopeObserver is
+                // @ApplicationScoped (container lifetime), so without this its
+                // allow-list would leak into the next method — and because
+                // containerPort.beforeEach fires BeforeScopeStarted(RequestScoped)
+                // BEFORE this adapter reconfigures the list, a stale restrictive
+                // allow-list could wrongly veto the next method's request scope.
+                configureScopeObserver(null);
                 testContext.unbindMetadata(TestControl.class);
             }
         }

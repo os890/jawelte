@@ -74,7 +74,14 @@ public class TestScopeCdiExtension implements Extension {
         TestClassScopeStore classStore = new TestClassScopeStore();
         active.bindMetadata(TestMethodScopeStore.class, methodStore);
         active.bindMetadata(TestClassScopeStore.class, classStore);
-        event.addContext(new TestMethodScopedContext(methodStore));
+        // Bind the method context on TestContext as well as registering it with
+        // CDI. ScopeLifecycleAdapter drives activate()/deactivate() through this
+        // metadata handle rather than beanManager.getContext(TestMethodScoped),
+        // which would throw ContextNotActiveException while the context is
+        // inactive (its store unallocated) — see the adapter for details.
+        TestMethodScopedContext methodContext = new TestMethodScopedContext(methodStore);
+        active.bindMetadata(TestMethodScopedContext.class, methodContext);
+        event.addContext(methodContext);
         event.addContext(new TestClassScopedContext(classStore));
     }
 

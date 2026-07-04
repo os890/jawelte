@@ -39,7 +39,7 @@
         <module>scenario-03-method-scope-predestroy-per-method</module>
         <module>scenario-04-method-scope-same-instance-within-method</module>
         <module>scenario-05-method-scope-provider-same-instance</module>
-        <module>scenario-06-before-scope-veto-does-not-alter-activation</module>
+        <module>scenario-06-before-scope-veto-suppresses-activation</module>
         <module>scenario-07-before-scope-event-fired</module>
         <module>scenario-08-method-scope-predestroy-aggregates-exceptions</module>
         <module>scenario-09-method-scope-same-instance-across-threads</module>

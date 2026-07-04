@@ -30,12 +30,14 @@ import org.os890.jawelte.module.scope.api.TestMethodScoped;
  * map, this class wires it up to CDI.
  *
  * <p>Mirrors {@code @ApplicationScoped} with a per-test-method
- * lifetime. {@link #isActive()} always returns {@code true} while
- * the CDI container is up — bean access never throws
- * {@code ContextNotActiveException}. The {@code BeforeScopeStarted}
- * event fired by {@code ScopeLifecycleAdapter.beforeEach} is
- * observable but its veto status does NOT affect this context's
- * activation; activation is unconditional.
+ * lifetime. {@link #isActive()} reflects the store's allocation: the
+ * {@code ScopeLifecycleAdapter} allocates the store in {@code beforeEach}
+ * and tears it down in {@code afterEach}. If an observer vetoes the
+ * {@code BeforeScopeStarted} event fired by {@code beforeEach} (e.g. via
+ * {@code @TestControl(startScopes=…)}), the adapter leaves the store
+ * unallocated, {@link #isActive()} stays {@code false}, and bean access
+ * throws {@code ContextNotActiveException} — as the
+ * {@code BeforeScopeStarted} contract promises.
  *
  * <p>Implements {@link AlterableContext} so user code that calls
  * {@code Instance#destroy(Object)} on a method-scoped bean takes
@@ -62,7 +64,13 @@ public class TestMethodScopedContext implements AlterableContext {
 
     @Override
     public boolean isActive() {
-        return true;
+        // Active only while the store's map is allocated — the lifecycle
+        // adapter allocates it in beforeEach (unless the BeforeScopeStarted
+        // event was vetoed) and tears it down in afterEach. When
+        // @TestControl(startScopes=…) vetoes @TestMethodScoped, the store
+        // stays unallocated, so bean access throws ContextNotActiveException
+        // as the BeforeScopeStarted contract promises.
+        return store.isAllocated();
     }
 
     @Override
@@ -101,18 +109,18 @@ public class TestMethodScopedContext implements AlterableContext {
     }
 
     /**
-     * Replace the underlying bean map with a fresh one. Called
-     * unconditionally by {@code ScopeLifecycleAdapter.beforeEach}
-     * regardless of {@code BeforeScopeStarted} veto status.
+     * Allocate a fresh bean map, making the context active. Called by
+     * {@code ScopeLifecycleAdapter.beforeEach} unless the
+     * {@code BeforeScopeStarted} event was vetoed for this method — in which
+     * case activation is skipped and {@link #isActive()} stays {@code false}.
      */
     public void activate() {
         store.allocate();
     }
 
     /**
-     * Destroy every bean in the current store and null the map
-     * reference. Called unconditionally by
-     * {@code ScopeLifecycleAdapter.afterEach}.
+     * Destroy every bean in the current store and drop the map, making the
+     * context inactive. Called by {@code ScopeLifecycleAdapter.afterEach}.
      */
     public void deactivate() {
         store.destroyAll();

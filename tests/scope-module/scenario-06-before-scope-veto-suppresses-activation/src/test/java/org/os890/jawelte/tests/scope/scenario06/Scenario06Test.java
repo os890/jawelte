@@ -16,7 +16,9 @@
 package org.os890.jawelte.tests.scope.scenario06;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import jakarta.enterprise.context.ContextNotActiveException;
 import jakarta.inject.Inject;
 
 import org.junit.jupiter.api.AfterAll;
@@ -31,21 +33,20 @@ class Scenario06Test {
     Counter counter;
 
     @Test
-    void scopeActivatesEvenWhenBeforeScopeStartedIsVetoed() {
-        // TestMethodScopedVetoer.on(BeforeScopeStarted) called
-        // event.veto() before scope-module's adapter ran activate().
-        // Per the resolved design, scope-module ignores the veto and
-        // activates anyway: the @TestMethodScoped bean must resolve
-        // and accept writes.
-        counter.increment();
-        assertThat(counter.value()).isEqualTo(1);
+    void vetoedTestMethodScopedStaysInactive() {
+        // TestMethodScopedVetoer.on(BeforeScopeStarted) calls event.veto()
+        // before scope-module's adapter would activate @TestMethodScoped.
+        // scope-module honors the veto: the context is left inactive, so
+        // accessing the @TestMethodScoped bean throws ContextNotActiveException.
+        assertThatThrownBy(counter::increment)
+                .isInstanceOf(ContextNotActiveException.class);
     }
 
     @AfterAll
     static void verifyVetoWasObservedDownstream() {
-        // A second observer ordered after the vetoer sees the
-        // already-vetoed event - confirms vet status propagates in the
-        // event chain, even though scope-module doesn't act on it.
+        // A second observer ordered after the vetoer sees the already-vetoed
+        // event — confirms veto status propagates in the event chain (and, now
+        // that the veto is honored, that scope-module acted on it above).
         assertThat(VetoObserver.SAW_VETOED_EVENT.get())
                 .as("downstream observer must see isVetoed=true")
                 .isTrue();
