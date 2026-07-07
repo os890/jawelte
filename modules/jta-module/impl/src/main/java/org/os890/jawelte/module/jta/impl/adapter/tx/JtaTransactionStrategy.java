@@ -151,9 +151,17 @@ public class JtaTransactionStrategy implements TransactionStrategy {
      *       marker.</li>
      * </ul>
      *
-     * <p>{@link WeakHashMap} so completed-and-discarded {@code Transaction}
-     * instances are eligible for GC; vendor TMs typically discard the
-     * {@code Transaction} object once {@code afterCompletion} has run.
+     * <p>The marker is cleared on tx completion — the direct path
+     * removes it in {@code commit()} / {@code rollback()}, the sync path
+     * in the {@code Synchronization}'s {@code afterCompletion(int)} — so
+     * correctness depends on completion, not GC timing. A vendor that
+     * reuses / pools {@code Transaction} objects (identity-based
+     * {@code equals} / {@code hashCode}) therefore never carries a stale
+     * marker into the next tx, which would otherwise make the sync path
+     * short-circuit and silently drop that tx's lifecycle events.
+     * {@link WeakHashMap} remains as a backstop so any entry missed by
+     * the completion hooks (e.g. a tx that never completes) is still
+     * reclaimed once its {@code Transaction} is GC'd.
      */
     private static final Map<Transaction, Boolean> EVENTS_BOUND =
             Collections.synchronizedMap(new WeakHashMap<>());
@@ -245,6 +253,12 @@ public class JtaTransactionStrategy implements TransactionStrategy {
     @Override
     public void commit() {
         TransactionManager tm = requireInitialized();
+        // Capture the completing tx before TM.commit()/rollback() nulls
+        // it out, so its EVENTS_BOUND marker can be cleared on completion
+        // (see finally). Tying reclamation to completion rather than GC
+        // keeps a reused/pooled Transaction object from carrying a stale
+        // marker into the next tx on the sync path.
+        Transaction completing = currentTransactionQuietly(tm);
         fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
         try {
             int status = tm.getStatus();
@@ -275,6 +289,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         } catch (SystemException | SecurityException sysFailure) {
             throw new IllegalStateException("JTA commit failure", sysFailure);
         } finally {
+            clearEventsBound(completing);
             resumeSuspendedIfAny(tm);
         }
     }
@@ -282,6 +297,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
     @Override
     public void rollback() {
         TransactionManager tm = requireInitialized();
+        Transaction completing = currentTransactionQuietly(tm);
         fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
         try {
             tm.rollback();
@@ -289,6 +305,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         } catch (SystemException | SecurityException | IllegalStateException sysFailure) {
             throw new IllegalStateException("JTA rollback failure", sysFailure);
         } finally {
+            clearEventsBound(completing);
             resumeSuspendedIfAny(tm);
         }
     }
@@ -468,6 +485,25 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         }
     }
 
+    private static Transaction currentTransactionQuietly(TransactionManager tm) {
+        try {
+            return tm.getTransaction();
+        } catch (SystemException ignored) {
+            return null;
+        }
+    }
+
+    private static void clearEventsBound(Transaction transaction) {
+        if (transaction != null) {
+            // Remove the marker on completion so a vendor that reuses /
+            // pools the Transaction object (identity-based equals/hashCode)
+            // doesn't carry a stale marker into the next tx — which would
+            // make bindLifecycleEventsToCurrentTransaction() short-circuit
+            // and silently drop that tx's lifecycle events on the sync path.
+            EVENTS_BOUND.remove(transaction);
+        }
+    }
+
     /**
      * Ensure {@link TransactionStarted} +
      * {@link TransactionBeforeCompletion} +
@@ -508,7 +544,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             return;
         }
         try {
-            transaction.registerSynchronization(new LifecycleEventSynchronization());
+            transaction.registerSynchronization(new LifecycleEventSynchronization(transaction));
         } catch (jakarta.transaction.RollbackException | SystemException registerFailure) {
             EVENTS_BOUND.remove(transaction);
             return;
@@ -524,7 +560,13 @@ public class JtaTransactionStrategy implements TransactionStrategy {
      */
     private static class LifecycleEventSynchronization implements Synchronization {
 
+        private final Transaction transaction;
+
         private boolean beforeCompletionFired;
+
+        LifecycleEventSynchronization(Transaction transaction) {
+            this.transaction = transaction;
+        }
 
         @Override
         public void beforeCompletion() {
@@ -534,16 +576,23 @@ public class JtaTransactionStrategy implements TransactionStrategy {
 
         @Override
         public void afterCompletion(int status) {
-            if (!beforeCompletionFired) {
-                // JTA spec: rollback path skips beforeCompletion. Fire
-                // here so jawelte's contract holds across commit and
-                // rollback paths.
-                fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
-            }
-            if (status == Status.STATUS_COMMITTED) {
-                fireEvent(new TransactionCommitted(TRANSACTION_WIDE));
-            } else {
-                fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
+            try {
+                if (!beforeCompletionFired) {
+                    // JTA spec: rollback path skips beforeCompletion. Fire
+                    // here so jawelte's contract holds across commit and
+                    // rollback paths.
+                    fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
+                }
+                if (status == Status.STATUS_COMMITTED) {
+                    fireEvent(new TransactionCommitted(TRANSACTION_WIDE));
+                } else {
+                    fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
+                }
+            } finally {
+                // Clear the marker now the tx has completed, so a reused
+                // Transaction object re-binds (fires events) next time
+                // instead of being suppressed by a stale marker.
+                clearEventsBound(transaction);
             }
         }
     }

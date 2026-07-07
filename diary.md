@@ -6448,3 +6448,32 @@ The "H2 lacks SET DEFAULT" limitation was an H2 1.x trait. The concern is theref
   rule codes degrade to NO ACTION. Verified on H2 2.3.232.
 
 **Verification:** full-reactor mvn clean install green (all tests + javadoc doclint).
+
+## Clear JtaTransactionStrategy's EVENTS_BOUND marker on tx completion
+
+**Problem:** EVENTS_BOUND (a synchronized WeakHashMap<Transaction,Boolean>) is written in begin() and
+via putIfAbsent in bindLifecycleEventsToCurrentTransaction(), but was removed only on a
+registerSynchronization failure — never on normal completion. Reclamation depended solely on GC of the
+Transaction key. A JTA provider that reuses/pools Transaction objects (identity-based equals/hashCode —
+Narayana, Geronimo, Atomikos all can) could hand back an instance carrying a stale marker from a prior
+completed tx. On the sync path (a vendor @Transactional interceptor drives the tx and
+bindLifecycleEventsToCurrentTransaction runs from the EM producer), putIfAbsent then sees the stale TRUE
+and returns early — silently dropping TransactionStarted / BeforeCompletion / Committed / RolledBack for
+that tx, violating the "events fire once per JTA tx" contract. The direct path re-marks unconditionally
+in begin(), so it stayed correct.
+
+**Fix (tie marker lifetime to completion, not GC):**
+- commit()/rollback() capture the completing Transaction before TM.commit()/rollback() and remove it
+  from EVENTS_BOUND in finally.
+- LifecycleEventSynchronization holds its Transaction and removes it in afterCompletion.
+- WeakHashMap kept as a backstop for a tx that never completes.
+
+**Test (white-box unit test in jta-module/impl — stub TM + a single reused Transaction object, no CDI):**
+- syncPathRebindsAfterCompletionOfReusedTransaction (afterCompletion clear): bind → complete → bind the
+  reused object again; a 2nd synchronization must register (1 without the fix, expected 2).
+- directPathCommitClearsMarkerSoReusedTransactionRebinds (commit clear): begin()+commit() → bind the
+  reused object on the sync path; a synchronization must register (0 without the fix, expected 1).
+Both fail with clearing disabled and pass with it (temporary no-op mutation of clearEventsBound). Added
+junit-jupiter + assertj at test scope to jta-module/impl (its first unit tests).
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (37m 47s).
