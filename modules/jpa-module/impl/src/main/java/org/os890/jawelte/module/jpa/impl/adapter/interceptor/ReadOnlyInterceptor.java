@@ -15,6 +15,9 @@
  */
 package org.os890.jawelte.module.jpa.impl.adapter.interceptor;
 
+import java.lang.reflect.Method;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -41,6 +44,16 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  * {@code em.persist(...)} calls inside the annotated method are
  * discarded.
  *
+ * <p>The COMMIT flush mode covers the annotated method's transaction
+ * and everything called below it: EntityManagers present at entry are
+ * swapped here, and EntityManagers lazily created during the body
+ * (e.g. a lazily-joined PU, or a nested transaction) are born with
+ * {@code COMMIT} via {@code TransactionScopedEmHolder.peekOrAutoBegin}
+ * because this interceptor marks the read-only scope for the body's
+ * duration. All of them are restored on exit (see
+ * {@link #restoreFlushModes(Map)}), so an <em>enclosing</em> scope is
+ * never left read-only.
+ *
  * <p>When no transaction is active (e.g. {@code @ReadOnly}
  * declared without {@code @Transactional}), the interceptor still
  * fires but is a documented no-op: the body proceeds and any
@@ -54,17 +67,32 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  * <p>The interceptor captures each touched
  * {@link EntityManager}'s original {@link FlushModeType} before
  * switching to {@code COMMIT} and restores it in the
- * {@code finally} block, so a nested {@code @ReadOnly} call does
- * not leave its enclosing level with the wrong flush mode.
+ * {@code finally} block. Because every {@code @Transactional}
+ * invocation starts a fresh transaction with its own
+ * {@link EntityManager}, a genuinely nested {@code @ReadOnly} call
+ * operates on its own frame: it swaps and restores its own EM and
+ * marks its own transaction rollback-only, independently of the
+ * enclosing {@code @ReadOnly} level.
  *
- * <p>A re-entrance guard ({@link #ACTIVE}) shields against double
+ * <p>The read-only scope is tracked by depth, not a flag
+ * ({@link TransactionScopedEmHolder#enterReadOnlyScope()} /
+ * {@link TransactionScopedEmHolder#exitReadOnlyScope()}): a nested
+ * {@code @ReadOnly} returning does not end the scope — only the
+ * outermost level unwinding does. So lazily-joined PUs created after
+ * a nested {@code @ReadOnly} has returned are still born read-only,
+ * and the enclosing scope is restored only when the outermost level
+ * exits.
+ *
+ * <p>A call-site guard ({@link #CALL_STACK}) shields against double
  * registration (programmatic + auto-discovery) on the same call
- * site: when the interceptor fires a second time on the same thread
- * before the first invocation has unwound, the inner call simply
- * proceeds without re-applying the flush-mode swap or scheduling a
- * second {@code setRollbackOnly}. Without this guard the inner
- * call's {@code finally} block would restore the flush mode to
- * what it was before the first invocation captured it — mid-method.
+ * site: when the interceptor fires a second time for the <em>same</em>
+ * {@link Method} already at the top of the per-thread stack, the
+ * inner fire simply proceeds without re-applying the flush-mode swap,
+ * re-entering the read-only scope, or scheduling a second
+ * {@code setRollbackOnly}. Genuinely nested {@code @ReadOnly}
+ * invocations between distinct methods still nest correctly because
+ * each level pushes a different {@code Method} onto the stack — the
+ * same mechanism {@code TransactionalInterceptor} uses.
  */
 @Interceptor
 @ReadOnly
@@ -72,12 +100,15 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
 public class ReadOnlyInterceptor {
 
     /**
-     * Per-thread re-entrance flag. {@code true} while a
-     * {@code @ReadOnly} invocation is mid-flight on the calling
-     * thread; the interceptor short-circuits to
-     * {@link InvocationContext#proceed()} on any nested fire.
+     * Per-thread stack of currently-active intercepted {@link Method}
+     * frames. The top carries the {@code Method} the current
+     * {@code @ReadOnly} invocation is dispatching; a second fire whose
+     * {@code Method} matches the top is a duplicate registration on the
+     * same call site and short-circuits to
+     * {@link InvocationContext#proceed()}. Distinct nested
+     * {@code @ReadOnly} methods push distinct {@code Method}s and nest.
      */
-    private static final ThreadLocal<Boolean> ACTIVE = ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static final ThreadLocal<Deque<Method>> CALL_STACK = ThreadLocal.withInitial(ArrayDeque::new);
 
     /** No-arg constructor required by CDI. */
     public ReadOnlyInterceptor() {
@@ -93,7 +124,11 @@ public class ReadOnlyInterceptor {
      */
     @AroundInvoke
     public Object aroundInvoke(InvocationContext invocationContext) throws Exception {
-        if (Boolean.TRUE.equals(ACTIVE.get())) {
+        Deque<Method> callStack = CALL_STACK.get();
+        Method currentMethod = invocationContext.getMethod();
+        if (!callStack.isEmpty() && callStack.peek() == currentMethod) {
+            // Duplicate fire on the same call site (programmatic
+            // registration + auto-discovery): run the body once.
             return invocationContext.proceed();
         }
         TransactionStrategy strategy = TestContext.loadService(TransactionStrategy.class);
@@ -108,7 +143,13 @@ public class ReadOnlyInterceptor {
                 entityManager.setFlushMode(FlushModeType.COMMIT);
             }
         }
-        ACTIVE.set(Boolean.TRUE);
+        callStack.push(currentMethod);
+        // Enter the read-only scope (by depth) so EntityManagers lazily
+        // created during the body (this tx and everything called below it)
+        // are also born with FlushModeType.COMMIT — see
+        // TransactionScopedEmHolder.peekOrAutoBegin. A nested @ReadOnly
+        // returning does not end the scope; only the outermost level does.
+        TransactionScopedEmHolder.enterReadOnlyScope();
         try {
             Object result = invocationContext.proceed();
             strategy.setRollbackOnly();
@@ -121,8 +162,12 @@ public class ReadOnlyInterceptor {
             markRollbackOnlyAndSuppress(strategy, throwable);
             throw throwable;
         } finally {
-            ACTIVE.set(Boolean.FALSE);
+            TransactionScopedEmHolder.exitReadOnlyScope();
             restoreFlushModes(originalFlushModes);
+            callStack.pop();
+            if (callStack.isEmpty()) {
+                CALL_STACK.remove();
+            }
         }
     }
 
@@ -141,13 +186,20 @@ public class ReadOnlyInterceptor {
     }
 
     private static void restoreFlushModes(Map<String, FlushModeType> originalFlushModes) {
-        for (Map.Entry<String, FlushModeType> entry : originalFlushModes.entrySet()) {
-            EntityManager entityManager = TransactionScopedEmHolder.peek(entry.getKey());
+        // Restore every EM currently on this thread's stack for an active PU,
+        // not just the ones swapped at entry: an EM lazily created during the
+        // read-only body (not in originalFlushModes) was born AUTO and switched
+        // to COMMIT by TransactionScopedEmHolder.peekOrAutoBegin, so it must be
+        // reset to AUTO too — otherwise an enclosing scope that shares the tx
+        // (REQUIRED) would inherit the read-only flush mode.
+        for (String persistenceUnitName : JpaActivePersistenceUnits.get()) {
+            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
             if (entityManager == null || !entityManager.isOpen()) {
                 continue;
             }
+            FlushModeType restoreTo = originalFlushModes.getOrDefault(persistenceUnitName, FlushModeType.AUTO);
             try {
-                entityManager.setFlushMode(entry.getValue());
+                entityManager.setFlushMode(restoreTo);
             } catch (RuntimeException ignored) {
                 // EM may already be in a state where setFlushMode is
                 // disallowed (e.g. mid-completion); ignore — the EM

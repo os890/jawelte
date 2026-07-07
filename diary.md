@@ -6329,3 +6329,99 @@ output → test; production output → not test; and unrelated "test"-named segm
 /build/test/ CI, Gradle prod under /home/test/) → not test. Test-the-test: reverting to the bare
 "/test/" substring makes the misclassification case fail. Registered scenario-69 in the jpa
 aggregator + coverage-report.
+
+## Fix: @ReadOnly now covers lazily-joined PUs (flush-mode COMMIT), scoped to the method + below
+
+ReadOnlyInterceptor.aroundInvoke swapped flush mode to COMMIT only for EntityManagers already on
+the holder stack at interception time (peek != null). In the all-lazy begin path (multi-PU, no
+@PersistenceConfig.persistenceUnitName), no EM exists at entry; EMs created via peekOrAutoBegin
+during the body were born with the JPA-default AUTO flush mode. So inside an @ReadOnly method a
+lazily-joined PU auto-flushed mid-method (em.persist + query executed the INSERT), violating the
+documented "dirty checks do not auto-flush" contract. (Final DB state stayed correct via
+rollback-only, but the mid-method contract was broken.)
+
+Fix (scope: the @ReadOnly method's tx and everything called below it — NOT the enclosing tx):
+- TransactionScopedEmHolder gains a per-thread READ_ONLY_SCOPE flag with
+  setReadOnlyScopeActive/isReadOnlyScopeActive. peekOrAutoBegin sets FlushModeType.COMMIT on every
+  EM it creates while the flag is set (so lazily-joined PUs and nested REQUIRES_NEW txs created
+  during the body are read-only too — the chosen "whole call-subtree" semantics).
+- ReadOnlyInterceptor sets the flag for the annotated method's duration (outermost @ReadOnly only,
+  via the existing ACTIVE re-entrance guard) and clears it in finally. Its restore now resets EVERY
+  active-PU EM on the stack (getOrDefault(pu, AUTO)) — pre-existing EMs to their captured mode,
+  lazily-created ones to AUTO — so an ENCLOSING scope that shares the tx (REQUIRED) is never left
+  read-only.
+- Updated ReadOnly (api) + ReadOnlyInterceptor javadoc to state the COMMIT mode covers the method's
+  tx and below, with enclosing scopes restored on exit.
+
+Test: tests/jpa-module/scenario-70-readonly-covers-lazy-pu — (1) a lazily-joined PU's EM is COMMIT
+inside an @ReadOnly method; (2) a nested REQUIRES_NEW @ReadOnly's EM is COMMIT while the enclosing
+writable tx's EM stays AUTO. Both pass under owb + weld; removing the COMMIT-on-create makes both
+fail (expected COMMIT but was AUTO). Registered scenario-70 in the jpa aggregator + coverage-report.
+
+## @ReadOnly covers lazily-joined persistence units (flush-mode COMMIT), scoped to method + below
+
+**Problem:** `ReadOnlyInterceptor` swapped flush mode to `COMMIT` only for `EntityManager`s already
+on the holder stack at interception time. In the all-lazy begin path (multi-PU, no
+`@PersistenceConfig.persistenceUnitName`), no EM exists at method entry, so EMs created via
+`peekOrAutoBegin` during the body were born with the JPA-default `AUTO` flush mode. A lazily-joined
+PU therefore auto-flushed mid-method inside a `@ReadOnly` method, breaking the documented "dirty
+checks do not auto-flush" contract. (Final DB state stayed correct — the tx is marked rollback-only
+— but the mid-method contract was violated.)
+
+**Fix (scope: the `@ReadOnly` method's transaction and everything called below it; the enclosing
+caller transaction stays untouched):**
+- `TransactionScopedEmHolder` gains a per-thread `READ_ONLY_SCOPE` flag
+  (`setReadOnlyScopeActive` / `isReadOnlyScopeActive`); `peekOrAutoBegin` sets
+  `FlushModeType.COMMIT` on every EM it creates while the flag is set — so lazily-joined PUs and
+  nested `REQUIRES_NEW` transactions started during the body are read-only too. Flag cleared in
+  `clearForCurrentThread()`.
+- `ReadOnlyInterceptor` sets the flag for the annotated method's duration (outermost `@ReadOnly`
+  only, via the existing re-entrance guard) and clears it in `finally`. Its restore now resets every
+  active-PU EM on the stack — pre-existing ones to their captured mode, lazily-created ones to
+  `AUTO` — so an enclosing `REQUIRED`-shared transaction is never left read-only.
+- Updated `ReadOnly` (api) and `ReadOnlyInterceptor` javadoc to describe the method-and-below scope
+  with enclosing scopes restored on exit.
+
+**Test:** `tests/jpa-module/scenario-70-readonly-covers-lazy-pu` — (1) a lazily-joined PU's EM is
+`COMMIT` inside an `@ReadOnly` method; (2) a nested `REQUIRES_NEW` `@ReadOnly` transaction's EM is
+`COMMIT` while the enclosing writable transaction's EM stays `AUTO` (the "level or below" boundary).
+Both pass under OWB and Weld; removing the COMMIT-on-create makes both fail
+(`expected: COMMIT but was: AUTO`). Registered scenario-70 in the jpa aggregator + coverage-report.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (33m 35s).
+
+## Nested @ReadOnly: roll back the nested tx, keep the outer level read-only (depth-tracked scope)
+
+**Trigger:** review question — with nested @ReadOnly calls, only the outermost level should end the
+read-only scope, so a new transaction started a level above isn't left read-only. Tracing the code
+surfaced two linked defects.
+
+**Defect 1 (nested @ReadOnly writes committed):** the framework starts a fresh transaction for every
+@Transactional invocation (TxType is not interpreted). A nested @Transactional @ReadOnly method
+therefore gets its own frame + EntityManager. But ReadOnlyInterceptor's re-entrance guard was a plain
+boolean, so a genuinely nested @ReadOnly short-circuited completely — it never called setRollbackOnly()
+on its own frame, and its writes committed. Proven with scenario-71 on the pre-fix code: expected 1
+row, got 2 (nested insert persisted).
+
+**Defect 2 (outer scope ended early):** the read-only scope flag added for lazily-joined PUs was a
+boolean. Once nested @ReadOnly is allowed to run, its exit would clear the flag while the enclosing
+@ReadOnly level was still executing — a PU lazily joined after the nested call returned would be born
+AUTO, re-introducing the lazily-joined-PU auto-flush bug under nesting.
+
+**Fix:**
+- ReadOnlyInterceptor now uses a call-site-precise Method stack (mirroring TransactionalInterceptor)
+  instead of a boolean. Same-call-site double-registration still short-circuits; a genuinely nested
+  @ReadOnly runs fully — swaps/restores its own frame's EM and marks its own transaction rollback-only.
+- TransactionScopedEmHolder's read-only scope is depth-tracked (enterReadOnlyScope/exitReadOnlyScope;
+  isReadOnlyScopeActive = depth > 0). Only the outermost @ReadOnly unwinding ends the scope.
+
+**Tests:**
+- scenario-71-nested-readonly-rolls-back: an @ReadOnly method calling another @ReadOnly method — both
+  levels' writes discarded; outer stays COMMIT after the nested call returns (fails on the old boolean
+  guard: count 2 vs 1).
+- scenario-72-readonly-scope-survives-nested-readonly: outer @ReadOnly (all-lazy multi-PU) calls a
+  nested @ReadOnly, then dereferences a fresh PU — still COMMIT (fails on a boolean-reset mutation:
+  born AUTO).
+Both registered in the jpa aggregator + coverage-report.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (35m 16s).
