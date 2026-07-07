@@ -6425,3 +6425,26 @@ AUTO, re-introducing the lazily-joined-PU auto-flush bug under nesting.
 Both registered in the jpa aggregator + coverage-report.
 
 **Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (35m 16s).
+
+## Document FK re-add fidelity limits in NativeSqlDeleteDbCleanupStrategy (docs-only)
+
+**Context:** the native-SQL fallback cleanup strategy drops all FK constraints, deletes rows, then
+re-adds the constraints. It captures each FK from JDBC metadata (DatabaseMetaData.getImportedKeys)
+and re-emits ADD CONSTRAINT with the reported ON DELETE / ON UPDATE rules. The class/record javadoc
+called this re-emit "verbatim", which is inaccurate — it is a metadata-level reconstruction, not the
+original DDL text.
+
+**Empirical check:** ran the exact DDL the strategy emits against H2 2.3.232 (the suite's target).
+H2 accepts CASCADE, SET NULL, SET DEFAULT, RESTRICT and NO ACTION on both ON DELETE and ON UPDATE,
+and round-trips the drop/re-add — so nothing the strategy emits can fail on the supported database.
+The "H2 lacks SET DEFAULT" limitation was an H2 1.x trait. The concern is therefore portability-only
+(for non-H2 engines this strategy is designed to be swapped onto) plus javadoc accuracy.
+
+**Change (documentation-only, no behaviour change):**
+- Corrected the "verbatim" claims in the class flow and the ForeignKeyDefinition record javadoc.
+- Added a "Re-add fidelity (portability)" note: an engine that reports a rule its ADD CONSTRAINT
+  grammar rejects (e.g. SET DEFAULT, or an explicit ON UPDATE clause) fails the re-add and relies on
+  the recreate fallback; SET DEFAULT loses the column default-value expression; unknown/vendor JDBC
+  rule codes degrade to NO ACTION. Verified on H2 2.3.232.
+
+**Verification:** full-reactor mvn clean install green (all tests + javadoc doclint).
