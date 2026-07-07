@@ -103,6 +103,8 @@
         <module>scenario-68-emf-cache-divergent-config-fails</module>
         <module>scenario-69-persistence-xml-test-classpath-classification</module>
         <module>scenario-70-readonly-covers-lazy-pu</module>
+        <module>scenario-71-nested-readonly-rolls-back</module>
+        <module>scenario-72-readonly-scope-survives-nested-readonly</module>
     </modules>
 
     <dependencies>

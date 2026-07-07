@@ -1072,6 +1072,16 @@
             <artifactId>jawelte-tests-jpa-module-scenario-70-readonly-covers-lazy-pu</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-71-nested-readonly-rolls-back</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-72-readonly-scope-survives-nested-readonly</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             tests/jta-module scenarios (TICKET-006). Same role as the

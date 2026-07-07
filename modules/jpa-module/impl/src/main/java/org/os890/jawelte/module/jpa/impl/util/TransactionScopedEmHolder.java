@@ -100,18 +100,21 @@ public abstract class TransactionScopedEmHolder {
             ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     /**
-     * Per-thread "a {@code @ReadOnly} scope is active" flag, set by
-     * {@code ReadOnlyInterceptor} for the duration of the annotated
+     * Per-thread {@code @ReadOnly} nesting depth, maintained by
+     * {@code ReadOnlyInterceptor} for the duration of an annotated
      * method's execution (its own transaction and everything called
-     * below it). While it is {@code true}, {@link #peekOrAutoBegin(String)}
-     * gives every newly created {@link EntityManager} the
-     * {@link FlushModeType#COMMIT} flush mode, so a lazily-joined PU's
-     * EM suppresses auto-flush exactly like the EMs the interceptor
-     * swapped at entry. The interceptor restores flush modes on exit,
-     * so an enclosing scope is never left read-only.
+     * below it). It is a <em>counter</em>, not a flag: each entering
+     * {@code @ReadOnly} level increments it and each exiting level
+     * decrements it, so a nested {@code @ReadOnly} call returning does
+     * not end the read-only scope — only the outermost level unwinding
+     * drops the depth back to zero. While the depth is positive,
+     * {@link #peekOrAutoBegin(String)} gives every newly created
+     * {@link EntityManager} the {@link FlushModeType#COMMIT} flush mode,
+     * so a lazily-joined PU's EM suppresses auto-flush exactly like the
+     * EMs the interceptor swapped at entry.
      */
-    private static final ThreadLocal<Boolean> READ_ONLY_SCOPE =
-            ThreadLocal.withInitial(() -> Boolean.FALSE);
+    private static final ThreadLocal<Integer> READ_ONLY_SCOPE_DEPTH =
+            ThreadLocal.withInitial(() -> 0);
 
     /**
      * Suppressed-instantiation constructor. The class is
@@ -123,27 +126,40 @@ public abstract class TransactionScopedEmHolder {
     }
 
     /**
-     * Mark whether a {@code @ReadOnly} scope is active on the calling
-     * thread. Called by {@code ReadOnlyInterceptor} — {@code true} for
-     * the duration of the annotated method's execution, {@code false}
-     * once it unwinds. While {@code true}, {@link #peekOrAutoBegin(String)}
-     * creates read-only ({@link FlushModeType#COMMIT}) EntityManagers.
-     *
-     * @param active whether a {@code @ReadOnly} scope is active
+     * Enter a {@code @ReadOnly} scope on the calling thread, increasing
+     * the nesting depth. Called by {@code ReadOnlyInterceptor} when an
+     * {@code @ReadOnly} method starts. Balanced by
+     * {@link #exitReadOnlyScope()} in the interceptor's {@code finally}.
      */
-    public static void setReadOnlyScopeActive(boolean active) {
-        READ_ONLY_SCOPE.set(active);
+    public static void enterReadOnlyScope() {
+        READ_ONLY_SCOPE_DEPTH.set(READ_ONLY_SCOPE_DEPTH.get() + 1);
+    }
+
+    /**
+     * Exit a {@code @ReadOnly} scope on the calling thread, decreasing
+     * the nesting depth. Only when the outermost level exits does the
+     * depth return to zero and the read-only scope end. Never drops
+     * below zero.
+     */
+    public static void exitReadOnlyScope() {
+        int depth = READ_ONLY_SCOPE_DEPTH.get();
+        if (depth <= 1) {
+            READ_ONLY_SCOPE_DEPTH.remove();
+        } else {
+            READ_ONLY_SCOPE_DEPTH.set(depth - 1);
+        }
     }
 
     /**
      * Whether a {@code @ReadOnly} scope is currently active on the
-     * calling thread (set by {@code ReadOnlyInterceptor}).
+     * calling thread (nesting depth is positive). Maintained by
+     * {@code ReadOnlyInterceptor}.
      *
-     * @return {@code true} while a {@code @ReadOnly} method is executing
-     *         on this thread
+     * @return {@code true} while at least one {@code @ReadOnly} method
+     *         is executing on this thread
      */
     public static boolean isReadOnlyScopeActive() {
-        return Boolean.TRUE.equals(READ_ONLY_SCOPE.get());
+        return READ_ONLY_SCOPE_DEPTH.get() > 0;
     }
 
     /**
@@ -508,7 +524,7 @@ public abstract class TransactionScopedEmHolder {
         MANAGED_PU_STACK.remove();
         FRAME_PUS_STACK.remove();
         FRAMEWORK_OWNED.remove();
-        READ_ONLY_SCOPE.remove();
+        READ_ONLY_SCOPE_DEPTH.remove();
     }
 
     private static void fireTransactionStartedQuietly(String persistenceUnitName) {
