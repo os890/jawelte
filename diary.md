@@ -6508,3 +6508,26 @@ seeded on the per-thread stack, no CDI):**
 Test-the-test verified via a temporary throw-from-resume mutation.
 
 **Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (36m 28s).
+
+## Follow-up: throw the original JTA resume failure directly (sneaky-throw) instead of wrapping it
+
+Review feedback on the nested-resume fix: rather than wrapping a resume failure in
+IllegalStateException, surface the original exception when it is the sole failure, using the
+generic-erasure sneaky-throw idiom already used by JpaLifecycleAdapter.throwUnchecked (no shared util
+exists yet — centralising the helper remains on the todo list).
+
+- commit()/rollback() now hold the outcome as Throwable and raise it via throwUnchecked, so a checked
+  resume failure (SystemException / InvalidTransactionException) surfaces unwrapped without a throws
+  clause.
+- tryResume returns the original resume/status-read exception rather than an IllegalStateException
+  wrapper. Deliberately unchanged (scope was "resume path only"): the "inner transaction still
+  associated" status-guard diagnostic (no underlying exception — resume was not attempted), and
+  commit()/rollback()'s own failure translations (unchecked-type consistency with the RESOURCE_LOCAL
+  strategy + the jakarta.transaction -> jakarta.persistence RollbackException contract). When there
+  is an inner failure, the resume failure still rides along as a suppressed exception.
+
+Test: added resumeFailureThrownDirectlyWhenNoInnerFailure — a resume SystemException with a clean
+inner commit surfaces as SystemException, not IllegalStateException (test-the-test verified via a
+temporary wrap mutation).
+
+Verification: full owb+weld × geronimo+narayana matrix green — all 20 phases (37m 11s).
