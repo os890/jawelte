@@ -6477,3 +6477,57 @@ Both fail with clearing disabled and pass with it (temporary no-op mutation of c
 junit-jupiter + assertj at test scope to jta-module/impl (its first unit tests).
 
 **Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (37m 47s).
+
+## Nested JTA commit/rollback resume no longer masks the primary failure
+
+**Problem:** JtaTransactionStrategy.commit()/rollback() ran resumeSuspendedIfAny(tm) in a finally that
+threw on resume failure. When TM.commit() failed (e.g. SystemException → "JTA commit failure") and a
+nested @Transactional had suspended an outer tx, the finally called tm.resume(outer) without
+confirming the inner tx was dissociated. Resuming while a tx is still associated throws
+IllegalStateException, re-wrapped as "JTA resume failure" — and, thrown from finally, it superseded
+the original commit/rollback failure, losing the real cause.
+
+**Fix:**
+- commit()/rollback() hold the outcome in a `primary` RuntimeException (assigned in the catch blocks)
+  and throw it after the finally instead of throwing inline.
+- resumeSuspendedIfAny(tm, primary) no longer throws — it returns the exception to throw. A resume
+  failure becomes primary only when there is none; otherwise it is attached via addSuppressed, so the
+  inner tx's failure always survives.
+- tryResume guards on TM status: it calls tm.resume(outer) only when the inner tx is fully dissociated
+  (STATUS_NO_TRANSACTION); otherwise it returns a clear "inner transaction still associated"
+  diagnostic and leaves the outer un-resumed rather than triggering tm.resume's own
+  IllegalStateException.
+
+**Test (white-box unit test in jta-module/impl — stub TM modelling suspend/resume, suspended outer
+seeded on the per-thread stack, no CDI):**
+- resumeFailureDoesNotMaskCommitFailure: inner commit throws SystemException with the outer still
+  associated → thrown is "JTA commit failure" (cause = SystemException), resume failure attached as
+  suppressed, tm.resume never called. Fails on the old throw-from-finally behavior.
+- successfulCommitResumesSuspendedOuter: a clean nested commit resumes the suspended outer, throws
+  nothing.
+Test-the-test verified via a temporary throw-from-resume mutation.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (36m 28s).
+
+## Follow-up: throw the original JTA resume failure directly (sneaky-throw) instead of wrapping it
+
+Review feedback on the nested-resume fix: rather than wrapping a resume failure in
+IllegalStateException, surface the original exception when it is the sole failure, using the
+generic-erasure sneaky-throw idiom already used by JpaLifecycleAdapter.throwUnchecked (no shared util
+exists yet — centralising the helper remains on the todo list).
+
+- commit()/rollback() now hold the outcome as Throwable and raise it via throwUnchecked, so a checked
+  resume failure (SystemException / InvalidTransactionException) surfaces unwrapped without a throws
+  clause.
+- tryResume returns the original resume/status-read exception rather than an IllegalStateException
+  wrapper. Deliberately unchanged (scope was "resume path only"): the "inner transaction still
+  associated" status-guard diagnostic (no underlying exception — resume was not attempted), and
+  commit()/rollback()'s own failure translations (unchecked-type consistency with the RESOURCE_LOCAL
+  strategy + the jakarta.transaction -> jakarta.persistence RollbackException contract). When there
+  is an inner failure, the resume failure still rides along as a suppressed exception.
+
+Test: added resumeFailureThrownDirectlyWhenNoInnerFailure — a resume SystemException with a clean
+inner commit surfaces as SystemException, not IllegalStateException (test-the-test verified via a
+temporary wrap mutation).
+
+Verification: full owb+weld × geronimo+narayana matrix green — all 20 phases (37m 11s).
