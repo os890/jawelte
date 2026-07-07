@@ -318,3 +318,21 @@ When picking this up:
 - Alternative to the merge+unpack+check hack: an external coverage gate that parses the
   aggregate `jacoco.xml` and fails below threshold (simpler, but adds a non-Maven-native
   tool).
+
+## Re-verify TRUNCATE-under-RI-off if a non-H2 target is ever added
+
+`JdbcTruncateDbCleanupStrategy` (the default cleanup strategy) relies on
+`SET REFERENTIAL_INTEGRITY FALSE` letting `TRUNCATE TABLE` succeed on tables that are
+foreign-key targets, then `SET REFERENTIAL_INTEGRITY TRUE` afterwards. This is H2-specific.
+
+Confirmed working on H2 **2.3.232** (bundled) **and 2.4.240** (latest release as of 2025-09):
+without RI disabled, `TRUNCATE` of an FK-referenced table is rejected; with RI disabled it
+succeeds for both the referenced and referencing tables and leaves them empty. Existing coverage:
+`tests/jpa-module/scenario-51-cleanup-self-fk` (self-FK) and `scenario-50-cleanup-jointable`
+(M:N join table) exercise this path via the default strategy.
+
+Action only if the suite ever targets a non-H2 database (this strategy is designed to be swapped
+in for engines lacking `TRUNCATE` / `SET REFERENTIAL_INTEGRITY`): confirm that engine's `TRUNCATE`
+succeeds on FK-referenced tables with referential integrity disabled. If not, prefer
+`TRUNCATE TABLE ... RESTART IDENTITY` or fall back to `DELETE` for referenced tables. H2 itself
+is confirmed through the latest release — no action needed for the current target.
