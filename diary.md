@@ -6389,3 +6389,39 @@ Both pass under OWB and Weld; removing the COMMIT-on-create makes both fail
 (`expected: COMMIT but was: AUTO`). Registered scenario-70 in the jpa aggregator + coverage-report.
 
 **Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (33m 35s).
+
+## Nested @ReadOnly: roll back the nested tx, keep the outer level read-only (depth-tracked scope)
+
+**Trigger:** review question — with nested @ReadOnly calls, only the outermost level should end the
+read-only scope, so a new transaction started a level above isn't left read-only. Tracing the code
+surfaced two linked defects.
+
+**Defect 1 (nested @ReadOnly writes committed):** the framework starts a fresh transaction for every
+@Transactional invocation (TxType is not interpreted). A nested @Transactional @ReadOnly method
+therefore gets its own frame + EntityManager. But ReadOnlyInterceptor's re-entrance guard was a plain
+boolean, so a genuinely nested @ReadOnly short-circuited completely — it never called setRollbackOnly()
+on its own frame, and its writes committed. Proven with scenario-71 on the pre-fix code: expected 1
+row, got 2 (nested insert persisted).
+
+**Defect 2 (outer scope ended early):** the read-only scope flag added for lazily-joined PUs was a
+boolean. Once nested @ReadOnly is allowed to run, its exit would clear the flag while the enclosing
+@ReadOnly level was still executing — a PU lazily joined after the nested call returned would be born
+AUTO, re-introducing the lazily-joined-PU auto-flush bug under nesting.
+
+**Fix:**
+- ReadOnlyInterceptor now uses a call-site-precise Method stack (mirroring TransactionalInterceptor)
+  instead of a boolean. Same-call-site double-registration still short-circuits; a genuinely nested
+  @ReadOnly runs fully — swaps/restores its own frame's EM and marks its own transaction rollback-only.
+- TransactionScopedEmHolder's read-only scope is depth-tracked (enterReadOnlyScope/exitReadOnlyScope;
+  isReadOnlyScopeActive = depth > 0). Only the outermost @ReadOnly unwinding ends the scope.
+
+**Tests:**
+- scenario-71-nested-readonly-rolls-back: an @ReadOnly method calling another @ReadOnly method — both
+  levels' writes discarded; outer stays COMMIT after the nested call returns (fails on the old boolean
+  guard: count 2 vs 1).
+- scenario-72-readonly-scope-survives-nested-readonly: outer @ReadOnly (all-lazy multi-PU) calls a
+  nested @ReadOnly, then dereferences a fresh PU — still COMMIT (fails on a boolean-reset mutation:
+  born AUTO).
+Both registered in the jpa aggregator + coverage-report.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (35m 16s).
