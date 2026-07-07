@@ -84,6 +84,24 @@
             <artifactId>hibernate-core</artifactId>
             <scope>provided</scope>
         </dependency>
+
+        <!--
+            Test scope: a white-box unit test for JtaTransactionStrategy's
+            EVENTS_BOUND marker lifecycle. Stubs the TransactionManager /
+            Transaction directly (no CDI container, no real TM) to drive a
+            reused Transaction object across completion — versions are
+            managed by the root pom's dependencyManagement.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
