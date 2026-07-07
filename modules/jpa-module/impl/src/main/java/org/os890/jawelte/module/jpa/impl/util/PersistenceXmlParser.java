@@ -64,9 +64,9 @@ public abstract class PersistenceXmlParser {
     /**
      * Parse {@code META-INF/persistence.xml} resources visible to the
      * given {@link ClassLoader}, with a "test classpath wins"
-     * preference: when at least one resource URL points at a path
-     * containing {@code /test-classes/} or {@code /test/}, only those
-     * URLs are parsed; otherwise every reachable URL is parsed.
+     * preference: when at least one resource URL points at a build
+     * <em>test</em> output directory (see {@link #isTestClasspathPath(String)}),
+     * only those URLs are parsed; otherwise every reachable URL is parsed.
      *
      * <p>The preference lets a project ship a production-shaped
      * {@code persistence.xml} in a jar dependency (JTA + PostgreSQL)
@@ -113,11 +113,52 @@ public abstract class PersistenceXmlParser {
     }
 
     private static boolean isTestClasspath(URL url) {
-        String path = url.getPath();
+        return isTestClasspathPath(url.getPath());
+    }
+
+    /**
+     * Whether {@code path} points into a build's <em>test</em> output
+     * directory. Classified by whole path segments split on {@code /},
+     * never a raw substring, so an unrelated directory literally named
+     * {@code test} — a dependency jar under {@code /home/test/…}, a CI
+     * {@code /build/test/} workspace, a user path with a {@code test}
+     * segment — is not misclassified. A false positive would flip
+     * {@link #selectPreferred(List)} (which returns only the
+     * test-classified URLs when any exist) and silently drop the
+     * genuinely test-scoped {@code persistence.xml} in favour of a
+     * production one.
+     *
+     * <p>Recognized build-output test locations:
+     * <ul>
+     *   <li><b>Maven</b> — a {@code test-classes} segment
+     *       ({@code …/target/test-classes/});</li>
+     *   <li><b>Gradle</b> — a {@code test} segment that follows a
+     *       {@code classes} or {@code resources} segment
+     *       ({@code …/build/classes/<lang>/test/},
+     *       {@code …/build/resources/test/}).</li>
+     * </ul>
+     *
+     * @param path the URL path to classify; may be {@code null}
+     * @return {@code true} when the path is a build test-output location
+     */
+    static boolean isTestClasspathPath(String path) {
         if (path == null) {
             return false;
         }
-        return path.contains("/test-classes/") || path.contains("/test/");
+        String[] segments = path.split("/");
+        int buildOutputIndex = -1;
+        for (int i = 0; i < segments.length; i++) {
+            String segment = segments[i];
+            if (segment.equals("test-classes")) {
+                return true;
+            }
+            if (segment.equals("classes") || segment.equals("resources")) {
+                buildOutputIndex = i;
+            } else if (segment.equals("test") && buildOutputIndex >= 0 && i > buildOutputIndex) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static List<ParsedPersistenceUnit> parseOne(InputStream stream) throws Exception {
