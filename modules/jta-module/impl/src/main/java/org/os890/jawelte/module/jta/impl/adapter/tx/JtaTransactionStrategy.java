@@ -260,20 +260,24 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         // marker into the next tx on the sync path.
         Transaction completing = currentTransactionQuietly(tm);
         fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
+        // Hold the outcome instead of throwing inline, so a resume failure
+        // in the finally can be attached to it (addSuppressed) rather than
+        // replacing it — the original commit cause must survive.
+        RuntimeException primary = null;
         try {
-            int status = tm.getStatus();
-            if (status == Status.STATUS_MARKED_ROLLBACK) {
+            if (tm.getStatus() == Status.STATUS_MARKED_ROLLBACK) {
                 // Mirror RESOURCE_LOCAL behaviour: explicit rollback +
                 // RollbackException so the TransactionStrategy contract
-                // is identical across strategies. The thrown exception
-                // is jakarta.persistence.RollbackException (matching
-                // the SPI signature), not jakarta.transaction.RollbackException.
+                // is identical across strategies. The exception is
+                // jakarta.persistence.RollbackException (matching the SPI
+                // signature), not jakarta.transaction.RollbackException.
                 tm.rollback();
                 fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
-                throw new RollbackException("Transaction marked rollback-only");
+                primary = new RollbackException("Transaction marked rollback-only");
+            } else {
+                tm.commit();
+                fireEvent(new TransactionCommitted(TRANSACTION_WIDE));
             }
-            tm.commit();
-            fireEvent(new TransactionCommitted(TRANSACTION_WIDE));
         } catch (jakarta.transaction.RollbackException rolledByTm) {
             // TM.commit() may roll back internally (e.g. the tx was
             // marked rollback-only between our pre-check and TM.commit).
@@ -282,15 +286,18 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
             RollbackException wrapped = new RollbackException("JTA TM rolled back during commit");
             wrapped.initCause(rolledByTm);
-            throw wrapped;
+            primary = wrapped;
         } catch (HeuristicMixedException | HeuristicRollbackException heuristic) {
             fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
-            throw new IllegalStateException("Heuristic outcome on JTA commit", heuristic);
+            primary = new IllegalStateException("Heuristic outcome on JTA commit", heuristic);
         } catch (SystemException | SecurityException sysFailure) {
-            throw new IllegalStateException("JTA commit failure", sysFailure);
+            primary = new IllegalStateException("JTA commit failure", sysFailure);
         } finally {
             clearEventsBound(completing);
-            resumeSuspendedIfAny(tm);
+            primary = resumeSuspendedIfAny(tm, primary);
+        }
+        if (primary != null) {
+            throw primary;
         }
     }
 
@@ -299,14 +306,18 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         TransactionManager tm = requireInitialized();
         Transaction completing = currentTransactionQuietly(tm);
         fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
+        RuntimeException primary = null;
         try {
             tm.rollback();
             fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
         } catch (SystemException | SecurityException | IllegalStateException sysFailure) {
-            throw new IllegalStateException("JTA rollback failure", sysFailure);
+            primary = new IllegalStateException("JTA rollback failure", sysFailure);
         } finally {
             clearEventsBound(completing);
-            resumeSuspendedIfAny(tm);
+            primary = resumeSuspendedIfAny(tm, primary);
+        }
+        if (primary != null) {
+            throw primary;
         }
     }
 
@@ -456,21 +467,65 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         return tm;
     }
 
-    private static void resumeSuspendedIfAny(TransactionManager tm) {
+    /**
+     * Resume the suspended outer transaction (nested {@code @Transactional})
+     * after the inner tx has completed. Never throws: any resume failure is
+     * returned folded into {@code primary} so it can't mask the inner tx's
+     * own commit/rollback failure — if {@code primary} is {@code null} the
+     * resume failure becomes the returned exception, otherwise it rides along
+     * as a suppressed exception.
+     *
+     * @param tm      the JVM-singleton {@link TransactionManager}
+     * @param primary the inner tx's in-flight exception, or {@code null}
+     * @return the exception the caller should throw, or {@code null}
+     */
+    private static RuntimeException resumeSuspendedIfAny(TransactionManager tm, RuntimeException primary) {
         Deque<Transaction> stack = SUSPENDED.get();
         if (stack.isEmpty()) {
             // No outer to resume; clear the ThreadLocal to avoid
             // pinning the empty deque on the calling thread for the
             // rest of its lifetime.
             SUSPENDED.remove();
-            return;
+            return primary;
         }
         Transaction outer = stack.pop();
+        RuntimeException resumeFailure = tryResume(tm, outer);
+        if (resumeFailure == null) {
+            return primary;
+        }
+        if (primary == null) {
+            return resumeFailure;
+        }
+        primary.addSuppressed(resumeFailure);
+        return primary;
+    }
+
+    private static RuntimeException tryResume(TransactionManager tm, Transaction outer) {
+        int status;
+        try {
+            status = tm.getStatus();
+        } catch (SystemException statusFailure) {
+            return new IllegalStateException(
+                    "JTA resume aborted — could not read TM status before resuming the suspended "
+                            + "outer transaction", statusFailure);
+        }
+        if (status != Status.STATUS_NO_TRANSACTION) {
+            // The inner tx is not fully dissociated from the thread (e.g.
+            // TM.commit() threw). Resuming now would itself throw
+            // IllegalStateException; surface a clear diagnostic instead and
+            // leave the outer un-resumed — the caller's primary exception
+            // already signals that the transaction is in an indeterminate
+            // state the test's cleanup must reset.
+            return new IllegalStateException(
+                    "JTA resume aborted — inner transaction still associated with the thread (status="
+                            + status + "); suspended outer transaction was not resumed");
+        }
         try {
             tm.resume(outer);
+            return null;
         } catch (jakarta.transaction.InvalidTransactionException
                  | IllegalStateException | SystemException resumeFailure) {
-            throw new IllegalStateException("JTA resume failure on suspended outer transaction",
+            return new IllegalStateException("JTA resume failure on suspended outer transaction",
                     resumeFailure);
         }
     }
