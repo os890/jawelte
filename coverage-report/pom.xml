@@ -1067,6 +1067,11 @@
             <artifactId>jawelte-tests-jpa-module-scenario-69-persistence-xml-test-classpath-classification</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-tests-jpa-module-scenario-70-readonly-covers-lazy-pu</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             tests/jta-module scenarios (TICKET-006). Same role as the

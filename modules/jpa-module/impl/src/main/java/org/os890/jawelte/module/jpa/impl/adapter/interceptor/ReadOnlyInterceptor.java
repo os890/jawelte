@@ -41,6 +41,16 @@ import org.os890.jawelte.module.jpa.impl.util.TransactionScopedEmHolder;
  * {@code em.persist(...)} calls inside the annotated method are
  * discarded.
  *
+ * <p>The COMMIT flush mode covers the annotated method's transaction
+ * and everything called below it: EntityManagers present at entry are
+ * swapped here, and EntityManagers lazily created during the body
+ * (e.g. a lazily-joined PU, or a nested transaction) are born with
+ * {@code COMMIT} via {@code TransactionScopedEmHolder.peekOrAutoBegin}
+ * because this interceptor marks the read-only scope for the body's
+ * duration. All of them are restored on exit (see
+ * {@link #restoreFlushModes(Map)}), so an <em>enclosing</em> scope is
+ * never left read-only.
+ *
  * <p>When no transaction is active (e.g. {@code @ReadOnly}
  * declared without {@code @Transactional}), the interceptor still
  * fires but is a documented no-op: the body proceeds and any
@@ -109,6 +119,10 @@ public class ReadOnlyInterceptor {
             }
         }
         ACTIVE.set(Boolean.TRUE);
+        // Mark the read-only scope so EntityManagers lazily created during
+        // the body (this tx and everything called below it) are also born
+        // with FlushModeType.COMMIT — see TransactionScopedEmHolder.peekOrAutoBegin.
+        TransactionScopedEmHolder.setReadOnlyScopeActive(true);
         try {
             Object result = invocationContext.proceed();
             strategy.setRollbackOnly();
@@ -122,6 +136,7 @@ public class ReadOnlyInterceptor {
             throw throwable;
         } finally {
             ACTIVE.set(Boolean.FALSE);
+            TransactionScopedEmHolder.setReadOnlyScopeActive(false);
             restoreFlushModes(originalFlushModes);
         }
     }
@@ -141,13 +156,20 @@ public class ReadOnlyInterceptor {
     }
 
     private static void restoreFlushModes(Map<String, FlushModeType> originalFlushModes) {
-        for (Map.Entry<String, FlushModeType> entry : originalFlushModes.entrySet()) {
-            EntityManager entityManager = TransactionScopedEmHolder.peek(entry.getKey());
+        // Restore every EM currently on this thread's stack for an active PU,
+        // not just the ones swapped at entry: an EM lazily created during the
+        // read-only body (not in originalFlushModes) was born AUTO and switched
+        // to COMMIT by TransactionScopedEmHolder.peekOrAutoBegin, so it must be
+        // reset to AUTO too — otherwise an enclosing scope that shares the tx
+        // (REQUIRED) would inherit the read-only flush mode.
+        for (String persistenceUnitName : JpaActivePersistenceUnits.get()) {
+            EntityManager entityManager = TransactionScopedEmHolder.peek(persistenceUnitName);
             if (entityManager == null || !entityManager.isOpen()) {
                 continue;
             }
+            FlushModeType restoreTo = originalFlushModes.getOrDefault(persistenceUnitName, FlushModeType.AUTO);
             try {
-                entityManager.setFlushMode(entry.getValue());
+                entityManager.setFlushMode(restoreTo);
             } catch (RuntimeException ignored) {
                 // EM may already be in a state where setFlushMode is
                 // disallowed (e.g. mid-completion); ignore — the EM

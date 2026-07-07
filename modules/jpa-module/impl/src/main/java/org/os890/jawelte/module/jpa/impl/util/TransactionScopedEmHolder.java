@@ -26,6 +26,7 @@ import java.util.Set;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.FlushModeType;
 import jakarta.persistence.PersistenceUnitTransactionType;
 import jakarta.transaction.RollbackException;
 import jakarta.transaction.Status;
@@ -99,12 +100,50 @@ public abstract class TransactionScopedEmHolder {
             ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     /**
+     * Per-thread "a {@code @ReadOnly} scope is active" flag, set by
+     * {@code ReadOnlyInterceptor} for the duration of the annotated
+     * method's execution (its own transaction and everything called
+     * below it). While it is {@code true}, {@link #peekOrAutoBegin(String)}
+     * gives every newly created {@link EntityManager} the
+     * {@link FlushModeType#COMMIT} flush mode, so a lazily-joined PU's
+     * EM suppresses auto-flush exactly like the EMs the interceptor
+     * swapped at entry. The interceptor restores flush modes on exit,
+     * so an enclosing scope is never left read-only.
+     */
+    private static final ThreadLocal<Boolean> READ_ONLY_SCOPE =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    /**
      * Suppressed-instantiation constructor. The class is
      * {@code abstract} so direct {@code new} is impossible; the
      * explicit declaration silences {@code javadoc -doclint:all} on
      * the otherwise synthesized default constructor.
      */
     protected TransactionScopedEmHolder() {
+    }
+
+    /**
+     * Mark whether a {@code @ReadOnly} scope is active on the calling
+     * thread. Called by {@code ReadOnlyInterceptor} — {@code true} for
+     * the duration of the annotated method's execution, {@code false}
+     * once it unwinds. While {@code true}, {@link #peekOrAutoBegin(String)}
+     * creates read-only ({@link FlushModeType#COMMIT}) EntityManagers.
+     *
+     * @param active whether a {@code @ReadOnly} scope is active
+     */
+    public static void setReadOnlyScopeActive(boolean active) {
+        READ_ONLY_SCOPE.set(active);
+    }
+
+    /**
+     * Whether a {@code @ReadOnly} scope is currently active on the
+     * calling thread (set by {@code ReadOnlyInterceptor}).
+     *
+     * @return {@code true} while a {@code @ReadOnly} method is executing
+     *         on this thread
+     */
+    public static boolean isReadOnlyScopeActive() {
+        return Boolean.TRUE.equals(READ_ONLY_SCOPE.get());
     }
 
     /**
@@ -332,6 +371,14 @@ public abstract class TransactionScopedEmHolder {
             return null;
         }
         EntityManager entityManager = factory.createEntityManager();
+        if (isReadOnlyScopeActive()) {
+            // A @ReadOnly scope is active on this thread: every EM created
+            // within it — including this lazily-joined PU — must suppress
+            // auto-flush, matching the EMs ReadOnlyInterceptor swapped at
+            // entry. The interceptor restores the mode on exit, so an
+            // enclosing scope is never left read-only.
+            entityManager.setFlushMode(FlushModeType.COMMIT);
+        }
         if (jtaMode) {
             // Under JTA the EM cannot drive its own EntityTransaction —
             // em.getTransaction() throws "JTA mode" — and a freshly
@@ -461,6 +508,7 @@ public abstract class TransactionScopedEmHolder {
         MANAGED_PU_STACK.remove();
         FRAME_PUS_STACK.remove();
         FRAMEWORK_OWNED.remove();
+        READ_ONLY_SCOPE.remove();
     }
 
     private static void fireTransactionStartedQuietly(String persistenceUnitName) {

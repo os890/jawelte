@@ -6329,3 +6329,31 @@ output → test; production output → not test; and unrelated "test"-named segm
 /build/test/ CI, Gradle prod under /home/test/) → not test. Test-the-test: reverting to the bare
 "/test/" substring makes the misclassification case fail. Registered scenario-69 in the jpa
 aggregator + coverage-report.
+
+## Fix: @ReadOnly now covers lazily-joined PUs (flush-mode COMMIT), scoped to the method + below
+
+ReadOnlyInterceptor.aroundInvoke swapped flush mode to COMMIT only for EntityManagers already on
+the holder stack at interception time (peek != null). In the all-lazy begin path (multi-PU, no
+@PersistenceConfig.persistenceUnitName), no EM exists at entry; EMs created via peekOrAutoBegin
+during the body were born with the JPA-default AUTO flush mode. So inside an @ReadOnly method a
+lazily-joined PU auto-flushed mid-method (em.persist + query executed the INSERT), violating the
+documented "dirty checks do not auto-flush" contract. (Final DB state stayed correct via
+rollback-only, but the mid-method contract was broken.)
+
+Fix (scope: the @ReadOnly method's tx and everything called below it — NOT the enclosing tx):
+- TransactionScopedEmHolder gains a per-thread READ_ONLY_SCOPE flag with
+  setReadOnlyScopeActive/isReadOnlyScopeActive. peekOrAutoBegin sets FlushModeType.COMMIT on every
+  EM it creates while the flag is set (so lazily-joined PUs and nested REQUIRES_NEW txs created
+  during the body are read-only too — the chosen "whole call-subtree" semantics).
+- ReadOnlyInterceptor sets the flag for the annotated method's duration (outermost @ReadOnly only,
+  via the existing ACTIVE re-entrance guard) and clears it in finally. Its restore now resets EVERY
+  active-PU EM on the stack (getOrDefault(pu, AUTO)) — pre-existing EMs to their captured mode,
+  lazily-created ones to AUTO — so an ENCLOSING scope that shares the tx (REQUIRED) is never left
+  read-only.
+- Updated ReadOnly (api) + ReadOnlyInterceptor javadoc to state the COMMIT mode covers the method's
+  tx and below, with enclosing scopes restored on exit.
+
+Test: tests/jpa-module/scenario-70-readonly-covers-lazy-pu — (1) a lazily-joined PU's EM is COMMIT
+inside an @ReadOnly method; (2) a nested REQUIRES_NEW @ReadOnly's EM is COMMIT while the enclosing
+writable tx's EM stays AUTO. Both pass under owb + weld; removing the COMMIT-on-create makes both
+fail (expected COMMIT but was AUTO). Registered scenario-70 in the jpa aggregator + coverage-report.

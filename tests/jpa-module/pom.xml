@@ -102,6 +102,7 @@
         <module>scenario-67-native-sql-cleanup-fallback-recreate</module>
         <module>scenario-68-emf-cache-divergent-config-fails</module>
         <module>scenario-69-persistence-xml-test-classpath-classification</module>
+        <module>scenario-70-readonly-covers-lazy-pu</module>
     </modules>
 
     <dependencies>

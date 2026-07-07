@@ -26,10 +26,18 @@ import jakarta.interceptor.InterceptorBinding;
  * Modifier for a {@code jakarta.transaction.Transactional} method or
  * type that prevents writes from being persisted. Combined with
  * {@code @Transactional}, jpa-module's interceptor switches the active
- * {@code EntityManager}'s flush mode to {@code COMMIT} (so dirty
+ * {@code EntityManager}s' flush mode to {@code COMMIT} (so dirty
  * checks do not auto-flush) and marks the transaction rollback-only
  * before completion. Net effect: any {@code em.persist(...)} calls in
  * the annotated method or type are discarded.
+ *
+ * <p>The {@code COMMIT} flush mode applies to the annotated method's
+ * transaction and everything called below it: {@code EntityManager}s
+ * already active at entry, and any created later within the method
+ * (e.g. a lazily-joined persistence unit, or a nested transaction),
+ * all suppress auto-flush. An enclosing (caller) scope is left
+ * untouched — its flush mode is restored when the annotated method
+ * returns.
  *
  * <p>Without {@code @Transactional} on the same level,
  * {@code @ReadOnly} has no effect — it is an
