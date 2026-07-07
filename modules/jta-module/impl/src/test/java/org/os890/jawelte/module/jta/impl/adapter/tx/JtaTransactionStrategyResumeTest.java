@@ -101,6 +101,26 @@ public class JtaTransactionStrategyResumeTest {
                 .isSameAs(outer);
     }
 
+    /** A resume failure with no inner failure surfaces as its original type, unwrapped. */
+    @Test
+    public void resumeFailureThrownDirectlyWhenNoInnerFailure() throws Exception {
+        StubTransactionManager transactionManager = new StubTransactionManager();
+        transactionManager.status = Status.STATUS_ACTIVE;
+        transactionManager.current = new StubTransaction();
+        transactionManager.resumeException = new SystemException("resume boom");
+        setStaticField("transactionManager", transactionManager);
+        suspendedStack().push(new StubTransaction());
+        JtaTransactionStrategy strategy = new JtaTransactionStrategy();
+
+        Throwable thrown = catchThrowable(strategy::commit);
+
+        assertThat(thrown)
+                .as("a resume failure with no inner failure must surface as its original type, "
+                        + "not wrapped in IllegalStateException")
+                .isInstanceOf(SystemException.class)
+                .hasMessage("resume boom");
+    }
+
     private static void setStaticField(String name, Object value) throws Exception {
         Field field = JtaTransactionStrategy.class.getDeclaredField(name);
         field.setAccessible(true);
@@ -136,6 +156,8 @@ public class JtaTransactionStrategyResumeTest {
         private int resumeCalls;
 
         private Transaction lastResumed;
+
+        private SystemException resumeException;
 
         @Override
         public void begin() {
@@ -187,8 +209,11 @@ public class JtaTransactionStrategyResumeTest {
         }
 
         @Override
-        public void resume(Transaction transaction) {
+        public void resume(Transaction transaction) throws SystemException {
             resumeCalls++;
+            if (resumeException != null) {
+                throw resumeException;
+            }
             if (status != Status.STATUS_NO_TRANSACTION) {
                 throw new IllegalStateException("a transaction is already associated with this thread");
             }

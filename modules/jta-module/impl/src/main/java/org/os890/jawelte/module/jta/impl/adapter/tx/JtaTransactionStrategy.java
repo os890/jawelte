@@ -263,7 +263,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         // Hold the outcome instead of throwing inline, so a resume failure
         // in the finally can be attached to it (addSuppressed) rather than
         // replacing it — the original commit cause must survive.
-        RuntimeException primary = null;
+        Throwable primary = null;
         try {
             if (tm.getStatus() == Status.STATUS_MARKED_ROLLBACK) {
                 // Mirror RESOURCE_LOCAL behaviour: explicit rollback +
@@ -297,7 +297,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             primary = resumeSuspendedIfAny(tm, primary);
         }
         if (primary != null) {
-            throw primary;
+            throwUnchecked(primary);
         }
     }
 
@@ -306,7 +306,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         TransactionManager tm = requireInitialized();
         Transaction completing = currentTransactionQuietly(tm);
         fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
-        RuntimeException primary = null;
+        Throwable primary = null;
         try {
             tm.rollback();
             fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
@@ -317,7 +317,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             primary = resumeSuspendedIfAny(tm, primary);
         }
         if (primary != null) {
-            throw primary;
+            throwUnchecked(primary);
         }
     }
 
@@ -472,14 +472,15 @@ public class JtaTransactionStrategy implements TransactionStrategy {
      * after the inner tx has completed. Never throws: any resume failure is
      * returned folded into {@code primary} so it can't mask the inner tx's
      * own commit/rollback failure — if {@code primary} is {@code null} the
-     * resume failure becomes the returned exception, otherwise it rides along
-     * as a suppressed exception.
+     * resume failure becomes the returned exception (thrown as-is by the
+     * caller via {@link #throwUnchecked(Throwable)}), otherwise it rides
+     * along as a suppressed exception.
      *
      * @param tm      the JVM-singleton {@link TransactionManager}
      * @param primary the inner tx's in-flight exception, or {@code null}
-     * @return the exception the caller should throw, or {@code null}
+     * @return the throwable the caller should raise, or {@code null}
      */
-    private static RuntimeException resumeSuspendedIfAny(TransactionManager tm, RuntimeException primary) {
+    private static Throwable resumeSuspendedIfAny(TransactionManager tm, Throwable primary) {
         Deque<Transaction> stack = SUSPENDED.get();
         if (stack.isEmpty()) {
             // No outer to resume; clear the ThreadLocal to avoid
@@ -489,7 +490,7 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             return primary;
         }
         Transaction outer = stack.pop();
-        RuntimeException resumeFailure = tryResume(tm, outer);
+        Throwable resumeFailure = tryResume(tm, outer);
         if (resumeFailure == null) {
             return primary;
         }
@@ -500,20 +501,19 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         return primary;
     }
 
-    private static RuntimeException tryResume(TransactionManager tm, Transaction outer) {
+    private static Throwable tryResume(TransactionManager tm, Transaction outer) {
         int status;
         try {
             status = tm.getStatus();
         } catch (SystemException statusFailure) {
-            return new IllegalStateException(
-                    "JTA resume aborted — could not read TM status before resuming the suspended "
-                            + "outer transaction", statusFailure);
+            // Can't determine dissociation; surface the original failure as-is.
+            return statusFailure;
         }
         if (status != Status.STATUS_NO_TRANSACTION) {
             // The inner tx is not fully dissociated from the thread (e.g.
-            // TM.commit() threw). Resuming now would itself throw
-            // IllegalStateException; surface a clear diagnostic instead and
-            // leave the outer un-resumed — the caller's primary exception
+            // TM.commit() threw). No resume was attempted, so there is no
+            // underlying exception to surface — leave the outer un-resumed and
+            // report a clear diagnostic; the caller's primary exception
             // already signals that the transaction is in an indeterminate
             // state the test's cleanup must reset.
             return new IllegalStateException(
@@ -525,9 +525,26 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             return null;
         } catch (jakarta.transaction.InvalidTransactionException
                  | IllegalStateException | SystemException resumeFailure) {
-            return new IllegalStateException("JTA resume failure on suspended outer transaction",
-                    resumeFailure);
+            // Surface the resume failure as-is — thrown directly (via
+            // throwUnchecked) when it is the only failure, rather than wrapped.
+            return resumeFailure;
         }
+    }
+
+    /**
+     * Rethrow {@code throwable} unchanged using the generic-erasure
+     * "sneaky throw" idiom (as {@code JpaLifecycleAdapter} does), so
+     * {@link #commit()} / {@link #rollback()} can raise the original
+     * exception — including a checked JTA resume failure that is the sole
+     * failure — without a {@code throws} clause and without wrapping it.
+     *
+     * @param throwable the throwable to rethrow as-is
+     * @param <T>       inferred unchecked type; erasure makes the cast a
+     *                  no-op so {@code throwable} is thrown unchanged
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends Throwable> void throwUnchecked(Throwable throwable) throws T {
+        throw (T) throwable;
     }
 
     private static void fireEvent(Object event) {
