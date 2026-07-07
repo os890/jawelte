@@ -6477,3 +6477,34 @@ Both fail with clearing disabled and pass with it (temporary no-op mutation of c
 junit-jupiter + assertj at test scope to jta-module/impl (its first unit tests).
 
 **Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (37m 47s).
+
+## Nested JTA commit/rollback resume no longer masks the primary failure
+
+**Problem:** JtaTransactionStrategy.commit()/rollback() ran resumeSuspendedIfAny(tm) in a finally that
+threw on resume failure. When TM.commit() failed (e.g. SystemException → "JTA commit failure") and a
+nested @Transactional had suspended an outer tx, the finally called tm.resume(outer) without
+confirming the inner tx was dissociated. Resuming while a tx is still associated throws
+IllegalStateException, re-wrapped as "JTA resume failure" — and, thrown from finally, it superseded
+the original commit/rollback failure, losing the real cause.
+
+**Fix:**
+- commit()/rollback() hold the outcome in a `primary` RuntimeException (assigned in the catch blocks)
+  and throw it after the finally instead of throwing inline.
+- resumeSuspendedIfAny(tm, primary) no longer throws — it returns the exception to throw. A resume
+  failure becomes primary only when there is none; otherwise it is attached via addSuppressed, so the
+  inner tx's failure always survives.
+- tryResume guards on TM status: it calls tm.resume(outer) only when the inner tx is fully dissociated
+  (STATUS_NO_TRANSACTION); otherwise it returns a clear "inner transaction still associated"
+  diagnostic and leaves the outer un-resumed rather than triggering tm.resume's own
+  IllegalStateException.
+
+**Test (white-box unit test in jta-module/impl — stub TM modelling suspend/resume, suspended outer
+seeded on the per-thread stack, no CDI):**
+- resumeFailureDoesNotMaskCommitFailure: inner commit throws SystemException with the outer still
+  associated → thrown is "JTA commit failure" (cause = SystemException), resume failure attached as
+  suppressed, tm.resume never called. Fails on the old throw-from-finally behavior.
+- successfulCommitResumesSuspendedOuter: a clean nested commit resumes the suspended outer, throws
+  nothing.
+Test-the-test verified via a temporary throw-from-resume mutation.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (36m 28s).
