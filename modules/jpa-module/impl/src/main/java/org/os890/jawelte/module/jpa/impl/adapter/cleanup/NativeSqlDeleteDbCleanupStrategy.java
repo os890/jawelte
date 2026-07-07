@@ -55,7 +55,9 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
  *       table returned by the active {@link TableNameResolver};
  *       capture each FK constraint's full definition (name, FK
  *       columns, referenced table + columns, ON DELETE / ON UPDATE
- *       rules) so it can be re-emitted verbatim.</li>
+ *       rules) so an equivalent {@code ADD CONSTRAINT} can be
+ *       reconstructed (see the portability note below — this is a
+ *       metadata-level reconstruction, not the original DDL).</li>
  *   <li>Issue {@code ALTER TABLE "<t>" DROP CONSTRAINT "<fk>"}
  *       for every captured FK.</li>
  *   <li>Issue {@code DELETE FROM "<t>"} for every table in
@@ -106,6 +108,36 @@ import org.os890.jawelte.module.jpa.impl.util.JdbcAccess;
  * carried here is the "lose every priority sort by default" rank — it
  * matters only when both impls happen to be on the classpath; the swap
  * itself is the consumer's explicit registration.
+ *
+ * <p><strong>Re-add fidelity (portability).</strong> The re-added
+ * constraint is reconstructed from JDBC metadata
+ * ({@link DatabaseMetaData#getImportedKeys}), not captured as the
+ * original DDL text, and the {@code ON DELETE} / {@code ON UPDATE}
+ * clauses are always emitted. Consequences when targeting a non-H2
+ * database:
+ * <ul>
+ *   <li>A referential rule the driver reports but its {@code ALTER
+ *       TABLE ... ADD CONSTRAINT} grammar rejects (for example {@code
+ *       SET DEFAULT}, or an explicit {@code ON UPDATE} clause on
+ *       engines that disallow it) fails the re-add step. That failure
+ *       is aggregated and triggers the drop-and-recreate schema
+ *       fallback, so the database still ends up clean — but the
+ *       reconstructed rule, not the original, is what gets re-applied.</li>
+ *   <li>{@code SET DEFAULT} loses the column's default-value
+ *       expression: only the rule is reconstructed, not the default it
+ *       resolves against.</li>
+ *   <li>A vendor-extended or unrecognised JDBC rule code degrades to
+ *       {@code NO ACTION} (see {@code ForeignKeyDefinition.ruleToSql}),
+ *       silently relaxing the constraint's original semantics.</li>
+ * </ul>
+ * Verified against H2 2.3.232, the suite's target: it accepts every
+ * emitted clause ({@code CASCADE}, {@code SET NULL}, {@code SET
+ * DEFAULT}, {@code RESTRICT}, {@code NO ACTION}) on both {@code ON
+ * DELETE} and {@code ON UPDATE} and round-trips the drop / re-add, so
+ * none of the above bites on H2. (The historical "H2 lacks {@code SET
+ * DEFAULT}" limitation was an H2 1.x trait.) A consumer swapping this
+ * strategy onto a different engine that hits one of the cases above
+ * relies on the recreate fallback rather than a faithful re-add.
  *
  * <p>Native SQL (rather than JPQL) so the strategy can target
  * <em>any</em> table — including {@code @JoinTable},
@@ -343,7 +375,13 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
         }
     }
 
-    /** Captured FK definition — enough state to re-emit a verbatim ADD CONSTRAINT. */
+    /**
+     * Captured FK definition — enough JDBC-metadata state to
+     * reconstruct an equivalent {@code ADD CONSTRAINT}. This is a
+     * reconstruction, not the original DDL text; see the class-level
+     * "Re-add fidelity (portability)" note for the lossy cases
+     * ({@code SET DEFAULT} default values, vendor rule codes).
+     */
     private record ForeignKeyDefinition(
             String tableName,
             String constraintName,
