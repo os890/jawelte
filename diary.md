@@ -6531,3 +6531,50 @@ inner commit surfaces as SystemException, not IllegalStateException (test-the-te
 temporary wrap mutation).
 
 Verification: full owb+weld × geronimo+narayana matrix green — all 20 phases (37m 11s).
+
+## JTA lifecycle events capture the BeanManager at registration instead of on the completion thread
+
+**Problem:** `JtaTransactionStrategy.fireEvent(Object)` resolved the container inside the callback
+(`CDI.current().getBeanManager()`). On the direct `begin()`/`commit()`/`rollback()` path that is always
+the test thread, so it was fine. But `LifecycleEventSynchronization` — the sync-driven path used when a
+vendor `@Transactional` interceptor drives the tx via `UserTransaction` — fires
+`TransactionBeforeCompletion` / `TransactionCommitted` / `TransactionRolledBack` from
+`beforeCompletion()` / `afterCompletion(int)`, which JTA runs on whichever thread completes the
+transaction. That need not be the registering thread (a tx can be suspended on one thread and
+resumed/committed on another). Resolving `CDI.current()` there is thread-dependent — implementations may
+key the container on the thread context classloader — so the completion thread could see a different
+container or none, and `fireEvent` swallowed every `RuntimeException` silently, so the lost events left
+no trace at all. The catch comment additionally claimed observer failures were "aggregated by the
+framework"; they were simply discarded.
+
+**Fix:**
+- `LifecycleEventSynchronization` now captures the `BeanManager` at registration time (on the
+  registering thread, in `bindLifecycleEventsToCurrentTransaction()`) and fires through that captured
+  reference, so the completion thread no longer decides which container receives the events.
+  `currentBeanManagerQuietly()` returns `null` when CDI is not resolvable at registration, and
+  `fireEvent(BeanManager, Object)` then falls back to `CDI.current()` — the previous behaviour kept as a
+  safety net rather than dropping the events outright.
+- `fireEvent(Object)` (direct path, always the test thread) stays as a thin delegate to the captured
+  variant with a `null` manager.
+- A swallowed firing failure is now logged at `WARNING` with the event type and the throwable, and the
+  misleading "aggregated by the framework" comment is corrected — a dropped lifecycle event used to be
+  completely invisible.
+- `beforeCompletionFired` became `volatile`: the two callbacks are not guaranteed to run on the same
+  thread.
+- `XaDataSourceWrapper.TxScopedCleanupSynchronization` needed no code change — its caches are
+  `ConcurrentHashMap`s keyed by the `Transaction` it carries and `XAConnection.close()` is not
+  thread-affine, so a background completion thread is handled like the originating one. Documented that
+  explicitly so the next reader doesn't have to re-derive it.
+
+**Test (`tests/jta-module/scenario-58-lifecycle-events-on-foreign-completion-thread`):** begins a tx via
+the `TransactionManager` directly (not `strategy.begin()`, so the tx is not marked event-bound and the
+Synchronization path is the one exercised), calls `bindLifecycleEventsToCurrentTransaction()` on the test
+thread, then suspends the tx and resumes + commits it on a separate, explicitly named thread. Asserts
+`TransactionStarted` fired once on the registering thread, `TransactionBeforeCompletion` and
+`TransactionCommitted` fired exactly once each with no `TransactionRolledBack`, and — the point of the
+scenario — that both completion events were observed on the foreign thread and not on the registering
+one, so the assertion cannot pass for the trivial same-thread reason. Test-the-test verified by
+temporarily disabling the capture and the `CDI.current()` fallback: the scenario fails with
+"expected: 1 but was: 0" on the completion-event counts.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (35m 38s).

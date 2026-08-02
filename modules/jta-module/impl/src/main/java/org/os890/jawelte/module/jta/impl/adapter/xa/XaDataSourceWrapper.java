@@ -272,6 +272,15 @@ public class XaDataSourceWrapper implements DataSource {
      * {@code XAConnection} on transaction completion. Registered once
      * per JTA tx (on first {@link #getConnection()} that enlists an
      * XAResource); fires whether the tx commits or rolls back.
+     *
+     * <p>Deliberately thread-agnostic: JTA invokes the callbacks on
+     * whichever thread completes the transaction, which need not be the
+     * thread that registered this synchronization. Nothing here depends
+     * on that thread — the caches are {@link ConcurrentHashMap}s keyed by
+     * the {@link Transaction} carried in the instance, and
+     * {@link XAConnection#close()} is not thread-affine. No thread-local
+     * and no {@code CDI.current()} lookup is involved, so a background
+     * completion thread is handled exactly like the originating one.
      */
     private static class TxScopedCleanupSynchronization implements Synchronization {
 
