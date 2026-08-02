@@ -547,13 +547,68 @@ public class JtaTransactionStrategy implements TransactionStrategy {
         throw (T) throwable;
     }
 
+    /**
+     * Fire {@code event} from the calling thread, resolving the
+     * {@link BeanManager} via {@link CDI#current()}. Only for the direct
+     * {@link #begin()} / {@link #commit()} / {@link #rollback()} path,
+     * which always runs on the thread that drives the test.
+     *
+     * @param event the lifecycle event payload to fire
+     */
     private static void fireEvent(Object event) {
+        fireEvent(null, event);
+    }
+
+    /**
+     * Fire {@code event} through {@code capturedBeanManager}, falling back
+     * to {@link CDI#current()} when none could be captured.
+     *
+     * <p>The captured variant exists for the JTA {@link Synchronization}
+     * callbacks: those run on whatever thread the transaction manager
+     * completes the transaction on, which need not be the thread that
+     * registered the synchronization. Resolving {@code CDI.current()}
+     * there is thread-dependent (implementations may key the container on
+     * the thread context classloader), so the completion thread could see
+     * a different container — or none — and the events would be lost.
+     *
+     * @param capturedBeanManager the bean manager captured on the
+     *                            registering thread, or {@code null} to
+     *                            resolve the current one
+     * @param event               the lifecycle event payload to fire
+     */
+    private static void fireEvent(BeanManager capturedBeanManager, Object event) {
         try {
-            BeanManager beanManager = CDI.current().getBeanManager();
+            BeanManager beanManager = capturedBeanManager != null
+                    ? capturedBeanManager
+                    : CDI.current().getBeanManager();
             beanManager.getEvent().fire(event);
+        } catch (RuntimeException loggedAndIgnored) {
+            // Lifecycle events are non-critical: a failure here must not
+            // fail the transaction. It is not aggregated anywhere either,
+            // so log it — otherwise a dropped event (CDI not up, observer
+            // threw, container not resolvable from this thread) is
+            // completely invisible.
+            LOG.log(Level.WARNING,
+                    "Failed to fire JTA lifecycle event " + event.getClass().getName(),
+                    loggedAndIgnored);
+        }
+    }
+
+    /**
+     * Resolve the current {@link BeanManager}, or {@code null} when CDI
+     * is not (yet) available. Called on the registering thread so the
+     * result can be handed to a {@link Synchronization} that will run on
+     * an arbitrary completion thread.
+     *
+     * @return the current bean manager, or {@code null} if unavailable
+     */
+    private static BeanManager currentBeanManagerQuietly() {
+        try {
+            return CDI.current().getBeanManager();
         } catch (RuntimeException ignored) {
-            // CDI not up or observer threw — events are non-critical
-            // and observer failures are aggregated by the framework.
+            // No container on this thread yet — the Synchronization falls
+            // back to CDI.current() at firing time.
+            return null;
         }
     }
 
@@ -616,7 +671,12 @@ public class JtaTransactionStrategy implements TransactionStrategy {
             return;
         }
         try {
-            transaction.registerSynchronization(new LifecycleEventSynchronization(transaction));
+            // Capture the bean manager here, on the registering thread —
+            // the synchronization's callbacks run on whichever thread
+            // completes the tx, where CDI.current() is not guaranteed to
+            // resolve the same container.
+            transaction.registerSynchronization(
+                    new LifecycleEventSynchronization(transaction, currentBeanManagerQuietly()));
         } catch (jakarta.transaction.RollbackException | SystemException registerFailure) {
             EVENTS_BOUND.remove(transaction);
             return;
@@ -629,21 +689,38 @@ public class JtaTransactionStrategy implements TransactionStrategy {
      * {@link Synchronization} hooks. Used only when this strategy
      * isn't the one driving begin / commit / rollback (i.e., a
      * vendor's CDI {@code @Transactional} interceptor is in charge).
+     *
+     * <p>JTA gives no guarantee about which thread completes a
+     * transaction: the callbacks run on whatever thread calls
+     * {@code commit()} / {@code rollback()}, which may be a different
+     * one from the thread that registered this synchronization (a
+     * transaction can be suspended on one thread and resumed on
+     * another). The {@link BeanManager} is therefore captured at
+     * registration time and the events are fired through it, instead
+     * of resolving {@code CDI.current()} on the completion thread.
      */
     private static class LifecycleEventSynchronization implements Synchronization {
 
         private final Transaction transaction;
 
-        private boolean beforeCompletionFired;
+        /**
+         * Bean manager captured on the registering thread — see the
+         * class javadoc. May be {@code null} if CDI was not resolvable
+         * then, in which case firing falls back to {@code CDI.current()}.
+         */
+        private final BeanManager beanManager;
 
-        LifecycleEventSynchronization(Transaction transaction) {
+        private volatile boolean beforeCompletionFired;
+
+        LifecycleEventSynchronization(Transaction transaction, BeanManager beanManager) {
             this.transaction = transaction;
+            this.beanManager = beanManager;
         }
 
         @Override
         public void beforeCompletion() {
             beforeCompletionFired = true;
-            fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
+            fireEvent(beanManager, new TransactionBeforeCompletion(TRANSACTION_WIDE));
         }
 
         @Override
@@ -653,12 +730,12 @@ public class JtaTransactionStrategy implements TransactionStrategy {
                     // JTA spec: rollback path skips beforeCompletion. Fire
                     // here so jawelte's contract holds across commit and
                     // rollback paths.
-                    fireEvent(new TransactionBeforeCompletion(TRANSACTION_WIDE));
+                    fireEvent(beanManager, new TransactionBeforeCompletion(TRANSACTION_WIDE));
                 }
                 if (status == Status.STATUS_COMMITTED) {
-                    fireEvent(new TransactionCommitted(TRANSACTION_WIDE));
+                    fireEvent(beanManager, new TransactionCommitted(TRANSACTION_WIDE));
                 } else {
-                    fireEvent(new TransactionRolledBack(TRANSACTION_WIDE));
+                    fireEvent(beanManager, new TransactionRolledBack(TRANSACTION_WIDE));
                 }
             } finally {
                 // Clear the marker now the tx has completed, so a reused
