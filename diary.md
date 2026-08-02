@@ -6624,3 +6624,10 @@ Maven module and 456 of 459 scenario modules hold exactly one test class, so the
 time and never gets a second lookup. The benefit lands on suites where many test classes share a
 JVM — in this repo, the lnp-module scenarios (103 test classes each, two of them with ejb-module on
 the classpath) and, more importantly, real consumer test suites.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (32m 48s). The
+total is 170s below the pre-change run (2138s → 1968s), but that is *not* the cache: the gain is
+spread evenly across phases that never load ejb-module (jpa −31s, jta −15..−19s, coverage −2s) while
+the two ejb-module phases moved only −5s and −1s, the smallest deltas in the run. It reads as
+run-to-run system drift. As noted above, the correctness matrix cannot show this cache working by
+construction.
