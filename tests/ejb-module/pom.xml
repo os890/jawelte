@@ -61,6 +61,7 @@
         <module>scenario-07-singleton-injecting-entitymanager</module>
         <module>scenario-12-transactionattribute-ignored</module>
         <module>scenario-28-user-declared-transactional-preserved</module>
+        <module>scenario-29-classpath-scan-cached-across-test-classes</module>
     </modules>
 
     <dependencies>

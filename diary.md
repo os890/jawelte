@@ -6578,3 +6578,56 @@ temporarily disabling the capture and the `CDI.current()` fallback: the scenario
 "expected: 1 but was: 0" on the completion-event counts.
 
 **Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (35m 38s).
+
+## ejb-module classpath scan cached behind a new EjbAnnotationScanner port
+
+**Problem:** `EjbAnnotationExtension.scanClasspathForEjbAnnotatedTypes()` built a fresh `UrlSet` +
+`ClasspathArchive` + `AnnotationFinder` and walked the whole classpath on every
+`BeforeBeanDiscovery` — once per test-class container boot. jpa-module's `XbeanFinderEntityScanner`
+caches the identical xbean idiom per `ClassLoader` for exactly that reason; ejb-module paid the full
+walk every time. ejb-module/impl has no jpa-module dependency (ejb-api, core-api, the Jakarta APIs,
+MP Config, xbean-finder only), so the existing scanner could not simply be reused.
+
+**Fix:**
+- New port `EjbAnnotationScanner` in ejb-module/api, resolved via
+  `TestContext.loadService(EjbAnnotationScanner.class)` — the same shape jpa-module uses for
+  `EntityScanner`. The contract owns both filters (exclude prefixes, and skipping types that already
+  carry a normal scope or `@Dependent`) so an impl is free to cache the finished result. Documented
+  that impls run at `BeforeBeanDiscovery` and must not touch CDI.
+- Default impl `XbeanFinderEjbAnnotationScanner` in ejb-module/impl at `@Priority(Integer.MAX_VALUE)`
+  (absolute fallback), registered via `META-INF/services`. Caches the filtered class set in a
+  per-`ClassLoader` `WeakHashMap`, keyed additionally by the scan configuration (annotations +
+  exclude prefixes) so a differently-configured boot cannot reuse the wrong result. `performScan(...)`
+  is a `protected` seam so the walk can be substituted or observed without reimplementing the cache.
+- No invalidation hook: nothing inside ejb-module could drive one. Documented honestly that the weak
+  key is only partial protection here — the cached `Class` objects strongly reference the very
+  classloader used as the key, so entries do not self-trim; in this framework that key is the JVM's
+  context classloader, which outlives the suite anyway.
+- `EjbAnnotationExtension` now just delegates; its private xbean walk, `isExcluded` and
+  `hasNormalScopeOrDependent` moved into the scanner. The port is resolved per call rather than
+  frozen in a static field.
+
+**Test (`tests/ejb-module/scenario-29-classpath-scan-cached-across-test-classes`):**
+`@Specializes` cannot work here — the extension is a portable extension, not a bean, and the scan
+runs at `BeforeBeanDiscovery` before any bean exists. The substitution therefore goes through the
+project's `ServiceLoader` + `@Priority` seam: `TestScenarioCountingEjbAnnotationScanner` extends the
+shipped scanner at `@Priority(Integer.MAX_VALUE - 1)`, registered in that module's own
+`META-INF/services`, counting scan requests and actual classpath walks separately. Two
+`@EnableTestBeans` classes boot two containers in one JVM; both assert the walk ran exactly once for
+the module. The assertions are written about the whole module rather than "the second boot", so they
+are order-independent and adding a third class later cannot break them — which is also why no cache
+reset is needed. Test-the-test verified by disabling the cache lookup: the walk count reaches 2 and
+the scenario fails.
+
+**Scope note:** the correctness matrix cannot demonstrate the speed-up. Surefire forks one JVM per
+Maven module and 456 of 459 scenario modules hold exactly one test class, so the cache is cold every
+time and never gets a second lookup. The benefit lands on suites where many test classes share a
+JVM — in this repo, the lnp-module scenarios (103 test classes each, two of them with ejb-module on
+the classpath) and, more importantly, real consumer test suites.
+
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (32m 48s). The
+total is 170s below the pre-change run (2138s → 1968s), but that is *not* the cache: the gain is
+spread evenly across phases that never load ejb-module (jpa −31s, jta −15..−19s, coverage −2s) while
+the two ejb-module phases moved only −5s and −1s, the smallest deltas in the run. It reads as
+run-to-run system drift. As noted above, the correctness matrix cannot show this cache working by
+construction.
