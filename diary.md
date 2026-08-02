@@ -6577,5 +6577,4 @@ one, so the assertion cannot pass for the trivial same-thread reason. Test-the-t
 temporarily disabling the capture and the `CDI.current()` fallback: the scenario fails with
 "expected: 1 but was: 0" on the completion-event counts.
 
-**Verification:** the new scenario passes under all four owb/weld × geronimo/narayana combos.
-The full verify-all matrix was still running when this was committed — result reported separately.
+**Verification:** full owb+weld × geronimo+narayana matrix green — all 20 phases (35m 38s).
