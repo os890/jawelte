@@ -15,11 +15,9 @@
  */
 package org.os890.jawelte.module.ejb.impl;
 
-import java.io.IOException;
 import java.lang.System.Logger;
 import java.lang.System.Logger.Level;
 import java.lang.annotation.Annotation;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -33,7 +31,6 @@ import jakarta.ejb.Singleton;
 import jakarta.ejb.Stateless;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.Dependent;
-import jakarta.enterprise.context.NormalScope;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.spi.AnnotatedType;
 import jakarta.enterprise.inject.spi.BeanManager;
@@ -43,13 +40,11 @@ import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.enterprise.inject.spi.WithAnnotations;
 import jakarta.enterprise.inject.spi.configurator.AnnotatedTypeConfigurator;
 
-import org.apache.xbean.finder.AnnotationFinder;
-import org.apache.xbean.finder.UrlSet;
-import org.apache.xbean.finder.archive.ClasspathArchive;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.ServicePriorityResolver;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.ejb.api.port.EjbAnnotationMapper;
+import org.os890.jawelte.module.ejb.api.port.EjbAnnotationScanner;
 
 /**
  * CDI {@link Extension} that drives the {@link EjbAnnotationMapper}
@@ -384,26 +379,17 @@ public class EjbAnnotationExtension implements Extension {
         }
     }
 
+    /**
+     * Delegate discovery to the active {@link EjbAnnotationScanner}.
+     * Resolved per call rather than cached in a field: the port must
+     * follow whichever impl the current classpath elects, and the
+     * shipped default already caches the expensive part (the classpath
+     * walk) per classloader, so repeated resolution costs nothing
+     * measurable.
+     */
     private Set<Class<?>> scanClasspathForEjbAnnotatedTypes() {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        Set<Class<?>> matches = new LinkedHashSet<>();
-        try {
-            List<URL> urls = new UrlSet(classLoader).getUrls();
-            AnnotationFinder finder = new AnnotationFinder(new ClasspathArchive(classLoader, urls));
-            for (Class<? extends Annotation> annotationType : configuredAnnotations) {
-                for (Class<?> ejbClass : finder.findAnnotatedClasses(annotationType)) {
-                    if (!isExcluded(ejbClass.getName()) && !hasNormalScopeOrDependent(ejbClass)) {
-                        matches.add(ejbClass);
-                    }
-                }
-            }
-        } catch (IOException | RuntimeException scanFailure) {
-            throw new IllegalStateException(
-                    "ejb-module classpath scan for configured bean-defining annotations failed; "
-                            + "bootstrap aborted to surface the underlying classpath problem.",
-                    scanFailure);
-        }
-        return matches;
+        return TestContext.loadService(EjbAnnotationScanner.class)
+                .scan(configuredAnnotations, scanExcludePackages);
     }
 
     /**
@@ -476,39 +462,4 @@ public class EjbAnnotationExtension implements Extension {
         return annotationType;
     }
 
-    private boolean isExcluded(String className) {
-        for (String prefix : scanExcludePackages) {
-            if (className.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether {@code beanClass} already carries a bean-defining
-     * normal scope or {@code @Dependent}. Such classes are already
-     * discoverable under {@code bean-discovery-mode="annotated"} via
-     * the standard CDI rules; the extension must skip them when
-     * adding annotated types to avoid producing duplicate beans
-     * (OpenWebBeans rejects this with
-     * {@code DuplicateDefinitionException}).
-     *
-     * <p>Single pass over the class's annotations; no annotation
-     * hierarchy walk. Pseudo-scopes (annotations meta-annotated with
-     * {@code @jakarta.inject.Scope} only — for example
-     * {@code @jakarta.inject.Singleton}) are intentionally NOT
-     * treated as bean-defining here because they aren't bean-defining
-     * per the CDI 4.0 spec either.
-     */
-    private static boolean hasNormalScopeOrDependent(Class<?> beanClass) {
-        for (Annotation annotation : beanClass.getAnnotations()) {
-            Class<? extends Annotation> annotationType = annotation.annotationType();
-            if (annotationType == Dependent.class
-                    || annotationType.isAnnotationPresent(NormalScope.class)) {
-                return true;
-            }
-        }
-        return false;
-    }
 }
