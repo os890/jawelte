@@ -1,0 +1,21 @@
+sequenceDiagram
+    autonumber
+    participant Caller as caller
+    participant OrderService
+    participant DiscountService
+    participant AuditService
+    rect rgb(244, 244, 244)
+        Note over Caller,AuditService: OrderService.placeOrder — 0.20 ms | thread main
+        Caller->>OrderService: placeOrder(String, int)
+        activate OrderService
+            OrderService->>DiscountService: priceOf(String)
+            activate DiscountService
+            DiscountService-->>OrderService: BigDecimal [0.05 ms]
+            deactivate DiscountService
+            OrderService->>AuditService: log(String)
+            activate AuditService
+            AuditService-->>OrderService: void [0.00 ms]
+            deactivate AuditService
+        OrderService-->>Caller: String [0.20 ms]
+        deactivate OrderService
+    end

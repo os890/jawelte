@@ -99,6 +99,7 @@
         <batchee.version>2.0.0</batchee.version>
         <jberet.version>3.1.0.Final</jberet.version>
         <spring.data.jpa.version>4.0.5</spring.data.jpa.version>
+        <cdi.flow.version>1.0.0-SNAPSHOT</cdi.flow.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -397,6 +398,45 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>jawelte-spring-data-module</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Internal flow-assert-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-flow-assert-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-flow-assert-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!--
+                The cdi-flow recorder: a portable CDI extension which
+                attaches a recording interceptor while the container
+                boots and hands every finished call-chain to its
+                FlowSink registry. provided on flow-assert-module/api
+                (CallFlow / CallNode appear on the ports), compile on
+                flow-assert-module/impl (the api-to-library bridge, same
+                convention as WireMock), so a consumer that puts the
+                impl jar on its test classpath gets the recorder and its
+                extension along with it. The test-jar classifier carries
+                CallNodeBuilder for the container-free unit-tests of the
+                dialects.
+            -->
+            <dependency>
+                <groupId>org.os890.cdi.uml</groupId>
+                <artifactId>dynamic-cdi-flow-renderer</artifactId>
+                <version>${cdi.flow.version}</version>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.os890.cdi.uml</groupId>
+                <artifactId>dynamic-cdi-flow-renderer</artifactId>
+                <version>${cdi.flow.version}</version>
+                <type>test-jar</type>
+                <scope>test</scope>
             </dependency>
 
             <!--
@@ -931,6 +971,21 @@
                             <exclude>mvnw.cmd</exclude>
                             <exclude>.gitignore</exclude>
                             <exclude>**/*.md</exclude>
+                            <!--
+                                Expected-flow fixtures of
+                                tests/flow-assert-module, in whichever
+                                notation the scenario uses. A fixture
+                                is a rendered recording: it is produced
+                                by the recorder and copied in as it is,
+                                and a diagram notation only accepts a
+                                comment before its first statement -
+                                which a renderer would then have to be
+                                told about. The two built-in parsers do
+                                skip a `%%` / `'` licence header for a
+                                project that wants one. `flows` is the
+                                default expected-base-directory.
+                            -->
+                            <exclude>**/src/test/resources/flows/**</exclude>
                             <exclude>logo/**</exclude>
                             <exclude>docs/**</exclude>
                             <exclude>errors/**</exclude>

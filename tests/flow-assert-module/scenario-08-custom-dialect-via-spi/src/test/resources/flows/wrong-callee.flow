@@ -1,0 +1,8 @@
+chain OrderService.placeOrder
+call Caller>OrderService placeOrder(String, int)
+call OrderService>DiscountService priceOf(String)
+return DiscountService>OrderService BigDecimal
+call OrderService>AuditService log(String)
+return AuditService>OrderService void
+return OrderService>Caller String
+end

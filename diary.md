@@ -6631,3 +6631,141 @@ spread evenly across phases that never load ejb-module (jpa −31s, jta −15..�
 the two ejb-module phases moved only −5s and −1s, the smallest deltas in the run. It reads as
 run-to-run system drift. As noted above, the correctness matrix cannot show this cache working by
 construction.
+
+## 2026-08-05 — flow-assert-module: record a test method's call-flow and assert it against an expected diagram
+
+**Task.** Add a support module for the cdi-flow recorder (`~/workspace/java-flow`,
+`org.os890.cdi.uml:dynamic-cdi-flow-renderer`): let a test record the CDI call-flow it
+causes and compare that recording against a checked-in sequence-diagram. The expected
+file's extension decides the notation — Mermaid for `.mmd`, PlantUML for `.puml`, anything
+else through an SPI — and a mismatch has to point at the exact line, the way
+content-diff-module does for JSON. Delivered as a reviewed draft: API and SPI first, then
+the implementation.
+
+**Design decisions taken with the user before any code was written.**
+
+- The unit of comparison is the *combined* diagram of the test method: one block per
+  outermost call, in the order they happened, sharing the participant lanes. A method that
+  makes three outermost calls has a three-block expected file. No collapsing of identical
+  chains and no cap — an assertion has to see a call that happened twice.
+- The test class is *not* recorded by default. It is a CDI bean, so recording it would make
+  the test method the entry point and pull `@TestBean` mocks and test helpers into the
+  diagram. `@EnableFlowAssert(recordTestClass = true)` opts in.
+- Both a declarative `@ExpectedFlow` (convention-based resource lookup) and the fluent
+  `FlowDiff` entry point, in the shape of `ContentDiff` / `DbDiff` / `ResponseDiff`.
+- Module named `flow-assert-module`, enabling annotation `@EnableFlowAssert`.
+
+**Upstream addition (java-flow, branch `feat/combined-flow-diagram-api`).** The combined
+rendering existed only inside the recorder's use-case report: `UseCaseReport` builds it,
+writes it as `use-case.mmd`, and both `CombinedDiagram` and `RecordedChain` are
+package-private. `CombinedFlowDiagram.of(flows, format, title)` makes it a public function
+of the flows — three lines over the existing types, no visibility changes elsewhere. It
+renders every flow in the notation the *caller* asks for, so `cdi-flow.output-format` never
+leaks into a comparison, and it deliberately stops short of the report's dedup and
+`max-combined-requests` cap. Because the output stays byte-identical to `use-case.mmd`, a
+diagram taken from a real application run is a valid expected file. 7 new unit-tests, 140
+in the addon, green.
+
+**What the module ships.** `flow-assert-module/api`: `@EnableFlowAssert` (meta-annotated
+`@EnableTestBeans`), `@ExpectedFlow`, `FlowDiff` with its `DiffSpec` / `Difference` records,
+`RecordedFlows`, the canonical `FlowStep` model, `FlowAssertConfig` for the MP Config keys,
+and three ports — `FlowDialect` (one notation, keyed by file extension), `FlowDiffEngine`
+(the comparison) and `FlowRecordingPort` (what the running method recorded).
+`flow-assert-module/impl`: the two built-in dialects, the alignment-based diff engine, the
+capturing sink plus its static store, the lifecycle adapter and the config source.
+
+**Bridging the annotation into the recorder needed no change to it.** The recorder reads its
+`cdi-flow.*` keys through MicroProfile Config in its `BeforeBeanDiscovery` observer — which
+happens inside jawelte's bootstrap window, the one stretch where `TestContext.get()`
+resolves. `FlowRecordingConfigSource` (ordinal 250: above the properties-file defaults,
+below system properties, so `-Dcdi-flow.*` still wins) derives those keys from the
+annotation, cached per test class so a stale map cannot survive into the next one. Without
+the annotation the answer is `cdi-flow.enabled=false`, so the recorder on every consumer's
+classpath never instruments a test class that did not ask for it. A `ThreadLocal` guard
+keeps the nested config read the derivation performs from becoming a cycle.
+
+`FlowAssertLifecycleAdapter` sits at `@Priority(Integer.MAX_VALUE)`, which places it
+correctly twice: the lifecycle ports run ascending in `beforeEach` and reversed in
+`afterEach`, so it clears the recording *last* before the test body (no other module's setup
+lands in the diagram) and evaluates `@ExpectedFlow` *first* afterwards (before a transaction
+is rolled back). `CapturingFlowSink` is registered statically via `FlowSinks.register(...)`
+rather than as a CDI bean, which behaves identically on OpenWebBeans and Weld.
+
+**The comparison is structural, not textual.** `AlignmentFlowDiffEngine` matches the chains
+first — an extra outermost call is one `UNEXPECTED_CHAIN` rather than a diff as long as the
+diagram — then aligns the steps of each matched pair by longest common subsequence. A gap
+holding one step on either side is reported as the single thing that changed
+(`DIFFERENT_TARGET`, `DIFFERENT_SIGNATURE`, `DIFFERENT_RETURN`, `LOOP_COUNT`); a step that
+exists on both sides at another position is `WRONG_ORDER`. Durations, timestamps, thread
+names and notation boilerplate are rendered but not compared, which the split between
+`FlowStep#label` and `FlowStep#annotation` gives a custom dialect for free.
+
+**Three things the tests changed about the design.**
+
+1. The default exclude list named `org.os890.jawelte.*` and therefore vetoed the scenarios'
+   own beans. It now names the framework's two packages, `org.os890.jawelte.core` and
+   `org.os890.jawelte.module`, exactly as ejb-module's scan-exclude list does — test beans
+   under `org.os890.jawelte.tests` stay recordable.
+2. Participant declarations are no longer compared. A lane exists *because* a call goes to
+   it, so comparing lanes reports a second time what the call comparison already reported —
+   and it fights the ignore lists, where a deliberately ignored call leaves its lane
+   declared on one side only. Nothing a recording can produce is missed: a lane a recording
+   never calls into cannot exist. The two `*_PARTICIPANT` kinds stay in the enum for a
+   custom engine, documented as not reported by the built-in one.
+3. `FlowDialect#fileExtensions()` returned a `Set.of(...)`, whose iteration order is
+   unspecified, so the approval path created `placesOrder.mermaid` instead of
+   `placesOrder.mmd`. The built-ins now return ordered sets and the port documents that the
+   first extension is the canonical one. `renderSingle` also drops the use-case label the
+   lifecycle adapter sets, so a single-chain expected file is not tied to one test method.
+
+**Tests.** 29 unit-tests in `flow-assert-module/impl` (both dialects round-trip what they
+render, PlantUML's steps are structurally identical to Mermaid's, and the engine's semantics
+are pinned one difference kind at a time) plus 8 scenario modules under
+`tests/flow-assert-module`, 18 tests, green on **both** CDI runtimes: the headline
+convention case, the failure message with its line number, PlantUML selected by nothing but
+the file extension, two chains in one method, a named file with an ignored collaborator, the
+fluent single-chain assertions, a class without `@EnableFlowAssert` recording nothing at all
+(`FlowRuntime.active()` is null), and a third notation contributed by a test through the
+`FlowDialect` SPI. `verify-all.sh` runs the module in the `{owb, weld}` sweep — for a
+recorder that is a portable extension, the sweep *is* the portability claim.
+
+The timings in every checked-in fixture are hand-normalised to round numbers no run would
+produce, which is the cheapest possible proof that they are rendered but not compared.
+
+**Deliberately left out of the draft.** EL interpolation of the expected file (a diagram
+carries no argument values), a recording that spans more than one test method, and hotspot
+comparison beyond the opt-in flag. Asynchronous observers record on another thread and are
+only captured if they finish before the assertion — `RecordedFlows.awaitFlowCount(...)` is
+the deterministic handle, and the limitation is documented rather than hidden.
+
+### 2026-08-05 — all-modules / minimal-modules build profiles
+
+The module list of `modules/pom.xml` and of `tests/pom.xml` now lives in two profiles:
+`all-modules` (`activeByDefault`, everything) and `minimal-modules` (everything whose
+dependencies are released — i.e. all but `flow-assert-module`, which needs
+`org.os890.cdi.uml:dynamic-cdi-flow-renderer`, a project without a release yet).
+
+**Why those two POMs and no others.** `activeByDefault` is switched off by another profile
+declared in *the same* POM — that is the classic trap with this pattern. These two POMs
+declared no profile at all before, and still declare nothing but these two: every
+CDI-runtime, JTA-implementation, JAX-RS and lnp profile lives in `tests/<module>/pom.xml` or
+in a scenario POM. So `-P weld` cannot deactivate `all-modules`, the two axes are
+orthogonal, and they combine as `-P weld,minimal-modules`. Putting the module lists into the
+POMs that already carry `owb` (itself `activeByDefault`) would have broken exactly that.
+
+`-P minimal-modules` only takes effect when the build goes *through* an aggregator.
+`verify-all.sh` invokes each test module by its directory, one phase per profile
+combination, so the full matrix stays the all-modules gate by construction — nothing to
+change there.
+
+Verified: the default reactor builds 42 modules including flow-assert-module,
+`-P minimal-modules` leaves it out, and `-P weld,minimal-modules` from `tests/` activates
+both without a "profile could not be activated" warning.
+
+Also added `modules/flow-assert-module/README.md` — the first per-module README in the
+project: what the module compares (and what it deliberately does not), the notation rule,
+the API and SPI tables, the failure output, how to write the first expected file, the
+inherited limitations, and where the recorder lives:
+https://github.com/os890/dynamic-cdi-flow-renderer — including the local
+`mvn clean install` a build needs until that project has a release, and the pointer to the
+`feat/combined-flow-diagram-api` branch that carries `CombinedFlowDiagram`.

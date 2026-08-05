@@ -1,0 +1,22 @@
+@startuml
+autonumber
+hide footbox
+participant "caller" as Caller
+participant OrderService
+participant PricingService
+participant AuditService
+group OrderService.placeOrder — 0.20 ms | thread main
+    Caller -> OrderService : placeOrder(String, int)
+    activate OrderService
+        OrderService -> PricingService : priceOf(String)
+        activate PricingService
+        PricingService --> OrderService : BigDecimal [0.05 ms]
+        deactivate PricingService
+        OrderService -> AuditService : log(String)
+        activate AuditService
+        AuditService --> OrderService : void [0.00 ms]
+        deactivate AuditService
+    OrderService --> Caller : String [0.20 ms]
+    deactivate OrderService
+end
+@enduml
