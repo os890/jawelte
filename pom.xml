@@ -972,19 +972,20 @@
                             <exclude>.gitignore</exclude>
                             <exclude>**/*.md</exclude>
                             <!--
-                                Sequence-diagram fixtures of
-                                tests/flow-assert-module. A diagram is
-                                a rendered recording: the file is
-                                produced by the recorder and copied in,
-                                and both notations only accept a
-                                comment before the first statement,
+                                Expected-flow fixtures of
+                                tests/flow-assert-module, in whichever
+                                notation the scenario uses. A fixture
+                                is a rendered recording: it is produced
+                                by the recorder and copied in as it is,
+                                and a diagram notation only accepts a
+                                comment before its first statement -
                                 which a renderer would then have to be
-                                told about. The parsers do tolerate a
-                                `%%` / `'` licence header for a project
-                                that wants one.
+                                told about. The two built-in parsers do
+                                skip a `%%` / `'` licence header for a
+                                project that wants one. `flows` is the
+                                default expected-base-directory.
                             -->
-                            <exclude>**/*.mmd</exclude>
-                            <exclude>**/*.puml</exclude>
+                            <exclude>**/src/test/resources/flows/**</exclude>
                             <exclude>logo/**</exclude>
                             <exclude>docs/**</exclude>
                             <exclude>errors/**</exclude>

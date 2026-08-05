@@ -16,10 +16,8 @@
 package org.os890.jawelte.module.flowassert.impl.adapter.diff;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
 import jakarta.annotation.Priority;
 
@@ -32,7 +30,7 @@ import org.os890.jawelte.module.flowassert.impl.util.StepAlignment;
 
 /**
  * The built-in comparison: chains are matched first, then the steps
- * inside each matched pair, then the participant lanes.
+ * inside each matched pair.
  *
  * <p>Matching the chains first is what keeps a diff readable. An
  * outermost call that happened once too often would otherwise shift
@@ -48,6 +46,14 @@ import org.os890.jawelte.module.flowassert.impl.util.StepAlignment;
  * {@code DIFFERENT_RETURN}, {@code LOOP_COUNT} — rather than as a
  * deletion plus an insertion. Steps that exist on both sides at
  * different positions are reported as {@code WRONG_ORDER}.
+ *
+ * <p>Participant declarations are <strong>not</strong> compared.
+ * A lane exists because a call goes to it, so comparing the lanes
+ * reports a second time what the call comparison already reported -
+ * and it would fight the ignore lists, where a deliberately ignored
+ * call leaves its lane declared on one side only. Nothing a recording
+ * can produce is missed by leaving them out: a lane a recording never
+ * calls into cannot exist.
  *
  * <p>Registered at {@code @Priority(Integer.MAX_VALUE)}: an
  * implementation with a lower numeric priority replaces it wholesale.
@@ -72,7 +78,6 @@ public class AlignmentFlowDiffEngine implements FlowDiffEngine {
         List<FlowDiff.Difference> differences = new ArrayList<>();
         differences.addAll(compareChains(
                 DiagramChain.of(expectedSteps), DiagramChain.of(actualSteps), spec));
-        differences.addAll(compareParticipants(expectedSteps, actualSteps));
         differences.addAll(compareTitles(expectedSteps, actualSteps, spec));
         return List.copyOf(differences);
     }
@@ -177,9 +182,14 @@ public class AlignmentFlowDiffEngine implements FlowDiffEngine {
                         : FlowDiff.Difference.Kind.DIFFERENT_TARGET;
             case RETURN:
             case THROW:
-                return Objects.equals(expected.label(), actual.label()) && spec.compareTimings()
+                if (!Objects.equals(expected.label(), actual.label())) {
+                    return FlowDiff.Difference.Kind.DIFFERENT_RETURN;
+                }
+                // the returned type is the same, so what changed is who returned it:
+                // the second half of a callee that differs, already reported on the call
+                return Objects.equals(expected.from(), actual.from())
                         ? FlowDiff.Difference.Kind.TIMING
-                        : FlowDiff.Difference.Kind.DIFFERENT_RETURN;
+                        : FlowDiff.Difference.Kind.DIFFERENT_TARGET;
             case LOOP_START:
                 return FlowDiff.Difference.Kind.LOOP_COUNT;
             case CHAIN_NOTE:
@@ -295,47 +305,6 @@ public class AlignmentFlowDiffEngine implements FlowDiffEngine {
     private int lineOfTitle(List<FlowStep> steps) {
         for (FlowStep step : steps) {
             if (step.kind() == FlowStep.Kind.TITLE) {
-                return step.lineNumber();
-            }
-        }
-        return 0;
-    }
-
-    private List<FlowDiff.Difference> compareParticipants(
-            List<FlowStep> expected, List<FlowStep> actual) {
-        Set<String> expectedLanes = lanesOf(expected);
-        Set<String> actualLanes = lanesOf(actual);
-        List<FlowDiff.Difference> differences = new ArrayList<>();
-        for (String lane : expectedLanes) {
-            if (!actualLanes.contains(lane)) {
-                differences.add(new FlowDiff.Difference(
-                        FlowDiff.Difference.Kind.MISSING_PARTICIPANT, "participant " + lane,
-                        FlowDiff.Difference.MISSING, lineOfLane(expected, lane), 0, 0, 0));
-            }
-        }
-        for (String lane : actualLanes) {
-            if (!expectedLanes.contains(lane)) {
-                differences.add(new FlowDiff.Difference(
-                        FlowDiff.Difference.Kind.UNEXPECTED_PARTICIPANT, FlowDiff.Difference.MISSING,
-                        "participant " + lane, 0, lineOfLane(actual, lane), 0, 0));
-            }
-        }
-        return differences;
-    }
-
-    private Set<String> lanesOf(List<FlowStep> steps) {
-        Set<String> lanes = new LinkedHashSet<>();
-        for (FlowStep step : steps) {
-            if (step.kind() == FlowStep.Kind.PARTICIPANT) {
-                lanes.add(step.label());
-            }
-        }
-        return lanes;
-    }
-
-    private int lineOfLane(List<FlowStep> steps, String lane) {
-        for (FlowStep step : steps) {
-            if (step.kind() == FlowStep.Kind.PARTICIPANT && lane.equals(step.label())) {
                 return step.lineNumber();
             }
         }

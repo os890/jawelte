@@ -87,7 +87,7 @@ class AlignmentFlowDiffEngineTest {
 
         assertThat(differences).filteredOn(difference ->
                         difference.kind() == FlowDiff.Difference.Kind.DIFFERENT_TARGET)
-                .singleElement()
+                .first()
                 .satisfies(difference -> {
                     assertThat(difference.expected()).contains("PricingService", "priceOf(String)");
                     assertThat(difference.actual()).contains("DiscountService", "priceOf(String)");
@@ -188,9 +188,7 @@ class AlignmentFlowDiffEngineTest {
                 .buildFlow());
 
         assertThat(engine.diff(withAudit, withoutAudit,
-                spec(List.of("AuditService#log(*)"), List.of(), List.of())))
-                .filteredOn(difference -> difference.kind() != FlowDiff.Difference.Kind.MISSING_PARTICIPANT)
-                .isEmpty();
+                spec(List.of("AuditService#log(*)"), List.of(), List.of()))).isEmpty();
     }
 
     @Test
@@ -203,9 +201,7 @@ class AlignmentFlowDiffEngineTest {
         CallFlow withoutPricing = call("OrderService", "placeOrder").returning("Order").buildFlow();
 
         assertThat(engine.diff(combined(withNestedPricing), combined(withoutPricing),
-                spec(List.of(), List.of("PricingService#priceOf()"), List.of())))
-                .filteredOn(difference -> difference.kind() != FlowDiff.Difference.Kind.MISSING_PARTICIPANT)
-                .isEmpty();
+                spec(List.of(), List.of("PricingService#priceOf()"), List.of()))).isEmpty();
     }
 
     @Test
@@ -213,20 +209,20 @@ class AlignmentFlowDiffEngineTest {
     void ignoresChainsByEntryPoint() {
         assertThat(engine.diff(combined(placeOrder("PricingService")),
                 combined(placeOrder("PricingService"), ship()),
-                spec(List.of(), List.of(), List.of("ShippingService.*"))))
-                .filteredOn(difference -> difference.kind() != FlowDiff.Difference.Kind.UNEXPECTED_PARTICIPANT)
-                .isEmpty();
+                spec(List.of(), List.of(), List.of("ShippingService.*")))).isEmpty();
     }
 
     @Test
-    @DisplayName("a participant lane on one side only is reported as such")
-    void reportsParticipantDifferences() {
+    @DisplayName("participant lanes are not compared - the calls already say what changed")
+    void doesNotReportParticipantDifferences() {
         List<FlowDiff.Difference> differences = diff(
                 combined(placeOrder("PricingService")), combined(placeOrder("DiscountService")));
 
         assertThat(differences).extracting(FlowDiff.Difference::kind)
-                .contains(FlowDiff.Difference.Kind.MISSING_PARTICIPANT,
-                        FlowDiff.Difference.Kind.UNEXPECTED_PARTICIPANT);
+                .doesNotContain(FlowDiff.Difference.Kind.MISSING_PARTICIPANT,
+                        FlowDiff.Difference.Kind.UNEXPECTED_PARTICIPANT)
+                // the call and its return both name the callee, so both lines changed
+                .containsOnly(FlowDiff.Difference.Kind.DIFFERENT_TARGET);
     }
 
     @Test

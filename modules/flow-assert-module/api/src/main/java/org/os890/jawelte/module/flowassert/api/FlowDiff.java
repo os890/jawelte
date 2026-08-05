@@ -413,10 +413,21 @@ public abstract class FlowDiff {
             /** Both sides have the step, at different positions. */
             WRONG_ORDER,
 
-            /** A participant lane the recording never declared. */
+            /**
+             * A participant lane the recording never declared. Not
+             * reported by the built-in engine: a lane exists because a
+             * call goes to it, so the call comparison covers it, and
+             * comparing declarations would fight the ignore lists.
+             * Kept for a custom {@link FlowDiffEngine} that does
+             * compare them.
+             */
             MISSING_PARTICIPANT,
 
-            /** A participant lane the expected diagram does not declare. */
+            /**
+             * A participant lane the expected diagram does not
+             * declare. Not reported by the built-in engine, for the
+             * same reason as {@link #MISSING_PARTICIPANT}.
+             */
             UNEXPECTED_PARTICIPANT,
 
             /** The recording contains an outermost call the expected diagram does not. */

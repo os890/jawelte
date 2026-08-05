@@ -251,6 +251,10 @@ else
         run "tests/ejb-module [$cdi]"         "$REPO_ROOT/tests/ejb-module"         -P "$cdi" verify
         run "tests/testcontrol-module [$cdi]" "$REPO_ROOT/tests/testcontrol-module" -P "$cdi" verify
         run "tests/spring-data-module [$cdi]" "$REPO_ROOT/tests/spring-data-module" -P "$cdi" verify
+        # flow-assert-module records through a portable CDI extension, so
+        # the same expected diagram has to come out of either container -
+        # the sweep IS the portability claim, not a formality.
+        run "tests/flow-assert-module [$cdi]" "$REPO_ROOT/tests/flow-assert-module" -P "$cdi" verify
     done
 
     # tests/content-diff-module: utility library — does not bootstrap a

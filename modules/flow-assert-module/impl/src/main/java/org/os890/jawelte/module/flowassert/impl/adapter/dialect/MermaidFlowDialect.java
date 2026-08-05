@@ -74,7 +74,18 @@ public class MermaidFlowDialect implements FlowDialect {
 
     @Override
     public String renderSingle(CallFlow flow) {
-        return flow.toMermaid();
+        return untitled(flow).toMermaid();
+    }
+
+    /**
+     * Drops the use-case label the lifecycle adapter set, so a
+     * single-chain diagram carries no title either. A title naming the
+     * test method would make an otherwise reusable expected file
+     * specific to one of them, and the comparison ignores titles by
+     * default anyway.
+     */
+    private static CallFlow untitled(CallFlow flow) {
+        return new CallFlow(flow.root(), flow.threadName(), flow.config());
     }
 
     @Override
