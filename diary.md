@@ -6737,3 +6737,35 @@ carries no argument values), a recording that spans more than one test method, a
 comparison beyond the opt-in flag. Asynchronous observers record on another thread and are
 only captured if they finish before the assertion — `RecordedFlows.awaitFlowCount(...)` is
 the deterministic handle, and the limitation is documented rather than hidden.
+
+### 2026-08-05 — all-modules / minimal-modules build profiles
+
+The module list of `modules/pom.xml` and of `tests/pom.xml` now lives in two profiles:
+`all-modules` (`activeByDefault`, everything) and `minimal-modules` (everything whose
+dependencies are released — i.e. all but `flow-assert-module`, which needs
+`org.os890.cdi.uml:dynamic-cdi-flow-renderer`, a project without a release yet).
+
+**Why those two POMs and no others.** `activeByDefault` is switched off by another profile
+declared in *the same* POM — that is the classic trap with this pattern. These two POMs
+declared no profile at all before, and still declare nothing but these two: every
+CDI-runtime, JTA-implementation, JAX-RS and lnp profile lives in `tests/<module>/pom.xml` or
+in a scenario POM. So `-P weld` cannot deactivate `all-modules`, the two axes are
+orthogonal, and they combine as `-P weld,minimal-modules`. Putting the module lists into the
+POMs that already carry `owb` (itself `activeByDefault`) would have broken exactly that.
+
+`-P minimal-modules` only takes effect when the build goes *through* an aggregator.
+`verify-all.sh` invokes each test module by its directory, one phase per profile
+combination, so the full matrix stays the all-modules gate by construction — nothing to
+change there.
+
+Verified: the default reactor builds 42 modules including flow-assert-module,
+`-P minimal-modules` leaves it out, and `-P weld,minimal-modules` from `tests/` activates
+both without a "profile could not be activated" warning.
+
+Also added `modules/flow-assert-module/README.md` — the first per-module README in the
+project: what the module compares (and what it deliberately does not), the notation rule,
+the API and SPI tables, the failure output, how to write the first expected file, the
+inherited limitations, and where the recorder lives:
+https://github.com/os890/dynamic-cdi-flow-renderer — including the local
+`mvn clean install` a build needs until that project has a release, and the pointer to the
+`feat/combined-flow-diagram-api` branch that carries `CombinedFlowDiagram`.
