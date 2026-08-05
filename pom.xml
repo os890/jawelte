@@ -971,6 +971,20 @@
                             <exclude>mvnw.cmd</exclude>
                             <exclude>.gitignore</exclude>
                             <exclude>**/*.md</exclude>
+                            <!--
+                                Sequence-diagram fixtures of
+                                tests/flow-assert-module. A diagram is
+                                a rendered recording: the file is
+                                produced by the recorder and copied in,
+                                and both notations only accept a
+                                comment before the first statement,
+                                which a renderer would then have to be
+                                told about. The parsers do tolerate a
+                                `%%` / `'` licence header for a project
+                                that wants one.
+                            -->
+                            <exclude>**/*.mmd</exclude>
+                            <exclude>**/*.puml</exclude>
                             <exclude>logo/**</exclude>
                             <exclude>docs/**</exclude>
                             <exclude>errors/**</exclude>

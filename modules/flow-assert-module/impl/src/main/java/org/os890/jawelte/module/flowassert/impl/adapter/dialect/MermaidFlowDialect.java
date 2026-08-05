@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.module.flowassert.impl.adapter.dialect;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -47,6 +49,10 @@ import org.os890.jawelte.module.flowassert.impl.util.SequenceDiagramParser;
 @Priority(Integer.MAX_VALUE)
 public class MermaidFlowDialect implements FlowDialect {
 
+    /** Ordered: {@code .mmd} is the canonical extension a created file gets. */
+    private static final Set<String> EXTENSIONS =
+            Collections.unmodifiableSet(new LinkedHashSet<>(List.of(".mmd", ".mermaid")));
+
     /** No-arg constructor required by SPI {@code ServiceLoader} lookup. */
     public MermaidFlowDialect() {
     }
@@ -58,7 +64,7 @@ public class MermaidFlowDialect implements FlowDialect {
 
     @Override
     public Set<String> fileExtensions() {
-        return Set.of(".mmd", ".mermaid");
+        return EXTENSIONS;
     }
 
     @Override

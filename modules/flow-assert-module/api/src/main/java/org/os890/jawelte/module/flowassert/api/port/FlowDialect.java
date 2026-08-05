@@ -67,9 +67,17 @@ public interface FlowDialect {
      * The file extensions this dialect claims, leading dot included
      * and lower-case, e.g. {@code {".mmd", ".mermaid"}}.
      *
+     * <p>Iteration order matters: the <strong>first</strong> extension
+     * is the canonical one, used when a file is named rather than
+     * read — the recording written next to the build output, and an
+     * expected file created by
+     * {@code FlowAssertConfig.create-missing-expected}. Return an
+     * ordered set.
+     *
      * <p>Stable for the lifetime of the instance.
      *
-     * @return the claimed extensions; never {@code null}, never empty
+     * @return the claimed extensions, canonical one first; never
+     *         {@code null}, never empty
      */
     Set<String> fileExtensions();
 
