@@ -48,6 +48,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 | `jawelte-mockito` | Mockito | CDI-aware mock injection |
 | `jawelte-wiremock-module` | WireMock | HTTP stub server lifecycle management |
 | `jawelte-batch-module` | Jakarta Batch (jBatch) | CDI event-driven job execution with synchronous polling and pluggable timeout policy |
+| `jawelte-flow-assert-module` | cdi-flow recorder (`dynamic-cdi-flow-renderer`) | Records the CDI call-flow of a test method and asserts it against an expected sequence-diagram |
 
 New integrations follow the same pattern and require no changes to the core.
 
@@ -113,6 +114,8 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `EjbAnnotationMapper` | `DefaultEjbAnnotationMapper` (`@Priority(Integer.MAX_VALUE)`) + `EjbAnnotationExtension` | CDI runtime + xbean-finder classpath scan | `ejb-module/impl` |
 | `TestModuleLifecyclePort` | `WireMockLifecycleAdapter` (`@Priority(75)`) + `WireMockCdiExtension` + `WireMockRegistryScopeRemap` (`BeanScopeMapper` SPI provider) | CDI runtime + WireMock library (`WireMockServer`, `WireMockRuntimeInfo`) | `wiremock-module/impl` |
 | `TimeoutHandler` | `ThrowingTimeoutHandler` (`@Priority(Integer.MAX_VALUE)`) plus opt-in `PopulateLatestSnapshotTimeoutHandler` (`@Priority(Integer.MAX_VALUE - 100)`, ships in the same jar but not pre-registered) | CDI runtime + any jBatch implementation (BatchEE, JBeret) discovered via `BatchRuntime.getJobOperator()` | `batch-module/impl` |
+| `TestModuleLifecyclePort` | `FlowAssertLifecycleAdapter` (`@Priority(Integer.MAX_VALUE)`) + `FlowRecordingConfigSource` (MicroProfile `ConfigSource` SPI provider, ordinal 250) + `CapturingFlowSink` (`FlowSink` SPI of the recorder) | cdi-flow recorder (portable CDI extension attaching a recording interceptor) | `flow-assert-module/impl` |
+| `FlowDialect`, `FlowDiffEngine`, `FlowRecordingPort` | `MermaidFlowDialect` / `PlantUmlFlowDialect`, `AlignmentFlowDiffEngine`, `StaticFlowRecordingPort` (all `@Priority(Integer.MAX_VALUE)`) | (in-process; renders through the recorder) | `flow-assert-module/impl` |
 
 **ejb-module additions (in `ejb-module/api`):**
 
@@ -126,6 +129,15 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 - `TimeoutHandler` — pluggable policy for "polling loop exceeded `BatchExecution.getTimeout()` while the job is still in a non-terminal status." Resolved via `TestContext.loadService(TimeoutHandler.class)` once per JVM. The default `ThrowingTimeoutHandler` raises `IllegalStateException`; consumers swap behaviour by registering an alternative impl with a lower numeric `@Priority`. `batch-module/impl` ships the opt-in `PopulateLatestSnapshotTimeoutHandler` (populates the event with the latest snapshot and returns without throwing) but does not pre-register it.
 
 `batch-module/impl` ships no `TestModuleLifecyclePort` adapter — it is purely CDI-driven. Two `@ApplicationScoped` beans (the observer that drives the polling loop, and a `@Produces JobOperator` bridge that delegates to `BatchRuntime.getJobOperator()`) handle everything; the CDI runtime discovers them via `beans.xml` with `bean-discovery-mode="annotated"`.
+
+**flow-assert-module additions (in `flow-assert-module/api`):**
+
+- `@EnableFlowAssert` — class-level switch (meta-annotated `@EnableTestBeans`) whose attributes are the recording's configuration; `@ExpectedFlow` — per-method assertion against an expected diagram, resolved by convention when it names no resource.
+- `FlowDialect` — one diagram notation, selected by the **file extension of the expected resource**: rendering a recording and parsing a diagram back into the canonical `FlowStep` model. Built-in Mermaid and PlantUML; a custom notation is a new provider.
+- `FlowDiffEngine` — the comparison itself, notation-agnostic because it works on `FlowStep`s. One active implementation per JVM, so a custom dialect inherits the built-in comparison instead of bringing one.
+- `FlowRecordingPort` — what the running test method recorded; the boundary between the user-facing api and the sink that collects the recorder's output.
+
+Two integration properties are worth stating at this level. First, **the expected file decides the notation**, not configuration: the recording is rendered in whichever notation the expectation is written in, so the recorder's own `cdi-flow.output-format` never takes part in a comparison. Second, **the recorder is configured through MicroProfile Config rather than through an API** — it reads its keys while the container boots, inside the bootstrap window where `TestContext.get()` resolves, which is why a per-test-class annotation can drive a library that only knows about configuration keys. A `ConfigSource` at ordinal 250 performs that translation and answers `cdi-flow.enabled=false` for any test class without the annotation, so a module every consumer pulls in transitively instruments nothing it was not asked to.
 
 **Planned (forward-looking, not yet shipped):** `DatasetContainerPort` (e.g. DB-Unit). Each will land as its own module under `modules/` and follow the same shape as `cdi-module`.
 
