@@ -32,3 +32,8 @@ __pycache__
 errors
 
 tickets
+# maven-release-plugin working files (removed again by release:clean)
+release.properties
+pom.xml.tag
+pom.xml.next
+pom.xml.releaseBackup
