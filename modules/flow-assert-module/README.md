@@ -57,35 +57,24 @@ sink registry. It lives in its own repository:
 | | |
 |---|---|
 | Coordinates | `org.os890.cdi.uml:dynamic-cdi-flow-renderer` |
-| Version used here | `1.0.0-SNAPSHOT` (property `cdi.flow.version` in the root POM) |
+| Version used here | `0.9.0` (property `cdi.flow.version` in the root POM) |
 | Scope | `compile` on `flow-assert-module/impl`, so a consumer gets the recorder — and with it the portable extension — by depending on the impl jar alone |
 
-> [!IMPORTANT]
-> **cdi-flow has no release yet.** Until it has one, build and install it locally before
-> building jawelte with this module:
->
-> ```bash
-> git clone https://github.com/os890/dynamic-cdi-flow-renderer.git
-> cd dynamic-cdi-flow-renderer
-> mvn clean install -pl dynamic-cdi-flow-renderer
-> ```
->
-> A build that cannot do that selects the module-list profile that leaves this module out:
->
-> ```bash
-> mvn install -P minimal-modules
-> ```
->
-> `all-modules` is the default and contains everything. The two profiles are declared in
-> `modules/pom.xml` and `tests/pom.xml`, which declare no other profile — so they never
-> collide with `-P owb` / `-P weld` / `-P jta-geronimo` / `-P resteasy` and combine freely
-> with them: `mvn verify -P weld,minimal-modules`. `verify-all.sh` invokes each test module
-> by its directory rather than through the aggregator, so the full matrix always covers
-> every module.
+Nothing has to be built or installed first: the release lives in a plain Maven repository
+served over GitHub Pages, and the root POM declares it, so `mvn install` resolves it like
+any other dependency.
 
-This module also needs one addition that is **not** part of the last cdi-flow release-less
-snapshot on `main`: `report/CombinedFlowDiagram`, which exposes the combined rendering of
-several flows as a plain function. It is on the `feat/combined-flow-diagram-api` branch.
+```xml
+<repositories>
+    <repository>
+        <id>os890</id>
+        <url>https://os890.github.io/os890-maven-repo/</url>
+    </repository>
+</repositories>
+```
+
+A project that consumes `jawelte-flow-assert-module-impl` needs that same repository in its
+own POM — a `<repositories>` entry is not inherited through a dependency's POM.
 
 ## What gets compared
 

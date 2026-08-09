@@ -41,7 +41,45 @@
         <connection>scm:git:https://github.com/os890/jawelte.git</connection>
         <developerConnection>scm:git:https://github.com/os890/jawelte.git</developerConnection>
         <url>https://github.com/os890/jawelte</url>
+        <tag>HEAD</tag>
     </scm>
+
+    <!--
+        The release-target is a git repository served over GitHub Pages
+        rather than a repository manager which accepts an upload, so
+        `deploy` writes the Maven layout into a checkout of it and that
+        checkout is pushed afterwards. `release.sh` makes that checkout
+        itself - clone jawelte, run it, and the artifacts are on the
+        remote; nothing has to be set up on the machine first.
+    -->
+    <distributionManagement>
+        <repository>
+            <id>os890-maven-repo</id>
+            <name>os890 Maven repository (GitHub Pages)</name>
+            <url>file://${os890.maven.repo.directory}</url>
+        </repository>
+    </distributionManagement>
+
+    <!--
+        The same repository on the reading side. cdi-flow - the recorder
+        flow-assert-module builds on - is published there and nowhere
+        else, so declaring it here is what makes a plain `mvn install`
+        resolve the full reactor without anyone having to build or
+        configure anything first.
+    -->
+    <repositories>
+        <repository>
+            <id>os890</id>
+            <name>os890 Maven repository (GitHub Pages)</name>
+            <url>https://os890.github.io/os890-maven-repo/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <!--
         Default reactor. A plain `mvn clean install` from the repo
@@ -99,7 +137,7 @@
         <batchee.version>2.0.0</batchee.version>
         <jberet.version>3.1.0.Final</jberet.version>
         <spring.data.jpa.version>4.0.5</spring.data.jpa.version>
-        <cdi.flow.version>1.0.0-SNAPSHOT</cdi.flow.version>
+        <cdi.flow.version>0.9.0</cdi.flow.version>
 
         <!-- Plugin versions -->
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
@@ -115,6 +153,19 @@
         <apache.rat.plugin.version>0.16.1</apache.rat.plugin.version>
         <jacoco.plugin.version>0.8.13</jacoco.plugin.version>
         <maven.javadoc.plugin.version>3.11.2</maven.javadoc.plugin.version>
+        <maven.source.plugin.version>3.3.1</maven.source.plugin.version>
+        <maven.release.plugin.version>3.0.1</maven.release.plugin.version>
+
+        <!--
+            Where `deploy` writes the Maven layout. The default stages
+            into target/, so a `deploy` from any clone stays inside that
+            clone and no build assumes a directory that happens to exist
+            on one machine. `release.sh` overrides it with the clone of
+            the publication repository it makes for the release, which is
+            what keeps maven-metadata.xml a merge of the versions already
+            published rather than a list of one.
+        -->
+        <os890.maven.repo.directory>${session.executionRootDirectory}/target/staged-repository</os890.maven.repo.directory>
 
         <!--
             Quality gate thresholds (project-wide). Advisory for now: the
@@ -1011,11 +1062,44 @@
                         <quiet>true</quiet>
                     </configuration>
                 </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>${maven.source.plugin.version}</version>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-release-plugin</artifactId>
+                    <version>${maven.release.plugin.version}</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 
         <plugins>
             <!-- Cross-cutting gates that run on every module by inheritance. -->
+
+            <plugin>
+                <!--
+                    `release:prepare` tags as v<version>, and
+                    `release:perform` builds that tag with the
+                    release-profile so the sources-jars are attached to
+                    what is published and to nothing else. The reactor it
+                    walks is the default one - core + modules - so
+                    tests/* and coverage-report/ are never published.
+                    `release.sh` drives both goals and publishes the
+                    result; it is not meant to be invoked by hand.
+                -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <configuration>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <releaseProfiles>release</releaseProfiles>
+                    <goals>deploy</goals>
+                </configuration>
+            </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -1095,4 +1179,32 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            Activated by `release:perform` through <releaseProfiles>. The
+            javadoc-jars are not in here: every published module already
+            builds one in its own `verify`, so a release only has to add
+            the sources.
+        -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
