@@ -6817,3 +6817,37 @@ the moment a third project publishes there.
 
 **Verification.** `verify-all.sh` — ALL 22 PHASES GREEN in 40m 33s, including
 `tests/flow-assert-module` on both OpenWebBeans and Weld against the released recorder.
+
+### 2026-08-09 — jawelte 0.1.0 released
+
+**Outcome.** `v0.1.0` is tagged and pushed, the artifacts are published, and `main` continues
+on `0.2.0-SNAPSHOT`. 81 files — jar, sources-jar, javadoc-jar and pom per module, with
+checksums and a `maven-metadata.xml` per artifact — went into the publication repository as
+an additions-only commit; the artifacts of the other project living there were verified
+untouched. Resolution was checked end to end against an empty local repository: a consumer
+POM with nothing but the repository entry and `jawelte-flow-assert-module-impl:0.1.0` pulls
+`jawelte-flow-assert-module-api`, `jawelte-core-api` and
+`org.os890.cdi.uml:dynamic-cdi-flow-renderer:0.9.0` from the remote, which is the "one
+dependency and an annotation" claim of the module README holding up from the outside.
+
+**The first run failed, and the bug was in release.sh.** The publication clone was made
+under `target/`. `release:prepare` runs `clean verify`, so `clean` deleted the clone's `.git`
+in the middle of the release. The deploy afterwards happily recreated the path as plain
+directories and wrote all 81 artifacts into it, and the publication step read the empty
+`git status` of a non-repository as "the deploy wrote nothing". By then the tag existed and
+had been pushed, so the repository was left released-but-unpublished.
+
+Two changes came out of it. The clone now lives in a `mktemp` directory that no build phase
+can reach, and the publication step asserts it is still a git checkout rather than inferring
+that from an empty `status` — an empty status and a destroyed checkout had been
+indistinguishable, which is what turned a wrong path into a silent one. `--publish-only
+<tag>` exists for the state the failure produced: the tag is already pushed, so re-running
+the whole procedure would only fail on it. It writes the SCM url and the tag into
+`release.properties` — the two entries `release:perform` reads — and runs the same standard
+goal, which is what completed this release.
+
+**Worth remembering for the next release.** The dry run does not cover any of this: it stops
+before `release:perform`, so the deploy, the clone and the push are first exercised by the
+real run. What would have caught it is a rehearsal against a throwaway publication
+repository via `JAWELTE_PUBLISH_REPO_URL`, which the script already supports but the dry-run
+path does not use.
