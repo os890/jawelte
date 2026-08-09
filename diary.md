@@ -6769,3 +6769,51 @@ inherited limitations, and where the recorder lives:
 https://github.com/os890/dynamic-cdi-flow-renderer — including the local
 `mvn clean install` a build needs until that project has a release, and the pointer to the
 `feat/combined-flow-diagram-api` branch that carries `CombinedFlowDiagram`.
+
+### 2026-08-09 — cdi-flow from its release, and a release procedure for jawelte
+
+**Task.** Consume the released cdi-flow instead of a locally installed snapshot, then give
+jawelte the same kind of release procedure and cut its first release.
+
+**The dependency.** cdi-flow is published as `0.9.0` in a plain Maven repository served over
+GitHub Pages (`https://os890.github.io/os890-maven-repo/`). The root POM declares that
+repository — releases enabled, snapshots disabled — and `cdi.flow.version` moved from
+`1.0.0-SNAPSHOT` to `0.9.0`. Verified by moving the locally installed copies out of `~/.m2`
+first, so resolution had to come from the remote: `_remote.repositories` records `os890` for
+the jar, the pom and the tests-jar. The release contains `report/CombinedFlowDiagram`, which
+had been the one addition living on a branch, so nothing is missing any more.
+
+**The module-list profiles are gone.** `all-modules` / `minimal-modules` existed for exactly
+one reason: flow-assert-module depended on something a build could not resolve. It resolves
+now, so `modules/pom.xml` and `tests/pom.xml` are back to a single plain `<modules>` list and
+the escape hatch, its comments and the README section explaining it are removed. A
+`<repositories>` entry is not inherited through a dependency's POM, so the module README now
+says a consuming project needs the same entry — that is the one thing a consumer must still
+do by hand.
+
+**Release setup.** `maven-release-plugin`, tagging `v@{project.version}` to match the tag
+format already in use, `autoVersionSubmodules`, and `releaseProfiles=release`. The `release`
+profile adds sources-jars only: every published module already builds a javadoc-jar in its
+own `verify`, so a release has nothing to add there. `release:perform` walks the default
+reactor — core + modules — so `tests/*` and `coverage-report/` are never published.
+
+**Publishing without a shared directory.** The target is a git repository, and Maven has no
+transport that pushes to a git remote, so `deploy` writes a `file://` layout into a checkout
+which is then pushed. Making that checkout a fixed path under `$HOME` would tie releasing to
+one machine, so `release.sh` clones the publication repository into `target/` for the
+duration of the release, deploys into the clone, commits and pushes it. A fresh checkout of
+jawelte plus push rights is the whole prerequisite. Deploying into a clone of the *current*
+remote state rather than into an empty staging directory is also what keeps
+`maven-metadata.xml` correct: the deploy plugin merges the new version into the list already
+published instead of replacing it with a list of one. The POM default for
+`os890.maven.repo.directory` stages into `target/`, so a plain `mvn deploy` from any clone
+stays inside that clone and never depends on a directory that happens to exist somewhere.
+
+`maven-scm-publish-plugin` was the obvious alternative and was rejected: it clones into
+`target/` too, but its model is publishing a whole tree, so it computes deletions against
+everything it does not own — and the artifacts of another project live in the same
+repository. Protecting them means enumerating `ignorePathsToDelete` patterns that go stale
+the moment a third project publishes there.
+
+**Verification.** `verify-all.sh` — ALL 22 PHASES GREEN in 40m 33s, including
+`tests/flow-assert-module` on both OpenWebBeans and Weld against the released recorder.
