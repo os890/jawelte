@@ -33,6 +33,17 @@
     <name>jawelte (tests aggregator)</name>
     <description>Top-level aggregator for jawelte's test sub-modules. Each scenario lives in its own module so its classpath / META-INF/services is isolated.</description>
 
+    <properties>
+        <!--
+            Inherited by every scenario below. The test tree is part of
+            the release reactor (see the full-reactor profile in the root
+            pom) purely so the release plugin keeps its versions in step;
+            none of it is an artifact anybody consumes, so no build that
+            reaches it may push it to the repository.
+        -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <modules>
         <module>core</module>
         <module>cdi-module</module>

@@ -6876,3 +6876,38 @@ the fix belongs in `release.sh`: after `release:prepare` has settled on the vers
 the out-of-reactor parents to match and fold that into the release commit — or at minimum
 have the script fail loudly when a pom outside the release reactor still names the old
 version.
+
+## 2026-08-15 — put the whole tree into the release reactor, publish only part of it
+
+The version drift repaired earlier the same day was a symptom: the release plugin rewrites
+the version of every project in its reactor and of no other, and `tests`, `coverage-report`
+and `verify-all` were outside it. Repairing the poms by hand fixes 0.1.0; it does not fix
+0.2.0. So the reactor is now the thing that changed.
+
+`-Pfull-reactor` on the root pom adds `tests` and `coverage-report` to the modules, and
+`release.sh` activates it for `release:prepare` — and only for `release:prepare`. The plain
+`mvn clean install` from the root is untouched (42 modules, framework code only); a prepare
+walks all 534 and rewrites every pom, so the tag is internally consistent by construction.
+`release:perform` is deliberately *not* given the profile: it deploys what it builds, and the
+default reactor is exactly the set that may be published. On top of that both trees set
+`maven.deploy.skip=true`, so even a build that does reach them cannot push them — the
+guarantee does not rest on the shape of the reactor alone. Verified per module:
+`help:evaluate -Dexpression=maven.deploy.skip` is `true` under `tests/` and in
+`coverage-report`, unset in `core/api`.
+
+**`verify-all/pom.xml` could not join that reactor.** It lists `../core` and `../modules`
+among its own modules, so a reactor containing both it and them reaches the same project
+twice, and Maven refuses: *"Project 'org.os890.jawelte:jawelte-core-api:0.2.0-SNAPSHOT' is
+duplicated in the reactor"*. Tried it, that is the actual error. It is therefore now
+parentless with a fixed `<version>1</version>`. It is an aggregator that is never released,
+never deployed and never depended on, so the only thing inheriting from `jawelte-parent` ever
+gave it was a version to keep in step — the one thing that could not be kept in step. Its
+modules still inherit normally; only the aggregator node sits outside the hierarchy. Both
+entry points now describe the same 534-module reactor: `mvn -Pfull-reactor` from the root and
+`mvn -f verify-all/pom.xml`, checked against each other with `validate`.
+
+**A release now costs a full test run.** The forked `clean verify` inherits the active
+profile, so preparing a release builds every scenario and a tag cannot come into existence
+unless the suite is green. That is deliberate, and it applies to `--dry-run` as well, which
+is called out in the script's header — a rehearsal now costs roughly what `verify-all.sh`
+costs.

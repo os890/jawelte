@@ -20,18 +20,31 @@
 
     <modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>org.os890.jawelte</groupId>
-        <artifactId>jawelte-parent</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
-        <relativePath>../pom.xml</relativePath>
-    </parent>
+    <!--
+        Deliberately parentless, and deliberately on a version that is
+        not the project's.
 
+        This pom is an aggregator and nothing else: it is never released,
+        never deployed, and nothing depends on it. Inheriting from
+        jawelte-parent would only give it a version to keep in step with
+        the rest of the tree - and it is the one pom the release plugin
+        cannot keep in step, because a reactor rooted here reaches
+        ../core and ../modules a second time and Maven rejects that
+        ("Project ... is duplicated in the reactor"). After 0.1.0 it was
+        left behind at 0.1.0-SNAPSHOT for exactly that reason. With no
+        parent and a fixed version there is nothing left to drift.
+
+        The modules below still inherit from jawelte-parent themselves,
+        so every build setting applies as before; only this aggregator
+        node sits outside the hierarchy.
+    -->
+    <groupId>org.os890.jawelte</groupId>
     <artifactId>jawelte-verify-all</artifactId>
+    <version>1</version>
     <packaging>pom</packaging>
 
     <name>jawelte (verify-all aggregator)</name>
-    <description>Full-stack reactor aggregator used by verify-all.sh. Lists core + modules + tests + coverage-report so the whole tree (framework code, every test scenario, the JaCoCo aggregate report) can be built from a single `mvn -f verify-all/pom.xml ...` invocation. Not listed under the root pom's modules so a normal `mvn clean install` from the repo root stays fast (framework code only) and never compiles test scenarios.</description>
+    <description>Full-stack reactor aggregator used by verify-all.sh. Lists core + modules + tests + coverage-report so the whole tree (framework code, every test scenario, the JaCoCo aggregate report) can be built from a single `mvn -f verify-all/pom.xml ...` invocation. Not listed under the root pom's modules so a normal `mvn clean install` from the repo root stays fast (framework code only) and never compiles test scenarios; `-Pfull-reactor` on the root pom is the equivalent for builds that have to start there, such as release:prepare.</description>
 
     <modules>
         <module>../core</module>

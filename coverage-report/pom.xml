@@ -33,6 +33,16 @@
     <name>jawelte (coverage report aggregator)</name>
     <description>JaCoCo coverage report aggregator. Depends on every production and test module so it builds last in the reactor; runs jacoco:report-aggregate to merge per-module exec data into a single project-wide report. Project-wide threshold enforcement is deferred (see in-pom comment).</description>
 
+    <properties>
+        <!--
+            Part of the release reactor (see the full-reactor profile in
+            the root pom) only so the release plugin keeps this pom's
+            version in step. A coverage report is not an artifact anybody
+            depends on, so no build that reaches it may push it.
+        -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
     <dependencies>
         <!-- Production modules: their classes ARE the analysis target. -->
         <dependency>
