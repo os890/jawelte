@@ -6911,3 +6911,23 @@ profile, so preparing a release builds every scenario and a tag cannot come into
 unless the suite is green. That is deliberate, and it applies to `--dry-run` as well, which
 is called out in the script's header — a rehearsal now costs roughly what `verify-all.sh`
 costs.
+
+### Verified against a real dry run
+
+`release:prepare -DdryRun=true` with `-DpreparationGoals=validate` standing in for the
+expensive `clean verify`, from a clean tree:
+
+- the profile does reach the forked build — the plugin prints
+  `Executing goals 'validate'... with additional arguments: -P full-reactor`, which is the
+  behaviour the "verify everything before tagging" decision rests on. It is not configured
+  anywhere; the release plugin forwards the session's active profiles by itself.
+- the fork walked 534 modules, and 534 `pom.xml.tag` / `pom.xml.next` pairs were written:
+  `0.2.0` in the tag poms, `0.3.0-SNAPSHOT` in the next ones, in `tests/**` and
+  `coverage-report/` as well as in core and modules.
+- `verify-all/pom.xml` got neither, which is the point of making it parentless — there is no
+  longer a version in it for anything to rewrite or forget to rewrite.
+- `release:clean` afterwards left the tree clean again.
+
+Note for the next release: `release:prepare` cannot run offline. The plugin's own
+dependencies (`maven-release-manager`, `maven-scm-api`, …) are not in the local repository,
+so `-o` fails before it reaches git.
