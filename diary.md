@@ -6851,3 +6851,28 @@ before `release:perform`, so the deploy, the clone and the push are first exerci
 real run. What would have caught it is a rehearsal against a throwaway publication
 repository via `JAWELTE_PUBLISH_REPO_URL`, which the script already supports but the dry-run
 path does not use.
+
+## 2026-08-15 — resync the poms the release plugin never saw
+
+The 0.1.0 release bumped the root pom, `core` and `modules` to `0.2.0-SNAPSHOT` and left
+everything else at `0.1.0-SNAPSHOT`. That is not a bug in the release plugin: the root pom's
+`<modules>` lists only `core` and `modules` — deliberately, so a plain `mvn clean install`
+from the repo root stays fast and never compiles test scenarios — and `release:prepare` only
+rewrites the reactor it is given. `tests`, `verify-all` and `coverage-report` live outside
+that reactor, so nothing rewrote them.
+
+The drift was 494 poms: the two aggregators plus 492 under `tests/`. Every one of the 494
+occurrences was the `<version>` of a `<parent>` block pointing at `jawelte-parent`; no test
+pom pins a jawelte artifact version of its own, they all inherit. So the fix was the
+mechanical one — one substitution per file, `0.1.0-SNAPSHOT` → `0.2.0-SNAPSHOT`.
+
+`mvn -f verify-all/pom.xml validate` now resolves all 534 modules of the full-stack reactor.
+Before the fix those 494 poms asked for a parent version that no longer exists anywhere —
+`relativePath` pointed at a root pom that had moved on, and `0.1.0-SNAPSHOT` was never
+deployed, so nothing could have satisfied them from a repository either.
+
+**This will happen again at 0.2.0.** The split reactor is intentional and worth keeping, so
+the fix belongs in `release.sh`: after `release:prepare` has settled on the versions, rewrite
+the out-of-reactor parents to match and fold that into the release commit — or at minimum
+have the script fail loudly when a pom outside the release reactor still names the old
+version.
