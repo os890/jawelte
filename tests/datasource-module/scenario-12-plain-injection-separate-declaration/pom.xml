@@ -30,7 +30,7 @@
     <artifactId>jawelte-tests-datasource-module-scenario-12-plain-injection-separate-declaration</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/datasource-module scenario 12: a plain @Inject DataSource with the declaration on a separate bean</name>
-    <description>Reproduction for &#35;124 in the narrowed shape: one definition carried by a bean that does nothing else, and a second bean holding a single plain @Inject DataSource. The archive deliberately ships no beans.xml, which is the last difference between this and the scenarios that pass.</description>
+    <description>Reproduction for &#35;124 in the narrowed shape: one definition carried by a bean that does nothing else, and a second bean holding a single plain @Inject DataSource. It carries its own always-succeeding MockFactory, which is what makes it a guard rather than a coincidence - with the shipped Mockito factory answering null on this JDK no auto-mock is registered and the collision cannot occur, so the scenario would pass whatever the code did.</description>
 
     <dependencies>
         <dependency>
