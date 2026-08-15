@@ -7467,3 +7467,38 @@ That is stronger than either scenario alone, and is what the ticket suggested th
 outcome should be.
 
 Full jpa suite green on OpenWebBeans and on Weld.
+
+## #123 — the reporter's credential point was a real hole
+
+The re-check on the ticket said #123 was still open. It was measured against the
+artifact in `~/workspace/os890-maven-repo`, which holds **0.1.0 only** — and that
+release contains no `jawelte-datasource-module`, no `jawelte-jndi-module` and no
+`jawelte-resource-module` at all, since all three were created after it. So the
+build could not exhibit `@DataSourceDefinition` behaviour in either direction,
+and the comparison table in the comment cannot have come from it. Worth stating
+plainly rather than arguing about: nobody can verify any of #122–#126 until the
+branches merge and something newer is published.
+
+But the comment contained one observation that did not depend on the build, and
+it found a genuine hole in the fix:
+
+> a declared data source cannot open the unit's database, because jpa-module
+> created it with its own credentials
+
+Exactly right. `computeProperties` dropped `jdbc.url` and `jdbc.driver` when a
+data source was in play but deliberately kept `jdbc.user` / `jdbc.password` — a
+comment explains that jta-module's XA wrapper still needs them for DDL. Handing
+Hibernate a *declared* data source and jpa-module's `sa` / empty pair means it
+opens connections with the wrong credentials, and H2 says so:
+
+    Wrong user name or password [28000-232]
+
+scenario-73 could never have caught it: its declaration happens to use `sa` and
+an empty password, the same values jpa-module generates. `scenario-74` is the
+same setup with `app` / `secret`, and it failed on all three assertions before
+the fix. The credentials are now dropped **only** on the declared-name path, so
+the resolver-supplied XA wrapper keeps them.
+
+The lesson is the reusable part: a scenario whose fixture coincides with the
+default under test proves nothing about the default. Worth remembering wherever
+jawelte generates a value the test could also have supplied.

@@ -510,6 +510,17 @@ public class JpaCdiExtension implements Extension {
         properties.put(
                 jta ? "jakarta.persistence.jtaDataSource" : "jakarta.persistence.nonJtaDataSource",
                 bound);
+        // The declared data source carries its own credentials. Leaving
+        // jpa-module's sa / empty pair in the bag makes Hibernate open
+        // connections with those instead, and H2 answers "Wrong user
+        // name or password" the moment a declaration uses anything else
+        // — which every real application does.
+        //
+        // Only dropped on this path. A resolver-supplied data source
+        // (jta-module's XA wrapper) keeps them, because that wrapper
+        // still needs them for DDL execution.
+        properties.remove("jakarta.persistence.jdbc.user");
+        properties.remove("jakarta.persistence.jdbc.password");
     }
 
     /**
