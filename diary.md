@@ -7436,3 +7436,34 @@ element carried the name. A production `persistence.xml` routinely says
 present.
 
 All 72 jpa scenarios pass on OpenWebBeans after the move.
+
+## #123 — proved, in the direction that actually matters
+
+`tests/jpa-module/scenario-73-persistence-unit-resolves-declared-data-source` is
+the reported setup: a production `persistence.xml` with `transaction-type="JTA"`
+and `<jta-data-source>java:app/jdbc/AppDS</jta-data-source>`, and a
+`@DataSourceDefinition` for that name on an application bean class — the case that
+made the timing hard, since a definition there is only discovered at
+`ProcessAnnotatedType`.
+
+Asserting the connected url would have been the weak version. What an application
+depends on is that a row written through one is readable through the other, so
+both directions are asserted: JDBC writes into the schema JPA generated and JPA
+reads it back, and the reverse.
+
+The negative check is unusually clean. With resolution disabled and the jar
+rebuilt clean, the scenario fails with
+
+    Table "NOTE" not found (this database is empty)
+
+which is the split database from the report, stated by H2 rather than by an
+assertion — JPA created its schema in one database and the JDBC half wrote into
+another.
+
+scenario-47 keeps passing untouched, because nothing binds the
+`java:jboss/datasources/PostgresDS` it names, and its javadoc now states the
+sharper rule the pair pins down: **resolve when declared, override when not**.
+That is stronger than either scenario alone, and is what the ticket suggested the
+outcome should be.
+
+Full jpa suite green on OpenWebBeans and on Weld.
