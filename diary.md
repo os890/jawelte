@@ -7040,3 +7040,32 @@ each attribute is tried against several candidate names because drivers disagree
 consumer's own `DataSourceFactory` — or the jta-module follow-up — is for.
 
 Not yet written: the test scenarios. Building clean is not the same as working.
+
+### Scenarios, and what the first red test taught
+
+Four scenarios, 16 tests, all green: a single definition (injectable unqualified, injectable by
+`@Named`, bound in JNDI, and actually talking to H2), two definitions resolving independently
+into separate databases, a definition on a bean class rather than the test class, and the
+inert case.
+
+The scenario that mattered most was the one that failed. Asserting that a JNDI lookup returns
+the *same object* that was injected came back with two different H2 instances, `ds0` and
+`ds2`. The cause is standard JNDI, not a bug in the module: a JDBC `DataSource` is usually
+`Referenceable`, so binding stores a `Reference` and every lookup rebuilds the object from it.
+Left alone that would hand a pooled data source's users a fresh pool per lookup. xbean's
+`WritableContext` takes a `cacheReferences` flag for exactly this, so the provider now
+constructs the root with it on: the rebuild happens once and repeated lookups are stable. The
+scenario asserts that property instead of the identity it cannot have — and says why in a
+comment, because "why isn't this `isSameAs`" is the obvious next question.
+
+Identity across *injection and lookup* is still not guaranteed for a `Referenceable` vendor
+type. Holding it would mean binding a non-`Referenceable` facade and injecting that same
+facade everywhere, which changes the observable type of every injected `DataSource`. That is a
+design decision worth taking deliberately rather than sliding into, so it is written down here
+and left open.
+
+**Optional, and verified as such.** Nothing depends on datasource-module: the root pom's entry
+is `<dependencyManagement>` (a version, not a dependency) and the two aggregators list it as a
+reactor module. It is absent from every other scenario's classpath. Scenario 03 covers the
+other half — the module present and unused — and asserts the container boots, no `DataSource`
+bean exists, and nothing is bound.

@@ -262,6 +262,16 @@ else
     # pass covers every scenario.
     run "tests/content-diff-module" "$REPO_ROOT/tests/content-diff-module" verify
 
+    # tests/datasource-module: @DataSourceDefinition discovery, the
+    # reflective factory and the JNDI binding, swept over both CDI
+    # runtimes because discovery runs inside a portable CDI extension
+    # (ProcessAnnotatedType + AfterBeanDiscovery) and synthetic-bean
+    # registration is exactly the area where OWB and Weld differ.
+    for cdi in owb weld; do
+        run "tests/datasource-module [$cdi]" \
+            "$REPO_ROOT/tests/datasource-module" -P "$cdi" verify
+    done
+
     # tests/jta-module: CDI-runtime × JTA-impl sweep.
     # 4 combos: {owb, weld} × {jta-geronimo, jta-narayana}.
     for cdi in owb weld; do

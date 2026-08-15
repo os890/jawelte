@@ -39,6 +39,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 
 | Module | Technology | Purpose |
 |---|---|---|
+| `jawelte-datasource-module` | JDBC (`@DataSourceDefinition`) | Builds, binds and injects the data sources a test or a bean declares |
 | `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
 | `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
 | `jawelte-jaxrs-module` | Jakarta REST | Embedded REST container for endpoint testing |
@@ -70,6 +71,7 @@ Each port represents the integration boundary between jawelte's core and an exte
 - `TestContext` — in-flight test-state holder owned by the framework; offers `getTestClass()`, typed metadata binding, the static `get()` accessor (active only inside the bootstrap window), and the `loadService(...)` helper that resolves SPI instances via MicroProfile Config + `ServicePriorityResolver`
 - `ServicePriorityResolver` — drives prioritized SPI selection (lowest `@Priority` wins; missing `@Priority` sorts last; class-name tiebreak)
 - `ConfigResolver` — single-method SPI for raw `String` config-key lookup; the dot-then-underscore fallback lives here
+- `JndiContextProvider` — hands out the single writable JNDI root every module binds into. A port rather than a per-module helper because installing an in-process naming provider installs a *fresh* root: a second module doing it independently would discard the first one's bindings. `writableRoot()` returning `null` is the documented "no naming provider in this JVM" answer, not a failure
 
 **Module ports (in `cdi-module/api`):**
 
@@ -82,6 +84,12 @@ Each port represents the integration boundary between jawelte's core and an exte
 - `@TestClassScoped` — CDI normal scope (`@NormalScope(passivating=false)`); same shape, with a per-test-class bean lifetime. `@PreDestroy` runs after `@AfterAll`, before the CDI container shuts down.
 
 scope-module ships **no new ports of its own**. It implements the existing `TestModuleLifecyclePort` and the standard CDI `Extension` SPI. The cross-module scope-override contract uses two mechanisms — both keep consumer modules free of a compile-time dep on scope-module: (1) the `BeanScopeMapper` SPI in `core/api/port` (TICKET-001) — scope-module ships SL-registered providers (`@TestBean` → `@TestClassScoped`, `@SessionScoped` → `@TestMethodScoped`, `@ConfigBean` → `@TestClassScoped`) that `core/impl`'s `ScopeRemapCdiExtension` walks at `ProcessAnnotatedType` time; (2) MP Config keys defaulted in scope-module's `microprofile-config.properties`, read reflectively by consumer modules to resolve scope-annotation FQCNs (cdi-module's auto-mock scope, wiremock-module's registry remap, ejb-module's `@Singleton` mapping). When scope-module is absent at runtime the SPI providers don't exist and the MP Config defaults aren't shipped — consumer modules degrade cleanly to their `@Dependent` / `@RequestScoped` / `@ApplicationScoped` fallbacks.
+
+**datasource-module additions (in `datasource-module/api`):**
+
+- `DataSourceFactory` — turns a `@DataSourceDefinition` into a `javax.sql.DataSource`. There is no common configuration interface for data sources, so the shipped implementation applies the annotation's attributes as JavaBean setters (trying several candidate names per attribute, since drivers disagree — H2 has `setURL` and `setUrl`, PostgreSQL only the latter). Pool-sizing, `transactional` and `isolationLevel` are documented as ignored rather than half-applied; a consumer registering a pooling factory at a lower priority is the supported way to honour them.
+
+datasource-module ships **no entry-point annotation of its own** — the platform's `@DataSourceDefinition` is the trigger, so a test declares only standard Jakarta API. It depends on neither jpa-module nor jta-module, and carries no JDBC-driver dependency: the vendor class the annotation names is loaded from the test's own classpath. With no definition declared anywhere the CDI extension registers nothing and the lifecycle adapter returns immediately, so the module on the classpath is inert until a definition is written.
 
 **jpa-module additions (in `jpa-module/api`):**
 
@@ -106,6 +114,9 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `ExcludedPackageFilter` | `DefaultExcludedPackageFilter` | MicroProfile Config | `cdi-module/impl` |
 | `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
 | `TestModuleLifecyclePort` | `ScopeLifecycleAdapter` (`@Priority(100)`) + `TestScopeCdiExtension` | CDI runtime (`BeanManager` from `SeContainer` on `TestContext`) | `scope-module/impl` |
+| `JndiContextProvider` | `DefaultJndiContextProvider` (`@Priority(Integer.MAX_VALUE)`) | JNDI naming provider (xbean-naming at runtime, reflectively — no compile dep) | `core/impl` |
+| `TestModuleLifecyclePort` | `DataSourceLifecycleAdapter` (`@Priority(150)`) + `DataSourceDefinitionCdiExtension` | CDI runtime + whichever JDBC vendor class the annotation names | `datasource-module/impl` |
+| `DataSourceFactory` | `DefaultDataSourceFactory` (`@Priority(Integer.MAX_VALUE)`) | (reflective JavaBean configuration of the vendor class) | `datasource-module/impl` |
 | `TestModuleLifecyclePort` | `JpaLifecycleAdapter` (`@Priority(200)`) + `JpaCdiExtension` | CDI runtime + JPA provider (Hibernate) + JDBC driver (H2) | `jpa-module/impl` |
 | `TransactionStrategy` | `DefaultResourceLocalTransactionStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process) | `jpa-module/impl` |
 | `DbCleanupStrategy` | `JpqlDeleteDbCleanupStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process; calls JPA) | `jpa-module/impl` |

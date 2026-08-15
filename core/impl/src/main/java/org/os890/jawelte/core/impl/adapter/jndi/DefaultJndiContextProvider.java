@@ -15,6 +15,8 @@
  */
 package org.os890.jawelte.core.impl.adapter.jndi;
 
+import java.util.Map;
+
 import javax.naming.Context;
 
 import jakarta.annotation.Priority;
@@ -113,7 +115,16 @@ public class DefaultJndiContextProvider implements JndiContextProvider {
                     "org.apache.xbean.naming.global.GlobalContextManager");
             Class<?> writableContext = loadXbeanClass(
                     "org.apache.xbean.naming.context.WritableContext");
-            Context root = (Context) writableContext.getDeclaredConstructor().newInstance();
+            // (nameInNamespace, bindings, cacheReferences). Reference
+            // caching matters for anything that binds a Referenceable
+            // object — a JDBC DataSource typically is one, and JNDI
+            // stores those as a Reference and rebuilds them on every
+            // lookup. With caching on, the rebuild happens once and
+            // every later lookup of that name yields the same object
+            // instead of a fresh one each time.
+            Context root = (Context) writableContext
+                    .getDeclaredConstructor(String.class, Map.class, boolean.class)
+                    .newInstance("", Map.of(), true);
             globalContextManager.getMethod("setGlobalContext", Context.class).invoke(null, root);
         } catch (ClassNotFoundException noNamingProvider) {
             // No xbean-naming on the classpath. Whoever supplies the
