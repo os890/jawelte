@@ -7220,3 +7220,25 @@ which is consistent with it appearing in a consumer's application and not here.
 out of the aggregator's `<modules>` — the identical mistake this repository already carries a
 ticket and a PR about. They ran green in isolation and did not run at all in the tree until the
 count was checked.
+
+### #126 — url redirect, and why it is config rather than a factory
+
+Valid by inspection: `DefaultDataSourceFactory` applied `url` verbatim and nothing could
+redirect it, so a production declaration naming a file database created that file wherever the
+test JVM ran and the next build reopened it with the previous build's rows in it.
+
+The reporter's own note carried the design: the workaround — register a `DataSourceFactory`
+that rewrites the URL — would have every consumer re-implementing a rewrite of a vendor URL
+syntax that a factory port should not have to guess at. So the redirect is a MicroProfile
+Config key carrying the definition's own name, read the way every other module reads its keys.
+Absent the key nothing changes, which keeps it invisible to anyone who does not need it.
+
+`scenario-11-url-redirected-by-config` declares `jdbc:h2:./scenario11-should-not-exist` — a
+file database, as production would — redirects it in the scenario's own
+`microprofile-config.properties`, and asserts both halves: the vendor object connects to the
+in-memory database, and no file is left in the working tree. The `:` inside the definition name
+has to be escaped in a properties key, which is worth knowing before writing one.
+
+The first run failed on an assertion that was too literal — H2 reports the url without the
+`;DB_CLOSE_DELAY=-1` that followed it, so the identity of the database is what can be asserted
+on. The redirect itself had worked on the first attempt.

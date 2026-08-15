@@ -26,6 +26,7 @@ import javax.sql.XADataSource;
 import jakarta.annotation.Priority;
 import jakarta.annotation.sql.DataSourceDefinition;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.module.datasource.api.port.DataSourceFactory;
 import org.os890.jawelte.module.datasource.impl.util.DataSourceAdapters;
 
@@ -72,6 +73,16 @@ import org.os890.jawelte.module.datasource.impl.util.DataSourceAdapters;
  */
 @Priority(Integer.MAX_VALUE)
 public class DefaultDataSourceFactory implements DataSourceFactory {
+
+    /**
+     * MicroProfile Config key prefix for redirecting a declared data
+     * source. The definition's own name completes it — e.g.
+     * {@code org.os890.jawelte.module.datasource."java:app/jdbc/AppDS".url}.
+     */
+    public static final String URL_OVERRIDE_PREFIX = "org.os890.jawelte.module.datasource.";
+
+    /** Suffix of the url-override key. */
+    public static final String URL_OVERRIDE_SUFFIX = ".url";
 
     /**
      * Attribute to candidate setter names, in the order they are
@@ -127,12 +138,46 @@ public class DefaultDataSourceFactory implements DataSourceFactory {
     }
 
     private static void applyStringAttributes(Object target, DataSourceDefinition definition) {
-        applyIfSet(target, "url", definition.url());
+        applyIfSet(target, "url", resolveUrl(definition));
         applyIfSet(target, "user", definition.user());
         applyIfSet(target, "password", definition.password());
         applyIfSet(target, "databaseName", definition.databaseName());
         applyIfSet(target, "serverName", definition.serverName());
         applyIfSet(target, "description", definition.description());
+    }
+
+    /**
+     * The url to configure the vendor object with: the definition's own,
+     * unless a test run redirects it.
+     *
+     * <p>A production {@code @DataSourceDefinition} names a production
+     * database, and a <em>file</em> database is the case that bites —
+     * the file is created wherever the test JVM runs, survives the
+     * suite, and the next build reopens it with the previous build's
+     * rows still in it. That reads as flakiness rather than as leftover
+     * state, and it leaves a stray file in the working tree.
+     *
+     * <p>Redirecting it must not require replacing the factory: that
+     * would have every consumer re-implementing a URL rewrite for a
+     * vendor syntax a factory port should not have to guess at. The
+     * redirect is therefore a MicroProfile Config key carrying the
+     * definition's own name, read the same way every other module reads
+     * its keys:
+     *
+     * <pre>
+     * org.os890.jawelte.module.datasource."java:app/jdbc/AppDS".url=jdbc:h2:mem:app;DB_CLOSE_DELAY=-1
+     * </pre>
+     *
+     * <p>Absent the key nothing changes and the declaration's own url is
+     * used, so this is invisible to anyone who does not need it.
+     */
+    private static String resolveUrl(DataSourceDefinition definition) {
+        String key = URL_OVERRIDE_PREFIX + definition.name() + URL_OVERRIDE_SUFFIX;
+        return ConfigProvider.getConfig()
+                .getOptionalValue(key, String.class)
+                .map(String::trim)
+                .filter(override -> !override.isEmpty())
+                .orElseGet(definition::url);
     }
 
     private static void applyIfSet(Object target, String attribute, String value) {
