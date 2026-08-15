@@ -510,15 +510,23 @@ public class JpaCdiExtension implements Extension {
         properties.put(
                 jta ? "jakarta.persistence.jtaDataSource" : "jakarta.persistence.nonJtaDataSource",
                 bound);
-        // The declared data source carries its own credentials. Leaving
-        // jpa-module's sa / empty pair in the bag makes Hibernate open
-        // connections with those instead, and H2 answers "Wrong user
-        // name or password" the moment a declaration uses anything else
-        // — which every real application does.
+        // Every generated connection coordinate goes, for two reasons.
         //
-        // Only dropped on this path. A resolver-supplied data source
-        // (jta-module's XA wrapper) keeps them, because that wrapper
-        // still needs them for DDL execution.
+        // The declared data source carries its own credentials, and
+        // leaving jpa-module's sa / empty pair behind makes Hibernate
+        // open connections with those — H2 answers "Wrong user name or
+        // password" the moment a declaration uses anything else, which
+        // every real application does.
+        //
+        // And the generated url has to go before the resolvers run, or
+        // jta-module builds a second, XA data source from it and the
+        // unit silently lands on the generated database after all.
+        //
+        // Only on this path. A resolver-supplied data source keeps
+        // them, because jta-module's wrapper needs them for DDL when it
+        // is the one supplying the data source.
+        properties.remove("jakarta.persistence.jdbc.url");
+        properties.remove("jakarta.persistence.jdbc.driver");
         properties.remove("jakarta.persistence.jdbc.user");
         properties.remove("jakarta.persistence.jdbc.password");
     }
@@ -649,6 +657,16 @@ public class JpaCdiExtension implements Extension {
         // key jpa-module reads — including this prefix (punch-list §5.4).
         properties.putAll(readAdditionalPersistenceProperties());
 
+        // Before the resolvers, deliberately. jta-module's resolver
+        // builds its XA data source from whatever connection
+        // coordinates the bag carries and publishes the result as
+        // jtaDataSource; if the declared one arrived afterwards it
+        // would either lose to that wrapper or replace an enlisted
+        // data source with a non-enlisted one. Putting it in first
+        // means the wrapper wraps the declared data source, which is
+        // what the persistence.xml asked for (#123).
+        applyDeclaredDataSource(unit, properties);
+
         PersistencePropertyResolver resolver = TestContext.loadService(PersistencePropertyResolver.class);
         if (resolver != null) {
             Map<String, Object> contributed = resolver.resolvePropertiesFor(unit.name(), properties);
@@ -656,11 +674,6 @@ public class JpaCdiExtension implements Extension {
                 properties.putAll(contributed);
             }
         }
-
-        // A unit naming a data source gets that data source, unless a
-        // resolver already supplied one (jta-module wraps it for XA,
-        // and that wrapper must win over the raw entry).
-        applyDeclaredDataSource(unit, properties);
 
         // When a data source is in play, drop the plain JDBC
         // connection coordinates so Hibernate cannot fall back to

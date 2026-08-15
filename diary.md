@@ -7502,3 +7502,41 @@ the resolver-supplied XA wrapper keeps them.
 The lesson is the reusable part: a scenario whose fixture coincides with the
 default under test proves nothing about the default. Worth remembering wherever
 jawelte generates a value the test could also have supplied.
+
+## #123 — the JTA interaction, and why scenario-73 could not see it
+
+The reporter confirmed the resolution works, then found that adding jta-module to
+the classpath silently undoes it: the unit goes back to jpa-module's generated
+database. They could not separate "jta-module present" from "unit runs as JTA",
+because with jta-module those always coincide, and they suggested the cheap
+discriminator — a JTA-flavoured counterpart to scenario-73. That was exactly
+right, and it reproduced on the first run with H2's own
+`Table "NOTE" not found (this database is empty)`.
+
+The cause was a guard I wrote. `JtaPersistencePropertyResolver` builds an
+`XADataSource` **reflectively from `jakarta.persistence.jdbc.url`** — jpa-module's
+generated one — and publishes it as `jtaDataSource`. `applyDeclaredDataSource`
+ran *after* the resolvers and skipped when that key was already set, on the
+reasoning that jta-module's XA wrapper must win over a raw entry. It does need to
+win; the mistake was that it was wrapping the wrong database.
+
+So the declaration now goes into the bag **before** the resolvers, and takes the
+generated `url` and `driver` with it as well as the credentials — otherwise
+jta-module simply rebuilds the generated data source from coordinates that are
+still lying around. jta-module then prefers a data source already in the bag over
+building one, so its wrapper wraps the declared data source. Vendors normally
+implement `DataSource` and `XADataSource` on the same class (H2's
+`JdbcDataSource` does), so the common case enlists directly.
+
+Where the declared data source is *not* an `XADataSource`, jta-module contributes
+nothing and logs a warning: the unit stays on the database its declaration names,
+without XA enlistment. A real limitation, stated out loud — quietly running
+against a different database is the worse trade, and was the bug.
+
+Two lessons, both about scenario design rather than about JTA. scenario-73 lives
+in `tests/jpa-module`, whose POM has no jta-module, so the interaction was
+invisible by construction — a scenario proves the fix only in the classpath it
+happens to run in. And this is the second defect in a row that a consumer found
+by reasoning about the code rather than by running it; both were real.
+
+All four {owb, weld} x {geronimo, narayana} combinations green.

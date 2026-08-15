@@ -196,6 +196,15 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
      * / empty, or the class is not on the runtime classpath.
      */
     private static XADataSource buildXaDataSourceOrNull(Map<String, Object> existingProperties) {
+        // A data source the persistence unit already has - jpa-module
+        // resolved the <jta-data-source> name its persistence.xml
+        // declares - is the one to enlist. Building a second one from
+        // JDBC coordinates would put the unit on a different database
+        // than the declaration names, silently (#123).
+        XADataSource declared = declaredXaDataSourceOrNull(existingProperties);
+        if (declared != null) {
+            return declared;
+        }
         Object url = existingProperties.get("jakarta.persistence.jdbc.url");
         if (!(url instanceof String urlString) || urlString.isEmpty()) {
             return null;
@@ -230,6 +239,51 @@ public class JtaPersistencePropertyResolver implements PersistencePropertyResolv
                             + "' via reflection from existing JDBC properties",
                     reflectionFailure);
         }
+    }
+
+    /**
+     * The data source the persistence unit already carries, when it is
+     * one this module can enlist.
+     *
+     * <p>jpa-module puts a resolved {@code <jta-data-source>} into the
+     * bag before the resolvers run, so it is here whenever the unit's
+     * {@code persistence.xml} names a data source something in the
+     * deployment binds. Vendors normally implement {@link DataSource}
+     * and {@link XADataSource} on the same class - H2's
+     * {@code JdbcDataSource} does - so the common case enlists
+     * directly.
+     *
+     * <p>When the declared data source is <em>not</em> an
+     * {@link XADataSource} this answers {@code null}, and the caller
+     * then contributes no {@code jtaDataSource} of its own. The
+     * declared entry jpa-module put in the bag therefore survives: the
+     * unit runs on the database its declaration names, without XA
+     * enlistment. That is a real limitation and is logged as one -
+     * quietly running against a different database instead, which is
+     * what happened before #123, is the worse trade.
+     *
+     * @param existingProperties the bag jpa-module assembled
+     * @return the declared data source as an {@link XADataSource}, or
+     *         {@code null} when there is none or it cannot be enlisted
+     */
+    private static XADataSource declaredXaDataSourceOrNull(Map<String, Object> existingProperties) {
+        Object jtaEntry = existingProperties.get("jakarta.persistence.jtaDataSource");
+        final Object declared = jtaEntry != null
+                ? jtaEntry
+                : existingProperties.get("jakarta.persistence.nonJtaDataSource");
+        if (declared instanceof XADataSource xaDataSource) {
+            return xaDataSource;
+        }
+        if (declared instanceof DataSource) {
+            LOG.log(Level.WARNING,
+                    () -> "The persistence unit's declared data source ("
+                            + declared.getClass().getName() + ") is not an XADataSource, so it"
+                            + " cannot be enlisted in JTA transactions. The unit stays on the"
+                            + " database its <jta-data-source> names; two-phase commit across it"
+                            + " and another resource will not work. Declare a vendor class that"
+                            + " implements XADataSource to get enlistment.");
+        }
+        return null;
     }
 
     /**
