@@ -7106,3 +7106,32 @@ project's own conventions imply (every port has one).
 - **08** — the `DataSourceFactory` swap. A consumer factory at `@Priority(100)` ignores
   `className` entirely and returns its own type, so "the swap took effect" cannot be confused
   with "the default happened to work".
+
+### Two Weld-only failures the OWB runs could not have shown
+
+The first full sweep after the module went in failed at phase 19 — the tests/datasource-module
+Weld phase. Both failures were in the scenarios, not the module, and both were cases of having
+written down one runtime's behaviour as if it were the contract.
+
+**`isUnsatisfied()` is not "nothing resolves".** Scenario 02 asserted that with two
+declarations an unqualified `DataSource` lookup is unsatisfied. Under OpenWebBeans it is —
+zero candidates. Under Weld it is *ambiguous* — two candidates — because Weld applies the
+spec rule that a bean qualified only with `@Named` also carries `@Default`, and OWB does not.
+`isUnsatisfied()` is false for an ambiguous lookup, so the assertion failed on a runtime whose
+behaviour is arguably the more correct one. What the module actually promises is that the
+caller must name which data source it means, and `isResolvable() == false` is that promise:
+true under both, for opposite reasons. The test now says so and explains both shapes.
+
+**337 scenarios ship a test `beans.xml` and mine shipped none.** Scenario 03 injects an
+ordinary `@ApplicationScoped` bean of its own; OWB discovered it anyway, Weld refused with
+`WELD-001408: Unsatisfied dependencies for type OrdinaryBean`. The convention across the test
+tree is an explicit `bean-discovery-mode="annotated"` descriptor per scenario, which I had
+simply not noticed while copying the pom shape. All eight scenarios have one now.
+
+The lesson is about the sweep, not about Weld: a scenario that only ever runs under the
+default profile is a scenario that has been tested against one container. Both of these
+passed cleanly on OWB right up until the matrix ran.
+
+Also worth recording: the background sweep reported "exit code 0" while the log said
+`>>> FAILED at phase 19`. The command was `bash verify-all.sh > log 2>&1; echo "EXIT=$?"` — the
+exit code belonged to the `echo`. Read the log, not the wrapper.

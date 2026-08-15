@@ -28,6 +28,7 @@ import javax.sql.DataSource;
 
 import jakarta.annotation.sql.DataSourceDefinition;
 import jakarta.annotation.sql.DataSourceDefinitions;
+import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
@@ -98,12 +99,29 @@ class Scenario02Test {
                 .isFalse();
     }
 
+    /**
+     * With two declarations, an unqualified {@code DataSource} must not
+     * silently resolve to one of them.
+     *
+     * <p>The two CDI runtimes reach that outcome differently, so the
+     * assertion is on the outcome rather than on either shape. Weld
+     * applies the spec rule that a bean qualified only with
+     * {@code @Named} also carries {@code @Default}, which makes the
+     * unqualified lookup <em>ambiguous</em> — two candidates.
+     * OpenWebBeans does not, which leaves it <em>unsatisfied</em> —
+     * zero candidates. Either way it is not resolvable, which is the
+     * property that matters: the caller has to name which data source
+     * it means.
+     */
     @Test
-    void noDefinitionIsDefaultWhenThereIsMoreThanOne() {
-        assertThat(CDI.current().select(DataSource.class).isUnsatisfied())
-                .as("an unqualified injection point is ambiguous with two declarations, "
-                        + "so nothing should satisfy it")
-                .isTrue();
+    void noSingleDataSourceResolvesUnqualifiedWhenThereIsMoreThanOne() {
+        Instance<DataSource> unqualified = CDI.current().select(DataSource.class);
+
+        assertThat(unqualified.isResolvable())
+                .as("with two declarations an unqualified lookup must not yield one of them — "
+                        + "ambiguous (Weld) and unsatisfied (OpenWebBeans) both satisfy that")
+                .isFalse();
+        assertThat(unqualified.isAmbiguous() || unqualified.isUnsatisfied()).isTrue();
     }
 
     private static void createTableWithRow(DataSource dataSource, String table, String label) throws SQLException {
