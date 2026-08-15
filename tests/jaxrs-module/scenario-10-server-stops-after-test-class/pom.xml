@@ -27,4 +27,24 @@
     <artifactId>jawelte-tests-jaxrs-module-scenario-10-server-stops-after-test-class</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/jaxrs-module scenario 10: the embedded server is stopped (and its port released) once the test class completes</name>
+
+    <properties>
+        <!--
+            The scenario is quarantined, not removed: its TCP-probe
+            assertion is timing-sensitive against CXF's Jetty transport
+            (Server.stop() returns before the listening socket is fully
+            released on some kernels). Re-enable by deleting this
+            property once the check is deterministic - a CDI
+            ContainerStopping observer rather than a port probe.
+
+            It is skipped here rather than commented out of the
+            aggregator, so that the module stays in the reactor. A pom
+            outside every reactor is a pom the release plugin cannot
+            rewrite: this one sat at the previous version through a
+            release and only turned up by counting versions across the
+            tree afterwards. In the reactor it keeps its version in step
+            and stays compile-checked; only the flaky assertion is off.
+        -->
+        <skipTests>true</skipTests>
+    </properties>
 </project>

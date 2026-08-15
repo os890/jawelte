@@ -6971,3 +6971,33 @@ copy; the count only surfaced from an explicit `find`. `release.sh` now ends wit
 Worth keeping in mind: a gitignored artifact of a build step is invisible to every "is the
 tree clean?" check in the script and in the git workflow. The dry run would never have caught
 either of these — the first needs a `perform`, the second needs the run to finish.
+
+## 2026-08-15 — the orphan pom: one scenario the release reactor still could not reach
+
+Checked what a release actually leaves committed, rather than what it stages: a scoped
+`release:prepare` (real, `preparationGoals=validate`) on a throwaway branch, then read the two
+`[maven-release-plugin]` commits it produced. The tag held 534 poms at `0.2.0-demo2` and the
+follow-up commit 534 at `0.3.0-SNAPSHOT` — and in both, one pom at the *old* version.
+
+`tests/jaxrs-module/scenario-10-server-stops-after-test-class` was commented out of its
+aggregator's `<modules>` — a quarantine for a timing-sensitive TCP-probe assertion against
+CXF's Jetty transport. The files stayed in the tree. So the pom belonged to no reactor at all:
+not the default one, not `-Pfull-reactor`, not `verify-all`. Nothing built it and nothing
+rewrote it. It had been sitting at `0.1.0-SNAPSHOT` and was swept up by the 494-pom resync
+purely because that was a `find`-driven substitution rather than a reactor-driven one.
+
+Commenting a module out of an aggregator is therefore not a neutral act: it removes the module
+from version management as well as from the build, silently and permanently. The scenario is
+now quarantined the other way round — listed as a module, with `<skipTests>true</skipTests>`
+in its own pom. It compiles on every build, its version tracks the tree, and only the
+unreliable assertion is off. It still compiles today, which was worth confirming before
+re-listing it.
+
+The tree is now uniform: 535 poms carrying a project version, 535 modules in the full reactor,
+and `verify-all/pom.xml` on its fixed `1` outside the hierarchy by design. Nothing versioned
+sits outside a reactor any more, which is the property that had to hold for the next release
+to leave everything on one snapshot version.
+
+Worth remembering: staged output is not committed output. The `pom.xml.next` files looked
+complete because 534 of them existed; the missing 535th had no file to be missing from. Only
+counting versions across the whole tree — not the reactor — surfaced it.

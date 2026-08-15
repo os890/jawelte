@@ -44,14 +44,13 @@
         <module>scenario-08-response-diff-xml</module>
         <module>scenario-09-multiple-resource-classes</module>
         <!--
-            scenario-10-server-stops-after-test-class: temporarily
-            commented out — the TCP-probe assertion is timing-sensitive
-            against CXF's Jetty transport (Server.stop() returns before
-            the listening socket is fully released on some kernels).
-            The files stay in the tree; needs a more deterministic
-            verification mechanism (e.g. a CDI ContainerStopping event
-            observer) before re-enabling.
+            scenario-10 is quarantined via <skipTests> in its own pom
+            rather than by being left out here: it builds and keeps its
+            version in step with the tree, it just does not run. See the
+            comment in that pom for why the assertion is unreliable and
+            for why the module has to stay listed.
         -->
+        <module>scenario-10-server-stops-after-test-class</module>
         <module>scenario-11-exception-mapper</module>
         <module>scenario-12-enable-jaxrs-alone-boots-the-lifecycle</module>
         <module>scenario-15-test-url-called-before-server-start</module>
