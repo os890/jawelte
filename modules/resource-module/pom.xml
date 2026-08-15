@@ -20,33 +20,19 @@
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
-        <artifactId>jawelte-parent</artifactId>
+        <artifactId>jawelte-modules</artifactId>
         <version>0.2.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-modules</artifactId>
+    <artifactId>jawelte-resource-module</artifactId>
     <packaging>pom</packaging>
 
-    <name>jawelte (modules aggregator)</name>
-    <description>Top-level aggregator for jawelte feature modules. Each feature module is a Maven aggregator with api / impl submodules.</description>
+    <name>jawelte (resource-module aggregator)</name>
+    <description>@Resource injection, so an application's production wiring runs unchanged in a test. resource-module/api ships the ResourceLookup port - a name to an object, with no assumption that the name lives in JNDI; resource-module/impl ships the CDI extension that fills @Resource fields through it and a default adapter that resolves against the naming tree jndi-module installs. It exists as its own module rather than inside cdi-module because cdi-module is mandatory and must not depend on jndi-module, and rather than inside jndi-module because that module's job is handing out the writable root, not consuming it - @Resource is a consumer of naming exactly as @DataSourceDefinition is. Optional and inert: a deployment with no @Resource field is never touched.</description>
 
     <modules>
-        <module>cdi-module</module>
-        <module>scope-module</module>
-        <module>jndi-module</module>
-        <module>resource-module</module>
-        <module>datasource-module</module>
-        <module>jpa-module</module>
-        <module>jta-module</module>
-        <module>ejb-module</module>
-        <module>content-diff-module</module>
-        <module>db-testdata-module</module>
-        <module>testcontrol-module</module>
-        <module>jaxrs-module</module>
-        <module>wiremock-module</module>
-        <module>batch-module</module>
-        <module>spring-data-module</module>
-        <module>flow-assert-module</module>
+        <module>api</module>
+        <module>impl</module>
     </modules>
 </project>

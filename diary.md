@@ -7314,3 +7314,45 @@ One trap worth remembering: the first negative check appeared to pass because
 `mvn install` does not delete a resource that was removed from the source tree —
 the stale services entry was still in `target/classes` and went into the jar. The
 negative half of a check like this needs `clean`.
+
+## #125 — resource-module, so production wiring runs unchanged
+
+`@Resource(lookup = ...)` had no support anywhere in the project — the field was
+left null, and if it fed a producer the container failed at first use with
+`IllegalProductException` rather than at deployment. That is the last reason an
+application could not run its unmodified production wiring in a jawelte test now
+that `@DataSourceDefinition` works.
+
+Placement was the decision worth making carefully. cdi-module owns injection but
+is mandatory, and must not gain a dependency on the optional jndi-module — that
+would need exactly the reflective bridge that was rejected earlier as a
+workaround. jndi-module's job is handing out the writable root, not consuming
+it; `@Resource` is a consumer of naming in the same way `@DataSourceDefinition`
+is. So: a new optional `resource-module`, api + impl, alongside the others.
+
+The port is `ResourceLookup` — a name and the field's type in, an object out —
+and it deliberately says nothing about JNDI, so a consumer resolving from a
+registry or a map replaces the shipped adapter without the interface changing.
+`JndiResourceLookup` at `@Priority(Integer.MAX_VALUE)` is that adapter, resolving
+against jndi-module's writable root. Because that root is installed with
+`supportReferenceable` off, a lookup hands back the object that was bound rather
+than a reconstruction — so `@Resource(lookup = "java:app/jdbc/AppDS")` and
+`@Inject @Named("java:app/jdbc/AppDS")` yield the *same* `DataSource`, and an
+application mixing both idioms still has one connection pool.
+
+The mechanism is `ProcessInjectionTarget`: a type declaring no named `@Resource`
+field is not touched at all, so the module costs nothing on a deployment that
+does not use it. Where there is one, the target is wrapped and the fields are
+filled after the runtime's own injection, so a `@PostConstruct` finds them in
+place. Core CDI SPI throughout — no runtime-specific code.
+
+Two boundaries stated up front rather than discovered later. A bare `@Resource`
+(no `lookup`/`mappedName`/`name`) is left alone: its EE name is inferred from the
+declaring class and field, which is a much larger surface, and failing a
+deployment over a declaration nobody asked this module to handle would be worse
+than doing nothing. And the test class is not covered — cdi-module builds its
+`InjectionTarget` at runtime via `getInjectionTargetFactory(...)`, which is not
+the discovery-time path this extension observes.
+
+Unresolvable names now fail at injection naming the field, the name, and the
+likely cause, instead of leaving a null for something else to trip over later.
