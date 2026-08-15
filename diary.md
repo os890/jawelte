@@ -7356,3 +7356,42 @@ the discovery-time path this extension observes.
 
 Unresolvable names now fail at injection naming the field, the name, and the
 likely cause, instead of leaving a null for something else to trip over later.
+
+## #125 — the six scenarios, and what each one is for
+
+All six are written the way an application would write them: a production
+`@DataSourceDefinition`, production `@Resource` wiring, and no test-only producer
+standing in for either. Green on both runtimes.
+
+- **01** — `@Resource(lookup)` resolves, *and* to the same object `@Inject @Named`
+  yields. The identity half is the one that matters: resolving to some working
+  data source would not be enough, because an application that migrates through
+  one idiom and reads through the other has to be on one connection pool.
+- **02** — the reported failure from the consuming end: a producer whose only
+  input is a `@Resource` field. Unfilled, an `@ApplicationScoped` producer method
+  returns null and fails with `IllegalProductException` at first use, naming the
+  producer rather than the field that caused it.
+- **03** — an unresolvable name fails naming the field, the name, and the likely
+  cause. The name is one character off the declared one, which is the realistic
+  version of the mistake.
+- **04** — `name` and `mappedName`, against two databases so a member resolving
+  to the wrong entry is caught rather than passing by coincidence.
+- **05** — the bare-`@Resource` boundary, asserted rather than assumed: the
+  deployment starts, the field stays null, and the named declaration on the same
+  bean still works. If bare support lands later, this is the scenario that
+  changes, visibly.
+- **06** — no naming provider on the classpath at all: the message names what is
+  missing and what to do about it. Unlike datasource-module, which treats an
+  absent provider as a documented no-op, this has to be fatal — filling the field
+  is the whole job.
+
+Verified as guards, not decoration: with the extension's `META-INF/services`
+entry removed and the jar rebuilt **clean**, scenario-01 fails both assertions.
+Same `clean` lesson as the #124 check — `install` does not delete a resource that
+was removed from the source tree.
+
+Two things fixed on the way past that were not #125. `verify-all.sh` gained a
+`tests/resource-module` phase per CDI runtime. And `coverage-report` was missing
+jndi-module and datasource-module entirely — an oversight from the datasource
+work, so coverage has been silently under-reporting since; all three modules are
+listed now.

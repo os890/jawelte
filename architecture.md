@@ -94,6 +94,14 @@ It is a module rather than a core port because **the core never looks anything u
 
 jta-module and datasource-module both depend on jndi-module; nothing else does, and a project using neither never pulls it in.
 
+**resource-module additions (in `resource-module/api`):**
+
+- `ResourceLookup` — a name from a `@Resource` declaration to the object to inject. The port says nothing about JNDI: the shipped adapter resolves against jndi-module's writable root, but a consumer resolving from a registry or a map replaces it without the interface changing. Returning `null` means "this provider does not know the name" and the caller turns that into a failure naming the field; throwing means the lookup itself could not be performed.
+
+The mechanism is `ProcessInjectionTarget`: a type declaring no *named* `@Resource` field is not wrapped at all, so the module is inert on a deployment that does not use it, and `@Resource` fields never become CDI injection points — no `ProcessInjectionPoint` fires for them, so cdi-module's auto-mocking cannot compete and there is nothing to declare under `SyntheticBeanTypeDeclaration`. Two boundaries are deliberate and asserted by scenarios rather than assumed: a **bare** `@Resource` (no `lookup`/`mappedName`/`name`) is left untouched, because its EE name is inferred from the declaring class and field and failing a deployment over a declaration the module does not handle would be worse than doing nothing; and the **test class** is not covered, because cdi-module builds its `InjectionTarget` at runtime through `getInjectionTargetFactory(...)` rather than on the discovery-time path this extension observes.
+
+It is its own module rather than part of cdi-module because cdi-module is mandatory and must not depend on the optional jndi-module, and rather than part of jndi-module because that module's job is handing out the writable root, not consuming it — `@Resource` is a consumer of naming in exactly the way `@DataSourceDefinition` is. It depends on jndi-module and on nothing else of jawelte's beyond `core/api`; datasource-module does not know it exists.
+
 **datasource-module additions (in `datasource-module/api`):**
 
 - `DataSourceFactory` — turns a `@DataSourceDefinition` into a `javax.sql.DataSource`. There is no common configuration interface for data sources, so the shipped implementation applies the annotation's attributes as JavaBean setters (trying several candidate names per attribute, since drivers disagree — H2 has `setURL` and `setUrl`, PostgreSQL only the latter). Pool-sizing, `transactional` and `isolationLevel` are documented as ignored rather than half-applied; a consumer registering a pooling factory at a lower priority is the supported way to honour them.
@@ -124,6 +132,7 @@ datasource-module ships **no entry-point annotation of its own** — the platfor
 | `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
 | `TestModuleLifecyclePort` | `ScopeLifecycleAdapter` (`@Priority(100)`) + `TestScopeCdiExtension` | CDI runtime (`BeanManager` from `SeContainer` on `TestContext`) | `scope-module/impl` |
 | `JndiContextProvider` | `DefaultJndiContextProvider` (`@Priority(Integer.MAX_VALUE)`) | JNDI naming provider (xbean-naming at runtime, reflectively — no compile dep) | `jndi-module/impl` |
+| `ResourceLookup` | `JndiResourceLookup` (`@Priority(Integer.MAX_VALUE)`) + `ResourceInjectionCdiExtension` | JNDI (through jndi-module's `JndiContextProvider`) | `resource-module/impl` |
 | `TestModuleLifecyclePort` | `DataSourceLifecycleAdapter` (`@Priority(150)`) + `DataSourceDefinitionCdiExtension` | CDI runtime + whichever JDBC vendor class the annotation names | `datasource-module/impl` |
 | `DataSourceFactory` | `DefaultDataSourceFactory` (`@Priority(Integer.MAX_VALUE)`) | (reflective JavaBean configuration of the vendor class) | `datasource-module/impl` |
 | `SyntheticBeanTypeDeclaration` | `DataSourceSyntheticBeanTypeDeclaration` (declares `javax.sql.DataSource`, but only once a `@DataSourceDefinition` was discovered) | (in-process, reads the extension off `TestContext`) | `datasource-module/impl` |

@@ -277,6 +277,15 @@ else
             "$REPO_ROOT/tests/datasource-module" -P "$cdi" verify
     done
 
+    # tests/resource-module: @Resource(lookup = ...) injection, swept
+    # over both CDI runtimes because the whole mechanism is an
+    # InjectionTarget swapped in at ProcessInjectionTarget - a portable
+    # SPI whose wrapping the two runtimes reach along different paths.
+    for cdi in owb weld; do
+        run "tests/resource-module [$cdi]" \
+            "$REPO_ROOT/tests/resource-module" -P "$cdi" verify
+    done
+
     # tests/jta-module: CDI-runtime × JTA-impl sweep.
     # 4 combos: {owb, weld} × {jta-geronimo, jta-narayana}.
     for cdi in owb weld; do
