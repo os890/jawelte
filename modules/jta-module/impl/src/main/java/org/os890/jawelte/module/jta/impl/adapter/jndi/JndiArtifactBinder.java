@@ -111,7 +111,7 @@ public abstract class JndiArtifactBinder {
 
     private static Context xbeanWritableRoot() {
         // The naming provider is installed once per JVM behind
-        // core/api's JndiContextProvider port and shared with every
+        // jndi-module's JndiContextProvider port and shared with every
         // other module that binds — see JndiBootstrap for why this is
         // not done here.
         return JndiBootstrap.writableRoot();

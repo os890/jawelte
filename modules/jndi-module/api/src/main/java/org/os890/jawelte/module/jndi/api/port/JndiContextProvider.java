@@ -13,9 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.core.api.port;
+package org.os890.jawelte.module.jndi.api.port;
 
 import javax.naming.Context;
+
+import org.os890.jawelte.core.api.port.TestContext;
 
 /**
  * Port for the in-process JNDI naming tree: hands out the single
@@ -29,6 +31,15 @@ import javax.naming.Context;
  * {@code @DataSourceDefinition} under the name the annotation
  * declares. Both need <em>the same</em> root, which is exactly why
  * this is a port and not a helper class copied per module.
+ *
+ * <p><b>Why a module of its own rather than a core port.</b> The core
+ * defines what the <em>test framework</em> needs — a lifecycle, a test
+ * context, prioritized SPI lookup, configuration. It never looks
+ * anything up by name. JNDI is something two integrations need, so it
+ * belongs beside them: a module the integrations that care about
+ * naming depend on, and that everybody else never pulls in. Putting it
+ * in the core would have made every consumer carry a concept the
+ * framework itself has no use for.
  *
  * <p><b>Why a shared root is mandatory, not merely tidy.</b>
  * Installing an in-process provider means installing a fresh
@@ -50,7 +61,7 @@ import javax.naming.Context;
  * raise their own error naming what they needed it for.
  *
  * <p>Resolved via {@code TestContext.loadService(JndiContextProvider.class)}.
- * core/impl ships the default implementation at
+ * jndi-module/impl ships the default implementation at
  * {@code @Priority(Integer.MAX_VALUE)}, so a consumer can substitute
  * a provider for a different naming implementation through
  * {@code META-INF/services}.

@@ -7135,3 +7135,39 @@ passed cleanly on OWB right up until the matrix ran.
 Also worth recording: the background sweep reported "exit code 0" while the log said
 `>>> FAILED at phase 19`. The command was `bash verify-all.sh > log 2>&1; echo "EXIT=$?"` — the
 exit code belonged to the `echo`. Read the log, not the wrapper.
+
+## 2026-08-15 — the naming port moves out of core into a jndi-module of its own
+
+`JndiContextProvider` went into `core/api` because that was the nearest place both jta-module
+and datasource-module could reach. That is a dependency-graph argument, not an architectural
+one, and it was the wrong call: the core's ports describe what the *test framework* needs — a
+lifecycle, a test context, prioritized SPI lookup, configuration — and the framework never
+looks anything up by name. Naming is what two integrations need. Putting it in the core made
+every consumer carry a concept the core has no use for.
+
+It now lives in `modules/jndi-module` (api + impl), and the dependency direction is the honest
+one: jndi-module/api depends on core-api for `TestContext.loadService(...)` and the core knows
+nothing about naming. jta-module and datasource-module each depend on jndi-module-api at
+compile scope and jndi-module-impl at runtime scope — they code against the port, and the
+adapter has to be present for a tree to exist. Nothing else depends on it, so a project using
+neither integration never pulls it in.
+
+The property the module exists for now has its own tests rather than only being exercised
+through its consumers: `tests/jndi-module` resolves the port twice — standing in for the two
+modules — and asserts they share one root, that a binding made through one resolution survives
+the other, and that it is reachable through a plain `InitialContext`. A second scenario, with
+no naming implementation on the classpath at all, pins `writableRoot()` returning `null` rather
+than throwing, which is what lets datasource-module carry on while jta-module treats the same
+answer as fatal.
+
+Two things the scenarios corrected on the way:
+
+**"No CDI needed" was too strong.** `TestContext.loadService` tries `CDI.current()` before
+falling back to reflection, so the CDI *API* has to be loadable even when no container runs.
+No container is booted — that part held — but the classpath claim in the first draft did not,
+and `NoClassDefFoundError: jakarta/enterprise/inject/spi/CDI` said so.
+
+**A `NameAlreadyBoundException` was the property, not a bug.** The second test method found
+`java:comp` already created by the first, precisely because the root is shared and outlives a
+method. The helper now tolerates it, which is exactly what both production binders do about
+the same situation.

@@ -100,6 +100,23 @@
             <artifactId>assertj-core</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!--
+            jndi-module supplies the JndiContextProvider port and, at
+            runtime, the adapter that installs the naming provider. The
+            impl is a runtime dependency rather than a compile one: this
+            module codes against the port only, but a naming tree has to
+            exist for the vendor lookups of TransactionManager / UserTransaction to resolve.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>

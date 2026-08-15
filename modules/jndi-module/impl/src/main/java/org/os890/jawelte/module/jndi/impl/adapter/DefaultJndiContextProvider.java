@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.os890.jawelte.core.impl.adapter.jndi;
+package org.os890.jawelte.module.jndi.impl.adapter;
 
 import java.util.Map;
 
@@ -21,10 +21,10 @@ import javax.naming.Context;
 
 import jakarta.annotation.Priority;
 
-import org.os890.jawelte.core.api.port.JndiContextProvider;
+import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
 
 /**
- * Default {@link JndiContextProvider} shipped by core/impl: installs
+ * Default {@link JndiContextProvider} shipped by jndi-module/impl: installs
  * Apache XBean's naming provider once per JVM and returns its writable
  * global context.
  *
@@ -44,7 +44,7 @@ import org.os890.jawelte.core.api.port.JndiContextProvider;
  * carrying their own copy of this logic would each guard their own flag
  * and the later one would wipe the earlier one's bindings.
  *
- * <p><b>Reflection-only.</b> core/impl does not compile-depend on
+ * <p><b>Reflection-only.</b> jndi-module/impl does not compile-depend on
  * xbean-naming: the naming provider is a runtime concern. Tests bring
  * xbean-naming, a Jakarta-EE deployment brings its container's provider,
  * and a JVM with neither gets {@code null} — the documented "no naming

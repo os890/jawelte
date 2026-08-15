@@ -21,8 +21,8 @@ import javax.naming.NamingException;
 import javax.sql.DataSource;
 
 import org.eclipse.microprofile.config.ConfigProvider;
-import org.os890.jawelte.core.api.port.JndiContextProvider;
 import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
 
 /**
  * Binds and unbinds the data sources built for a test class under the
@@ -31,7 +31,7 @@ import org.os890.jawelte.core.api.port.TestContext;
  * resolves — the same lookup production code performs.
  *
  * <p><b>The naming tree is not owned here.</b> The writable root comes
- * from core/api's {@link JndiContextProvider} port, which installs an
+ * from jndi-module's {@link JndiContextProvider} port, which installs an
  * in-process provider once per JVM. That is what lets jta-module's
  * transaction artifacts and these data sources coexist in one tree:
  * a module installing its own root would replace the tree and discard

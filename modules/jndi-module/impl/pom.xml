@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-jndi-module</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-jndi-module-impl</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (jndi-module/impl)</name>
+    <description>DefaultJndiContextProvider at @Priority(Integer.MAX_VALUE): installs Apache XBean's naming provider once per JVM and returns its writable global context, with supportReferenceable off so the tree hands back the object that was bound rather than a reconstruction of it. Reflection-only - no compile-time dependency on xbean-naming, because the naming provider is a runtime concern: tests bring xbean, a Jakarta-EE deployment brings its container's, and a JVM with neither gets null.</description>
+
+    <dependencies>
+        <!--
+            jndi-module/api supplies the JndiContextProvider port this
+            module implements.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.annotation-api supplies @Priority. provided scope
+            (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+
+        <!--
+            No xbean-naming dependency on purpose: the provider is
+            located reflectively at runtime, so this jar works whether
+            the naming implementation is xbean, a container's own, or
+            absent entirely.
+        -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

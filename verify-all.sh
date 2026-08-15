@@ -262,6 +262,11 @@ else
     # pass covers every scenario.
     run "tests/content-diff-module" "$REPO_ROOT/tests/content-diff-module" verify
 
+    # tests/jndi-module: the shared naming tree. Boots no CDI
+    # container - the port is resolved reflectively - so the owb/weld
+    # profiles are no-ops and one pass covers it.
+    run "tests/jndi-module" "$REPO_ROOT/tests/jndi-module" verify
+
     # tests/datasource-module: @DataSourceDefinition discovery, the
     # reflective factory and the JNDI binding, swept over both CDI
     # runtimes because discovery runs inside a portable CDI extension

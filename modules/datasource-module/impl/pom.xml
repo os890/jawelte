@@ -29,7 +29,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (datasource-module/impl)</name>
-    <description>Implementation of datasource-module: DataSourceDefinitionCdiExtension (discovers @DataSourceDefinition / @DataSourceDefinitions on the test class and on every annotated bean type, registers one synthetic @Named DataSource bean per definition), DataSourceLifecycleAdapter (TestModuleLifecyclePort at @Priority(150) — after scope-module at 100, before jpa-module at 200), DefaultDataSourceFactory (reflective, @Priority(Integer.MAX_VALUE)), and DataSourceJndiBinder which binds through core/api's JndiContextProvider port so the naming tree stays shared with jta-module. No JDBC driver dependency: the vendor class named by the annotation is loaded reflectively at runtime. SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
+    <description>Implementation of datasource-module: DataSourceDefinitionCdiExtension (discovers @DataSourceDefinition / @DataSourceDefinitions on the test class and on every annotated bean type, registers one synthetic @Named DataSource bean per definition), DataSourceLifecycleAdapter (TestModuleLifecyclePort at @Priority(150) — after scope-module at 100, before jpa-module at 200), DefaultDataSourceFactory (reflective, @Priority(Integer.MAX_VALUE)), and DataSourceJndiBinder which binds through jndi-module's JndiContextProvider port so the naming tree stays shared with jta-module. No JDBC driver dependency: the vendor class named by the annotation is loaded reflectively at runtime. SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
 
     <dependencies>
         <!--
@@ -43,8 +43,7 @@
 
         <!--
             core-api supplies TestModuleLifecyclePort + TestContext
-            (SPI lookup) and the JndiContextProvider port used for
-            binding. SPI-only — no compile-time dep on core/impl.
+            (SPI lookup). SPI-only — no compile-time dep on core/impl.
         -->
         <dependency>
             <groupId>${project.groupId}</groupId>
@@ -87,6 +86,23 @@
             @DataSourceDefinition names, loaded reflectively from the
             test's own classpath.
         -->
+
+        <!--
+            jndi-module supplies the JndiContextProvider port and, at
+            runtime, the adapter that installs the naming provider. The
+            impl is a runtime dependency rather than a compile one: this
+            module codes against the port only, but a naming tree has to
+            exist for a declared @DataSourceDefinition to be bound under its name.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <build>

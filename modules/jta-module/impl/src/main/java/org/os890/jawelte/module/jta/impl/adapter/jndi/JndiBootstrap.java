@@ -19,8 +19,8 @@ import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
-import org.os890.jawelte.core.api.port.JndiContextProvider;
 import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
 
 /**
  * jta-module's view of the JNDI naming tree, so
@@ -37,7 +37,7 @@ import org.os890.jawelte.core.api.port.TestContext;
  * module's bindings — jta-module's transaction artifacts and
  * datasource-module's {@code @DataSourceDefinition} entries would take
  * turns wiping each other out depending on boot order. The install
- * therefore lives behind core/api's {@link JndiContextProvider} port,
+ * therefore lives behind jndi-module's {@link JndiContextProvider} port,
  * resolved through {@link TestContext#loadService(Class)}, and this
  * class only adds jta-module's own semantics on top: a
  * {@link Context} to hand back and an error message that names JTA

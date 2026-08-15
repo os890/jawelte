@@ -48,6 +48,7 @@
         <module>core</module>
         <module>cdi-module</module>
         <module>scope-module</module>
+        <module>jndi-module</module>
         <module>datasource-module</module>
         <module>jpa-module</module>
         <module>jta-module</module>

@@ -39,6 +39,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 
 | Module | Technology | Purpose |
 |---|---|---|
+| `jawelte-jndi-module` | JNDI | The in-process naming tree every binding module shares — one provider, one writable root |
 | `jawelte-datasource-module` | JDBC (`@DataSourceDefinition`) | Builds, binds and injects the data sources a test or a bean declares |
 | `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
 | `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
@@ -71,7 +72,6 @@ Each port represents the integration boundary between jawelte's core and an exte
 - `TestContext` — in-flight test-state holder owned by the framework; offers `getTestClass()`, typed metadata binding, the static `get()` accessor (active only inside the bootstrap window), and the `loadService(...)` helper that resolves SPI instances via MicroProfile Config + `ServicePriorityResolver`
 - `ServicePriorityResolver` — drives prioritized SPI selection (lowest `@Priority` wins; missing `@Priority` sorts last; class-name tiebreak)
 - `ConfigResolver` — single-method SPI for raw `String` config-key lookup; the dot-then-underscore fallback lives here
-- `JndiContextProvider` — hands out the single writable JNDI root every module binds into. A port rather than a per-module helper because installing an in-process naming provider installs a *fresh* root: a second module doing it independently would discard the first one's bindings. `writableRoot()` returning `null` is the documented "no naming provider in this JVM" answer, not a failure
 
 **Module ports (in `cdi-module/api`):**
 
@@ -84,6 +84,14 @@ Each port represents the integration boundary between jawelte's core and an exte
 - `@TestClassScoped` — CDI normal scope (`@NormalScope(passivating=false)`); same shape, with a per-test-class bean lifetime. `@PreDestroy` runs after `@AfterAll`, before the CDI container shuts down.
 
 scope-module ships **no new ports of its own**. It implements the existing `TestModuleLifecyclePort` and the standard CDI `Extension` SPI. The cross-module scope-override contract uses two mechanisms — both keep consumer modules free of a compile-time dep on scope-module: (1) the `BeanScopeMapper` SPI in `core/api/port` (TICKET-001) — scope-module ships SL-registered providers (`@TestBean` → `@TestClassScoped`, `@SessionScoped` → `@TestMethodScoped`, `@ConfigBean` → `@TestClassScoped`) that `core/impl`'s `ScopeRemapCdiExtension` walks at `ProcessAnnotatedType` time; (2) MP Config keys defaulted in scope-module's `microprofile-config.properties`, read reflectively by consumer modules to resolve scope-annotation FQCNs (cdi-module's auto-mock scope, wiremock-module's registry remap, ejb-module's `@Singleton` mapping). When scope-module is absent at runtime the SPI providers don't exist and the MP Config defaults aren't shipped — consumer modules degrade cleanly to their `@Dependent` / `@RequestScoped` / `@ApplicationScoped` fallbacks.
+
+**jndi-module additions (in `jndi-module/api`):**
+
+- `JndiContextProvider` — hands out the single writable JNDI root every binding module shares. `writableRoot()` returning `null` is the documented "no naming provider in this JVM" answer rather than a failure, because the callers disagree about whether that is fatal: datasource-module survives it (injection does not go through naming), jta-module does not.
+
+It is a module rather than a core port because **the core never looks anything up by name**. The core's ports describe what the test framework needs — a lifecycle, a test context, prioritized SPI lookup, configuration; naming is what two *integrations* need. Sharing one root is mandatory rather than tidy: installing an in-process provider installs a *fresh* writable root, so a second module doing it independently would discard whatever the first had already bound, and jta-module's transaction artifacts and datasource-module's `@DataSourceDefinition` entries would wipe each other out depending on boot order.
+
+jta-module and datasource-module both depend on jndi-module; nothing else does, and a project using neither never pulls it in.
 
 **datasource-module additions (in `datasource-module/api`):**
 
@@ -114,7 +122,7 @@ datasource-module ships **no entry-point annotation of its own** — the platfor
 | `ExcludedPackageFilter` | `DefaultExcludedPackageFilter` | MicroProfile Config | `cdi-module/impl` |
 | `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
 | `TestModuleLifecyclePort` | `ScopeLifecycleAdapter` (`@Priority(100)`) + `TestScopeCdiExtension` | CDI runtime (`BeanManager` from `SeContainer` on `TestContext`) | `scope-module/impl` |
-| `JndiContextProvider` | `DefaultJndiContextProvider` (`@Priority(Integer.MAX_VALUE)`) | JNDI naming provider (xbean-naming at runtime, reflectively — no compile dep) | `core/impl` |
+| `JndiContextProvider` | `DefaultJndiContextProvider` (`@Priority(Integer.MAX_VALUE)`) | JNDI naming provider (xbean-naming at runtime, reflectively — no compile dep) | `jndi-module/impl` |
 | `TestModuleLifecyclePort` | `DataSourceLifecycleAdapter` (`@Priority(150)`) + `DataSourceDefinitionCdiExtension` | CDI runtime + whichever JDBC vendor class the annotation names | `datasource-module/impl` |
 | `DataSourceFactory` | `DefaultDataSourceFactory` (`@Priority(Integer.MAX_VALUE)`) | (reflective JavaBean configuration of the vendor class) | `datasource-module/impl` |
 | `TestModuleLifecyclePort` | `JpaLifecycleAdapter` (`@Priority(200)`) + `JpaCdiExtension` | CDI runtime + JPA provider (Hibernate) + JDBC driver (H2) | `jpa-module/impl` |
