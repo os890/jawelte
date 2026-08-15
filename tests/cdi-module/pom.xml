@@ -93,6 +93,7 @@
         <module>scenario-58-dependent-instance-predestroy</module>
         <module>scenario-59-auto-mock-scope-resolved-per-container</module>
         <module>scenario-60-beforeall-failure-does-not-leak-the-container</module>
+        <module>scenario-61-late-synthetic-bean-not-auto-mocked</module>
     </modules>
 
     <dependencies>

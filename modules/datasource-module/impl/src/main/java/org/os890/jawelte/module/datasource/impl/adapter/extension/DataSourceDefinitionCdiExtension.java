@@ -111,6 +111,12 @@ public class DataSourceDefinitionCdiExtension implements Extension {
             // ProcessAnnotatedType path still covers bean types.
             return;
         }
+        // Published so DataSourceSyntheticBeanTypeDeclaration can read
+        // the discovered definitions back at AfterBeanDiscovery time
+        // without a CDI type in cdi-module's port signature. A live
+        // reference rather than a snapshot, because onProcessAnnotatedType
+        // keeps collecting after this observer has returned.
+        context.bindMetadata(DataSourceDefinitionCdiExtension.class, this);
         for (Class<?> current = context.getTestClass();
                 current != null && current != Object.class;
                 current = current.getSuperclass()) {

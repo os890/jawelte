@@ -7282,3 +7282,35 @@ cdi-module uses for its own scan result. And *every* provider is consulted rathe
 than the highest-priority one, so plain `ServiceLoader` is used instead of
 `TestContext.loadService(...)` — each module has its own types to declare and the
 results are unioned.
+
+## #124 — reproduced, fixed, and guarded
+
+With the port in place, datasource-module declares `javax.sql.DataSource` —
+but only once a `@DataSourceDefinition` was actually discovered, read back from
+the extension it published on the active `TestContext`. A deployment that has the
+module on the classpath and declares nothing keeps auto-mocking `DataSource`
+exactly as before, which is the "optional module changes nothing" property the
+module was built to.
+
+`tests/datasource-module/scenario-12-plain-injection-separate-declaration` is the
+reporter's narrowed shape: the declaration on one bean, a single plain
+`@Inject DataSource` in another, the test class declaring neither. It carries its
+own always-succeeding `MockFactory`, which is the part that makes it a guard
+rather than a coincidence — with the shipped Mockito factory answering `null` on
+this JDK the collision cannot occur and the scenario would pass no matter what
+the code did.
+
+Verified in both directions: with the module's `SyntheticBeanTypeDeclaration`
+service entry removed and the jar rebuilt clean, scenario-12 fails on
+OpenWebBeans with exactly the reported
+
+    AmbiguousResolutionException: There is more than one Bean with type
+    javax.sql.DataSource Qualifiers: [@jakarta.enterprise.inject.Default()]
+
+and passes on both runtimes with it restored. `tests/cdi-module/scenario-61`
+guards the same contract one level down, for a plain user extension.
+
+One trap worth remembering: the first negative check appeared to pass because
+`mvn install` does not delete a resource that was removed from the source tree —
+the stale services entry was still in `target/classes` and went into the jar. The
+negative half of a check like this needs `clean`.

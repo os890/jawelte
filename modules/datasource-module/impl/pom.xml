@@ -51,6 +51,18 @@
         </dependency>
 
         <!--
+            cdi-module/api supplies SyntheticBeanTypeDeclaration, the
+            port this module uses to tell auto-mocking that DataSource is
+            spoken for once a @DataSourceDefinition was discovered.
+            Ports only — cdi-module/api itself depends on nothing but
+            core/api, and there is no compile-time dep on cdi-module/impl.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-cdi-module-api</artifactId>
+        </dependency>
+
+        <!--
             CDI supplies the Extension SPI used for discovery and the
             synthetic-bean registration in AfterBeanDiscovery.
             provided scope (inherited).
