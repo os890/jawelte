@@ -7001,3 +7001,42 @@ to leave everything on one snapshot version.
 Worth remembering: staged output is not committed output. The `pom.xml.next` files looked
 complete because 534 of them existed; the missing 535th had no file to be missing from. Only
 counting versions across the whole tree — not the reactor — surfaced it.
+
+## 2026-08-15 — datasource-module draft: @DataSourceDefinition support, and a naming tree that had to be shared
+
+Drafted the module for #120 on `feat/datasource-module`. `@DataSourceDefinition` on the test
+class or on any bean type produces a real `DataSource`, bound in JNDI under the declared name
+and injectable as `@Named(<name>)` — with the sole definition also getting `@Default` so the
+common single-data-source test writes a plain `@Inject DataSource`. Two or more definitions
+deliberately leave nothing `@Default`: an unqualified injection point really is ambiguous
+then, and CDI's own error says so better than an arbitrary winner would.
+
+The module depends on neither jpa-module nor jta-module, which was the point of putting it in
+its own module rather than inside jpa-module. It has no JDBC driver dependency either — the
+vendor class the annotation names is loaded from the test's own classpath.
+
+**The naming tree forced a real design decision.** jta-module's `JndiBootstrap` installs an
+in-process provider by setting the `java.naming.*` system properties and then installing a
+*fresh* `WritableContext` as xbean's global context. That second step replaces the root. A
+second module carrying its own copy of that logic would guard it with its own `initialized`
+flag, and whichever module booted second would silently discard everything the first had
+bound — jta's `TransactionManager` and the declared data sources taking turns wiping each
+other out depending on boot order. Duplication here would not have been untidy, it would have
+been a bug that only shows up when both modules are in play.
+
+So the install moved behind a new core port, `JndiContextProvider`, with core/impl shipping
+the default xbean adapter at `@Priority(Integer.MAX_VALUE)` and jta-module's `JndiBootstrap`
+reduced to jta-specific semantics on top of it. One install, one root, both modules binding
+into it. `writableRoot()` returning `null` is the documented "no naming provider here"
+answer rather than an exception, because for datasource-module that is survivable — injection
+does not go through JNDI — while for jta-module it stays fatal, which is why the error message
+naming JTA lives in jta-module and not in the port.
+
+The reflective default factory is the other piece worth noting: there is no common
+configuration interface for data sources, so attributes are applied as JavaBean setters, and
+each attribute is tried against several candidate names because drivers disagree (H2 has both
+`setURL` and `setUrl`, PostgreSQL only the latter). Pool-sizing, `transactional` and
+`isolationLevel` are documented as ignored rather than half-applied; honouring them is what a
+consumer's own `DataSourceFactory` — or the jta-module follow-up — is for.
+
+Not yet written: the test scenarios. Building clean is not the same as working.
