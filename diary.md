@@ -7242,3 +7242,43 @@ has to be escaped in a properties key, which is worth knowing before writing one
 The first run failed on an assertion that was too literal — H2 reports the url without the
 `;DB_CLOSE_DELAY=-1` that followed it, so the identity of the database is what can be asserted
 on. The redirect itself had worked on the first attempt.
+
+## #124 — why the auto-mock collision is not an ordering problem
+
+The reporter came back with a narrowed reproduction: one `@DataSourceDefinition`,
+one plain `@Inject DataSource`, `mockito-core` on the classpath. The reason it
+never reproduced here turned out to be environmental — on this JDK
+`Mockito.mock(...)` refuses the types involved and `MockitoMockFactory` answers
+`null`, so auto-mock silently skips and the collision cannot happen. Swapping in
+a `MockFactory` that always succeeds (a `Proxy`) reproduces it on both runtimes.
+
+That reproduction disproved the analysis I had posted on the ticket. I had said
+the auto-mock re-check *does* see another extension's synthetic bean provided
+that extension's `AfterBeanDiscovery` observer ran first, making it an ordering
+race. It is not. Measured with a probe extension holding the last observer slot
+(`@Priority(Integer.MAX_VALUE)`), on OpenWebBeans 4.1.0 and on Weld alike:
+
+* `ProcessSyntheticBean` had not been fired for a single bean yet — the probe's
+  recorded list was empty;
+* `beanManager.getBeans(PaymentGateway.class)` returned 0 even though another
+  extension had already called `addBean()` for it.
+
+So `addBean()` registrations are invisible to `getBeans(...)` for the whole of
+`AfterBeanDiscovery`, at any observer priority. The late `@Priority` I had
+proposed is a no-op, and was reverted rather than shipped with a rationale that
+does not hold.
+
+A type that cannot be detected has to be declared. cdi-module already works that
+way for its own synthetic beans — the auto-mock loop consults the `@TestBean`
+scan result, not the bean manager. The new `SyntheticBeanTypeDeclaration` port in
+cdi-module/api opens that up: a module registering synthetic beans names the
+types it is about to supply, and auto-mock skips them.
+
+Two decisions worth recording. The port takes a `TestContext` rather than a
+`BeanManager`, because cdi-module/api deliberately depends on nothing but
+core/api and carries no CDI types; providers read what their extension bound via
+`TestContext.bindMetadata(...)` during `BeforeBeanDiscovery`, the same channel
+cdi-module uses for its own scan result. And *every* provider is consulted rather
+than the highest-priority one, so plain `ServiceLoader` is used instead of
+`TestContext.loadService(...)` — each module has its own types to declare and the
+results are unioned.

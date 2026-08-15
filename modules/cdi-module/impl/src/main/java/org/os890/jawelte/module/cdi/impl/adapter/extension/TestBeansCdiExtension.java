@@ -27,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -65,6 +66,7 @@ import org.os890.jawelte.core.api.port.BeanScopeMapperPort;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
 import org.os890.jawelte.module.cdi.api.port.MockFactory;
+import org.os890.jawelte.module.cdi.api.port.SyntheticBeanTypeDeclaration;
 import org.os890.jawelte.module.cdi.api.port.WhitelistFilter;
 import org.os890.jawelte.module.cdi.impl.util.SyntheticBeanUtil;
 import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
@@ -85,6 +87,16 @@ import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
  * (see {@code META-INF/microprofile-config.properties}), so the
  * filter is fully configurable through the standard MP Config
  * machinery.
+ *
+ * <p>Before synthesising anything the auto-mock loop also asks every
+ * {@link SyntheticBeanTypeDeclaration} on the classpath which types it
+ * is about to register a synthetic bean for, and skips those. The
+ * {@code isUnsatisfied} re-check alone cannot cover them:
+ * {@code addBean()} registrations are invisible to
+ * {@code BeanManager.getBeans(...)} for the whole of
+ * {@code AfterBeanDiscovery}, so without the declaration auto-mock
+ * registers a competing bean of the same type and the deployment fails
+ * with {@code AmbiguousResolutionException}.
  *
  * <p>The Extension obtains the active {@link TestContext} via
  * {@link TestContext#get()} during {@code BeforeBeanDiscovery};
@@ -116,6 +128,10 @@ public class TestBeansCdiExtension implements Extension {
     private WhitelistFilter whitelistFilter;
     private ExcludedPackageFilter excludedPackageFilter;
     private MockFactory mockFactory;
+    // Every provider is consulted, not the highest-priority one, so
+    // TestContext.loadService (which resolves to a single impl) is the
+    // wrong entry point here - the declared types are unioned.
+    private List<SyntheticBeanTypeDeclaration> syntheticBeanTypeDeclarations = List.of();
     // Resolved per container in onBeforeBeanDiscovery (not once per JVM)
     // so each test class's MP Config layer selects the auto-mock scope.
     private Class<? extends Annotation> autoMockNonJdkScope;
@@ -151,6 +167,9 @@ public class TestBeansCdiExtension implements Extension {
         this.whitelistFilter = TestContext.loadService(WhitelistFilter.class);
         this.excludedPackageFilter = TestContext.loadService(ExcludedPackageFilter.class);
         this.mockFactory = TestContext.loadService(MockFactory.class);
+        // Enumerated here, on the bootstrap thread, for the same
+        // ClassLoader reason the filter caches are warmed below.
+        this.syntheticBeanTypeDeclarations = loadSyntheticBeanTypeDeclarations();
         // Resolve the auto-mock default scope here (per container, on the
         // bootstrap thread) so the active MP Config layer wins and the
         // reflective Class.forName runs under the bootstrap ClassLoader.
@@ -292,6 +311,14 @@ public class TestBeansCdiExtension implements Extension {
         // (into the autoMockNonJdkScope field), so each test class's
         // MP Config layer selects it rather than the value frozen by the
         // first container in the JVM.
+        // Types another extension is about to register a synthetic bean
+        // for. They have to be declared rather than detected: the
+        // isUnsatisfied re-check below runs on getBeans(...), which does
+        // not see addBean() registrations while AfterBeanDiscovery is
+        // still in progress - on either runtime, at any observer
+        // priority. See SyntheticBeanTypeDeclaration.
+        Set<Type> declaredSyntheticTypes = collectDeclaredSyntheticTypes();
+
         for (IpKey key : unsatisfiedCandidateIps) {
             Type targetType = key.targetType;
             Class<?> rawType = rawClassOf(targetType);
@@ -300,6 +327,10 @@ public class TestBeansCdiExtension implements Extension {
             }
             Set<Annotation> qualifiers = key.qualifiers;
             if (hasSyntheticBeanBinding(rawType)) {
+                continue;
+            }
+            if (declaredSyntheticTypes.contains(targetType)
+                    || declaredSyntheticTypes.contains(rawType)) {
                 continue;
             }
             if (excludedPackageFilter != null && excludedPackageFilter.isExcluded(rawType)) {
@@ -567,6 +598,47 @@ public class TestBeansCdiExtension implements Extension {
             }
         }
         return false;
+    }
+
+    /**
+     * Enumerate every {@link SyntheticBeanTypeDeclaration} on the
+     * classpath. Plain {@link ServiceLoader} rather than
+     * {@link TestContext#loadService(Class)}: that resolves a port to
+     * its single highest-priority implementation, and here every
+     * provider matters — each module registering synthetic beans has
+     * its own types to declare and they are unioned.
+     *
+     * @return the providers, in classpath order; never {@code null}
+     */
+    private static List<SyntheticBeanTypeDeclaration> loadSyntheticBeanTypeDeclarations() {
+        List<SyntheticBeanTypeDeclaration> providers = new ArrayList<>();
+        for (SyntheticBeanTypeDeclaration provider
+                : ServiceLoader.load(SyntheticBeanTypeDeclaration.class)) {
+            providers.add(provider);
+        }
+        return providers;
+    }
+
+    /**
+     * The union of what every provider declares for the container being
+     * built. A provider answering {@code null} contributes nothing,
+     * which keeps a third-party implementation that forgets the
+     * empty-set contract from failing the deployment.
+     *
+     * @return the declared types; empty when nothing is declared
+     */
+    private Set<Type> collectDeclaredSyntheticTypes() {
+        if (syntheticBeanTypeDeclarations.isEmpty()) {
+            return Set.of();
+        }
+        Set<Type> declared = new LinkedHashSet<>();
+        for (SyntheticBeanTypeDeclaration provider : syntheticBeanTypeDeclarations) {
+            Set<Type> types = provider.declaredTypes(activeContext);
+            if (types != null) {
+                declared.addAll(types);
+            }
+        }
+        return declared;
     }
 
     private static boolean isUnsatisfied(
