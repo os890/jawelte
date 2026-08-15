@@ -7540,3 +7540,51 @@ happens to run in. And this is the second defect in a row that a consumer found
 by reasoning about the code rather than by running it; both were real.
 
 All four {owb, weld} x {geronimo, narayana} combinations green.
+
+## #132 — db-migration-module, and a wrong assumption the scenario caught
+
+A consequence of #123 working: now that a declared data source and the
+persistence unit are one database, a migration tool's history table is in scope
+for per-method cleanup like any other. Emptying it while leaving the DDL it
+describes means the next container re-runs the first script against tables that
+already exist — and the class passes alone and fails in a suite, which reads as
+flakiness rather than as leaked state.
+
+The consumer's own route (a `TableNameResolver` at a lower `@Priority`) really is
+as bad as they said: the port is resolved through `TestContext.loadService(...)`,
+so it is single-winner. A filtering resolver cannot filter — it has to replace
+`InformationSchemaTableNameResolver` outright and reimplement the
+`INFORMATION_SCHEMA` walk.
+
+No new SPI was needed. `ConfigKeyAliasProvider` already lets a non-owning module
+contribute into a logical key owned by another, additively, and three modules
+already use it against cdi-module's auto-mock excludes. So:
+
+- **jpa-module** owns `org.os890.jawelte.module.jpa.cleanup.exclude-tables` and
+  filters both cleanup strategies through it. Generic capability, no tool
+  knowledge.
+- **db-migration-module** is a new optional single-artifact module carrying the
+  names — `flyway_schema_history`, `schema_version`, `DATABASECHANGELOG`,
+  `DATABASECHANGELOGLOCK` — plus a twenty-line alias provider. It depends on
+  `core/api` and nothing else: not on jpa-module, not on Flyway or Liquibase.
+
+Knowing Flyway's table name is knowledge about a third-party tool rather than
+about persistence, which is why it lives in its own module — the same reasoning
+that moved the JNDI port out of core.
+
+**The mistake worth recording.** I assumed `ConfigResolver.resolve(...)` merged
+contributor aliases itself. It does not: it reads one key, and the *owner* is
+responsible for calling `resolveAliasKeysFor(...)` and unioning — which is what
+`DefaultExcludedPackageFilter.readPrefixes` does, and which I would have seen by
+reading it rather than inferring from the port's javadoc. The first run of
+scenario-75 failed with the history row gone, which is exactly what the scenario
+is for.
+
+Both halves are asserted deliberately: the history row survives the cleanup
+boundary **and** an ordinary table is still emptied across the same one. Asserting
+only the first would pass just as well if cleanup had stopped working altogether.
+Verified in both directions — with the module's dependency removed the history row
+is emptied again, so the module is doing the work rather than something
+incidental.
+
+Full jpa suite green on OpenWebBeans and Weld.

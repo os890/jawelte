@@ -166,7 +166,11 @@ public class NativeSqlDeleteDbCleanupStrategy implements DbCleanupStrategy {
     @Override
     public void cleanAllTables(String persistenceUnitName, EntityManagerFactory entityManagerFactory) {
         TableNameResolver tableNameResolver = TestContext.loadService(TableNameResolver.class);
-        List<String> tableNames = tableNameResolver.resolveTableNames(persistenceUnitName, entityManagerFactory);
+        // Migration-tool bookkeeping and anything else the deployment
+        // declared off-limits: emptying a schema-migration history while
+        // leaving the DDL it describes is never the intended outcome.
+        List<String> tableNames = CleanupTableExclusions.apply(
+                tableNameResolver.resolveTableNames(persistenceUnitName, entityManagerFactory));
         if (tableNames.isEmpty()) {
             return;
         }

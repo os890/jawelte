@@ -107,6 +107,7 @@
         <module>scenario-72-readonly-scope-survives-nested-readonly</module>
         <module>scenario-73-persistence-unit-resolves-declared-data-source</module>
         <module>scenario-74-declared-credentials-open-the-unit</module>
+        <module>scenario-75-migration-history-survives-cleanup</module>
     </modules>
 
     <dependencies>
