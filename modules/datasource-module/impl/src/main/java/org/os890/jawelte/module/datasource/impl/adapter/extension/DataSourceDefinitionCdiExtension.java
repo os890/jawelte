@@ -21,6 +21,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import jakarta.annotation.Priority;
 import jakarta.annotation.sql.DataSourceDefinition;
 import jakarta.annotation.sql.DataSourceDefinitions;
 import jakarta.enterprise.context.Dependent;
@@ -211,7 +212,7 @@ public class DataSourceDefinitionCdiExtension implements Extension {
      *
      * @param event the CDI lifecycle event
      */
-    void onAfterDeploymentValidation(@Observes AfterDeploymentValidation event) {
+    void onAfterDeploymentValidation(@Observes @Priority(1000) AfterDeploymentValidation event) {
         if (definitionsByName.isEmpty()) {
             return;
         }

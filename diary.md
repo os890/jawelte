@@ -7395,3 +7395,44 @@ Two things fixed on the way past that were not #125. `verify-all.sh` gained a
 jndi-module and datasource-module entirely — an oversight from the datasource
 work, so coverage has been silently under-reporting since; all three modules are
 listed now.
+
+## #123 — moving the EMF build, and why that was the whole problem
+
+The ticket reads as "jpa-module ignores `<jta-data-source>`", and the parser does
+ignore it — `PersistenceXmlParser` read only `name` and `<class>`. But that was
+the easy half. The real obstacle was timing: jpa-module built every
+`EntityManagerFactory` in `BeforeBeanDiscovery`, the *first* CDI phase, and a
+`@DataSourceDefinition` declared on a bean class is only discovered at
+`ProcessAnnotatedType`. There was no point at which a data source existed to hand
+over, whatever the parser knew.
+
+Two ways out. Move datasource-module's build earlier — impossible without losing
+bean-class definitions. Or move jpa-module's build later, which is what happened:
+`BeforeBeanDiscovery` → `AfterDeploymentValidation`, at observer `@Priority(2000)`
+against datasource-module's `@Priority(1000)`. Observer ordering within one event
+type *is* specified by CDI, unlike the cross-extension bean visibility that #124
+turned out to hinge on, so pinning the pair is a real contract rather than a hope.
+
+The only thing forcing the early build was `AfterBeanDiscovery` capturing the
+factory into its `produceWith` lambda. Resolving it at produce time instead costs
+one indirection and removes the constraint entirely. Moving a build *later* is
+also the safe direction: everything it depends on is complete by then, and
+`AfterDeploymentValidation` still precedes the application context starting, so a
+startup observer using an `EntityManager` is unaffected — the same window #122
+established for data sources.
+
+Two decisions worth recording. Resolution goes through **jndi-module's naming
+tree**, not through datasource-module: jpa-module gains a dependency on one
+interface jar and none at all on datasource-module, any module that binds a data
+source resolves the same way, and it matches what a real container does with the
+element. And an **unresolvable name is not an error** — the unit keeps
+jpa-module's own database exactly as before, which is what stops this from
+breaking every existing production-shaped scenario.
+
+The key written depends on the active transaction type rather than on which
+element carried the name. A production `persistence.xml` routinely says
+`<jta-data-source>` while the test runs RESOURCE_LOCAL; handing Hibernate a
+`jtaDataSource` there would have it expect a transaction manager that is not
+present.
+
+All 72 jpa scenarios pass on OpenWebBeans after the move.

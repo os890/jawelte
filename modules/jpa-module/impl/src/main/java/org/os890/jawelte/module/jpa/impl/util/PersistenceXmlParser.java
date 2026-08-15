@@ -181,9 +181,29 @@ public abstract class PersistenceXmlParser {
                     classes.add(text.trim());
                 }
             }
-            result.add(new ParsedPersistenceUnit(name, List.copyOf(classes)));
+            result.add(new ParsedPersistenceUnit(
+                    name,
+                    List.copyOf(classes),
+                    firstText(persistenceUnitElement, "jta-data-source"),
+                    firstText(persistenceUnitElement, "non-jta-data-source")));
         }
         return result;
+    }
+
+    /**
+     * The text of the first child element with the given local name,
+     * or {@code null} when the element is absent or empty.
+     */
+    private static String firstText(Element persistenceUnitElement, String localName) {
+        NodeList elements = persistenceUnitElement.getElementsByTagNameNS("*", localName);
+        if (elements.getLength() == 0) {
+            return null;
+        }
+        String text = elements.item(0).getTextContent();
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        return text.trim();
     }
 
     /**
@@ -192,8 +212,30 @@ public abstract class PersistenceXmlParser {
      * @param name              the {@code name} attribute
      * @param classes           the bodies of {@code <class>} child
      *                          elements; empty if none declared
+     * @param jtaDataSource     the body of {@code <jta-data-source>},
+     *                          or {@code null} when not declared
+     * @param nonJtaDataSource  the body of
+     *                          {@code <non-jta-data-source>}, or
+     *                          {@code null} when not declared
      */
-    public record ParsedPersistenceUnit(String name, List<String> classes) {
+    public record ParsedPersistenceUnit(
+            String name, List<String> classes, String jtaDataSource, String nonJtaDataSource) {
+
+        /**
+         * The data source name this unit declares, whichever element
+         * carried it. A production-shaped {@code persistence.xml}
+         * routinely says {@code <jta-data-source>} while a test runs
+         * RESOURCE_LOCAL, so the two are not treated as alternatives
+         * to choose between - either one names the data source the
+         * unit wants.
+         *
+         * @return the declared name, or {@code null} when the unit
+         *         declares none and jpa-module supplies its own
+         *         database as before
+         */
+        public String declaredDataSourceName() {
+            return jtaDataSource != null ? jtaDataSource : nonJtaDataSource;
+        }
 
         /**
          * Whether the persistence unit declares at least one

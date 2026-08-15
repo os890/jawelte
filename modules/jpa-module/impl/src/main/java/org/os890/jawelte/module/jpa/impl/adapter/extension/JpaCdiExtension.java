@@ -28,6 +28,10 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import javax.naming.Context;
+import javax.naming.NamingException;
+
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Any;
@@ -35,6 +39,7 @@ import jakarta.enterprise.inject.Default;
 import jakarta.enterprise.inject.literal.InjectLiteral;
 import jakarta.enterprise.inject.literal.NamedLiteral;
 import jakarta.enterprise.inject.spi.AfterBeanDiscovery;
+import jakarta.enterprise.inject.spi.AfterDeploymentValidation;
 import jakarta.enterprise.inject.spi.AnnotatedField;
 import jakarta.enterprise.inject.spi.BeforeBeanDiscovery;
 import jakarta.enterprise.inject.spi.Extension;
@@ -57,6 +62,7 @@ import jakarta.transaction.UserTransaction;
 import org.hibernate.jpa.HibernatePersistenceProvider;
 import org.os890.jawelte.core.api.port.ConfigResolver;
 import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
 import org.os890.jawelte.module.jpa.api.PersistenceConfig;
 import org.os890.jawelte.module.jpa.api.ReadOnly;
 import org.os890.jawelte.module.jpa.api.port.CdiTransactionalSupportProvider;
@@ -82,9 +88,7 @@ import org.os890.jawelte.module.jpa.impl.util.TestPersistenceUnitInfo;
  *       every reachable {@code persistence.xml}, filter the
  *       persistence-unit set per the annotation, run ASM-based
  *       entity discovery for persistence units with no
- *       {@code <class>} elements, pre-warm one
- *       {@link EntityManagerFactory} per active persistence unit in
- *       {@link EmfCache}, register the interceptor bindings for
+ *       {@code <class>} elements, register the interceptor bindings for
  *       {@link Transactional} and {@link ReadOnly}, and seed
  *       {@link JpaActivePersistenceUnits}.</li>
  *   <li><strong>{@code ProcessAnnotatedType}</strong>: rewrite every
@@ -167,6 +171,28 @@ public class JpaCdiExtension implements Extension {
 
     private final Map<String, Map<String, Object>> persistenceUnitProperties = new LinkedHashMap<>();
 
+    /**
+     * The persistence units this test class activates, kept from
+     * {@code BeforeBeanDiscovery} until the factories are built in
+     * {@code AfterDeploymentValidation}.
+     *
+     * <p><b>Why the build waits.</b> A unit naming a
+     * {@code <jta-data-source>} has to be given that data source rather
+     * than a generated H2 url, and the data source does not exist at
+     * {@code BeforeBeanDiscovery}: a {@code @DataSourceDefinition}
+     * declared on a bean class is only discovered at
+     * {@code ProcessAnnotatedType}, so datasource-module cannot have
+     * built anything that early. {@code AfterDeploymentValidation} is
+     * the first point at which everything is discovered and built, and
+     * it is still before the application context starts — so a startup
+     * observer using an {@code EntityManager} is unaffected.
+     */
+    private final List<ParsedPersistenceUnit> activeParsedUnits = new ArrayList<>();
+
+    private PersistenceConfig activePersistenceConfig;
+
+    private Class<?> activeTestClass;
+
     private final Set<String> userProducedFactoryQualifiers = new HashSet<>();
 
     private final Set<String> userProducedManagerQualifiers = new HashSet<>();
@@ -197,17 +223,12 @@ public class JpaCdiExtension implements Extension {
         Class<?> testClass = testContext.getTestClass();
         PersistenceConfig persistenceConfig = testClass.getAnnotation(PersistenceConfig.class);
 
+        this.activeTestClass = testClass;
+        this.activePersistenceConfig = persistenceConfig;
+
         List<ParsedPersistenceUnit> parsed =
                 PersistenceXmlParser.parseAll(Thread.currentThread().getContextClassLoader());
         Set<String> filter = filterFromAnnotation(persistenceConfig);
-        // Resolve the active strategy's transaction type once: under
-        // JTA the auto-discovery (Hibernate) path bootstraps the EMF
-        // with PersistenceUnitTransactionType.JTA; under RESOURCE_LOCAL
-        // it stays RESOURCE_LOCAL. The spec bootstrap path picks up
-        // the same change from properties (PersistencePropertyResolver
-        // contributes jakarta.persistence.transaction-type=JTA when
-        // the JTA strategy is active).
-        PersistenceUnitTransactionType emfTransactionType = resolveEmfTransactionType();
 
         Set<String> resolvedActivePersistenceUnits = new LinkedHashSet<>();
         for (ParsedPersistenceUnit unit : parsed) {
@@ -215,17 +236,7 @@ public class JpaCdiExtension implements Extension {
                 continue;
             }
             resolvedActivePersistenceUnits.add(unit.name());
-            Map<String, Object> properties = computeProperties(unit, persistenceConfig, testClass);
-            // Hand Hibernate a deferred ExtendedBeanManager. Resolved
-            // lazily after CDI bootstrap completes (see the
-            // @Initialized(ApplicationScoped.class) observer in this
-            // extension), so Hibernate's CDI integration talks to the
-            // final runtime BeanManager and not the bootstrap-phase
-            // reference an Extension observer holds.
-            properties.put("jakarta.persistence.bean.manager", deferredBeanManager);
-            persistenceUnitProperties.put(unit.name(), properties);
-            EmfCache.getOrCreate(unit.name(), properties,
-                    () -> bootstrapEntityManagerFactory(unit, properties, emfTransactionType));
+            activeParsedUnits.add(unit);
         }
         activePersistenceUnits = resolvedActivePersistenceUnits;
         JpaActivePersistenceUnits.set(activePersistenceUnits);
@@ -307,9 +318,6 @@ public class JpaCdiExtension implements Extension {
         boolean jtaMode = "JTA".equals(
                 TestContext.loadService(TransactionStrategy.class).getTransactionType().name());
         for (String persistenceUnitName : activePersistenceUnits) {
-            EntityManagerFactory factory = EmfCache.getCached(persistenceUnitName)
-                    .orElseThrow(() -> new IllegalStateException(
-                            "EntityManagerFactory for '" + persistenceUnitName + "' missing from cache"));
             String backoffKey = singlePersistenceUnit ? "" : persistenceUnitName;
 
             if (!userProducedFactoryQualifiers.contains(backoffKey)) {
@@ -318,7 +326,11 @@ public class JpaCdiExtension implements Extension {
                         .scope(ApplicationScoped.class)
                         .types(EntityManagerFactory.class, Object.class)
                         .qualifiers(syntheticQualifiers(persistenceUnitName, singlePersistenceUnit))
-                        .produceWith(instance -> factory);
+                        // Resolved when the bean is first produced, not
+                        // here: the factory is built in
+                        // AfterDeploymentValidation, which is after this
+                        // observer. Producing happens later still.
+                        .produceWith(instance -> entityManagerFactoryFor(persistenceUnitName));
             }
 
             if (!userProducedManagerQualifiers.contains(backoffKey)) {
@@ -346,7 +358,8 @@ public class JpaCdiExtension implements Extension {
                                 // begin / commit here).
                                 TestContext.loadService(TransactionStrategy.class)
                                         .bindLifecycleEventsToCurrentTransaction();
-                                EntityManager createdEm = factory.createEntityManager();
+                                EntityManager createdEm =
+                                        entityManagerFactoryFor(persistenceUnitName).createEntityManager();
                                 // Announce the raw EM to the
                                 // @TransactionScoped JtaEntityManagerCapture
                                 // observer so the connection resolver can
@@ -456,6 +469,130 @@ public class JpaCdiExtension implements Extension {
         }
     }
 
+    /**
+     * Give a unit that names a data source that data source, instead of
+     * the generated H2 url computed above.
+     *
+     * <p>Resolution goes through jndi-module's naming tree rather than
+     * through datasource-module, which jpa-module does not depend on
+     * and does not need to: {@code @DataSourceDefinition} binds under
+     * its declared name, and so does anything else that binds a data
+     * source, so a unit naming <em>any</em> bound entry resolves. That
+     * is also what a real container does with the element.
+     *
+     * <p><b>An unresolvable name is not an error.</b> A unit naming
+     * something nothing binds keeps jpa-module's own database, exactly
+     * as before this existed — the documented behaviour for a
+     * persistence.xml that names a container resource the test does not
+     * provide, and what keeps this change from breaking every existing
+     * production-shaped scenario.
+     *
+     * <p>The key depends on the active transaction type, not on which
+     * element carried the name: a production file routinely declares
+     * {@code <jta-data-source>} while the test runs RESOURCE_LOCAL, and
+     * handing Hibernate a {@code jtaDataSource} there would have it
+     * expect a transaction manager that is not present.
+     */
+    private void applyDeclaredDataSource(ParsedPersistenceUnit unit, Map<String, Object> properties) {
+        String declaredName = unit.declaredDataSourceName();
+        if (declaredName == null) {
+            return;
+        }
+        if (properties.containsKey("jakarta.persistence.jtaDataSource")
+                || properties.containsKey("jakarta.persistence.nonJtaDataSource")) {
+            return;
+        }
+        Object bound = lookUpDataSource(declaredName);
+        if (bound == null) {
+            return;
+        }
+        boolean jta = PersistenceUnitTransactionType.JTA == resolveEmfTransactionType();
+        properties.put(
+                jta ? "jakarta.persistence.jtaDataSource" : "jakarta.persistence.nonJtaDataSource",
+                bound);
+    }
+
+    /**
+     * Resolve a name in the shared naming tree.
+     *
+     * @param declaredName the {@code <jta-data-source>} /
+     *                     {@code <non-jta-data-source>} body
+     * @return the bound object, or {@code null} when there is no naming
+     *         provider or nothing is bound under the name
+     */
+    private static Object lookUpDataSource(String declaredName) {
+        JndiContextProvider provider = TestContext.loadService(JndiContextProvider.class);
+        Context root = provider == null ? null : provider.writableRoot();
+        if (root == null) {
+            return null;
+        }
+        try {
+            return root.lookup(declaredName);
+        } catch (NamingException notBound) {
+            return null;
+        }
+    }
+
+    /**
+     * Build every active persistence unit's
+     * {@link EntityManagerFactory}.
+     *
+     * <p><b>{@code @Priority} is the contract, not decoration.</b>
+     * datasource-module builds and binds its
+     * {@code @DataSourceDefinition}s from its own
+     * {@code AfterDeploymentValidation} observer at priority 1000; this
+     * one runs at 2000 so a unit declaring a {@code <jta-data-source>}
+     * finds it. Observer ordering within a single event type is
+     * specified by CDI, so this holds on any runtime — unlike the
+     * cross-extension bean visibility that bit us in #124.
+     *
+     * <p>Still before the application context starts, so an
+     * {@code @Initialized(ApplicationScoped.class)} observer using an
+     * {@code EntityManager} sees a fully built unit.
+     *
+     * @param event the CDI lifecycle event
+     */
+    void onAfterDeploymentValidation(@Observes @Priority(2000) AfterDeploymentValidation event) {
+        if (!active) {
+            return;
+        }
+        // Resolve the active strategy's transaction type once: under
+        // JTA the auto-discovery (Hibernate) path bootstraps the EMF
+        // with PersistenceUnitTransactionType.JTA; under RESOURCE_LOCAL
+        // it stays RESOURCE_LOCAL. The spec bootstrap path picks up
+        // the same change from properties (PersistencePropertyResolver
+        // contributes jakarta.persistence.transaction-type=JTA when
+        // the JTA strategy is active).
+        PersistenceUnitTransactionType emfTransactionType = resolveEmfTransactionType();
+        for (ParsedPersistenceUnit unit : activeParsedUnits) {
+            Map<String, Object> properties =
+                    computeProperties(unit, activePersistenceConfig, activeTestClass);
+            // Hand Hibernate a deferred ExtendedBeanManager. Resolved
+            // lazily after CDI bootstrap completes (see the
+            // @Initialized(ApplicationScoped.class) observer in this
+            // extension), so Hibernate's CDI integration talks to the
+            // final runtime BeanManager and not the bootstrap-phase
+            // reference an Extension observer holds.
+            properties.put("jakarta.persistence.bean.manager", deferredBeanManager);
+            persistenceUnitProperties.put(unit.name(), properties);
+            EmfCache.getOrCreate(unit.name(), properties,
+                    () -> bootstrapEntityManagerFactory(unit, properties, emfTransactionType));
+        }
+    }
+
+    /**
+     * The factory for a unit, resolved at produce time.
+     *
+     * @param persistenceUnitName the unit
+     * @return its factory
+     * @throws IllegalStateException if the factory was never built
+     */
+    private static EntityManagerFactory entityManagerFactoryFor(String persistenceUnitName) {
+        return EmfCache.getCached(persistenceUnitName)
+                .orElseThrow(() -> new IllegalStateException(
+                        "EntityManagerFactory for '" + persistenceUnitName + "' missing from cache"));
+    }
+
     private static Set<String> filterFromAnnotation(PersistenceConfig persistenceConfig) {
         if (persistenceConfig == null || persistenceConfig.persistenceUnits().length == 0) {
             return Collections.emptySet();
@@ -509,12 +646,18 @@ public class JpaCdiExtension implements Extension {
             }
         }
 
-        // When a resolver contributed a jtaDataSource, drop the plain
-        // JDBC connection coordinates so Hibernate cannot fall back to
+        // A unit naming a data source gets that data source, unless a
+        // resolver already supplied one (jta-module wraps it for XA,
+        // and that wrapper must win over the raw entry).
+        applyDeclaredDataSource(unit, properties);
+
+        // When a data source is in play, drop the plain JDBC
+        // connection coordinates so Hibernate cannot fall back to
         // its non-XA connection-provider path for schema-generation /
         // pool-warm-up. user + password are kept — Hibernate still
         // uses them for DDL execution against the wrapped DataSource.
-        if (properties.containsKey("jakarta.persistence.jtaDataSource")) {
+        if (properties.containsKey("jakarta.persistence.jtaDataSource")
+                || properties.containsKey("jakarta.persistence.nonJtaDataSource")) {
             properties.remove("jakarta.persistence.jdbc.url");
             properties.remove("jakarta.persistence.jdbc.driver");
         }
