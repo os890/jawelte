@@ -6931,3 +6931,43 @@ expensive `clean verify`, from a clean tree:
 Note for the next release: `release:prepare` cannot run offline. The plugin's own
 dependencies (`maven-release-manager`, `maven-scm-api`, …) are not in the local repository,
 so `-o` fails before it reaches git.
+
+## 2026-08-15 — rehearsed the full-reactor release as 0.2.0-demo1, and what it corrected
+
+Ran `release.sh` for real, end to end, on a throwaway `demo-release` branch against the local
+clone of the publication repository at `~/workspace/os890-maven-repo`. Both hazards of a real
+run were fenced off first: `release:prepare` pushes to the SCM url in the pom — not to
+`origin` — so the branch carried a commit repointing `<scm>` at a scratch bare repository,
+`origin` was repointed to the same place, and the throwaway branch made both changes
+disposable. `receive.denyCurrentBranch=updateInstead` in the target repo let the publication
+push land in a non-bare checkout. Released `0.2.0-demo1` rather than `0.2.0` so that no real
+tag or version could survive a botched cleanup.
+
+**It worked, and it published exactly the right set.** `release:prepare` built all 534
+modules green and cut the tag; `release:perform` deployed; the publication commit contains 27
+artifacts × (jar + sources + javadoc + pom) plus the aggregator poms — core and modules only.
+Not one `jawelte-tests-*`, scenario, coverage-report or verify-all artifact. Afterwards
+everything was rolled back: target repo reset to `bc5eb6b` with the config unset, branch,
+tag, stale remote-tracking ref, `target/checkout` and the scratch repository all removed.
+
+**Two things in the design were wrong, and only the rehearsal could show it.**
+
+*`release:perform` is not the narrow reactor.* The claim written into the pom and into
+`release.sh` that morning — perform runs without the profile, so it deploys core + modules and
+that is what keeps the test artifacts unpublished — is false. `release:prepare` writes
+`exec.activateProfiles=full-reactor` into `release.properties`, and `release:perform` reads it
+back: the tag is rebuilt with all 534 modules regardless of what the command line says. The
+publication is correct only because `tests/` and `coverage-report/` set
+`maven.deploy.skip=true`. That property is not a second line of defence, it is the mechanism.
+Both comments now say so. (It also means a release costs two full suite runs, not one.)
+
+*The release left 492 files behind.* `release:perform` finishes with a `release:clean`, but
+that one runs in the outer invocation's reactor — core + modules — so every
+`pom.xml.releaseBackup` under `tests/` and `coverage-report/` survived. They are in
+`.gitignore`, so `git status` reported a clean tree while 492 stale files sat in the working
+copy; the count only surfaced from an explicit `find`. `release.sh` now ends with an explicit
+`-Pfull-reactor release:clean`.
+
+Worth keeping in mind: a gitignored artifact of a build step is invisible to every "is the
+tree clean?" check in the script and in the git workflow. The dry run would never have caught
+either of these — the first needs a `perform`, the second needs the run to finish.

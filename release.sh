@@ -163,8 +163,13 @@ step "release:prepare"
 # whole test suite: the tag cannot come into existence unless everything
 # passes. That is the expensive part of a release, on a dry run too.
 #
-# `release:perform` below is intentionally NOT given the profile: it
-# deploys what it builds, and only core + modules may be published.
+# Note that leaving the profile off `release:perform` below does NOT keep
+# it out of the perform build: release:prepare writes
+# `exec.activateProfiles=full-reactor` into release.properties and perform
+# reads it back, so the tag is rebuilt with the full reactor too. What
+# keeps the test scenarios unpublished is maven.deploy.skip in tests/ and
+# coverage-report/, not the shape of the reactor. Verified by rehearsal —
+# see the 0.2.0-demo1 entry in diary.md.
 
 PREPARE_ARGS=(-Pfull-reactor)
 [[ -n "$RELEASE_VERSION" ]] && PREPARE_ARGS+=("-DreleaseVersion=$RELEASE_VERSION")
@@ -202,6 +207,12 @@ step "release:perform — deploying $RELEASED_VERSION into the clone"
 
 "$MVN" "${MVN_ARGS[@]}" release:perform \
     -Darguments="-Dos890.maven.repo.directory=$PUBLISH_CHECKOUT"
+
+# release:perform ends with a release:clean, but that one runs in this
+# invocation's reactor — core + modules — and so leaves the pom.xml.releaseBackup
+# files of tests/ and coverage-report/ behind, 492 of them. They are gitignored,
+# which means `git status` does not show them and they survive unnoticed.
+"$MVN" "${MVN_ARGS[@]}" -Pfull-reactor release:clean
 
 # --- publish ---------------------------------------------------------------
 

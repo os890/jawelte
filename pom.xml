@@ -1085,16 +1085,22 @@
                     release-profile so the sources-jars are attached to
                     what is published and to nothing else.
 
-                    The two goals deliberately walk different reactors.
                     `release.sh` prepares with -Pfull-reactor, so every
                     pom in the repository gets its version rewritten and
                     the tag is internally consistent - and the forked
                     `clean verify` covers the test scenarios, so nothing
-                    is tagged that does not build. `perform` runs without
-                    the profile and therefore deploys the default reactor
-                    only: core + modules. tests/* and coverage-report/
-                    additionally set maven.deploy.skip, so they stay
-                    unpublished even in a build that does include them.
+                    is tagged that does not build.
+
+                    That profile reaches `perform` as well, whether or
+                    not the command line repeats it: `release:prepare`
+                    records `exec.activateProfiles=full-reactor` in
+                    release.properties and `release:perform` reads it
+                    back, so the tag is rebuilt with all 534 modules.
+                    What keeps the test scenarios out of the repository
+                    is therefore maven.deploy.skip in tests/ and
+                    coverage-report/ - not the reactor being narrower
+                    here. Rehearsed end to end as 0.2.0-demo1: the
+                    publication contains core + modules and nothing else.
 
                     `release.sh` drives both goals and publishes the
                     result; it is not meant to be invoked by hand.
