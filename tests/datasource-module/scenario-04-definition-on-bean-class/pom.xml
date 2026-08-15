@@ -31,4 +31,16 @@
     <packaging>jar</packaging>
     <name>jawelte tests/datasource-module scenario 04: a definition on a bean class is discovered</name>
     <description>Verifies that @DataSourceDefinition declared on an application bean rather than on the test class is discovered via ProcessAnnotatedType and is injectable and bound exactly as a test-class-level declaration would be.</description>
+
+    <dependencies>
+        <!--
+            The in-process JNDI provider core/impl installs. Declared
+            per scenario rather than in the parent so that scenario 06
+            can run without one.
+        -->
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-naming</artifactId>
+        </dependency>
+    </dependencies>
 </project>

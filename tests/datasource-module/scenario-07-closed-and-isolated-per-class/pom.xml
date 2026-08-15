@@ -27,10 +27,10 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-tests-datasource-module-scenario-02-multiple-definitions-named</artifactId>
+    <artifactId>jawelte-tests-datasource-module-scenario-07-closed-and-isolated-per-class</artifactId>
     <packaging>jar</packaging>
-    <name>jawelte tests/datasource-module scenario 02: two definitions resolve independently by name</name>
-    <description>Verifies that @DataSourceDefinitions with two entries produces two independent DataSources, each injectable by its @Named qualifier and each bound under its own JNDI name, writing to two separate H2 databases.</description>
+    <name>jawelte tests/datasource-module scenario 07: data sources are closed and not shared across test classes</name>
+    <description>Verifies the end of the lifecycle: a closeable vendor DataSource is closed in afterAll, and a second test class gets its own freshly built instance rather than the previous class's. Both subject classes are driven through EngineTestKit so the assertions can run after their containers have shut down.</description>
 
     <dependencies>
         <!--

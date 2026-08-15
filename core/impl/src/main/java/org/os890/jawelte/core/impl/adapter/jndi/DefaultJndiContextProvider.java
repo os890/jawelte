@@ -115,16 +115,36 @@ public class DefaultJndiContextProvider implements JndiContextProvider {
                     "org.apache.xbean.naming.global.GlobalContextManager");
             Class<?> writableContext = loadXbeanClass(
                     "org.apache.xbean.naming.context.WritableContext");
-            // (nameInNamespace, bindings, cacheReferences). Reference
-            // caching matters for anything that binds a Referenceable
-            // object — a JDBC DataSource typically is one, and JNDI
-            // stores those as a Reference and rebuilds them on every
-            // lookup. With caching on, the rebuild happens once and
-            // every later lookup of that name yields the same object
-            // instead of a fresh one each time.
+            Class<?> contextAccess = loadXbeanClass(
+                    "org.apache.xbean.naming.context.ContextAccess");
+            Object modifiable = contextAccess.getField("MODIFIABLE").get(null);
+            // (nameInNamespace, bindings, contextAccess, cacheReferences,
+            //  supportReferenceable, checkDereferenceDifferent,
+            //  assumeDereferenceBound).
+            //
+            // supportReferenceable = false is the one that matters, and
+            // it is why the long constructor is used at all. The bind
+            // stores the live object either way — xbean never calls
+            // NamingManager.getStateToBind. It is the *lookup* that
+            // dereferences: with this flag on, a bound Referenceable is
+            // passed through NamingManager.getObjectInstance and the
+            // caller gets a freshly reconstructed object instead of the
+            // one that was bound. A JDBC DataSource is almost always
+            // Referenceable, so leaving it on would mean an injected
+            // data source and a JNDI lookup of the same name handing
+            // back two different objects — and for a pooled data source,
+            // two different pools. Turning it off makes the naming tree
+            // hold what was put into it, which is what a test framework
+            // needs and what an EE container's own tree behaves like.
+            //
+            // The remaining flags then have nothing left to act on:
+            // reference caching, dereference-difference checking and
+            // the dereference-bound assumption all describe handling of
+            // reconstructed objects that no longer occurs.
             Context root = (Context) writableContext
-                    .getDeclaredConstructor(String.class, Map.class, boolean.class)
-                    .newInstance("", Map.of(), true);
+                    .getDeclaredConstructor(String.class, Map.class, contextAccess,
+                            boolean.class, boolean.class, boolean.class, boolean.class)
+                    .newInstance("", Map.of(), modifiable, false, false, false, false);
             globalContextManager.getMethod("setGlobalContext", Context.class).invoke(null, root);
         } catch (ClassNotFoundException noNamingProvider) {
             // No xbean-naming on the classpath. Whoever supplies the

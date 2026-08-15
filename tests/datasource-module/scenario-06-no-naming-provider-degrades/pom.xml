@@ -27,20 +27,8 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-tests-datasource-module-scenario-02-multiple-definitions-named</artifactId>
+    <artifactId>jawelte-tests-datasource-module-scenario-06-no-naming-provider-degrades</artifactId>
     <packaging>jar</packaging>
-    <name>jawelte tests/datasource-module scenario 02: two definitions resolve independently by name</name>
-    <description>Verifies that @DataSourceDefinitions with two entries produces two independent DataSources, each injectable by its @Named qualifier and each bound under its own JNDI name, writing to two separate H2 databases.</description>
-
-    <dependencies>
-        <!--
-            The in-process JNDI provider core/impl installs. Declared
-            per scenario rather than in the parent so that scenario 06
-            can run without one.
-        -->
-        <dependency>
-            <groupId>org.apache.xbean</groupId>
-            <artifactId>xbean-naming</artifactId>
-        </dependency>
-    </dependencies>
+    <name>jawelte tests/datasource-module scenario 06: no naming provider is degradation, not failure</name>
+    <description>Verifies the documented behaviour when no JNDI provider is on the classpath: this scenario deliberately omits xbean-naming. The declared DataSource is still built and still injectable, binding is skipped rather than fatal, and a lookup fails with the naming layer's own error at the point it is attempted.</description>
 </project>

@@ -31,4 +31,16 @@
     <packaging>jar</packaging>
     <name>jawelte tests/datasource-module scenario 01: a single @DataSourceDefinition is injectable and bound in JNDI</name>
     <description>Verifies that one @DataSourceDefinition on the test class yields a working DataSource that is injectable unqualified (sole definition wins @Default), injectable by @Named, resolvable through a JNDI lookup of the declared name, and that all three routes hand back the identical instance.</description>
+
+    <dependencies>
+        <!--
+            The in-process JNDI provider core/impl installs. Declared
+            per scenario rather than in the parent so that scenario 06
+            can run without one.
+        -->
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-naming</artifactId>
+        </dependency>
+    </dependencies>
 </project>

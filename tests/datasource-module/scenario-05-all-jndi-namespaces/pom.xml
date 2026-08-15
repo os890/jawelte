@@ -27,10 +27,10 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>jawelte-tests-datasource-module-scenario-02-multiple-definitions-named</artifactId>
+    <artifactId>jawelte-tests-datasource-module-scenario-05-all-jndi-namespaces</artifactId>
     <packaging>jar</packaging>
-    <name>jawelte tests/datasource-module scenario 02: two definitions resolve independently by name</name>
-    <description>Verifies that @DataSourceDefinitions with two entries produces two independent DataSources, each injectable by its @Named qualifier and each bound under its own JNDI name, writing to two separate H2 databases.</description>
+    <name>jawelte tests/datasource-module scenario 05: every standard JNDI namespace resolves</name>
+    <description>Verifies that a declared name in each of the four standard Jakarta namespaces - java:comp/env, java:module, java:app and java:global - is bound and resolves, so the binder's sub-context creation is not specific to one prefix.</description>
 
     <dependencies>
         <!--

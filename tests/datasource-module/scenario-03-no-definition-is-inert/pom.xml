@@ -31,4 +31,16 @@
     <packaging>jar</packaging>
     <name>jawelte tests/datasource-module scenario 03: the module is inert without a definition</name>
     <description>Verifies that datasource-module on the classpath with no @DataSourceDefinition anywhere changes nothing: the container boots, no DataSource bean exists, nothing is bound in JNDI, and the lifecycle adapter is a no-op.</description>
+
+    <dependencies>
+        <!--
+            The in-process JNDI provider core/impl installs. Declared
+            per scenario rather than in the parent so that scenario 06
+            can run without one.
+        -->
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-naming</artifactId>
+        </dependency>
+    </dependencies>
 </project>

@@ -67,29 +67,25 @@ class Scenario01Test {
         assertThat(byName).isSameAs(unqualified);
     }
 
+    /**
+     * One declaration means one data source, whichever way it is
+     * reached. A JDBC {@code DataSource} is almost always
+     * {@code Referenceable}, and a naming provider left to its
+     * defaults reconstructs such an object on lookup — which would
+     * hand a pooled data source's users a second, unrelated pool.
+     * The naming provider is configured not to dereference, so the
+     * tree hands back what was put into it.
+     */
     @Test
-    void theDefinitionIsBoundInJndiUnderItsDeclaredName() throws NamingException, SQLException {
+    void theDefinitionIsBoundInJndiUnderItsDeclaredName() throws NamingException {
         Object bound = new InitialContext().lookup("java:comp/env/jdbc/OrdersDS");
 
-        assertThat(bound).isInstanceOf(DataSource.class);
-        try (Connection connection = ((DataSource) bound).getConnection()) {
-            assertThat(connection.getMetaData().getURL())
-                    .as("the bound entry has to be the declared data source, "
-                            + "reaching the same database as the injected one")
-                    .contains("scenario01");
-        }
+        assertThat(bound)
+                .as("a JNDI lookup must hand back the very object that was injected, "
+                        + "not a second one built from the same declaration")
+                .isSameAs(unqualified);
     }
 
-    /**
-     * A JDBC {@code DataSource} is usually {@code Referenceable}, so
-     * JNDI stores a {@code Reference} and rebuilds the object on
-     * lookup rather than handing back the instance that was bound —
-     * standard naming behaviour, not something this module chooses.
-     * What it must not do is rebuild it <em>per lookup</em>: that
-     * would hand a pooled data source's users a separate pool each
-     * time. Reference caching in the naming provider is what makes
-     * repeated lookups stable.
-     */
     @Test
     void repeatedLookupsResolveToTheSameInstance() throws NamingException {
         InitialContext context = new InitialContext();

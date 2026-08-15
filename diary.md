@@ -7069,3 +7069,40 @@ is `<dependencyManagement>` (a version, not a dependency) and the two aggregator
 reactor module. It is absent from every other scenario's classpath. Scenario 03 covers the
 other half — the module present and unused — and asserts the container boots, no `DataSource`
 bean exists, and nothing is bound.
+
+### The red test was right, and the fix was a policy flag rather than a wrapper
+
+Softening the identity assertion was the wrong move; the assertion was correct and the
+behaviour was not. Reading what xbean actually does settled it: xbean never calls
+`NamingManager.getStateToBind`, so the *bind* stores the live object. It is the *lookup* that
+dereferences — `WritableContext` passes a bound `Referenceable` through
+`NamingManager.getObjectInstance` and hands back a reconstruction. That behaviour is a
+constructor flag, `supportReferenceable`, and the naming provider now builds its root with it
+off. Injection and a JNDI lookup return the identical object, no facade, no wrapper, no
+softened assertion — and the earlier `cacheReferences` change went away with it, since there
+are no reconstructed objects left to cache.
+
+Worth keeping: the first instinct was to wrap the vendor object in something not
+`Referenceable`. That would have worked and would have been a workaround — it changes the
+observable type of every injected `DataSource` to hide a provider policy. Configuring the
+policy is the smaller and more honest change.
+
+### The remaining four scenarios
+
+Eight scenarios now, 32 tests, all green — the ticket's list, plus a factory-swap scenario the
+project's own conventions imply (every port has one).
+
+- **05** — all four Jakarta namespaces (`java:comp/env`, `java:module`, `java:app`,
+  `java:global`), which nest to different depths; the binder's sub-context creation must not
+  be specific to the prefix the other scenarios happen to use.
+- **06** — no naming provider at all. Its pom deliberately omits xbean-naming, which is why
+  xbean moved out of the tests aggregator and into the individual scenario poms: a dependency
+  inherited from a parent cannot be removed by a child. Injection still works, binding is
+  skipped quietly, and a lookup fails with the naming layer's own error where it is attempted.
+- **07** — closing and per-class isolation, driven through `EngineTestKit` because a test
+  cannot assert about its own `afterAll`. A recording vendor `DataSource` shows each declared
+  instance closed, the JNDI entry unbound, a second class getting its own instance, and the
+  same class run twice building a fresh one each time.
+- **08** — the `DataSourceFactory` swap. A consumer factory at `@Priority(100)` ignores
+  `className` entirely and returns its own type, so "the swap took effect" cannot be confused
+  with "the default happened to work".

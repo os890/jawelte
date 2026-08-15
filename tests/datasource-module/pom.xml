@@ -31,13 +31,17 @@
     <packaging>pom</packaging>
 
     <name>jawelte (tests/datasource-module aggregator and parent)</name>
-    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-datasource-module. Each scenario boots a CDI container (via cdi-module) so the @DataSourceDefinition discovery extension, the DataSourceLifecycleAdapter and the reflective factory run end-to-end against H2. xbean-naming is on the test classpath so the JNDI binding path is exercised for real rather than skipped. No jpa-module and no jta-module dependency anywhere in this tree — that datasource-module stands alone is part of what these scenarios assert.</description>
+    <description>Aggregator AND parent for the per-scenario test modules covering jawelte-datasource-module. Each scenario boots a CDI container (via cdi-module) so the @DataSourceDefinition discovery extension, the DataSourceLifecycleAdapter and the reflective factory run end-to-end against H2. Each scenario that needs a JNDI provider declares xbean-naming itself, so scenario 06 can run without one and assert the documented degradation. No jpa-module and no jta-module dependency anywhere in this tree — that datasource-module stands alone is part of what these scenarios assert.</description>
 
     <modules>
         <module>scenario-01-single-definition-injected-and-bound</module>
         <module>scenario-02-multiple-definitions-named</module>
         <module>scenario-03-no-definition-is-inert</module>
         <module>scenario-04-definition-on-bean-class</module>
+        <module>scenario-05-all-jndi-namespaces</module>
+        <module>scenario-06-no-naming-provider-degrades</module>
+        <module>scenario-07-closed-and-isolated-per-class</module>
+        <module>scenario-08-datasource-factory-swap</module>
     </modules>
 
     <dependencies>
@@ -99,16 +103,12 @@
         </dependency>
 
         <!--
-            xbean-naming supplies the in-process JNDI provider that
-            core/impl's DefaultJndiContextProvider installs. Present
-            here so the bind-and-look-up path is actually exercised;
-            scenario 03 is the one that documents what happens without
-            a lookup at all.
+            xbean-naming is deliberately NOT declared here. It is the
+            in-process JNDI provider core/impl installs, and scenario 06
+            exists precisely to run without one — a dependency inherited
+            from this parent could not be removed by a child, so each
+            scenario that wants naming declares it itself.
         -->
-        <dependency>
-            <groupId>org.apache.xbean</groupId>
-            <artifactId>xbean-naming</artifactId>
-        </dependency>
 
         <!--
             H2 is the vendor whose org.h2.jdbcx.JdbcDataSource the
