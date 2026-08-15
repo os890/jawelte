@@ -15,57 +15,44 @@
  */
 package org.os890.jawelte.module.datasource.impl.adapter.lifecycle;
 
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-
-import javax.sql.DataSource;
-
 import jakarta.annotation.Priority;
-import jakarta.annotation.sql.DataSourceDefinition;
-import jakarta.enterprise.inject.spi.BeanManager;
 import jakarta.enterprise.inject.spi.CDI;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.core.api.port.TestModuleLifecyclePort;
-import org.os890.jawelte.module.datasource.api.port.DataSourceFactory;
-import org.os890.jawelte.module.datasource.impl.DataSourceRegistry;
 import org.os890.jawelte.module.datasource.impl.adapter.extension.DataSourceDefinitionCdiExtension;
-import org.os890.jawelte.module.datasource.impl.adapter.jndi.DataSourceJndiBinder;
 
 /**
  * {@link TestModuleLifecyclePort} adapter shipped by
- * datasource-module/impl. Builds one {@link DataSource} per discovered
- * {@code @DataSourceDefinition} in {@code beforeAll}, binds each into
- * JNDI, and closes and unbinds them in {@code afterAll}.
+ * datasource-module/impl. Releases the data sources when the test class
+ * is done.
  *
- * <p><b>Priority.</b> {@code @Priority(150)} — after scope-module
- * (100), so the test scopes are live, and before jpa-module (200), so
- * a declared data source already exists by the time the JPA adapter
- * boots. That ordering is what a later "persistence unit resolves its
- * declared {@code <jta-data-source>}" change needs, and choosing it
- * now costs nothing.
+ * <p><b>Building is not done here, deliberately.</b> A lifecycle port's
+ * {@code beforeAll} runs after {@code TestBeanContainerPort.beforeAll},
+ * which is what starts the CDI container — so anything built here would
+ * arrive after {@code @Initialized(ApplicationScoped.class)} has already
+ * fired, and a startup observer using a declared data source would have
+ * failed already. Schema migration, readiness probes and cache warm-up
+ * all live in that window. The build therefore happens in
+ * {@code DataSourceDefinitionCdiExtension}'s
+ * {@code AfterDeploymentValidation} observer, which runs before the
+ * application context starts — the order a real container establishes a
+ * {@code @DataSourceDefinition} in.
  *
- * <p><b>No-op unless something was declared.</b> The adapter reads the
- * discovery map off {@link DataSourceDefinitionCdiExtension}; an empty
- * map means an immediate return, with no registry access, no naming
- * lookup and no CDI resolution. A test class without
- * {@code @DataSourceDefinition} — and therefore every existing test in
- * the suite — sees exactly the behaviour it saw before this module
- * existed, even with the module on the classpath.
+ * <p>What is left for this adapter is the other end: unbinding the JNDI
+ * entries and closing what can be closed, once the class is finished.
+ * That has to be driven from the test lifecycle, because the CDI
+ * container is shut down by the bean-container port right after.
  *
- * <p><b>Build failure recovery.</b> If building the second of three
- * data sources throws, the first one is closed and unbound before the
- * failure propagates. The framework does not call {@code afterAll} for
- * an adapter whose {@code beforeAll} threw, so this self-cleanup is
- * the only thing that releases what was already opened.
+ * <p><b>Priority.</b> {@code @Priority(150)} — after scope-module (100)
+ * and before jpa-module (200). For teardown the order is reversed
+ * (LIFO), so the data sources outlive jpa-module's own cleanup, which is
+ * the ordering a persistence unit resolving a declared data source will
+ * need.
  *
- * <p><b>Closing.</b> {@code javax.sql.DataSource} has no
- * {@code close()} — a vendor either implements {@link AutoCloseable}
- * or exposes its own no-arg {@code close()}, and many (H2's
- * {@code JdbcDataSource} among them) hold nothing that needs closing
- * at all. All three cases are handled and the third is not an error.
+ * <p><b>No-op unless something was declared.</b> With no
+ * {@code @DataSourceDefinition} anywhere there is nothing built and
+ * nothing to release, and this returns before touching CDI at all.
  */
 @Priority(150)
 public class DataSourceLifecycleAdapter implements TestModuleLifecyclePort {
@@ -75,121 +62,17 @@ public class DataSourceLifecycleAdapter implements TestModuleLifecyclePort {
     }
 
     @Override
-    public void beforeAll(TestContext testContext) {
-        Map<String, DataSourceDefinition> definitions = discoveredDefinitions();
-        if (definitions.isEmpty()) {
-            return;
-        }
-        DataSourceFactory factory = resolveFactory();
-        DataSourceRegistry registry = CDI.current().select(DataSourceRegistry.class).get();
-        List<String> built = new ArrayList<>();
-        try {
-            for (Map.Entry<String, DataSourceDefinition> entry : definitions.entrySet()) {
-                String name = entry.getKey();
-                DataSource dataSource = factory.create(entry.getValue());
-                if (dataSource == null) {
-                    throw new IllegalStateException(
-                            factory.getClass().getName() + " returned null for @DataSourceDefinition(name = \""
-                                    + name + "\")");
-                }
-                registry.register(name, dataSource);
-                built.add(name);
-                DataSourceJndiBinder.bind(name, dataSource);
-            }
-        } catch (RuntimeException buildFailure) {
-            releaseBestEffort(registry, built, buildFailure);
-            throw buildFailure;
-        }
-    }
-
-    @Override
     public void afterAll(TestContext testContext) {
-        if (discoveredDefinitions().isEmpty()) {
+        DataSourceDefinitionCdiExtension extension = CDI.current().getBeanManager()
+                .getExtension(DataSourceDefinitionCdiExtension.class);
+        if (extension.builtDataSources().isEmpty()) {
             return;
         }
-        DataSourceRegistry registry = CDI.current().select(DataSourceRegistry.class).get();
-        List<Throwable> failures = new ArrayList<>();
-        try {
-            for (Map.Entry<String, DataSource> entry : registry.entries().entrySet()) {
-                try {
-                    DataSourceJndiBinder.unbind(entry.getKey());
-                    closeIfCloseable(entry.getValue());
-                } catch (RuntimeException closeFailure) {
-                    failures.add(closeFailure);
-                }
-            }
-        } finally {
-            registry.clear();
-        }
-        if (!failures.isEmpty()) {
-            RuntimeException first = new IllegalStateException(
-                    "Failed to release " + failures.size() + " declared DataSource(s)", failures.get(0));
-            for (int i = 1; i < failures.size(); i++) {
-                first.addSuppressed(failures.get(i));
-            }
-            throw first;
-        }
-    }
-
-    private static Map<String, DataSourceDefinition> discoveredDefinitions() {
-        BeanManager beanManager = CDI.current().getBeanManager();
-        DataSourceDefinitionCdiExtension extension =
-                beanManager.getExtension(DataSourceDefinitionCdiExtension.class);
-        return extension.discoveredDefinitions();
-    }
-
-    private static DataSourceFactory resolveFactory() {
-        DataSourceFactory factory = TestContext.loadService(DataSourceFactory.class);
-        if (factory == null) {
-            throw new IllegalStateException(
-                    "No " + DataSourceFactory.class.getName() + " on the classpath. "
-                            + "jawelte-datasource-module-impl ships the default one; a consumer replacing it "
-                            + "must keep exactly one registered via META-INF/services.");
-        }
-        return factory;
-    }
-
-    private static void releaseBestEffort(DataSourceRegistry registry, List<String> built, RuntimeException primary) {
-        for (String name : built) {
-            try {
-                DataSourceJndiBinder.unbind(name);
-                closeIfCloseable(registry.get(name));
-            } catch (RuntimeException cleanupFailure) {
-                primary.addSuppressed(cleanupFailure);
-            }
-        }
-        registry.clear();
-    }
-
-    /**
-     * Close a data source that can be closed.
-     *
-     * <p>Three shapes, in order: {@link AutoCloseable}, a vendor's own
-     * public no-arg {@code close()}, or nothing to close — the last is
-     * the common case (H2's {@code JdbcDataSource} holds no resource)
-     * and is not an error.
-     */
-    private static void closeIfCloseable(DataSource dataSource) {
-        if (dataSource instanceof AutoCloseable closeable) {
-            try {
-                closeable.close();
-            } catch (Exception closeFailure) {
-                throw new IllegalStateException(
-                        "Failed to close " + dataSource.getClass().getName(), closeFailure);
-            }
-            return;
-        }
-        Method close;
-        try {
-            close = dataSource.getClass().getMethod("close");
-        } catch (NoSuchMethodException nothingToClose) {
-            return;
-        }
-        try {
-            close.invoke(dataSource);
-        } catch (ReflectiveOperationException closeFailure) {
-            throw new IllegalStateException(
-                    "Failed to close " + dataSource.getClass().getName(), closeFailure);
+        IllegalStateException releaseFailures = new IllegalStateException(
+                "Failed to release one or more declared DataSource(s)");
+        extension.releaseAll(releaseFailures);
+        if (releaseFailures.getSuppressed().length > 0) {
+            throw releaseFailures;
         }
     }
 }

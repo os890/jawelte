@@ -7171,3 +7171,52 @@ and `NoClassDefFoundError: jakarta/enterprise/inject/spi/CDI` said so.
 `java:comp` already created by the first, precisely because the root is shared and outlives a
 method. The helper now tolerates it, which is exactly what both production binders do about
 the same situation.
+
+## 2026-08-15 — reviewing the tickets filed against datasource-module
+
+Six arrived (#122–#127), all with real evidence from an evaluation of 0.2.0-SNAPSHOT. Each was
+checked against the code and, where possible, turned into a scenario before being believed.
+
+**#122 — valid, reproduced, fixed.** Data sources were built in the lifecycle adapter's
+`beforeAll`, which runs *after* `TestBeanContainerPort.beforeAll` — and that is what starts the
+CDI container and fires `@Initialized(ApplicationScoped.class)`. A startup observer therefore
+found an empty registry. `scenario-10-startup-observer-uses-datasource` reproduced it with the
+reporter's error verbatim. The `@Priority(150)` chosen relative to scope-module and jpa-module
+was never wrong; it just orders lifecycle adapters among themselves and cannot place work
+before the container port.
+
+The fix moves construction into the extension's `AfterDeploymentValidation` observer — the last
+deployment event, fired before the application context starts, which is the order a real
+container establishes a `@DataSourceDefinition` in. The adapter keeps the other end: unbinding
+and closing when the class finishes, which has to be driven from the test lifecycle because the
+container is shut down right after. `DataSourceRegistry` disappeared in the process: with the
+extension holding what it built, a separate bean to bridge adapter and synthetic beans had
+nothing left to do.
+
+**#127 — valid, reproduced, only partly fixable portably.** `SeContainerInitializer.initialize()`
+registers the container before it can fail, and when it throws the handle is lost, so `stop()`
+finds no metadata and closes nothing. Every later class in the JVM then fails with
+"... is already registered". `scenario-60` in tests/cdi-module reproduces it.
+
+The honest outcome is worth recording: there is no portable way to release a container whose
+bootstrap threw. CDI's only handle is `SeContainer`, and `initialize()` either returns it or
+loses it. Measured on both runtimes, `CDI.current()` is not a running `SeContainer` at that
+point — OpenWebBeans hands out an `OwbCDI`, and Weld's is not reachable that way either. The
+attempt is kept because it is the only correct thing the spec offers and costs nothing, but
+what actually ships is the diagnostic: the collateral failure now names the class holding the
+real error instead of leaving the reader to decode "already registered". Reaching into a
+runtime's internals would fix one implementation and rot on the next — the suite runs on both,
+with more planned.
+
+**#124 — could not reproduce.** `scenario-09-named-injection-in-application-bean` builds the
+exact reported shape (two declarations, an application bean injecting one of them by `@Named`)
+and passes on both runtimes, resolving the real data source rather than a mock. Reading
+cdi-module explains why: the auto-mock loop re-checks `isUnsatisfied` at `AfterBeanDiscovery`
+time, so a synthetic bean registered by another extension *earlier in the same phase* is seen.
+That makes the collision a question of extension ordering, which CDI leaves unspecified —
+which is consistent with it appearing in a consumer's application and not here.
+
+**Two scenarios I nearly shipped orphaned.** 09 and 10 were written, run individually, and left
+out of the aggregator's `<modules>` — the identical mistake this repository already carries a
+ticket and a PR about. They ran green in isolation and did not run at all in the tree until the
+count was checked.

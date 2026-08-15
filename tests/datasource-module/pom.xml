@@ -42,6 +42,8 @@
         <module>scenario-06-no-naming-provider-degrades</module>
         <module>scenario-07-closed-and-isolated-per-class</module>
         <module>scenario-08-datasource-factory-swap</module>
+        <module>scenario-09-named-injection-in-application-bean</module>
+        <module>scenario-10-startup-observer-uses-datasource</module>
     </modules>
 
     <dependencies>

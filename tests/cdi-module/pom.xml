@@ -92,6 +92,7 @@
         <module>scenario-56-deltaspike-whitelist-allow</module>
         <module>scenario-58-dependent-instance-predestroy</module>
         <module>scenario-59-auto-mock-scope-resolved-per-container</module>
+        <module>scenario-60-beforeall-failure-does-not-leak-the-container</module>
     </modules>
 
     <dependencies>
