@@ -1083,9 +1083,25 @@
                     `release:prepare` tags as v<version>, and
                     `release:perform` builds that tag with the
                     release-profile so the sources-jars are attached to
-                    what is published and to nothing else. The reactor it
-                    walks is the default one - core + modules - so
-                    tests/* and coverage-report/ are never published.
+                    what is published and to nothing else.
+
+                    `release.sh` prepares with -Pfull-reactor, so every
+                    pom in the repository gets its version rewritten and
+                    the tag is internally consistent - and the forked
+                    `clean verify` covers the test scenarios, so nothing
+                    is tagged that does not build.
+
+                    That profile reaches `perform` as well, whether or
+                    not the command line repeats it: `release:prepare`
+                    records `exec.activateProfiles=full-reactor` in
+                    release.properties and `release:perform` reads it
+                    back, so the tag is rebuilt with all 534 modules.
+                    What keeps the test scenarios out of the repository
+                    is therefore maven.deploy.skip in tests/ and
+                    coverage-report/ - not the reactor being narrower
+                    here. Rehearsed end to end as 0.2.0-demo1: the
+                    publication contains core + modules and nothing else.
+
                     `release.sh` drives both goals and publishes the
                     result; it is not meant to be invoked by hand.
                 -->
@@ -1179,6 +1195,33 @@
     </build>
 
     <profiles>
+        <!--
+            Adds the two module trees the default reactor leaves out, so
+            that a build started with -Pfull-reactor walks the whole
+            repository. `release.sh` activates it for `release:prepare`:
+            the release plugin only rewrites the versions of the projects
+            in its reactor, and without this the test scenarios and the
+            coverage-report keep the old version while core and modules
+            move on - which is exactly what happened to 494 poms in 0.1.0.
+
+            Being in the release reactor does not make these artifacts
+            published: `release:perform` runs without the profile, and
+            both trees set maven.deploy.skip on top of that.
+
+            verify-all/pom.xml aggregates the same tree for verify-all.sh
+            but cannot be a module here - it re-lists ../core and
+            ../modules, and Maven rejects a reactor that reaches the same
+            project twice. It carries no parent and a fixed version for
+            that reason, so it has nothing that could fall out of sync.
+        -->
+        <profile>
+            <id>full-reactor</id>
+            <modules>
+                <module>tests</module>
+                <module>coverage-report</module>
+            </modules>
+        </profile>
+
         <!--
             Activated by `release:perform` through <releaseProfiles>. The
             javadoc-jars are not in here: every published module already

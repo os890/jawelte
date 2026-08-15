@@ -6851,3 +6851,153 @@ before `release:perform`, so the deploy, the clone and the push are first exerci
 real run. What would have caught it is a rehearsal against a throwaway publication
 repository via `JAWELTE_PUBLISH_REPO_URL`, which the script already supports but the dry-run
 path does not use.
+
+## 2026-08-15 — resync the poms the release plugin never saw
+
+The 0.1.0 release bumped the root pom, `core` and `modules` to `0.2.0-SNAPSHOT` and left
+everything else at `0.1.0-SNAPSHOT`. That is not a bug in the release plugin: the root pom's
+`<modules>` lists only `core` and `modules` — deliberately, so a plain `mvn clean install`
+from the repo root stays fast and never compiles test scenarios — and `release:prepare` only
+rewrites the reactor it is given. `tests`, `verify-all` and `coverage-report` live outside
+that reactor, so nothing rewrote them.
+
+The drift was 494 poms: the two aggregators plus 492 under `tests/`. Every one of the 494
+occurrences was the `<version>` of a `<parent>` block pointing at `jawelte-parent`; no test
+pom pins a jawelte artifact version of its own, they all inherit. So the fix was the
+mechanical one — one substitution per file, `0.1.0-SNAPSHOT` → `0.2.0-SNAPSHOT`.
+
+`mvn -f verify-all/pom.xml validate` now resolves all 534 modules of the full-stack reactor.
+Before the fix those 494 poms asked for a parent version that no longer exists anywhere —
+`relativePath` pointed at a root pom that had moved on, and `0.1.0-SNAPSHOT` was never
+deployed, so nothing could have satisfied them from a repository either.
+
+**This will happen again at 0.2.0.** The split reactor is intentional and worth keeping, so
+the fix belongs in `release.sh`: after `release:prepare` has settled on the versions, rewrite
+the out-of-reactor parents to match and fold that into the release commit — or at minimum
+have the script fail loudly when a pom outside the release reactor still names the old
+version.
+
+## 2026-08-15 — put the whole tree into the release reactor, publish only part of it
+
+The version drift repaired earlier the same day was a symptom: the release plugin rewrites
+the version of every project in its reactor and of no other, and `tests`, `coverage-report`
+and `verify-all` were outside it. Repairing the poms by hand fixes 0.1.0; it does not fix
+0.2.0. So the reactor is now the thing that changed.
+
+`-Pfull-reactor` on the root pom adds `tests` and `coverage-report` to the modules, and
+`release.sh` activates it for `release:prepare` — and only for `release:prepare`. The plain
+`mvn clean install` from the root is untouched (42 modules, framework code only); a prepare
+walks all 534 and rewrites every pom, so the tag is internally consistent by construction.
+`release:perform` is deliberately *not* given the profile: it deploys what it builds, and the
+default reactor is exactly the set that may be published. On top of that both trees set
+`maven.deploy.skip=true`, so even a build that does reach them cannot push them — the
+guarantee does not rest on the shape of the reactor alone. Verified per module:
+`help:evaluate -Dexpression=maven.deploy.skip` is `true` under `tests/` and in
+`coverage-report`, unset in `core/api`.
+
+**`verify-all/pom.xml` could not join that reactor.** It lists `../core` and `../modules`
+among its own modules, so a reactor containing both it and them reaches the same project
+twice, and Maven refuses: *"Project 'org.os890.jawelte:jawelte-core-api:0.2.0-SNAPSHOT' is
+duplicated in the reactor"*. Tried it, that is the actual error. It is therefore now
+parentless with a fixed `<version>1</version>`. It is an aggregator that is never released,
+never deployed and never depended on, so the only thing inheriting from `jawelte-parent` ever
+gave it was a version to keep in step — the one thing that could not be kept in step. Its
+modules still inherit normally; only the aggregator node sits outside the hierarchy. Both
+entry points now describe the same 534-module reactor: `mvn -Pfull-reactor` from the root and
+`mvn -f verify-all/pom.xml`, checked against each other with `validate`.
+
+**A release now costs a full test run.** The forked `clean verify` inherits the active
+profile, so preparing a release builds every scenario and a tag cannot come into existence
+unless the suite is green. That is deliberate, and it applies to `--dry-run` as well, which
+is called out in the script's header — a rehearsal now costs roughly what `verify-all.sh`
+costs.
+
+### Verified against a real dry run
+
+`release:prepare -DdryRun=true` with `-DpreparationGoals=validate` standing in for the
+expensive `clean verify`, from a clean tree:
+
+- the profile does reach the forked build — the plugin prints
+  `Executing goals 'validate'... with additional arguments: -P full-reactor`, which is the
+  behaviour the "verify everything before tagging" decision rests on. It is not configured
+  anywhere; the release plugin forwards the session's active profiles by itself.
+- the fork walked 534 modules, and 534 `pom.xml.tag` / `pom.xml.next` pairs were written:
+  `0.2.0` in the tag poms, `0.3.0-SNAPSHOT` in the next ones, in `tests/**` and
+  `coverage-report/` as well as in core and modules.
+- `verify-all/pom.xml` got neither, which is the point of making it parentless — there is no
+  longer a version in it for anything to rewrite or forget to rewrite.
+- `release:clean` afterwards left the tree clean again.
+
+Note for the next release: `release:prepare` cannot run offline. The plugin's own
+dependencies (`maven-release-manager`, `maven-scm-api`, …) are not in the local repository,
+so `-o` fails before it reaches git.
+
+## 2026-08-15 — rehearsed the full-reactor release as 0.2.0-demo1, and what it corrected
+
+Ran `release.sh` for real, end to end, on a throwaway `demo-release` branch against the local
+clone of the publication repository at `~/workspace/os890-maven-repo`. Both hazards of a real
+run were fenced off first: `release:prepare` pushes to the SCM url in the pom — not to
+`origin` — so the branch carried a commit repointing `<scm>` at a scratch bare repository,
+`origin` was repointed to the same place, and the throwaway branch made both changes
+disposable. `receive.denyCurrentBranch=updateInstead` in the target repo let the publication
+push land in a non-bare checkout. Released `0.2.0-demo1` rather than `0.2.0` so that no real
+tag or version could survive a botched cleanup.
+
+**It worked, and it published exactly the right set.** `release:prepare` built all 534
+modules green and cut the tag; `release:perform` deployed; the publication commit contains 27
+artifacts × (jar + sources + javadoc + pom) plus the aggregator poms — core and modules only.
+Not one `jawelte-tests-*`, scenario, coverage-report or verify-all artifact. Afterwards
+everything was rolled back: target repo reset to `bc5eb6b` with the config unset, branch,
+tag, stale remote-tracking ref, `target/checkout` and the scratch repository all removed.
+
+**Two things in the design were wrong, and only the rehearsal could show it.**
+
+*`release:perform` is not the narrow reactor.* The claim written into the pom and into
+`release.sh` that morning — perform runs without the profile, so it deploys core + modules and
+that is what keeps the test artifacts unpublished — is false. `release:prepare` writes
+`exec.activateProfiles=full-reactor` into `release.properties`, and `release:perform` reads it
+back: the tag is rebuilt with all 534 modules regardless of what the command line says. The
+publication is correct only because `tests/` and `coverage-report/` set
+`maven.deploy.skip=true`. That property is not a second line of defence, it is the mechanism.
+Both comments now say so. (It also means a release costs two full suite runs, not one.)
+
+*The release left 492 files behind.* `release:perform` finishes with a `release:clean`, but
+that one runs in the outer invocation's reactor — core + modules — so every
+`pom.xml.releaseBackup` under `tests/` and `coverage-report/` survived. They are in
+`.gitignore`, so `git status` reported a clean tree while 492 stale files sat in the working
+copy; the count only surfaced from an explicit `find`. `release.sh` now ends with an explicit
+`-Pfull-reactor release:clean`.
+
+Worth keeping in mind: a gitignored artifact of a build step is invisible to every "is the
+tree clean?" check in the script and in the git workflow. The dry run would never have caught
+either of these — the first needs a `perform`, the second needs the run to finish.
+
+## 2026-08-15 — the orphan pom: one scenario the release reactor still could not reach
+
+Checked what a release actually leaves committed, rather than what it stages: a scoped
+`release:prepare` (real, `preparationGoals=validate`) on a throwaway branch, then read the two
+`[maven-release-plugin]` commits it produced. The tag held 534 poms at `0.2.0-demo2` and the
+follow-up commit 534 at `0.3.0-SNAPSHOT` — and in both, one pom at the *old* version.
+
+`tests/jaxrs-module/scenario-10-server-stops-after-test-class` was commented out of its
+aggregator's `<modules>` — a quarantine for a timing-sensitive TCP-probe assertion against
+CXF's Jetty transport. The files stayed in the tree. So the pom belonged to no reactor at all:
+not the default one, not `-Pfull-reactor`, not `verify-all`. Nothing built it and nothing
+rewrote it. It had been sitting at `0.1.0-SNAPSHOT` and was swept up by the 494-pom resync
+purely because that was a `find`-driven substitution rather than a reactor-driven one.
+
+Commenting a module out of an aggregator is therefore not a neutral act: it removes the module
+from version management as well as from the build, silently and permanently. The scenario is
+now quarantined the other way round — listed as a module, with `<skipTests>true</skipTests>`
+in its own pom. It compiles on every build, its version tracks the tree, and only the
+unreliable assertion is off. It still compiles today, which was worth confirming before
+re-listing it.
+
+The tree is now uniform: 535 poms carrying a project version, 535 modules in the full reactor,
+and `verify-all/pom.xml` on its fixed `1` outside the hierarchy by design. Nothing versioned
+sits outside a reactor any more, which is the property that had to hold for the next release
+to leave everything on one snapshot version.
+
+Worth remembering: staged output is not committed output. The `pom.xml.next` files looked
+complete because 534 of them existed; the missing 535th had no file to be missing from. Only
+counting versions across the whole tree — not the reactor — surfaced it.

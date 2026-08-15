@@ -43,6 +43,8 @@
 #                                       0.2.0-SNAPSHOT, no prompts
 #   bash release.sh --dry-run 0.1.0 0.2.0-SNAPSHOT
 #                                       rehearse: no tag, no commit, no push
+#                                       (still builds the full test suite,
+#                                        so budget verify-all.sh's runtime)
 #   bash release.sh --publish-only v0.1.0
 #                                       build an existing tag and publish it,
 #                                       without tagging anything. For a run
@@ -152,7 +154,24 @@ else
 
 step "release:prepare"
 
-PREPARE_ARGS=()
+# -Pfull-reactor adds tests/ and coverage-report/ to the reactor, for two
+# reasons. The release plugin rewrites the version of every project it
+# walks and of no other, so without the profile those 494 poms keep the
+# old version while core and modules move on — which is what happened in
+# 0.1.0 and had to be repaired by hand afterwards. And the forked
+# `clean verify` inherits the profile, so preparing a release builds the
+# whole test suite: the tag cannot come into existence unless everything
+# passes. That is the expensive part of a release, on a dry run too.
+#
+# Note that leaving the profile off `release:perform` below does NOT keep
+# it out of the perform build: release:prepare writes
+# `exec.activateProfiles=full-reactor` into release.properties and perform
+# reads it back, so the tag is rebuilt with the full reactor too. What
+# keeps the test scenarios unpublished is maven.deploy.skip in tests/ and
+# coverage-report/, not the shape of the reactor. Verified by rehearsal —
+# see the 0.2.0-demo1 entry in diary.md.
+
+PREPARE_ARGS=(-Pfull-reactor)
 [[ -n "$RELEASE_VERSION" ]] && PREPARE_ARGS+=("-DreleaseVersion=$RELEASE_VERSION")
 [[ -n "$DEVELOPMENT_VERSION" ]] && PREPARE_ARGS+=("-DdevelopmentVersion=$DEVELOPMENT_VERSION")
 if [[ -n "$RELEASE_VERSION" && -n "$DEVELOPMENT_VERSION" ]]; then
@@ -188,6 +207,12 @@ step "release:perform — deploying $RELEASED_VERSION into the clone"
 
 "$MVN" "${MVN_ARGS[@]}" release:perform \
     -Darguments="-Dos890.maven.repo.directory=$PUBLISH_CHECKOUT"
+
+# release:perform ends with a release:clean, but that one runs in this
+# invocation's reactor — core + modules — and so leaves the pom.xml.releaseBackup
+# files of tests/ and coverage-report/ behind, 492 of them. They are gitignored,
+# which means `git status` does not show them and they survive unnoticed.
+"$MVN" "${MVN_ARGS[@]}" -Pfull-reactor release:clean
 
 # --- publish ---------------------------------------------------------------
 
