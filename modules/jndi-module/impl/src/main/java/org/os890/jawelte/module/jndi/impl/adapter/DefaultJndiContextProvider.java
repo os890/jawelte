@@ -34,23 +34,31 @@ import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
  * jndi-module/impl inherits a naming provider from it. The same shape
  * jpa-module uses for {@code xbean-finder-shaded}.
  *
- * <p><b>Absence is a single question, asked here.</b> A JVM may have no
- * naming provider at all, and the port answers that with {@code null}.
- * This class decides it with one {@link Class#forName} probe and only
- * touches {@link XbeanNamingTree} once the probe has succeeded, so the
- * xbean-typed class is never loaded when xbean is not there — no
- * {@link NoClassDefFoundError} to catch, and, because the
- * {@code java.naming.*} system properties are set inside that class, no
- * JVM ever gets those properties pointed at a factory that is missing.
- * (jta-module's old bootstrap set them first and discovered the absence
- * afterwards, which left a JVM whose only naming provider was its
- * container's with {@code java.naming.factory.initial} naming a class it
- * could not load.)
+ * <p><b>Why the probe exists at all.</b> This adapter cannot function
+ * without xbean — it <em>is</em> the xbean adapter — so the probe is not
+ * here for its own sake. It is here so that a consumer can express "this
+ * classpath has no naming provider" by leaving xbean-naming out, which
+ * is the cheapest possible way to construct that state. The alternative
+ * expression — leaving jndi-module/impl itself out, so that
+ * {@link org.os890.jawelte.core.api.port.TestContext#loadService(Class)}
+ * finds no provider and answers {@code null} — is not available to a
+ * consumer that pulls this module in transitively at runtime scope, which
+ * every module binding into the tree does. Without the probe, each of
+ * those consumers would need a dependency exclusion in every scenario
+ * that exercises the degradation.
  *
- * <p>The probe is repeated per call rather than cached: the answer
- * depends on the thread's context classloader, and one
- * {@code Class.forName} against an already-loaded class costs nothing
- * next to the JNDI operation the caller is about to perform.
+ * <p>The probe is also what keeps the {@code java.naming.*} system
+ * properties out of a JVM that cannot use them: they are set inside
+ * {@link XbeanNamingTree}, which is only touched once the probe has
+ * succeeded. jta-module's old bootstrap set them first and discovered
+ * xbean's absence afterwards, leaving a JVM whose only naming provider
+ * was its container's with {@code java.naming.factory.initial} naming a
+ * class it could not load.
+ *
+ * <p>It is repeated per call rather than cached: the answer depends on
+ * the thread's context classloader, and one {@code Class.forName}
+ * against an already-loaded class costs nothing next to the JNDI
+ * operation the caller is about to perform.
  *
  * <p>{@code @Priority(Integer.MAX_VALUE)} so a consumer can register a
  * provider for a different naming implementation at a lower priority via
