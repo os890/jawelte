@@ -7222,3 +7222,72 @@ now than in #120. 0 failures, 0 errors throughout.
 
 `architecture.md` and the impl pom description now state the identity semantics,
 since that is the contract every future consumer of the tree inherits.
+
+## 2026-08-17 — #120: datasource-module for @DataSourceDefinition
+
+Third slice of the re-sliced series, cut from `main` after #137 merged.
+
+**Where the content came from.** PR #121's commit `2f89e2e` turned out to be an exact
+cut point: the state after the jndi extraction and before the #122 / #124 / #126
+follow-ups. So the slice is the module (api + impl) plus scenarios 01-08, with
+`SyntheticBeanTypeDeclaration`, `AfterDeploymentValidation` and `URL_OVERRIDE`
+verifiably absent from `src`.
+
+**Three things changed rather than adopted.**
+
+1. Dropped the `org.os890.jawelte.module.datasource.jndi.enabled` MP Config toggle —
+   a public constant, a config file and a `ConfigProvider` lookup that #120 never asks
+   for and no scenario in the slice exercises, and which made `bind()` return `false`
+   for two unrelated reasons. The unused `microprofile-config-api` dependency went with
+   it, and `writableRootIfEnabled()` became `writableRootOrNull()`.
+
+2. Fixed a re-introduction of the #69/#70 anti-pattern.
+   `DataSourceDefinitionCdiExtension.definitionsByName` was a plain `LinkedHashMap`
+   mutated from `onProcessAnnotatedType` — one of the observers Weld invokes in
+   parallel, which is exactly the hazard #69 found in cdi/batch/wiremock. The
+   duplicate-name detection also calls `putIfAbsent` and treats it as an atomic check,
+   which on a `LinkedHashMap` it is not. Now a `ConcurrentHashMap`, with bean
+   registration sorted by name so a deployment is reproducible; insertion order was
+   never meaningful under parallel discovery, and `Map.copyOf` had already been
+   discarding it for callers. `DataSourceRegistry` got the same treatment: the write is
+   in `beforeAll` and the reads happen later, on threads a test may have spawned
+   itself, with no happens-before edge between them.
+
+3. Removed two unused public accessors, `definitions()` and `names()`, whose javadoc
+   promised ordering they did not deliver.
+
+**#138, found the hard way.** The scenarios first failed under both runtimes with
+`NoClassDefFound JndiContextProvider` — for a dependency correctly declared at compile
+scope. Cause: `verify-all.sh`'s Phase 1 reactor is rooted at `verify-all/pom.xml` and
+never installs the root pom, so `~/.m2`'s `jawelte-parent` predated this branch's new
+`dependencyManagement` entries. Maven could not build the installed
+`datasource-module-impl` POM's effective model, declared it invalid, and **silently
+dropped its transitive dependencies** — a WARNING plus a non-fatal ERROR line, then a
+green resolution with a short classpath and a runtime failure naming a class nobody
+had touched. `mvn -N install` at the root fixes it. Filed as #138 because every
+remaining ticket in this series adds or extends a module.
+
+**Verification.** Full reactor `clean install` 666 tests; `tests/datasource-module` 32
+tests under each of OWB and Weld; `tests/jndi-module` 12; `tests/jta-module` all four
+CDI x JTA combinations at 51 each; `tests/jpa-module` 114 under each runtime;
+`tests/cdi-module` 60 under each. 0 failures, 0 errors throughout, and no invalid-POM
+warning anywhere in the logs.
+
+### Review finding on PR #139 — singular class name
+
+os890: the project does not use plural class names, and while some existing plurals
+are intentional, this one is not — it is one adapter, not several.
+
+`DataSourceAdapters` renamed to `DataSourceAdapter`, with the class javadoc reworded
+so it reads as one adaptation ("each adaptation does exactly that unwrapping") rather
+than as a pair of adapters. The class does hold two entry points — `of(XADataSource)`
+and `of(ConnectionPoolDataSource)` — but both perform the same single adaptation to
+`DataSource`, which is what makes the singular right.
+
+It was the only genuine plural this branch introduced. Pre-existing ones elsewhere in
+`core`/`modules` (`CallPatterns`, `RecordedFlows`, `JpaActivePersistenceUnits`,
+`DiffOptions`, `EndpointResources`, `FlowRecordingSettings`) were left alone: out of
+this slice's scope, and some are the intentional kind.
+
+Re-verified: full reactor `clean install` 666 tests, `tests/datasource-module` 32
+tests under each of OWB and Weld, 0 failures, 0 errors.

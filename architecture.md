@@ -40,6 +40,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 | Module | Technology | Purpose |
 |---|---|---|
 | `jawelte-jndi-module` | JNDI | The in-process naming tree every binding module shares — one provider, one writable root |
+| `jawelte-datasource-module` | JDBC (`@DataSourceDefinition`) | Builds, binds and injects the data sources a test or a bean declares |
 | `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
 | `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
 | `jawelte-jaxrs-module` | Jakarta REST | Embedded REST container for endpoint testing |
@@ -92,6 +93,12 @@ It is a module rather than a core port because **the core never looks anything u
 
 jta-module depends on jndi-module (api at compile scope, impl at runtime scope — it codes against the port, and an adapter has to be present for a tree to exist). Nothing else does, so a project not using JTA never pulls it in. `jndi-module/api` depends on `core/api` for `TestContext.loadService(...)` and the dependency points that way only.
 
+**datasource-module additions (in `datasource-module/api`):**
+
+- `DataSourceFactory` — turns a `@DataSourceDefinition` into a `javax.sql.DataSource`. There is no common configuration interface for data sources, so the shipped implementation applies the annotation's attributes as JavaBean setters, trying several candidate names per attribute because drivers disagree (H2 has `setURL` *and* `setUrl`, PostgreSQL only the latter). Pool-sizing, `transactional` and `isolationLevel` are documented as ignored rather than half-applied; registering a pooling factory at a lower priority is the supported way to honour them.
+
+datasource-module ships **no entry-point annotation of its own** — the platform's `@DataSourceDefinition` is the trigger, so a test declares only standard Jakarta API. It depends on neither jpa-module nor jta-module, and carries no JDBC-driver dependency: the vendor class the annotation names is loaded from the test's own classpath, which is the one place reflection is unavoidable here. It binds through jndi-module's `JndiContextProvider`, so its entries and jta-module's transaction artifacts share one naming tree.
+
 **jpa-module additions (in `jpa-module/api`):**
 
 - `@PersistenceConfig` — class-level JPA configuration (`fileMode`, `filePath`, `persistenceUnits`).
@@ -116,6 +123,8 @@ jta-module depends on jndi-module (api at compile scope, impl at runtime scope �
 | `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
 | `TestModuleLifecyclePort` | `ScopeLifecycleAdapter` (`@Priority(100)`) + `TestScopeCdiExtension` | CDI runtime (`BeanManager` from `SeContainer` on `TestContext`) | `scope-module/impl` |
 | `JndiContextProvider` | `DefaultJndiContextProvider` (`@Priority(Integer.MAX_VALUE)`) | JNDI naming provider (xbean-naming at `provided` scope — compiled against, not transitive; absence answered with `null` after a `Class.forName` probe) | `jndi-module/impl` |
+| `TestModuleLifecyclePort` | `DataSourceLifecycleAdapter` (`@Priority(150)`) + `DataSourceDefinitionCdiExtension` | CDI runtime + whichever JDBC vendor class the annotation names | `datasource-module/impl` |
+| `DataSourceFactory` | `DefaultDataSourceFactory` (`@Priority(Integer.MAX_VALUE)`) | (reflective JavaBean configuration of the vendor class) | `datasource-module/impl` |
 | `TestModuleLifecyclePort` | `JpaLifecycleAdapter` (`@Priority(200)`) + `JpaCdiExtension` | CDI runtime + JPA provider (Hibernate) + JDBC driver (H2) | `jpa-module/impl` |
 | `TransactionStrategy` | `DefaultResourceLocalTransactionStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process) | `jpa-module/impl` |
 | `DbCleanupStrategy` | `JpqlDeleteDbCleanupStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process; calls JPA) | `jpa-module/impl` |
