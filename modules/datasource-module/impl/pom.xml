@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-datasource-module</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-datasource-module-impl</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (datasource-module/impl)</name>
+    <description>Implementation of datasource-module: DataSourceDefinitionCdiExtension (discovers @DataSourceDefinition / @DataSourceDefinitions on the test class and on every annotated bean type, registers one synthetic @Named DataSource bean per definition), DataSourceLifecycleAdapter (TestModuleLifecyclePort at @Priority(150) — after scope-module at 100, before jpa-module at 200), DefaultDataSourceFactory (reflective, @Priority(Integer.MAX_VALUE)), and DataSourceJndiBinder which binds through jndi-module's JndiContextProvider port so the naming tree stays shared with jta-module. No JDBC driver dependency: the vendor class named by the annotation is loaded reflectively at runtime. SPI lookups go through TestContext.loadService(...) — no compile-time dep on core/impl.</description>
+
+    <dependencies>
+        <!--
+            datasource-module/api supplies the DataSourceFactory port
+            this module implements and resolves.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-datasource-module-api</artifactId>
+        </dependency>
+
+        <!--
+            core-api supplies TestModuleLifecyclePort + TestContext
+            (SPI lookup). SPI-only — no compile-time dep on core/impl.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            CDI supplies the Extension SPI used for discovery and the
+            synthetic-bean registration in AfterBeanDiscovery.
+            provided scope (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.annotation-api supplies @DataSourceDefinition /
+            @DataSourceDefinitions (what the extension observes) and
+            @Priority. provided scope (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+
+
+        <!--
+            No JDBC driver and no connection-pool dependency: the
+            vendor DataSource class is whatever the test's
+            @DataSourceDefinition names, loaded reflectively from the
+            test's own classpath.
+        -->
+
+        <!--
+            jndi-module supplies the JndiContextProvider port and, at
+            runtime, the adapter that installs the naming provider. The
+            impl is a runtime dependency rather than a compile one: this
+            module codes against the port only, but a naming tree has to
+            exist for a declared @DataSourceDefinition to be bound under its name.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
