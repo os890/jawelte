@@ -19,8 +19,11 @@ import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
+import org.os890.jawelte.core.api.port.TestContext;
+import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
+
 /**
- * One-time-per-JVM setup of an in-process JNDI provider so the
+ * jta-module's view of the JNDI naming tree, so
  * {@code JndiArtifactBinder} can bind {@code UserTransaction} /
  * {@code TransactionManager} /
  * {@code TransactionSynchronizationRegistry} under standard names and
@@ -28,74 +31,38 @@ import javax.naming.NamingException;
  * JNDI-aware code paths, application code that follows the Jakarta-EE
  * lookup convention) finds them.
  *
- * <p>The system properties {@code java.naming.factory.initial} and
- * {@code java.naming.factory.url.pkgs} are set once, idempotently.
- * jta-module never compile-depends on a JNDI provider; the provider
- * is supplied at runtime (the project's test classpath uses
- * {@code org.apache.xbean:xbean-naming}). Production deployments
- * either run in a Jakarta-EE container that ships JNDI already
- * (skip this bootstrap) or pull a naming provider themselves.
- *
- * <p>Idempotent: callers can invoke {@link #ensureInitialized()} any
- * number of times — the first call sets the properties, subsequent
- * calls verify they're still set to a working factory and otherwise
- * no-op.
+ * <p><b>The naming tree itself is not owned here.</b> Installing an
+ * in-process provider installs a fresh writable root, so doing it in
+ * more than one place would mean a later module discarding an earlier
+ * module's bindings — jta-module's transaction artifacts and whatever a
+ * second binding module publishes would take turns wiping each other
+ * out depending on boot order. The install
+ * therefore lives behind jndi-module's {@link JndiContextProvider} port,
+ * resolved through {@link TestContext#loadService(Class)}, and this
+ * class only adds jta-module's own semantics on top: a
+ * {@link Context} to hand back and an error message that names JTA
+ * when nothing is available.
  */
 public abstract class JndiBootstrap {
-
-    /**
-     * The {@code InitialContextFactory} the project's test classpath
-     * brings (Apache XBean's). Plays nicely with the {@code java:}
-     * URL scheme via {@code java.naming.factory.url.pkgs}.
-     */
-    private static final String XBEAN_INITIAL_FACTORY =
-            "org.apache.xbean.naming.global.GlobalContextManager";
-
-    /**
-     * Package prefix for the {@code java:} URL context factory shipped
-     * by {@code xbean-naming}. Without this, lookups like
-     * {@code java:/TransactionManager} fail with "no URL context".
-     */
-    private static final String XBEAN_URL_PKGS = "org.apache.xbean.naming";
-
-    private static volatile boolean initialized;
 
     /** Suppress instantiation; the class is a static-method holder. */
     protected JndiBootstrap() {
     }
 
     /**
-     * Idempotently ensure JNDI is usable in this JVM. First call sets
-     * the standard {@code java.naming.*} system properties; subsequent
-     * calls return without re-setting (assumes the factory installed
-     * the first time is still in place).
+     * Idempotently ensure JNDI is usable in this JVM, then return an
+     * {@link InitialContext} for it.
      *
-     * @return a {@link Context} ready for binds / lookups (or
-     *         {@code null} when the JVM has no JNDI provider on the
-     *         classpath — the bootstrap couldn't install xbean-naming
-     *         either, callers must surface this as an error)
+     * @return a {@link Context} ready for binds / lookups
+     * @throws IllegalStateException when no naming provider is
+     *         available — for jta-module that is a hard error, since
+     *         the vendor integrations resolve their artifacts by name
      */
     public static Context ensureInitialized() {
-        if (!initialized) {
-            synchronized (JndiBootstrap.class) {
-                if (!initialized) {
-                    System.setProperty(Context.INITIAL_CONTEXT_FACTORY, XBEAN_INITIAL_FACTORY);
-                    System.setProperty(Context.URL_PKG_PREFIXES, XBEAN_URL_PKGS);
-                    installXbeanGlobalContext();
-                    initialized = true;
-                }
-            }
-        }
+        writableRoot();
         try {
             return new InitialContext();
         } catch (NamingException factoryAbsent) {
-            // The system properties point at a factory class that isn't
-            // on the classpath. Reset the initialized flag so a later
-            // caller (e.g. after a different naming provider gets added
-            // dynamically) gets another chance, and propagate as a
-            // runtime exception — silent JNDI failure would surface
-            // much later as obscure "tm not found" errors.
-            initialized = false;
             throw new IllegalStateException(
                     "No JNDI InitialContextFactory on the classpath. jta-module's JndiArtifactBinder "
                             + "needs one (xbean-naming on the test classpath, or any other provider "
@@ -105,33 +72,18 @@ public abstract class JndiBootstrap {
     }
 
     /**
-     * Install a fresh {@code WritableContext} as xbean-naming's
-     * global context, the writable root every {@code InitialContext}
-     * binds / looks up against. Without it
-     * {@code GlobalContextManager} hands out a sentinel that fails
-     * every operation with "Global context has not been set".
+     * The shared writable root, installing the naming provider on
+     * first use.
      *
-     * <p>Reflection-only so jta-module/impl doesn't compile-depend on
-     * xbean-naming — the JNDI provider is a runtime concern: tests
-     * bring xbean-naming, production deployments bring whichever
-     * provider their container ships.
+     * @return the writable root context, or {@code null} when this JVM
+     *         has no naming provider at all — the caller decides
+     *         whether that is fatal
      */
-    private static void installXbeanGlobalContext() {
-        try {
-            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
-            Class<?> globalContextManager = Class.forName(
-                    "org.apache.xbean.naming.global.GlobalContextManager", true, tccl);
-            Class<?> writableContext = Class.forName(
-                    "org.apache.xbean.naming.context.WritableContext", true, tccl);
-            Context root = (Context) writableContext.getDeclaredConstructor().newInstance();
-            globalContextManager.getMethod("setGlobalContext", Context.class).invoke(null, root);
-        } catch (ClassNotFoundException notXbean) {
-            // Not running with xbean-naming. The InitialContextFactory
-            // a consumer wires up themselves (or their container
-            // provides) is responsible for its own root context.
-        } catch (ReflectiveOperationException unexpected) {
-            throw new IllegalStateException(
-                    "Failed to install xbean-naming global context", unexpected);
+    public static Context writableRoot() {
+        JndiContextProvider provider = TestContext.loadService(JndiContextProvider.class);
+        if (provider == null) {
+            return null;
         }
+        return provider.writableRoot();
     }
 }

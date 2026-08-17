@@ -7001,3 +7001,62 @@ to leave everything on one snapshot version.
 Worth remembering: staged output is not committed output. The `pom.xml.next` files looked
 complete because 534 of them existed; the missing 535th had no file to be missing from. Only
 counting versions across the whole tree — not the reactor — surfaced it.
+
+## 2026-08-17 — #134: extract the JNDI naming tree into its own jndi-module
+
+**Context.** Starting with #121 the new work had drifted away from the project's
+"1 topic, 1 ticket, 1 PR" rule: four PRs stacked on each other's branches, with
+#121 alone carrying six unrelated topics (the jndi extraction, `@DataSourceDefinition`
+support, deployment-time construction, the auto-mock/synthetic-bean collision, the
+per-definition url redirect, and an unrelated `beforeAll`-failure fix). The decision
+was to rebuild the same content as a fresh series of one-topic branches, each cut
+from `main` and merged before the next is cut, keeping the old PRs and tickets open
+as the content source until the series is complete.
+
+**This slice.** The first topic in that series, and the one that had no ticket at
+all — filed as #134.
+
+The in-process naming tree was installed by jta-module/impl inside
+`JndiBootstrap.ensureInitialized()`, behind a `static volatile boolean` private to
+that class. The install's second step replaces the root (a fresh `WritableContext`
+becomes xbean's global context), so that private flag made the install idempotent
+for jta-module and nobody else: a second binding module would either copy the logic
+and silently discard the first module's bindings depending on boot order, or
+compile-depend on jta-module for a JDBC concern.
+
+Extracted behind `JndiContextProvider` in a new `modules/jndi-module` (api + impl).
+A module rather than a core port because the core never looks anything up by name —
+naming is what individual integrations need. `writableRoot()` returns `null` for
+"no naming provider in this JVM" rather than throwing, because callers disagree
+about whether that is fatal. jta-module keeps `JndiBootstrap` for its own semantics
+only (an `InitialContext` to hand back, an error message naming JTA) and loses its
+flag, its two property constants and both reflection blocks;
+`JndiArtifactBinder.xbeanWritableRoot()` — the second copy of the
+`GlobalContextManager` reflection — became a call to the port.
+
+**Found while porting.** PR #121's version of the adapter also built the root with
+`supportReferenceable = false`, a behaviour change motivated by the datasource
+identity requirement and untested by anything in `tests/jndi-module`. Kept out of
+this slice, which uses the same no-arg `WritableContext` constructor `main` does, and
+filed as #135 with its own scenario. Verifying it against xbean-naming 4.30 bytecode
+also corrected the mechanism #121 described: the substitution happens in
+`addBinding` — at **bind** time, where the `Reference` replaces the live object — not
+at lookup as that PR's body claimed. The default flags are
+`supportReferenceable = true`, `checkDereferenceDifferent = true`,
+`assumeDereferenceBound = false`.
+
+**Verification.** `tests/jndi-module`, 6 tests, no CDI container: two resolutions
+share one root, a binding survives a second resolution, a bound entry is visible
+through a plain `InitialContext`, and with no naming implementation on the classpath
+`writableRoot()` returns `null` consistently. `xbean-naming` sits in scenario 01's
+own pom because scenario 02 must run without it and a child cannot remove an
+inherited dependency. Full reactor `clean install` green; the `tests/jta-module`
+CDI-runtime × JTA-impl sweep is the claim that this is a refactoring rather than a
+change.
+
+**Incidental.** `jawelte-parent:0.2.0-SNAPSHOT` was not in the local repository, so
+any standalone `mvn verify` under `tests/` failed to read the descriptors of already
+installed jawelte artifacts (`tests/core` fails identically on `main`). `mvn -N
+install` at the repo root fixes it — worth knowing because `verify-all.sh` never
+installs the root pom itself: its Phase 1 reactor is rooted at `verify-all/pom.xml`,
+which is deliberately parentless and does not list the root pom as a module.

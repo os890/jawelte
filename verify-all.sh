@@ -262,6 +262,12 @@ else
     # pass covers every scenario.
     run "tests/content-diff-module" "$REPO_ROOT/tests/content-diff-module" verify
 
+    # tests/jndi-module: the shared naming tree. Boots no CDI container -
+    # the port is resolved through TestContext.loadService, which falls
+    # back to reflective instantiation when none is running - so the
+    # owb/weld profiles are no-ops and one pass covers it.
+    run "tests/jndi-module" "$REPO_ROOT/tests/jndi-module" verify
+
     # tests/jta-module: CDI-runtime × JTA-impl sweep.
     # 4 combos: {owb, weld} × {jta-geronimo, jta-narayana}.
     for cdi in owb weld; do
