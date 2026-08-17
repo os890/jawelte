@@ -110,20 +110,10 @@ public abstract class JndiArtifactBinder {
     }
 
     private static Context xbeanWritableRoot() {
-        // ensureInitialized has the side-effect of installing a
-        // WritableContext as xbean's global context — needed before
-        // we can fetch the writable root.
-        JndiBootstrap.ensureInitialized();
-        try {
-            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
-            Class<?> globalContextManager = Class.forName(
-                    "org.apache.xbean.naming.global.GlobalContextManager", true, tccl);
-            return (Context) globalContextManager.getMethod("getGlobalContext").invoke(null);
-        } catch (ClassNotFoundException notXbean) {
-            return null;
-        } catch (ReflectiveOperationException unexpected) {
-            throw new IllegalStateException(
-                    "Failed to access xbean-naming global context", unexpected);
-        }
+        // The naming provider is installed once per JVM behind
+        // jndi-module's JndiContextProvider port and shared with every
+        // other module that binds — see JndiBootstrap for why this is
+        // not done here.
+        return JndiBootstrap.writableRoot();
     }
 }

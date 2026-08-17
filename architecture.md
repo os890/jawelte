@@ -39,6 +39,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 
 | Module | Technology | Purpose |
 |---|---|---|
+| `jawelte-jndi-module` | JNDI | The in-process naming tree every binding module shares — one provider, one writable root |
 | `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
 | `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
 | `jawelte-jaxrs-module` | Jakarta REST | Embedded REST container for endpoint testing |
@@ -83,6 +84,14 @@ Each port represents the integration boundary between jawelte's core and an exte
 
 scope-module ships **no new ports of its own**. It implements the existing `TestModuleLifecyclePort` and the standard CDI `Extension` SPI. The cross-module scope-override contract uses two mechanisms — both keep consumer modules free of a compile-time dep on scope-module: (1) the `BeanScopeMapper` SPI in `core/api/port` (TICKET-001) — scope-module ships SL-registered providers (`@TestBean` → `@TestClassScoped`, `@SessionScoped` → `@TestMethodScoped`, `@ConfigBean` → `@TestClassScoped`) that `core/impl`'s `ScopeRemapCdiExtension` walks at `ProcessAnnotatedType` time; (2) MP Config keys defaulted in scope-module's `microprofile-config.properties`, read reflectively by consumer modules to resolve scope-annotation FQCNs (cdi-module's auto-mock scope, wiremock-module's registry remap, ejb-module's `@Singleton` mapping). When scope-module is absent at runtime the SPI providers don't exist and the MP Config defaults aren't shipped — consumer modules degrade cleanly to their `@Dependent` / `@RequestScoped` / `@ApplicationScoped` fallbacks.
 
+**jndi-module additions (in `jndi-module/api`):**
+
+- `JndiContextProvider` — hands out the single writable JNDI root every binding module shares. `writableRoot()` returning `null` is the documented "no naming provider in this JVM" answer rather than a failure, because callers disagree about whether that is fatal: jta-module cannot work without naming (its vendor integrations resolve artifacts by name), while a module that only publishes names alongside another resolution path can carry on.
+
+It is a module rather than a core port because **the core never looks anything up by name**. The core's ports describe what the test framework needs — a lifecycle, a test context, prioritized SPI lookup, configuration; naming is what individual *integrations* need. Sharing one root is mandatory rather than tidy: installing an in-process provider installs a *fresh* writable root, so a second module doing it independently would discard whatever the first had already bound, and the two would wipe each other out depending on boot order.
+
+jta-module depends on jndi-module (api at compile scope, impl at runtime scope — it codes against the port, and an adapter has to be present for a tree to exist). Nothing else does, so a project not using JTA never pulls it in. `jndi-module/api` depends on `core/api` for `TestContext.loadService(...)` and the dependency points that way only.
+
 **jpa-module additions (in `jpa-module/api`):**
 
 - `@PersistenceConfig` — class-level JPA configuration (`fileMode`, `filePath`, `persistenceUnits`).
@@ -106,6 +115,7 @@ scope-module ships **no new ports of its own**. It implements the existing `Test
 | `ExcludedPackageFilter` | `DefaultExcludedPackageFilter` | MicroProfile Config | `cdi-module/impl` |
 | `WhitelistFilter` | `DefaultWhitelistFilter` | (in-process) | `cdi-module/impl` |
 | `TestModuleLifecyclePort` | `ScopeLifecycleAdapter` (`@Priority(100)`) + `TestScopeCdiExtension` | CDI runtime (`BeanManager` from `SeContainer` on `TestContext`) | `scope-module/impl` |
+| `JndiContextProvider` | `DefaultJndiContextProvider` (`@Priority(Integer.MAX_VALUE)`) | JNDI naming provider (xbean-naming at `provided` scope — compiled against, not transitive; absence answered with `null` after a `Class.forName` probe) | `jndi-module/impl` |
 | `TestModuleLifecyclePort` | `JpaLifecycleAdapter` (`@Priority(200)`) + `JpaCdiExtension` | CDI runtime + JPA provider (Hibernate) + JDBC driver (H2) | `jpa-module/impl` |
 | `TransactionStrategy` | `DefaultResourceLocalTransactionStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process) | `jpa-module/impl` |
 | `DbCleanupStrategy` | `JpqlDeleteDbCleanupStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process; calls JPA) | `jpa-module/impl` |

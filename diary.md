@@ -7001,3 +7001,174 @@ to leave everything on one snapshot version.
 Worth remembering: staged output is not committed output. The `pom.xml.next` files looked
 complete because 534 of them existed; the missing 535th had no file to be missing from. Only
 counting versions across the whole tree — not the reactor — surfaced it.
+
+## 2026-08-17 — #134: extract the JNDI naming tree into its own jndi-module
+
+**Context.** Starting with #121 the new work had drifted away from the project's
+"1 topic, 1 ticket, 1 PR" rule: four PRs stacked on each other's branches, with
+#121 alone carrying six unrelated topics (the jndi extraction, `@DataSourceDefinition`
+support, deployment-time construction, the auto-mock/synthetic-bean collision, the
+per-definition url redirect, and an unrelated `beforeAll`-failure fix). The decision
+was to rebuild the same content as a fresh series of one-topic branches, each cut
+from `main` and merged before the next is cut, keeping the old PRs and tickets open
+as the content source until the series is complete.
+
+**This slice.** The first topic in that series, and the one that had no ticket at
+all — filed as #134.
+
+The in-process naming tree was installed by jta-module/impl inside
+`JndiBootstrap.ensureInitialized()`, behind a `static volatile boolean` private to
+that class. The install's second step replaces the root (a fresh `WritableContext`
+becomes xbean's global context), so that private flag made the install idempotent
+for jta-module and nobody else: a second binding module would either copy the logic
+and silently discard the first module's bindings depending on boot order, or
+compile-depend on jta-module for a JDBC concern.
+
+Extracted behind `JndiContextProvider` in a new `modules/jndi-module` (api + impl).
+A module rather than a core port because the core never looks anything up by name —
+naming is what individual integrations need. `writableRoot()` returns `null` for
+"no naming provider in this JVM" rather than throwing, because callers disagree
+about whether that is fatal. jta-module keeps `JndiBootstrap` for its own semantics
+only (an `InitialContext` to hand back, an error message naming JTA) and loses its
+flag, its two property constants and both reflection blocks;
+`JndiArtifactBinder.xbeanWritableRoot()` — the second copy of the
+`GlobalContextManager` reflection — became a call to the port.
+
+**Found while porting.** PR #121's version of the adapter also built the root with
+`supportReferenceable = false`, a behaviour change motivated by the datasource
+identity requirement and untested by anything in `tests/jndi-module`. Kept out of
+this slice, which uses the same no-arg `WritableContext` constructor `main` does, and
+filed as #135 with its own scenario. Verifying it against xbean-naming 4.30 bytecode
+also corrected the mechanism #121 described: the substitution happens in
+`addBinding` — at **bind** time, where the `Reference` replaces the live object — not
+at lookup as that PR's body claimed. The default flags are
+`supportReferenceable = true`, `checkDereferenceDifferent = true`,
+`assumeDereferenceBound = false`.
+
+**Verification.** `tests/jndi-module`, 6 tests, no CDI container: two resolutions
+share one root, a binding survives a second resolution, a bound entry is visible
+through a plain `InitialContext`, and with no naming implementation on the classpath
+`writableRoot()` returns `null` consistently. `xbean-naming` sits in scenario 01's
+own pom because scenario 02 must run without it and a child cannot remove an
+inherited dependency. Full reactor `clean install` green; the `tests/jta-module`
+CDI-runtime × JTA-impl sweep is the claim that this is a refactoring rather than a
+change.
+
+**Incidental.** `jawelte-parent:0.2.0-SNAPSHOT` was not in the local repository, so
+any standalone `mvn verify` under `tests/` failed to read the descriptors of already
+installed jawelte artifacts (`tests/core` fails identically on `main`). `mvn -N
+install` at the repo root fixes it — worth knowing because `verify-all.sh` never
+installs the root pom itself: its Phase 1 reactor is rooted at `verify-all/pom.xml`,
+which is deliberately parentless and does not list the root pom as a module.
+
+### Review round 1 on PR #136 — drop the reflection, drop the double-checked lock
+
+Two review points from os890, both correct.
+
+**"Why does the impl module need that much reflection for a simple task?"** It
+did not; it had inherited jta-module's pattern wholesale. The project already had
+the better precedent: `xbean-finder-shaded` is managed at `provided` scope in the
+root pom and `XbeanFinderEntityScanner` imports `AnnotationFinder` directly.
+Reflection is right in `GeronimoTransactionManagerProvider` /
+`NarayanaTransactionManagerProvider` / `AtomikosTransactionManagerProvider`,
+which probe *competing* vendors of which at most one is present and none is
+declared — but `DefaultJndiContextProvider` **is** the xbean adapter, and a
+different naming implementation gets its own adapter at a lower `@Priority`.
+
+xbean-naming is now a `provided` dependency of jndi-module/impl (non-transitive,
+so "no provider in this JVM" stays a reachable state and scenario 02 still has an
+empty naming classpath), every xbean type is confined to a new package-private
+`XbeanNamingTree`, and `DefaultJndiContextProvider` keeps a single
+`Class.forName` probe that decides whether to touch it. 3 `Class.forName` sites,
+a `newInstance` and two `getMethod`/`invoke` pairs became one probe; the install
+is now `GlobalContextManager.setGlobalContext(new WritableContext())`. The
+provider went from 140 to 48 lines.
+
+**"The install-lock can be done with a synchronized method."** Also right, and
+the DCL was pure ceremony for a path that runs a handful of times per JVM.
+`INSTALL_LOCK` + double-check + `volatile` became a `static synchronized` method
+over a plain `boolean` — with every read and write under the lock, `volatile` is
+redundant. (Precision for the record: DCL with a `volatile` guard has been
+correct since JSR-133/Java 5, and without `volatile` it is still not guaranteed
+by the memory model — it is a JMM question, not a JDK-version one. It simply buys
+nothing here.)
+
+**Fixed on the way.** The old ordering set `java.naming.factory.initial` *first*
+and discovered xbean's absence afterwards, leaving a JVM whose only provider was
+its container's with that property naming a class it could not load — a working
+`new InitialContext()` broken by asking jndi-module a question it answered with
+"nothing here". Probing first fixes it, and scenario 02 now asserts both
+`java.naming.*` properties are untouched when the answer is `null`. Verified as a
+guard: with main's ordering restored, that one test fails and the other three
+pass. Also corrected a stale claim in jndi-module/impl's pom description, ported
+from #121, that `supportReferenceable` was off.
+
+**Verification.** Full reactor `clean install` green; `tests/jndi-module` 7 tests
+green; `tests/jta-module` all four CDI×JTA combinations green at 51 tests each.
+
+### Review round 2 on PR #136 — the last reflection goes
+
+os890, on the round-1 result: "why should the xbean class be checked via
+reflection when the whole impl module doesn't work without xbean?", and then
+"GlobalContextManager is still used via reflection".
+
+Correct on the premise, and the round-1 javadoc had defended the probe on the
+wrong grounds. Two facts settle where the absence answer belongs:
+`TestContext.loadService` already returns `null` when no provider is registered
+and jta-module's `JndiBootstrap` null-checks it, so "no jndi-module-impl on the
+classpath" needs nothing from the adapter. The probe only covered the *other*
+state — impl present, xbean absent — which is reachable because every binding
+module pulls jndi-module-impl in transitively at runtime scope, and which is how
+the queued consumer scenarios are built (`tests/datasource-module` scenario 06
+from #120, and the equivalent in #125, both just omit xbean-naming).
+
+That state is worth keeping cheap, but it does not need a `Class.forName` to
+recognise. `DefaultJndiContextProvider` now calls `XbeanNamingTree.writableRoot()`
+and catches `NoClassDefFoundError`, translating it to the port's `null`. The
+module has no reflection left at all — the provider is 20 lines of body — and
+consumers keep constructing the degradation by omitting one test dependency
+rather than by excluding a transitive one.
+
+Removing the probe moved the property-ordering guarantee into `install()`, where
+it is now structural: the root is constructed *first*, because that construction
+is the first touch of an xbean type, so a classpath without xbean-naming fails
+before the code has claimed xbean is the JVM's naming provider. Re-verified as a
+guard after the reshape — with the properties moved back ahead of the first xbean
+touch, scenario 02's fourth test fails and the other three pass.
+
+Accepted trade-off, recorded rather than hidden: this relies on the JVM resolving
+`XbeanNamingTree`'s constant-pool entries lazily. HotSpot does; the JLS permits
+eager resolution, so it is a real-world guarantee rather than a specified one. The
+`try` wraps the *call* rather than sitting inside the class, so eager resolution
+at class-load time is caught too.
+
+**Verification.** Full reactor `clean install` green; `tests/jndi-module` 7 tests
+green; `tests/jta-module` green in all four CDI x JTA combinations at 51 tests
+each; ordering guard re-confirmed.
+
+### Review round 3 on PR #136 — `installed` becomes volatile
+
+os890: the flag should be `volatile` unless the code uses a double-check, and a
+check only inside the synchronized method is not enough because the variable
+"might not be synced".
+
+Recorded for the record, because the code now carries a keyword its own comment
+says is redundant: as written, every read and write of `installed` is inside
+`static synchronized writableRoot()`, and a monitor release happens-before every
+subsequent acquire of that same monitor (JLS 17.4.5), so a stale read is not
+reachable — the same guarantee `Collections.synchronizedList` and every other
+guarded-by-lock non-volatile field in the JDK rely on. `volatile` is mandatory in
+the *double-checked* shape, where the fast-path read sits outside the monitor.
+
+Marked `volatile` anyway at os890's direction, and documented as a deliberate
+forward-looking guard rather than as a present-day fix: the visibility guarantee
+is a property of where the accesses are, not of the field, so if a later edit adds
+an unsynchronized fast path in front of the lock, `volatile` is already in place
+and that edit cannot introduce a data race by omission. The method javadoc, which
+had asserted the flag needed nothing, was corrected to match.
+
+Verification of this change was still running when the commit was pushed at
+os890's request, so it went in as UNTESTED. It came back green afterwards: full
+reactor `clean install` 629 tests, `tests/jndi-module` 7 tests, and all four
+`tests/jta-module` CDI x JTA combinations at 51 tests each — 0 failures, 0 errors
+throughout. Review on #136 closed at that point.
