@@ -65,7 +65,24 @@ abstract class XbeanNamingTree {
      */
     private static final String URL_PKGS = "org.apache.xbean.naming";
 
-    private static boolean installed;
+    /**
+     * Whether {@link #install()} has already run.
+     *
+     * <p>{@code volatile} is deliberate belt-and-braces rather than a
+     * requirement of the current code: every read and write of this flag
+     * happens inside {@link #writableRoot()}, which is
+     * {@code static synchronized}, and a monitor release
+     * <em>happens-before</em> every subsequent acquire of that same
+     * monitor — so a stale read is not possible as the code stands.
+     *
+     * <p>It is marked anyway because the guarantee is a property of
+     * <em>where</em> the accesses are, not of the field: the moment
+     * someone adds an unsynchronized fast path in front of the lock —
+     * the double-checked-locking shape — {@code volatile} stops being
+     * redundant and becomes load-bearing. Having it here means that edit
+     * cannot introduce a data race by omission.
+     */
+    private static volatile boolean installed;
 
     /** Suppress instantiation; the class is a static-method holder. */
     protected XbeanNamingTree() {
@@ -74,11 +91,12 @@ abstract class XbeanNamingTree {
     /**
      * The shared writable root, installing the provider on first call.
      *
-     * <p>{@code synchronized} on the method, with a plain {@code boolean}
-     * flag: this runs a handful of times per JVM, so there is no
-     * fast path worth double-checking and nothing that needs to be
-     * {@code volatile} — every read and write of the flag happens under
-     * this lock.
+     * <p>{@code synchronized} on the method rather than a
+     * double-checked lock around a smaller critical section: this runs a
+     * handful of times per JVM, so there is no fast path worth the extra
+     * shape. Both accesses to {@link #installed} are inside this method,
+     * which is what makes the lock alone sufficient for visibility — see
+     * that field for why it carries {@code volatile} regardless.
      *
      * @return the writable root context, never {@code null}
      * @throws IllegalStateException when xbean rejects the root context

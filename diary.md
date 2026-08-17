@@ -7145,3 +7145,27 @@ at class-load time is caught too.
 **Verification.** Full reactor `clean install` green; `tests/jndi-module` 7 tests
 green; `tests/jta-module` green in all four CDI x JTA combinations at 51 tests
 each; ordering guard re-confirmed.
+
+### Review round 3 on PR #136 — `installed` becomes volatile
+
+os890: the flag should be `volatile` unless the code uses a double-check, and a
+check only inside the synchronized method is not enough because the variable
+"might not be synced".
+
+Recorded for the record, because the code now carries a keyword its own comment
+says is redundant: as written, every read and write of `installed` is inside
+`static synchronized writableRoot()`, and a monitor release happens-before every
+subsequent acquire of that same monitor (JLS 17.4.5), so a stale read is not
+reachable — the same guarantee `Collections.synchronizedList` and every other
+guarded-by-lock non-volatile field in the JDK rely on. `volatile` is mandatory in
+the *double-checked* shape, where the fast-path read sits outside the monitor.
+
+Marked `volatile` anyway at os890's direction, and documented as a deliberate
+forward-looking guard rather than as a present-day fix: the visibility guarantee
+is a property of where the accesses are, not of the field, so if a later edit adds
+an unsynchronized fast path in front of the lock, `volatile` is already in place
+and that edit cannot introduce a data race by omission. The method javadoc, which
+had asserted the flag needed nothing, was corrected to match.
+
+Verification of this change was still running when the commit was pushed at
+os890's request, so it went in as UNTESTED.
