@@ -7337,3 +7337,59 @@ exactly. With the fix it passes on both runtimes.
 tests under each of OWB and Weld; `tests/jndi-module` 12; `tests/jta-module` all four
 CDI x JTA combinations at 51 each; `tests/jpa-module` 114 per runtime;
 `tests/cdi-module` 60 per runtime. 0 failures, 0 errors.
+
+## 2026-08-18 — #124: auto-mock must not stand in for a type a module supplies
+
+Fifth slice of the re-sliced series, cut from `main` after #140 merged.
+
+**Reproduced first.** PR #121's commit `35a2211` recorded that #124 could not be
+reproduced, and scenario-09 (its shape) does pass. Scenario-12 narrows it further —
+the declaration on one bean, a single plain `@Inject DataSource` on another, neither on
+the test class — and that fails on both runtimes with `AmbiguousResolutionException` /
+`WELD-001409`. So the ticket is real; the original repro attempt was just not narrow
+enough. Both scenarios are kept: 09 as the passing shape, 12 as the reproduction.
+
+**Two designs were rejected on evidence before the third was adopted.**
+
+1. *CDI's own precedence.* Registering the module's synthetic bean as a
+   `@Priority`-selected alternative does remove the ambiguity — and then scenario-12
+   fails with a `NullPointerException`, because the injected `DataSource` is the
+   auto-mock. Resolution turns on two extensions agreeing about priority numbers, and
+   the losing case silently injects a stub instead of the real object. Strictly worse
+   than a loud failure.
+
+2. *A `SyntheticBeanTypeDeclaration` SPI* (what #121 built, adopted here first and then
+   discarded). os890's objection was that the concept, not just the name, reads as a
+   workaround: a module pre-announces the types it intends to register, in a parallel
+   registry that can drift from what it actually does, needing an interface, a class and
+   a `META-INF/services` file per module — and a cdi-module dependency for anyone
+   using it. A stale services entry killed a whole bootstrap with
+   `ServiceConfigurationError` during the experiments, which is that fragility showing.
+
+**What shipped**, from os890's suggestion to put it on the test context:
+`SuppliedTypeRegistry`, held per `TestContext`, which every part already has. A module
+records what it supplies in the same breath as registering it —
+
+    SuppliedTypeRegistry.of(TestContext.get()).markSupplied(DataSource.class);
+    event.addBean().types(DataSource.class)....;
+
+— and cdi-module's auto-mock reads it. No port, no SPI, no services file, no class per
+module, and datasource-module now depends on `core/api` alone.
+
+**Ordering became the explicit contract.** A supplier must mark before the reader
+looks, so the observers are pinned: suppliers at `LIBRARY_BEFORE`, auto-mock at
+`LIBRARY_AFTER`. Neither had a priority before and the order merely happened to work.
+Whether `@Priority` on container-lifecycle observers is honoured was the one real risk
+of this design; both runtimes honour it.
+
+Scenario-61 got stronger as a result. It registers its bean at `@Priority(9000)`, after
+auto-mock — irrelevant under the old pull model, the interesting case under push. It now
+marks in `BeforeBeanDiscovery` and registers in `AfterBeanDiscovery`, proving the
+contract is "say it before the reader looks", not "say it when you register".
+
+**Guard-verified.** Deleting the single `markSupplied` line reproduces the bug on both
+runtimes.
+
+**Verification.** Full reactor `clean install` 671 tests; `tests/datasource-module` 36
+per runtime; `tests/cdi-module` 61 per runtime; `tests/jta-module` all four CDI x JTA
+combinations at 51 each. 0 failures, 0 errors.
