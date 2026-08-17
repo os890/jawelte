@@ -27,7 +27,7 @@ import jakarta.annotation.Priority;
 import jakarta.annotation.sql.DataSourceDefinition;
 
 import org.os890.jawelte.module.datasource.api.port.DataSourceFactory;
-import org.os890.jawelte.module.datasource.impl.util.DataSourceAdapters;
+import org.os890.jawelte.module.datasource.impl.util.DataSourceAdapter;
 
 /**
  * Default {@link DataSourceFactory} shipped by datasource-module/impl:
@@ -247,10 +247,10 @@ public class DefaultDataSourceFactory implements DataSourceFactory {
             return dataSource;
         }
         if (vendorInstance instanceof XADataSource xaDataSource) {
-            return DataSourceAdapters.of(xaDataSource);
+            return DataSourceAdapter.of(xaDataSource);
         }
         if (vendorInstance instanceof ConnectionPoolDataSource pooledDataSource) {
-            return DataSourceAdapters.of(pooledDataSource);
+            return DataSourceAdapter.of(pooledDataSource);
         }
         throw new IllegalStateException(
                 "@DataSourceDefinition(name = \"" + definition.name() + "\") names className '"

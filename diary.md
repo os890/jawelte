@@ -7272,3 +7272,22 @@ tests under each of OWB and Weld; `tests/jndi-module` 12; `tests/jta-module` all
 CDI x JTA combinations at 51 each; `tests/jpa-module` 114 under each runtime;
 `tests/cdi-module` 60 under each. 0 failures, 0 errors throughout, and no invalid-POM
 warning anywhere in the logs.
+
+### Review finding on PR #139 — singular class name
+
+os890: the project does not use plural class names, and while some existing plurals
+are intentional, this one is not — it is one adapter, not several.
+
+`DataSourceAdapters` renamed to `DataSourceAdapter`, with the class javadoc reworded
+so it reads as one adaptation ("each adaptation does exactly that unwrapping") rather
+than as a pair of adapters. The class does hold two entry points — `of(XADataSource)`
+and `of(ConnectionPoolDataSource)` — but both perform the same single adaptation to
+`DataSource`, which is what makes the singular right.
+
+It was the only genuine plural this branch introduced. Pre-existing ones elsewhere in
+`core`/`modules` (`CallPatterns`, `RecordedFlows`, `JpaActivePersistenceUnits`,
+`DiffOptions`, `EndpointResources`, `FlowRecordingSettings`) were left alone: out of
+this slice's scope, and some are the intentional kind.
+
+Re-verified: full reactor `clean install` 666 tests, `tests/datasource-module` 32
+tests under each of OWB and Weld, 0 failures, 0 errors.

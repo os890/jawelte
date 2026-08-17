@@ -34,8 +34,8 @@ import javax.sql.XADataSource;
  * <p>Both are connection <em>factories</em> rather than data sources:
  * they hand out an {@code XAConnection} / {@code PooledConnection}
  * wrapper whose {@code getConnection()} yields the usable JDBC
- * connection. The adapters do exactly that unwrapping and nothing
- * else, so that a test declaring an XA driver class and a test
+ * connection. Each adaptation does exactly that unwrapping and
+ * nothing else, so that a test declaring an XA driver class and a test
  * declaring a plain one look identical from the injection point.
  *
  * <p>Deliberately <em>not</em> a pool and <em>not</em> transaction
@@ -45,10 +45,10 @@ import javax.sql.XADataSource;
  * {@code XaDataSourceWrapper} for it) rather than something to
  * approximate here.
  */
-public abstract class DataSourceAdapters {
+public abstract class DataSourceAdapter {
 
     /** Suppress instantiation; the class is a static-method holder. */
-    protected DataSourceAdapters() {
+    protected DataSourceAdapter() {
     }
 
     /**
