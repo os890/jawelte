@@ -7168,4 +7168,7 @@ and that edit cannot introduce a data race by omission. The method javadoc, whic
 had asserted the flag needed nothing, was corrected to match.
 
 Verification of this change was still running when the commit was pushed at
-os890's request, so it went in as UNTESTED.
+os890's request, so it went in as UNTESTED. It came back green afterwards: full
+reactor `clean install` 629 tests, `tests/jndi-module` 7 tests, and all four
+`tests/jta-module` CDI x JTA combinations at 51 tests each — 0 failures, 0 errors
+throughout. Review on #136 closed at that point.
