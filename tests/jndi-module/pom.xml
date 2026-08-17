@@ -36,6 +36,7 @@
     <modules>
         <module>scenario-01-one-root-across-resolutions</module>
         <module>scenario-02-no-provider-returns-null</module>
+        <module>scenario-03-lookup-returns-the-bound-object</module>
     </modules>
 
     <dependencies>
