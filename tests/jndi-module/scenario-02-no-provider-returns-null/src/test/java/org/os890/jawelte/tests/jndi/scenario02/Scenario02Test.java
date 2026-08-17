@@ -18,6 +18,8 @@ package org.os890.jawelte.tests.jndi.scenario02;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import javax.naming.Context;
+
 import org.junit.jupiter.api.Test;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
@@ -33,6 +35,9 @@ import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
  * will work without them; a consumer that only publishes names as a
  * convenience, and whose real path is injection, carries on unaffected.
  * A port that threw would take that decision away from both.
+ *
+ * <p>The last test covers the other half of answering {@code null}:
+ * leaving the JVM exactly as it was found.
  */
 class Scenario02Test {
 
@@ -59,5 +64,27 @@ class Scenario02Test {
 
         assertThat(provider.writableRoot()).isNull();
         assertThat(provider.writableRoot()).isNull();
+    }
+
+    /**
+     * Reporting absence must also mean leaving no trace of the attempt.
+     *
+     * <p>The adapter points {@code java.naming.factory.initial} at
+     * xbean's factory as part of installing it. If it did that before
+     * finding out whether xbean is there — which is what jta-module's
+     * bootstrap used to do — a JVM whose only naming provider is its
+     * container's would be left with the property naming a class it
+     * cannot load, and a plain {@code new InitialContext()} would fail
+     * <em>because</em> jndi-module had been asked a question it answered
+     * with "nothing here".
+     */
+    @Test
+    void aFailedResolutionLeavesTheNamingPropertiesAlone() {
+        TestContext.loadService(JndiContextProvider.class).writableRoot();
+
+        assertThat(System.getProperty(Context.INITIAL_CONTEXT_FACTORY))
+                .as("no provider was installed, so nothing may claim to be one")
+                .isNull();
+        assertThat(System.getProperty(Context.URL_PKG_PREFIXES)).isNull();
     }
 }

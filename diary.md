@@ -7060,3 +7060,48 @@ installed jawelte artifacts (`tests/core` fails identically on `main`). `mvn -N
 install` at the repo root fixes it — worth knowing because `verify-all.sh` never
 installs the root pom itself: its Phase 1 reactor is rooted at `verify-all/pom.xml`,
 which is deliberately parentless and does not list the root pom as a module.
+
+### Review round 1 on PR #136 — drop the reflection, drop the double-checked lock
+
+Two review points from os890, both correct.
+
+**"Why does the impl module need that much reflection for a simple task?"** It
+did not; it had inherited jta-module's pattern wholesale. The project already had
+the better precedent: `xbean-finder-shaded` is managed at `provided` scope in the
+root pom and `XbeanFinderEntityScanner` imports `AnnotationFinder` directly.
+Reflection is right in `GeronimoTransactionManagerProvider` /
+`NarayanaTransactionManagerProvider` / `AtomikosTransactionManagerProvider`,
+which probe *competing* vendors of which at most one is present and none is
+declared — but `DefaultJndiContextProvider` **is** the xbean adapter, and a
+different naming implementation gets its own adapter at a lower `@Priority`.
+
+xbean-naming is now a `provided` dependency of jndi-module/impl (non-transitive,
+so "no provider in this JVM" stays a reachable state and scenario 02 still has an
+empty naming classpath), every xbean type is confined to a new package-private
+`XbeanNamingTree`, and `DefaultJndiContextProvider` keeps a single
+`Class.forName` probe that decides whether to touch it. 3 `Class.forName` sites,
+a `newInstance` and two `getMethod`/`invoke` pairs became one probe; the install
+is now `GlobalContextManager.setGlobalContext(new WritableContext())`. The
+provider went from 140 to 48 lines.
+
+**"The install-lock can be done with a synchronized method."** Also right, and
+the DCL was pure ceremony for a path that runs a handful of times per JVM.
+`INSTALL_LOCK` + double-check + `volatile` became a `static synchronized` method
+over a plain `boolean` — with every read and write under the lock, `volatile` is
+redundant. (Precision for the record: DCL with a `volatile` guard has been
+correct since JSR-133/Java 5, and without `volatile` it is still not guaranteed
+by the memory model — it is a JMM question, not a JDK-version one. It simply buys
+nothing here.)
+
+**Fixed on the way.** The old ordering set `java.naming.factory.initial` *first*
+and discovered xbean's absence afterwards, leaving a JVM whose only provider was
+its container's with that property naming a class it could not load — a working
+`new InitialContext()` broken by asking jndi-module a question it answered with
+"nothing here". Probing first fixes it, and scenario 02 now asserts both
+`java.naming.*` properties are untouched when the answer is `null`. Verified as a
+guard: with main's ordering restored, that one test fails and the other three
+pass. Also corrected a stale claim in jndi-module/impl's pom description, ported
+from #121, that `supportReferenceable` was off.
+
+**Verification.** Full reactor `clean install` green; `tests/jndi-module` 7 tests
+green; `tests/jta-module` all four CDI×JTA combinations green at 51 tests each.

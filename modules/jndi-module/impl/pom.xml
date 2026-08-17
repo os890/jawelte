@@ -29,7 +29,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (jndi-module/impl)</name>
-    <description>DefaultJndiContextProvider at @Priority(Integer.MAX_VALUE): installs Apache XBean's naming provider once per JVM and returns its writable global context, with supportReferenceable off so the tree hands back the object that was bound rather than a reconstruction of it. Reflection-only - no compile-time dependency on xbean-naming, because the naming provider is a runtime concern: tests bring xbean, a Jakarta-EE deployment brings its container's, and a JVM with neither gets null.</description>
+    <description>DefaultJndiContextProvider at @Priority(Integer.MAX_VALUE): installs Apache XBean's naming provider once per JVM and returns its writable global context, so every module that binds shares one root. xbean-naming is a provided dependency - compiled against, but not inherited by anything that takes this jar - and all of its types are confined to XbeanNamingTree, which is only loaded once a Class.forName probe has confirmed the provider is there. A JVM with no naming provider gets null from the port rather than an error, and never has its java.naming.* properties touched.</description>
 
     <dependencies>
         <!--
@@ -51,11 +51,25 @@
         </dependency>
 
         <!--
-            No xbean-naming dependency on purpose: the provider is
-            located reflectively at runtime, so this jar works whether
-            the naming implementation is xbean, a container's own, or
-            absent entirely.
+            xbean-naming is the naming implementation this adapter
+            installs, so it is compiled against rather than reflected
+            over - the same shape jpa-module uses for
+            xbean-finder-shaded.
+
+            provided scope (overriding the test scope the root pom
+            manages it at, since that default is aimed at the scenarios
+            that bring a provider for their own test run): available
+            when this module is compiled, and NOT transitive, so nothing
+            that takes jndi-module-impl inherits a naming provider from
+            it. That is what keeps "no provider in this JVM" a reachable
+            state - tests/jndi-module scenario 02 asserts it - and it
+            keeps a consumer free to supply a different provider.
         -->
+        <dependency>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-naming</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
     <build>

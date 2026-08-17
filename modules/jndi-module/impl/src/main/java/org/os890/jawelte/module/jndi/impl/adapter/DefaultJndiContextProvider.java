@@ -22,56 +22,51 @@ import jakarta.annotation.Priority;
 import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
 
 /**
- * Default {@link JndiContextProvider} shipped by jndi-module/impl: installs
- * Apache XBean's naming provider once per JVM and returns its writable
- * global context.
+ * Default {@link JndiContextProvider} shipped by jndi-module/impl:
+ * installs Apache XBean's naming provider once per JVM and returns its
+ * writable global context.
  *
- * <p>The installation is two steps. First the standard
- * {@code java.naming.factory.initial} /
- * {@code java.naming.factory.url.pkgs} system properties are pointed at
- * xbean, so a plain {@code new InitialContext()} and the {@code java:}
- * URL scheme both work. Then a {@code WritableContext} is installed as
- * xbean's global context — without it {@code GlobalContextManager}
- * hands out a sentinel that fails every operation with "Global context
- * has not been set".
+ * <p>xbean-naming is a {@code provided} dependency, so the installation
+ * itself is written against xbean's own types in
+ * {@link XbeanNamingTree} — see there for what "installing" means and
+ * why it happens only once. {@code provided} is what makes that safe to
+ * do: the dependency is not transitive, so nothing that takes
+ * jndi-module/impl inherits a naming provider from it. The same shape
+ * jpa-module uses for {@code xbean-finder-shaded}.
  *
- * <p><b>Installed exactly once.</b> The second step replaces the root,
- * so running it twice would discard everything bound so far. The
- * {@code installed} flag guards it, and routing every module through
- * this one provider is what makes that guard sufficient — two modules
- * carrying their own copy of this logic would each guard their own flag
- * and the later one would wipe the earlier one's bindings.
+ * <p><b>Absence is a single question, asked here.</b> A JVM may have no
+ * naming provider at all, and the port answers that with {@code null}.
+ * This class decides it with one {@link Class#forName} probe and only
+ * touches {@link XbeanNamingTree} once the probe has succeeded, so the
+ * xbean-typed class is never loaded when xbean is not there — no
+ * {@link NoClassDefFoundError} to catch, and, because the
+ * {@code java.naming.*} system properties are set inside that class, no
+ * JVM ever gets those properties pointed at a factory that is missing.
+ * (jta-module's old bootstrap set them first and discovered the absence
+ * afterwards, which left a JVM whose only naming provider was its
+ * container's with {@code java.naming.factory.initial} naming a class it
+ * could not load.)
  *
- * <p><b>Reflection-only.</b> jndi-module/impl does not compile-depend on
- * xbean-naming: the naming provider is a runtime concern. Tests bring
- * xbean-naming, a Jakarta-EE deployment brings its container's provider,
- * and a JVM with neither gets {@code null} — the documented "no naming
- * available" answer, not an exception.
+ * <p>The probe is repeated per call rather than cached: the answer
+ * depends on the thread's context classloader, and one
+ * {@code Class.forName} against an already-loaded class costs nothing
+ * next to the JNDI operation the caller is about to perform.
  *
  * <p>{@code @Priority(Integer.MAX_VALUE)} so a consumer can register a
- * provider for a different naming implementation at a lower priority
- * via {@code META-INF/services}.
+ * provider for a different naming implementation at a lower priority via
+ * {@code META-INF/services}.
  */
 @Priority(Integer.MAX_VALUE)
 public class DefaultJndiContextProvider implements JndiContextProvider {
 
     /**
-     * XBean's {@code InitialContextFactory}. Plays nicely with the
-     * {@code java:} URL scheme via {@code java.naming.factory.url.pkgs}.
+     * XBean's {@code InitialContextFactory}, and the class this adapter
+     * probes for. Named as a string rather than through
+     * {@code GlobalContextManager.class} on purpose: resolving that
+     * literal is exactly the load this probe exists to avoid.
      */
-    private static final String XBEAN_INITIAL_FACTORY =
+    private static final String GLOBAL_CONTEXT_MANAGER =
             "org.apache.xbean.naming.global.GlobalContextManager";
-
-    /**
-     * Package prefix for the {@code java:} URL context factory shipped
-     * by {@code xbean-naming}. Without this, lookups like
-     * {@code java:/TransactionManager} fail with "no URL context".
-     */
-    private static final String XBEAN_URL_PKGS = "org.apache.xbean.naming";
-
-    private static final Object INSTALL_LOCK = new Object();
-
-    private static volatile boolean installed;
 
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public DefaultJndiContextProvider() {
@@ -79,68 +74,29 @@ public class DefaultJndiContextProvider implements JndiContextProvider {
 
     @Override
     public Context writableRoot() {
-        ensureInstalled();
-        return globalContext();
-    }
-
-    private static void ensureInstalled() {
-        if (installed) {
-            return;
+        if (!namingProviderPresent()) {
+            return null;
         }
-        synchronized (INSTALL_LOCK) {
-            if (installed) {
-                return;
-            }
-            System.setProperty(Context.INITIAL_CONTEXT_FACTORY, XBEAN_INITIAL_FACTORY);
-            System.setProperty(Context.URL_PKG_PREFIXES, XBEAN_URL_PKGS);
-            installGlobalContext();
-            installed = true;
-        }
+        return XbeanNamingTree.writableRoot();
     }
 
     /**
-     * Install a fresh {@code WritableContext} as xbean-naming's global
-     * context — the writable root every {@code InitialContext} binds
-     * and looks up against.
+     * Whether xbean-naming is on the classpath of the calling thread.
      *
-     * <p>Only ever called from inside {@link #ensureInstalled()}'s
-     * double-checked guard: it replaces the root, so a second call
-     * would throw away every binding made against the first one.
+     * @return {@code true} when the provider can be installed;
+     *         {@code false} is the port's documented "no naming provider
+     *         in this JVM" answer rather than an error
      */
-    private static void installGlobalContext() {
+    private static boolean namingProviderPresent() {
         try {
-            Class<?> globalContextManager = loadXbeanClass(
-                    "org.apache.xbean.naming.global.GlobalContextManager");
-            Class<?> writableContext = loadXbeanClass(
-                    "org.apache.xbean.naming.context.WritableContext");
-            Context root = (Context) writableContext.getDeclaredConstructor().newInstance();
-            globalContextManager.getMethod("setGlobalContext", Context.class).invoke(null, root);
+            Class.forName(GLOBAL_CONTEXT_MANAGER, false,
+                    Thread.currentThread().getContextClassLoader());
+            return true;
         } catch (ClassNotFoundException noNamingProvider) {
-            // No xbean-naming on the classpath. Whoever supplies the
-            // InitialContextFactory instead (a Jakarta-EE container,
-            // a consumer's own provider) owns its own root context.
-            // writableRoot() reports the absence by returning null.
-        } catch (ReflectiveOperationException unexpected) {
-            throw new IllegalStateException(
-                    "Failed to install the xbean-naming global context", unexpected);
+            // Whoever supplies the InitialContextFactory instead (a
+            // Jakarta-EE container, a consumer's own provider) owns its
+            // own root context; there is nothing for this adapter to do.
+            return false;
         }
-    }
-
-    private static Context globalContext() {
-        try {
-            Class<?> globalContextManager = loadXbeanClass(
-                    "org.apache.xbean.naming.global.GlobalContextManager");
-            return (Context) globalContextManager.getMethod("getGlobalContext").invoke(null);
-        } catch (ClassNotFoundException noNamingProvider) {
-            return null;
-        } catch (ReflectiveOperationException unexpected) {
-            throw new IllegalStateException(
-                    "Failed to access the xbean-naming global context", unexpected);
-        }
-    }
-
-    private static Class<?> loadXbeanClass(String className) throws ClassNotFoundException {
-        ClassLoader tccl = Thread.currentThread().getContextClassLoader();
-        return Class.forName(className, true, tccl);
     }
 }
