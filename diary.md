@@ -7105,3 +7105,43 @@ from #121, that `supportReferenceable` was off.
 
 **Verification.** Full reactor `clean install` green; `tests/jndi-module` 7 tests
 green; `tests/jta-module` all four CDI×JTA combinations green at 51 tests each.
+
+### Review round 2 on PR #136 — the last reflection goes
+
+os890, on the round-1 result: "why should the xbean class be checked via
+reflection when the whole impl module doesn't work without xbean?", and then
+"GlobalContextManager is still used via reflection".
+
+Correct on the premise, and the round-1 javadoc had defended the probe on the
+wrong grounds. Two facts settle where the absence answer belongs:
+`TestContext.loadService` already returns `null` when no provider is registered
+and jta-module's `JndiBootstrap` null-checks it, so "no jndi-module-impl on the
+classpath" needs nothing from the adapter. The probe only covered the *other*
+state — impl present, xbean absent — which is reachable because every binding
+module pulls jndi-module-impl in transitively at runtime scope, and which is how
+the queued consumer scenarios are built (`tests/datasource-module` scenario 06
+from #120, and the equivalent in #125, both just omit xbean-naming).
+
+That state is worth keeping cheap, but it does not need a `Class.forName` to
+recognise. `DefaultJndiContextProvider` now calls `XbeanNamingTree.writableRoot()`
+and catches `NoClassDefFoundError`, translating it to the port's `null`. The
+module has no reflection left at all — the provider is 20 lines of body — and
+consumers keep constructing the degradation by omitting one test dependency
+rather than by excluding a transitive one.
+
+Removing the probe moved the property-ordering guarantee into `install()`, where
+it is now structural: the root is constructed *first*, because that construction
+is the first touch of an xbean type, so a classpath without xbean-naming fails
+before the code has claimed xbean is the JVM's naming provider. Re-verified as a
+guard after the reshape — with the properties moved back ahead of the first xbean
+touch, scenario 02's fourth test fails and the other three pass.
+
+Accepted trade-off, recorded rather than hidden: this relies on the JVM resolving
+`XbeanNamingTree`'s constant-pool entries lazily. HotSpot does; the JLS permits
+eager resolution, so it is a real-world guarantee rather than a specified one. The
+`try` wraps the *call* rather than sitting inside the class, so eager resolution
+at class-load time is caught too.
+
+**Verification.** Full reactor `clean install` green; `tests/jndi-module` 7 tests
+green; `tests/jta-module` green in all four CDI x JTA combinations at 51 tests
+each; ordering guard re-confirmed.

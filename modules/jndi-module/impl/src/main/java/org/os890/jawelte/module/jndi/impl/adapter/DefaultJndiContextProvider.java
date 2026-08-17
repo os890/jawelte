@@ -26,39 +26,43 @@ import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
  * installs Apache XBean's naming provider once per JVM and returns its
  * writable global context.
  *
- * <p>xbean-naming is a {@code provided} dependency, so the installation
- * itself is written against xbean's own types in
- * {@link XbeanNamingTree} — see there for what "installing" means and
- * why it happens only once. {@code provided} is what makes that safe to
- * do: the dependency is not transitive, so nothing that takes
- * jndi-module/impl inherits a naming provider from it. The same shape
- * jpa-module uses for {@code xbean-finder-shaded}.
+ * <p>xbean-naming is a {@code provided} dependency and the installation
+ * is written against xbean's own types in {@link XbeanNamingTree} — see
+ * there for what "installing" means and why it happens only once. This
+ * adapter <em>is</em> the xbean adapter: it cannot function without
+ * xbean, so xbean is not treated as optional anywhere in the module, and
+ * a naming implementation other than xbean is expected to ship its own
+ * provider at a lower {@code @Priority} rather than to be accommodated
+ * here. {@code provided} is the same shape jpa-module uses for
+ * {@code xbean-finder-shaded}: compiled against, and not transitive, so
+ * nothing that takes jndi-module/impl inherits a naming provider from
+ * it.
  *
- * <p><b>Why the probe exists at all.</b> This adapter cannot function
- * without xbean — it <em>is</em> the xbean adapter — so the probe is not
- * here for its own sake. It is here so that a consumer can express "this
- * classpath has no naming provider" by leaving xbean-naming out, which
- * is the cheapest possible way to construct that state. The alternative
- * expression — leaving jndi-module/impl itself out, so that
+ * <p><b>The absence answer.</b> The port reports "no naming provider in
+ * this JVM" by returning {@code null}, and there are two ways for a
+ * classpath to be in that state. Leaving jndi-module/impl out is the
+ * obvious one, and it needs nothing from this class:
  * {@link org.os890.jawelte.core.api.port.TestContext#loadService(Class)}
- * finds no provider and answers {@code null} — is not available to a
- * consumer that pulls this module in transitively at runtime scope, which
- * every module binding into the tree does. Without the probe, each of
- * those consumers would need a dependency exclusion in every scenario
- * that exercises the degradation.
+ * finds no provider and answers {@code null} on its own. The other is
+ * leaving xbean-naming out while this module is still present, which is
+ * the state a consumer is actually in — every module that binds pulls
+ * jndi-module/impl in transitively at runtime scope — and it is how a
+ * consumer's own degradation scenario is built, by omitting one test
+ * dependency rather than by excluding a transitive one.
  *
- * <p>The probe is also what keeps the {@code java.naming.*} system
- * properties out of a JVM that cannot use them: they are set inside
- * {@link XbeanNamingTree}, which is only touched once the probe has
- * succeeded. jta-module's old bootstrap set them first and discovered
- * xbean's absence afterwards, leaving a JVM whose only naming provider
- * was its container's with {@code java.naming.factory.initial} naming a
- * class it could not load.
- *
- * <p>It is repeated per call rather than cached: the answer depends on
- * the thread's context classloader, and one {@code Class.forName}
- * against an already-loaded class costs nothing next to the JNDI
- * operation the caller is about to perform.
+ * <p>That second state is recognised by catching the linkage failure
+ * from the first touch of an xbean type, rather than by predicting it
+ * with a {@code Class.forName} probe: the module compiles against xbean,
+ * so asking at runtime whether xbean is there would be the one piece of
+ * reflection left in a class that has no other reason to reflect. All
+ * xbean references live in {@link XbeanNamingTree}, so the failure has
+ * exactly one place it can come from, and that class defers the
+ * {@code java.naming.*} system properties until after its first xbean
+ * touch has succeeded — so a JVM that cannot use those properties never
+ * has them set. (jta-module's old bootstrap set them first and
+ * discovered xbean's absence afterwards, leaving a JVM whose only naming
+ * provider was its container's with {@code java.naming.factory.initial}
+ * naming a class it could not load.)
  *
  * <p>{@code @Priority(Integer.MAX_VALUE)} so a consumer can register a
  * provider for a different naming implementation at a lower priority via
@@ -67,44 +71,21 @@ import org.os890.jawelte.module.jndi.api.port.JndiContextProvider;
 @Priority(Integer.MAX_VALUE)
 public class DefaultJndiContextProvider implements JndiContextProvider {
 
-    /**
-     * XBean's {@code InitialContextFactory}, and the class this adapter
-     * probes for. Named as a string rather than through
-     * {@code GlobalContextManager.class} on purpose: resolving that
-     * literal is exactly the load this probe exists to avoid.
-     */
-    private static final String GLOBAL_CONTEXT_MANAGER =
-            "org.apache.xbean.naming.global.GlobalContextManager";
-
     /** No-arg constructor required by {@link java.util.ServiceLoader}. */
     public DefaultJndiContextProvider() {
     }
 
     @Override
     public Context writableRoot() {
-        if (!namingProviderPresent()) {
-            return null;
-        }
-        return XbeanNamingTree.writableRoot();
-    }
-
-    /**
-     * Whether xbean-naming is on the classpath of the calling thread.
-     *
-     * @return {@code true} when the provider can be installed;
-     *         {@code false} is the port's documented "no naming provider
-     *         in this JVM" answer rather than an error
-     */
-    private static boolean namingProviderPresent() {
         try {
-            Class.forName(GLOBAL_CONTEXT_MANAGER, false,
-                    Thread.currentThread().getContextClassLoader());
-            return true;
-        } catch (ClassNotFoundException noNamingProvider) {
-            // Whoever supplies the InitialContextFactory instead (a
-            // Jakarta-EE container, a consumer's own provider) owns its
-            // own root context; there is nothing for this adapter to do.
-            return false;
+            return XbeanNamingTree.writableRoot();
+        } catch (NoClassDefFoundError noNamingProvider) {
+            // xbean-naming is not on this classpath. Whoever supplies
+            // the InitialContextFactory instead (a Jakarta-EE container,
+            // a consumer's own provider) owns its own root context;
+            // null is the port's documented answer and the caller
+            // decides whether it can carry on without naming.
+            return null;
         }
     }
 }
