@@ -15,9 +15,12 @@
  */
 package org.os890.jawelte.module.jndi.impl.adapter;
 
+import java.util.Map;
+
 import javax.naming.Context;
 import javax.naming.NamingException;
 
+import org.apache.xbean.naming.context.ContextAccess;
 import org.apache.xbean.naming.context.WritableContext;
 import org.apache.xbean.naming.global.GlobalContextManager;
 
@@ -119,9 +122,38 @@ abstract class XbeanNamingTree {
         GlobalContextManager.setGlobalContext(root);
     }
 
+    /**
+     * Build the root with reference dereferencing switched off, so the
+     * tree hands back the object that was bound.
+     *
+     * <p>xbean's convenience constructors leave
+     * {@code supportReferenceable} on, and with it {@code addBinding}
+     * does not store what the caller bound: for a value that is
+     * {@link javax.naming.Referenceable} and yields a non-null
+     * {@link javax.naming.Reference}, the <em>Reference</em> is stored in
+     * its place, and every later lookup reconstructs a fresh object from
+     * it. Two lookups of one name then disagree, a lookup never returns
+     * the bound instance, and anything holding state behind the
+     * interface — a connection pool, canonically — gets one copy of that
+     * state per lookup.
+     *
+     * <p>{@code supportReferenceable = false} is the flag that decides
+     * this. With the substitution gone the remaining three have nothing
+     * left to act on: reference caching, the dereference-difference check
+     * and the dereference-bound assumption all describe handling of
+     * reconstructed objects that no longer occur, so they are passed
+     * {@code false} to say so rather than left to a default that implies
+     * otherwise.
+     *
+     * @return a fresh, modifiable root context
+     */
     private static Context newRoot() {
         try {
-            return new WritableContext();
+            return new WritableContext("", Map.of(), ContextAccess.MODIFIABLE,
+                    false,  // cacheReferences
+                    false,  // supportReferenceable
+                    false,  // checkDereferenceDifferent
+                    false); // assumeDereferenceBound
         } catch (NamingException rootRejected) {
             throw new IllegalStateException(
                     "Failed to build the xbean-naming global context", rootRejected);

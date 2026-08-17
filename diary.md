@@ -7172,3 +7172,53 @@ os890's request, so it went in as UNTESTED. It came back green afterwards: full
 reactor `clean install` 629 tests, `tests/jndi-module` 7 tests, and all four
 `tests/jta-module` CDI x JTA combinations at 51 tests each — 0 failures, 0 errors
 throughout. Review on #136 closed at that point.
+
+## 2026-08-17 — #135: the naming tree returns the object that was bound
+
+Second slice of the re-sliced series, cut from `main` after #136 merged.
+
+**The defect.** The root was built through xbean's no-arg `WritableContext`
+constructor, which chains to the 4-arg one and fixes `supportReferenceable = true`,
+`checkDereferenceDifferent = true`, `assumeDereferenceBound = false` (verified
+against xbean-naming 4.30 bytecode). With `supportReferenceable` on,
+`WritableContext.addBinding` does not store what the caller bound: for a value
+that is `Referenceable` and yields a non-null `Reference` whose reconstruction is
+not `equals` to it, the **Reference** is stored instead, and every later lookup
+rebuilds a fresh object from it. Two lookups of one name disagree, a lookup never
+returns the bound instance, and anything holding state behind its interface gets
+one copy per lookup — a pooled `DataSource` would be one pool per lookup.
+
+Worth recording that PR #121 had this mechanism backwards: its body attributed the
+substitution to the lookup passing a bound `Referenceable` through
+`NamingManager.getObjectInstance`. The substitution is at **bind** time, in
+`addBinding`; the lookup is only where the consequence shows.
+
+**The fix.** The 7-arg constructor with all four flags `false`.
+`supportReferenceable = false` is the one that decides it; with the substitution
+gone the other three describe handling of reconstructed objects that no longer
+occur, so they are passed explicitly rather than left to a default implying
+otherwise. Because #136 made xbean a compiled-against `provided` dependency, this
+needed no reflection at all — the ticket's suggested direction (read
+`ContextAccess.MODIFIABLE` as a field, select the constructor by signature) was
+written when the module still reflected and is obsolete.
+
+**The scenario.** `tests/jndi-module/scenario-03-lookup-returns-the-bound-object`,
+5 tests. The payload is `Referenceable` with identity `equals` and a **working**
+`ObjectFactory`, deliberately: under xbean's default the failure is then two
+functioning objects carrying the same state — the failure an application actually
+hits — rather than an error. A non-reconstructible reference would have made the
+identity assertions pass for the wrong reason, so a fifth test asserts the
+reconstruction path genuinely works. Guard-verified: with the no-arg constructor
+restored, exactly 3 of the 5 fail (the three `Referenceable` identity assertions),
+while the plain-binding test and the reconstruction-path test still pass and
+scenarios 01 and 02 are untouched — the change is scoped to what the ticket
+describes.
+
+**Verification.** Full reactor `clean install` 634 tests; `tests/jndi-module` 12
+tests; `tests/jta-module` all four CDI x JTA combinations at 51 each;
+`tests/jpa-module` 114 tests under each of OWB and Weld — jpa included because it
+is the other tree that touches data sources, and a surprise there is better found
+now than in #120. 0 failures, 0 errors throughout.
+
+`architecture.md` and the impl pom description now state the identity semantics,
+since that is the contract every future consumer of the tree inherits.

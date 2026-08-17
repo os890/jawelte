@@ -29,7 +29,7 @@
     <packaging>jar</packaging>
 
     <name>jawelte (jndi-module/impl)</name>
-    <description>DefaultJndiContextProvider at @Priority(Integer.MAX_VALUE): installs Apache XBean's naming provider once per JVM and returns its writable global context, so every module that binds shares one root. xbean-naming is a provided dependency - compiled against, but not inherited by anything that takes this jar - and all of its types are confined to XbeanNamingTree, which is only loaded once a Class.forName probe has confirmed the provider is there. A JVM with no naming provider gets null from the port rather than an error, and never has its java.naming.* properties touched.</description>
+    <description>DefaultJndiContextProvider at @Priority(Integer.MAX_VALUE): installs Apache XBean's naming provider once per JVM and returns its writable global context, so every module that binds shares one root. The root is built with supportReferenceable off, so a lookup returns the object that was bound rather than a fresh reconstruction of it - xbean's default replaces a bound Referenceable with its Reference at bind time, which would give a pooled DataSource one pool per lookup. xbean-naming is a provided dependency - compiled against, but not inherited by anything that takes this jar - and all of its types are confined to XbeanNamingTree, which is only loaded once a Class.forName probe has confirmed the provider is there. A JVM with no naming provider gets null from the port rather than an error, and never has its java.naming.* properties touched.</description>
 
     <dependencies>
         <!--
