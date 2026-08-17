@@ -7291,3 +7291,49 @@ this slice's scope, and some are the intentional kind.
 
 Re-verified: full reactor `clean install` 666 tests, `tests/datasource-module` 32
 tests under each of OWB and Weld, 0 failures, 0 errors.
+
+## 2026-08-17 — #122: build declared data sources at deployment time
+
+Fourth slice of the re-sliced series, cut from `main` after #139 merged.
+
+**The defect.** `DataSourceLifecycleAdapter.beforeAll` built the data sources, and a
+`TestModuleLifecyclePort` runs *after* `TestBeanContainerPort.beforeAll` — which is
+what starts the CDI container. So by the time anything could be built,
+`@Initialized(ApplicationScoped.class)` had already fired and any startup observer
+using a declared data source had already failed. Schema migration (Flyway/Liquibase),
+readiness probes and cache warm-up all live in that window, and it is exactly the code
+a test most wants to cover. The `@Priority(150)` placement was a correct ordering
+*among lifecycle adapters*; it never placed the work before the bean-container port.
+
+**The fix.** Construction moved into `DataSourceDefinitionCdiExtension`'s
+`AfterDeploymentValidation` observer — the last deployment event, fired before the
+application context starts, which is the order a real container establishes a
+`@DataSourceDefinition` in. A part-way failure releases what was already built and is
+reported through `addDeploymentProblem`, so the container refuses to start rather than
+coming up with half the declarations honoured. `DataSourceRegistry` is gone: the
+extension holds what it built, and the adapter keeps only unbind/close.
+
+**Slicing.** The source commit (`35a2211` in PR #121) bundled three tickets. Only #122
+is here. The `SeContainerCdiContainerPort` diagnostic and cdi-module scenario-60 are
+#127; scenario-09 belongs to #124 — the commit message itself records that #124 could
+not be reproduced and that scenario-09 was kept as a regression guard, so it travels
+with that ticket rather than this one.
+
+**#120's review fixes re-applied.** The imported code reintroduced what #139 had
+corrected, so: `definitionsByName` and the new `builtByName` are both
+`ConcurrentHashMap` (discovery races on one side, injection-time reads on the other);
+build order and bean-registration order both go through a `sortedNames()` helper so a
+deployment reproduces identically; `definitions()` dropped again; `builtDataSources()`
+replaced by `hasBuiltDataSources()`, since its only caller was an emptiness check
+paying for a full `Map.copyOf`. The adapter's javadoc claim that it "returns before
+touching CDI at all" was false — it calls `CDI.current()` first — and is corrected.
+
+**Guard-verified.** Rebuilt the module from `main`'s sources and ran scenario-10
+against it: it fails with the reporter's error verbatim, `No DataSource registered
+under 'java:app/jdbc/StartupDS'. Known names: []`, matching #122's evidence block
+exactly. With the fix it passes on both runtimes.
+
+**Verification.** Full reactor `clean install` 668 tests; `tests/datasource-module` 34
+tests under each of OWB and Weld; `tests/jndi-module` 12; `tests/jta-module` all four
+CDI x JTA combinations at 51 each; `tests/jpa-module` 114 per runtime;
+`tests/cdi-module` 60 per runtime. 0 failures, 0 errors.
