@@ -7827,3 +7827,50 @@ the database the test tree runs against — jpa-module generates H2 URLs by defa
 no driver. A note also records why cdi-module and scope-module are deliberately absent from
 an *integration* table: they are the foundation, and cdi-module is required rather than
 opt-in.
+
+## 2026-08-19 — jawelte 0.2.0 released
+
+**Outcome.** `v0.2.0` is tagged and pushed, 52 artifacts are published to
+`os890/os890-maven-repo`, and `main` continues on `0.3.0-SNAPSHOT`. `release.sh 0.2.0
+0.3.0-SNAPSHOT` ran end to end without an intervention — the first release that did.
+
+**What the two forked builds did.** `release:prepare` walked all 577 poms of the
+`-Pfull-reactor` reactor and built them green in 11m 24s before cutting the tag;
+`release:perform` rebuilt the tag — with the same profile, read back from
+`exec.activateProfiles` in `release.properties` — in 12m 11s and deployed. Zero test
+failures across both. Notably faster than the ~40m the 0.1.0-era notes budgeted for a
+release; the suite has been trimmed since (`verify-all.sh` was 32m at the last run).
+
+**The three fixes made after 0.1.0 all held.**
+
+*The version drift is gone.* 0.1.0 left 494 poms behind at the old version because they sat
+outside the release reactor. This time every versioned pom in the tree — all 577 — moved to
+`0.3.0-SNAPSHOT` in one step, and `verify-all/pom.xml` on its fixed `<version>1</version>`
+stayed outside the hierarchy as designed. Checked by counting versions across the whole
+tree, not across a reactor, which is the check that caught the orphan pom in August.
+
+*The publication clone survived.* `mktemp` outside `target/` did its job; no `clean` came
+near it, and the deploy wrote into a directory that was still a git checkout.
+
+*Nothing was left behind.* The closing `-Pfull-reactor release:clean` worked: `find` reports
+zero `pom.xml.releaseBackup` / `pom.xml.tag` / `pom.xml.next` / `release.properties` files.
+That one is worth re-checking explicitly every time, since all four are gitignored and a
+clean `git status` says nothing about them.
+
+**Publication verified four ways.** The commit (`1b28a2a`) touches only paths under
+`org/os890/jawelte` — the other project in that repository is untouched, confirmed from the
+diff rather than assumed. 492 files added, 126 modified, the modifications being exactly the
+`maven-metadata.xml` + `.md5` + `.sha1` triples of 42 artifacts; `<release>` is now `0.2.0`
+with `0.1.0` still in the version list, which is the merge behaviour that deploying into a
+clone of the current remote state buys. Not one `jawelte-tests-*`, coverage-report or
+verify-all artifact is in the set — `maven.deploy.skip` is what holds that line, since
+perform builds all 577 modules. And resolution was checked end to end against an empty local
+repository: a consumer pom with nothing but the repository entry and
+`jawelte-flow-assert-module-impl:0.2.0` pulls the api, `jawelte-core-api` and
+`org.os890.cdi.uml:dynamic-cdi-flow-renderer:0.9.0` off GitHub Pages, which was already
+serving the new files by the time the script finished.
+
+**Note for the next one.** The release log's outer reactor summaries list every module as
+`SKIPPED` — that is `release:prepare` and `release:clean` running a plugin goal at the root
+with nothing to build, not a build that skipped its modules. Worth knowing before it looks
+alarming in a 144k-line log.
