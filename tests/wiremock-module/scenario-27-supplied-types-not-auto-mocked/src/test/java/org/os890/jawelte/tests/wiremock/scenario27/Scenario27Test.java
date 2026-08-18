@@ -46,9 +46,11 @@ import com.github.tomakehurst.wiremock.client.WireMock;
  * never arises. A qualified point has no visible producer — only the
  * synthetic bean, which auto-mock cannot see.
  *
- * <p>{@link StubMockFactory} replaces the shipped Mockito factory on
- * purpose: without it auto-mock produces nothing on this JDK (#128) and
- * this scenario would pass whatever the code did.
+ * <p>The module ships {@code mock-maker-subclass}, so the shipped
+ * Mockito factory really does produce a competing bean here. Without
+ * that file the inline mock maker cannot self-attach its agent under
+ * this JDK, auto-mock registers nothing, and the scenario would pass
+ * whatever the code did (#150).
  */
 @EnableWireMock
 class Scenario27Test {
@@ -75,11 +77,4 @@ class Scenario27Test {
         assertThatCode(() -> client.resetMappings()).doesNotThrowAnyException();
     }
 
-    @Test
-    void theStubFactoryReallyWouldHaveProducedSomething() {
-        assertThat(new StubMockFactory().create(WireMock.class))
-                .as("if the factory refused this type, auto-mock would register nothing "
-                        + "and the assertions above would pass with the record missing")
-                .isNotNull();
-    }
 }

@@ -7748,3 +7748,44 @@ the parent is still absent, and a scenario fails resolution. After: the run inst
 itself and `jawelte-jndi-module-api` — the exact transitive dependency #120 lost — resolves.
 
 **Result: ALL 28 PHASES GREEN, 32m 27s, zero invalid-POM warnings in the log.**
+
+## 2026-08-18 — #150: the mock-maker gaps, and three javadocs that named the wrong cause
+
+Follow-up to #128, whose diagnostic is what made any of this visible.
+
+**The central-config option was measured out, not argued out.** #150 asked whether the
+mock-maker should be configured once instead of per module. Tested three ways —
+`-Dmockito.mock.maker=subclass` on the Maven command line, and passed into the forked JVM
+via `argLine` — and it fails in all of them, with #128's ERROR firing each time. Mockito
+5.14.2 honours only the `mockito-extensions/org.mockito.plugins.MockMaker` classpath
+resource here, so one central property was never available.
+
+**The ticket's premise needed correcting too.** "Applied unevenly" suggests randomness. It
+is not: the file is present in exactly the 61 scenarios where auto-mock has to work, and
+all 61 copies are byte-identical. The real gaps were three scenarios that needed auto-mock
+and lacked it — and each had papered over the consequence with a private
+`StubMockFactory`.
+
+**What shipped.** The file added to those three, and all three stub factories deleted.
+Verified both directions per scenario: green with real Mockito and no stub, and still
+failing with its own fix removed —
+
+| scenario | stub deleted | guard: fix removed |
+| --- | --- | --- |
+| `tests/datasource-module/scenario-12` | passes | fails, `AmbiguousResolutionException` |
+| `tests/cdi-module/scenario-61` | passes | fails |
+| `tests/wiremock-module/scenario-27` | passes | fails, `AmbiguousResolutionException` |
+
+The wiremock one was the doubt worth checking: its stub returned a real `WireMock` aimed at
+a dead port, and that trick looked load-bearing for the "reaches the running server"
+discriminator. It is not — the guard signal is the deployment failure, which real Mockito
+produces just as well, so the stub was only ever compensating for the missing file.
+
+**The javadocs.** All three said the stub was needed because "Mockito answers null on this
+JDK (#128)". That was my own imprecision earlier in the series, inherited from #128's
+framing; the real reason was the missing mock-maker file. Corrected in place, and the
+scenarios now say what actually makes them able to fail.
+
+**Verification.** `verify-all.sh`: ALL 28 PHASES GREEN, 32m 7s, and zero "cannot mock
+anything" errors anywhere in the log — so no scenario in the tree is silently running with
+auto-mocking disabled.

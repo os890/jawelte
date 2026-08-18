@@ -12,6 +12,12 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
+ * <p>The module ships {@code mock-maker-subclass}, which is what lets
+ * the shipped Mockito factory produce a competing bean at all: without
+ * it the inline mock maker cannot self-attach its agent under this JDK,
+ * auto-mock registers nothing, and this scenario would pass whatever
+ * the code did (#150).
  */
 package org.os890.jawelte.tests.cdi.scenario61;
 
