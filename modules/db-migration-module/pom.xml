@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-modules</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-db-migration-module</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (db-migration-module)</name>
+    <description>Knows which tables a schema-migration tool keeps its own bookkeeping in - flyway_schema_history and the older schema_version for Flyway, DATABASECHANGELOG and DATABASECHANGELOGLOCK for Liquibase - and contributes them to jpa-module's cleanup exclusion list so per-method cleanup does not empty a migration history while leaving the DDL it describes. Ships no Java logic beyond a ConfigKeyAliasProvider: the names are configuration, and the contribution is additive, so a consumer's own exclusions are unioned with these rather than replaced. Its own module rather than part of jpa-module because knowing Flyway's table name is knowledge about a third-party tool, not about persistence - the same reason every other integration has its own module. Optional and inert: without it on the classpath cleanup empties exactly what it always did.</description>
+
+    <dependencies>
+        <!--
+            core-api supplies the ConfigKeyAliasProvider SPI this
+            module implements. Nothing else: the module ships no
+            behaviour of its own, only the names.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            No dependency on jpa-module, and none on Flyway or
+            Liquibase. The logical key is matched as a string and the
+            tables are named as strings, so this jar works whichever
+            migration tool is on the consumer's classpath - or none.
+        -->
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -43,6 +43,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 | `jawelte-datasource-module` | JDBC (`@DataSourceDefinition`) | Builds, binds and injects the data sources a test or a bean declares |
 | `jawelte-resource-module` | `@Resource(lookup = ...)` | Fills named `@Resource` fields on application beans from the naming tree |
 | `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
+| `jawelte-db-migration-module` | Flyway / Liquibase | Keeps a migration tool's bookkeeping tables out of per-method cleanup |
 | `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
 | `jawelte-jaxrs-module` | Jakarta REST | Embedded REST container for endpoint testing |
 | `jawelte-microprofile` | MicroProfile | Config, Health, Metrics, OpenAPI support |
@@ -108,6 +109,12 @@ datasource-module ships **no entry-point annotation of its own** — the platfor
 The mechanism is `ProcessInjectionTarget`: a type declaring no *named* `@Resource` field is not wrapped at all, so the module is inert on a deployment that does not use it. `@Resource` fields never become CDI injection points — no `ProcessInjectionPoint` fires for them — so cdi-module's auto-mocking cannot compete and there is nothing to record through `SuppliedTypeRegistry`. Two boundaries are deliberate and asserted by scenarios rather than assumed: a **bare** `@Resource` (no `lookup` / `mappedName` / `name`) is left untouched, because its EE name is inferred from the declaring class and field and failing a deployment over a declaration the module does not handle would be worse than doing nothing; and the **test class** is not covered, because cdi-module builds its `InjectionTarget` at runtime through `getInjectionTargetFactory(...)` rather than on the discovery-time path this extension observes.
 
 It is its own module rather than part of cdi-module because cdi-module is mandatory and must not depend on the optional jndi-module, and rather than part of jndi-module because that module's job is handing out the writable root, not consuming it — `@Resource` is a consumer of naming in exactly the way `@DataSourceDefinition` is. It depends on jndi-module and on nothing else of jawelte's beyond `core/api`; datasource-module does not know it exists.
+
+**db-migration-module — a module with no ports and no api/impl split.**
+
+It ships one `ConfigKeyAliasProvider` and one `microprofile-config.properties`, and that is the whole module: the well-known bookkeeping table names (`flyway_schema_history`, `DATABASECHANGELOG`, `DATABASECHANGELOGLOCK`) contributed to the cleanup exclusion key jpa-module owns. There is no port for a consumer to implement and no API for one to compile against, so the usual `api` / `impl` split would produce an empty `api` artifact — it is flat for the same reason spring-data-module is.
+
+Why a module at all, rather than those names in jpa-module's own properties: jpa-module owns the logical key and knows no tool, and the merge is **additive** — a consumer's own value is unioned with every contributor's rather than replacing it. So a deployment without this module cleans exactly what it always did, a deployment with it keeps its migration history, and a consumer naming a home-grown history table gets that *plus* these. jpa-module never mentions Flyway or Liquibase, and this module has no dependency on jpa-module: it references the logical key as a literal string, because `jpa-module/impl` is not API.
 
 **jpa-module additions (in `jpa-module/api`):**
 
