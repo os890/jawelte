@@ -7437,3 +7437,45 @@ that decision with the measurements recorded on it.
 **Verification.** Full reactor `clean install` 674 tests; `tests/wiremock-module` 35 per
 runtime; `tests/cdi-module` 61 per runtime; `tests/datasource-module` 36 per runtime. 0
 failures, 0 errors. Guard-verified in both directions.
+
+## 2026-08-18 — #126: redirect a declared data source's url per definition
+
+Seventh slice of the re-sliced series, cut from `main` after #143 merged.
+
+**The defect.** `DefaultDataSourceFactory` applied the definition's `url` verbatim, so a
+production `@DataSourceDefinition` naming a **file** database created that file wherever
+the test JVM ran. The file survives the class, the suite and the build, and the next run
+reopens it with the previous run's rows still in it — which reads as flakiness rather
+than as leftover state, and leaves a stray file in the working tree.
+
+**The fix.** A MicroProfile Config key carrying the definition's own name, read the way
+every other module reads its keys: prefix + name + `.url`. Absent the key nothing
+changes. Redirecting through a replacement `DataSourceFactory` was the alternative and
+is worse — every consumer would re-implement a URL rewrite for a vendor syntax the port
+should not have to guess at.
+
+**Two corrections to #121's version.**
+
+1. Its javadoc advertised a key the code cannot produce:
+   `org.os890.jawelte.module.datasource."java:app/jdbc/AppDS".url`, quoted MP Config
+   style, while `resolveUrl` concatenates verbatim. Anyone following it would have set a
+   key that never matches. Corrected to the real shape, with the `.properties`-level
+   `\:` escape documented separately — that is properties syntax, not part of the key.
+
+2. Documented that the key is not settable through an environment variable: a Jakarta
+   name contains `:` and `/`, which the standard env-var mapping cannot express. Same
+   limitation #75 recorded for jpa's persistence-property keys.
+
+**Also.** `microprofile-config-api` had to come back to datasource-module/impl — #120
+dropped it along with the untested `jndi.enabled` toggle, and this is the first thing
+since to need `ConfigProvider`.
+
+**Guard-verified, and the defect is visible in the guard.** Reverting the single call
+site fails both of scenario-11's tests: the connection reports
+`jdbc:h2:./scenario11-should-not-exist`, and the run leaves
+`scenario11-should-not-exist.mv.db` in the scenario directory. The stray file appearing
+and then not appearing is the whole ticket in one observation. Deleted afterwards.
+
+**Verification.** Full reactor `clean install` 676 tests; `tests/datasource-module` 38
+per runtime; `tests/jpa-module` 114 per runtime — jpa included because it owns the other
+url-generation path. 0 failures, 0 errors, and no untracked files left behind.
