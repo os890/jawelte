@@ -7393,3 +7393,47 @@ runtimes.
 **Verification.** Full reactor `clean install` 671 tests; `tests/datasource-module` 36
 per runtime; `tests/cdi-module` 61 per runtime; `tests/jta-module` all four CDI x JTA
 combinations at 51 each. 0 failures, 0 errors.
+
+## 2026-08-18 — #142: wiremock-module records the types it supplies
+
+Sixth slice of the re-sliced series, cut from `main` after #141 merged. Started as #129
+and was re-scoped to a new ticket after measuring the premise.
+
+**#129's premise held for one module of four.** It asserts that jpa, jta, wiremock and
+spring-data are all exposed to the #124 collision. Measured, three are already shielded
+by their own `framework-exclude-packages` contributions: `jakarta.persistence.` /
+`jakarta.transaction.` (jpa), `com.arjuna.` — which covers
+`com.arjuna.ats.jta.common.JTAEnvironmentBean` (jta), and `org.springframework.data.`
+plus the filter's supertype walk (spring-data). wiremock-module contributes no
+exclusion at all.
+
+Verified rather than reasoned: a jpa-module scenario was written with a plain
+`@Inject EntityManager` and an always-succeeding `MockFactory`, then jpa-module's record
+was deleted — and it still passed. The scenario proved nothing, so it was deleted rather
+than kept as decoration.
+
+**wiremock-module is exposed only on a qualified injection point.** An unqualified
+`@Inject WireMock` is satisfied by the module's own `@Produces` producer, an ordinary
+bean that `getBeans(...)` can see, so auto-mock stands in for nothing.
+`@Inject @PaymentApi WireMock` — the multi-endpoint shape the module exists for — has no
+visible producer, only the synthetic bean, so auto-mock registers a competing bean under
+the endpoint qualifier. Finding that took three attempts: jpa (shielded), unqualified
+wiremock (producer-satisfied), then qualified wiremock, which fails.
+
+Two further obstacles to making the scenario real: `MockitoMockFactory` answers `null`
+on this JDK (#128), and all three wiremock types are classes, so a proxy-based stand-in
+cannot be built. `WireMock(int)` is public, and a real instance aimed at a dead port is
+enough to force the collision — which also gives the scenario its discriminator, since
+the module's client reaches the running server and the stand-in cannot.
+
+**Scope.** Only wiremock ships, as #142. The marks added to jpa/jta/spring-data during
+the attempt were reverted: three lines no scenario can fail on. What is left of #129 is
+the duplication its own last paragraph raises — the blanket prefix over-suppresses (no
+mocked `EntityManager` even when jpa-module supplies nothing) and under-suppresses
+(which is how wiremock slipped through), while `SuppliedTypeRegistry` states supply
+precisely. Replacing one with the other is a behaviour change, so #129 stays open for
+that decision with the measurements recorded on it.
+
+**Verification.** Full reactor `clean install` 674 tests; `tests/wiremock-module` 35 per
+runtime; `tests/cdi-module` 61 per runtime; `tests/datasource-module` 36 per runtime. 0
+failures, 0 errors. Guard-verified in both directions.

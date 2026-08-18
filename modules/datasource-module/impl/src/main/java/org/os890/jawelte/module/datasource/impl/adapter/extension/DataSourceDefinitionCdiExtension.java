@@ -201,7 +201,7 @@ public class DataSourceDefinitionCdiExtension implements Extension {
         // Recorded here, next to the registration it describes, so
         // cdi-module's auto-mocking does not stand in for a type this
         // module supplies itself. Its observer runs after this one.
-        SuppliedTypeRegistry.of(TestContext.get()).markSupplied(DataSource.class);
+        SuppliedTypeRegistry.active().markSupplied(DataSource.class);
         boolean soleDefinition = definitionsByName.size() == 1;
         for (String name : sortedNames()) {
             var beanBuilder = event.addBean()
