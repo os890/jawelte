@@ -454,6 +454,13 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal db-migration-module cross-reference -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-db-migration-module</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!-- Internal wiremock-module cross-references -->
             <dependency>
                 <groupId>${project.groupId}</groupId>

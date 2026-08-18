@@ -7573,3 +7573,50 @@ event — the distinction #122 turned on, now written into `architecture.md`.
 runtime (was 114 — scenarios 73 and 74); `tests/jta-module` 54 per combination across all
 four CDI x JTA combinations (was 51 — scenario 59); `tests/datasource-module` 38 per
 runtime; `tests/resource-module` 9 per runtime. 0 failures, 0 errors.
+
+## 2026-08-18 — #132: migration bookkeeping tables survive per-method cleanup
+
+Tenth slice of the re-sliced series, cut from `main` after #146 merged.
+
+**The defect.** Cleanup derives its targets from `INFORMATION_SCHEMA.TABLES`, which is
+the documented intent — it is what lets it reach join tables, audit logs and sequence
+bookkeeping no `@Entity` describes. The same reach puts a migration tool's history table
+in scope, and those rows are not test data: emptying them while leaving the DDL they
+describe puts the next migration run in front of a schema no history remembers. The
+symptom is unusually indirect — the class passes in isolation and fails in a suite,
+because the first container is always fine and only a later one meets the orphaned
+schema, with nothing in the message pointing at cleanup.
+
+Reachable only since #123: before that a declared data source and the persistence unit
+were different databases, so a migration running through the declared data source kept
+its history somewhere cleanup never looked.
+
+**The design, kept as it was.** jpa-module owns the logical key and names no tool;
+`db-migration-module` contributes `flyway_schema_history`, `DATABASECHANGELOG` and
+`DATABASECHANGELOGLOCK` through a `ConfigKeyAliasProvider`, and the merge is **additive**
+— a consumer naming a home-grown history table gets that plus these rather than replacing
+them. jpa-module never mentions Flyway or Liquibase, the new module has no dependency on
+jpa-module (it references the logical key as a literal string, since `jpa-module/impl` is
+not API), and a deployment without the module cleans exactly what it always did. Matching
+is case-insensitive because the tools disagree — Flyway lowercases, Liquibase uppercases.
+
+**Two gaps in #133 filled.** It never touched `architecture.md`, so a whole new module
+would have had no row in either table. And the module has no `api` / `impl` split, which
+contradicts the stated convention — correct here, since it ships one alias provider and
+one properties file and an `api` artifact would be empty, but it needed saying rather than
+being found later as an inconsistency. Both documented, including why this is a module at
+all rather than a few names in jpa-module's own properties.
+
+`CleanupTableExclusions` keeps its plural name: it holds a set of names, which is the
+intentional category alongside `DiffOptions` and `FlowRecordingSettings`, not the
+`DataSourceAdapters` case where there was only ever one thing.
+
+**Guard-verified and precisely scoped.** With the module's `ConfigKeyAliasProvider`
+services entry disabled, exactly 1 of scenario-75's 2 tests fails — the
+history-survives assertion — while "the ordinary table is still emptied" keeps passing.
+The exclusion does one thing.
+
+**Verification.** Full reactor `clean install` 696 tests; `tests/jpa-module` 122 per
+runtime; `tests/jta-module` 54 per combination across all four; `tests/datasource-module`
+38 per runtime; `tests/db-testdata-module` 72 — the other consumer of the cleanup
+strategies. 0 failures, 0 errors.

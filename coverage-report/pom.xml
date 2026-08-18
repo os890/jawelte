@@ -137,6 +137,11 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-db-migration-module</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>jawelte-content-diff-module-api</artifactId>
             <version>${project.version}</version>
         </dependency>
