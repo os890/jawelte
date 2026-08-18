@@ -150,6 +150,24 @@ run() {
 # unrelated test-suite work. Skipping tests here still installs
 # every artifact the LNP sweeps need; the LNP scenarios run in
 # Phase 2+ with the explicit -P lnp profile.
+# The root pom first, on its own.
+#
+# The reactor below is rooted at verify-all/pom.xml, which is
+# deliberately parentless and does NOT list the root pom as a module -
+# so a verify-all run never installs jawelte-parent. That is invisible
+# until someone adds a dependencyManagement entry, and then Maven's
+# failure mode is the quiet one: every module pom the reactor installs
+# omits versions for its internal dependencies and resolves them from
+# the parent, so a stale installed parent makes those poms "invalid",
+# and an invalid pom's transitive dependencies are DROPPED with a
+# WARNING rather than an error. The result is a green resolution with a
+# short classpath and a NoClassDefFoundError at test runtime, naming a
+# class nobody touched (#138).
+#
+# -N so only the root pom is built: a recursive run here would build
+# core and modules a second time.
+run "install root pom" "$REPO_ROOT" -N install
+
 if [ "$LNP_MODE" = true ]; then
     run "clean install full reactor [skipTests]" \
         "$REPO_ROOT/verify-all" -DskipTests clean install

@@ -7712,3 +7712,39 @@ fails — the strict one — while the default-null and library-usable assertion
 **Verification.** Full reactor `clean install` 700 tests; `tests/cdi-module` 62 classes /
 65 tests, identical under both runtimes; `tests/scope-module` 46 per runtime;
 `tests/datasource-module` 38 per runtime. 0 failures, 0 errors.
+
+## 2026-08-18 — #138: verify-all.sh installs the root pom
+
+Not part of the re-sliced series — a build defect found *by* it, filed while slicing #120
+and fixed now that the series is complete.
+
+**The defect.** Phase 1's reactor is rooted at `verify-all/pom.xml`, which is deliberately
+parentless and does not list the root pom as a module, so a verify-all run never installed
+`jawelte-parent`. Every module pom the reactor installs omits versions for its internal
+dependencies and resolves them from that parent, so a missing or stale installed parent
+makes those poms "invalid" — and an invalid pom's transitive dependencies are **dropped
+with a WARNING** rather than an error.
+
+Two faces, and only one is loud:
+
+- parent **absent** → resolution fails outright (`Could not find artifact ...
+  jawelte-parent:pom:0.2.0-SNAPSHOT`);
+- parent **present but stale** → silent. A green resolution with a short classpath and a
+  `NoClassDefFoundError` at test runtime naming a class nobody touched. That is what cost
+  time during #120, where datasource-module's scenarios failed on
+  `JndiContextProvider` — a dependency declared correctly at compile scope.
+
+**The fix.** One phase ahead of the reactor: `run "install root pom" "$REPO_ROOT" -N
+install`. `-N` so only the root pom builds — a recursive run there would build core and
+modules a second time, which is the duplication `verify-all/pom.xml` was made parentless to
+avoid. Reinstalling on every run also means staleness cannot persist, so both faces close.
+
+**Verified as the change deserves.** A change to the sweep script is tested by running the
+sweep, not by simulating it: `jawelte-parent` removed from the local repository, then the
+whole of `verify-all.sh`.
+
+Before, for contrast: with the parent removed and the old Phase 1, the reactor completes,
+the parent is still absent, and a scenario fails resolution. After: the run installs it
+itself and `jawelte-jndi-module-api` — the exact transitive dependency #120 lost — resolves.
+
+**Result: ALL 28 PHASES GREEN, 32m 27s, zero invalid-POM warnings in the log.**
