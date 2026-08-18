@@ -86,6 +86,26 @@ public class SuppliedTypeRegistry {
     }
 
     /**
+     * The registry for whichever test context is active, or an inert one
+     * when no jawelte bootstrap is in progress.
+     *
+     * <p>A CDI extension can be loaded by a container jawelte did not
+     * start, and then there is no context to record against — and
+     * equally no auto-mocking that would read the answer. Marking into
+     * an unbound registry is therefore the right no-op, and it keeps
+     * every call site to a single line.
+     *
+     * @return the active registry, or an inert one; never {@code null}
+     */
+    public static SuppliedTypeRegistry active() {
+        try {
+            return of(TestContext.get());
+        } catch (IllegalStateException noBootstrapInProgress) {
+            return new SuppliedTypeRegistry();
+        }
+    }
+
+    /**
      * Record that this module supplies beans of the given type.
      *
      * @param type the bean type being supplied

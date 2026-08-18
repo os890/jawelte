@@ -36,7 +36,9 @@ import jakarta.enterprise.inject.spi.CDI;
 import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.inject.Qualifier;
+import jakarta.interceptor.Interceptor;
 
+import org.os890.jawelte.core.api.SuppliedTypeRegistry;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.wiremock.api.EnableWireMock;
 import org.os890.jawelte.module.wiremock.api.WireMockEndpoint;
@@ -181,7 +183,9 @@ public class WireMockCdiExtension implements Extension {
         }
     }
 
-    void onAfterBeanDiscovery(@Observes AfterBeanDiscovery event) {
+    // Ordered ahead of cdi-module's auto-mock observer (LIBRARY_AFTER):
+    // the three endpoint types below must be recorded before auto-mock looks.
+    void onAfterBeanDiscovery(@Observes @Priority(Interceptor.Priority.LIBRARY_BEFORE) AfterBeanDiscovery event) {
         Class<? extends Annotation> defaultWinner = resolveDefaultWinner(discoveredEndpoints.keySet());
         boolean hasWinner = defaultWinner != null;
 
@@ -192,6 +196,11 @@ public class WireMockCdiExtension implements Extension {
             Annotation userQualifierLiteral = literalFor(userQualifierType);
             Annotation[] qualifiers = qualifierArrayFor(
                     userQualifierLiteral, userQualifierType, defaultWinner, hasWinner);
+
+            SuppliedTypeRegistry supplied = SuppliedTypeRegistry.active();
+            supplied.markSupplied(WireMockServer.class);
+            supplied.markSupplied(WireMock.class);
+            supplied.markSupplied(WireMockRuntimeInfo.class);
 
             event.addBean()
                     .types(WireMockServer.class)

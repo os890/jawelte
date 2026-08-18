@@ -60,6 +60,7 @@
         <module>scenario-24-priority-resolves-default</module>
         <module>scenario-25-priority-tie-stays-ambiguous</module>
         <module>scenario-26-registry-scope-resolved-per-container</module>
+        <module>scenario-27-supplied-types-not-auto-mocked</module>
     </modules>
 
     <dependencies>
