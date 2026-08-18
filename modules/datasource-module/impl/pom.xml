@@ -72,6 +72,16 @@
 
 
         <!--
+            microprofile-config-api supplies ConfigProvider, which
+            DefaultDataSourceFactory reads the per-definition url
+            redirect from. provided scope (inherited).
+        -->
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+        </dependency>
+
+        <!--
             No JDBC driver and no connection-pool dependency: the
             vendor DataSource class is whatever the test's
             @DataSourceDefinition names, loaded reflectively from the

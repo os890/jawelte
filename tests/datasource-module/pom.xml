@@ -44,6 +44,7 @@
         <module>scenario-08-datasource-factory-swap</module>
         <module>scenario-09-named-injection-in-application-bean</module>
         <module>scenario-10-startup-observer-uses-datasource</module>
+        <module>scenario-11-url-redirected-by-config</module>
         <module>scenario-12-plain-injection-separate-declaration</module>
     </modules>
 

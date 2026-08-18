@@ -26,6 +26,7 @@ import javax.sql.XADataSource;
 import jakarta.annotation.Priority;
 import jakarta.annotation.sql.DataSourceDefinition;
 
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.module.datasource.api.port.DataSourceFactory;
 import org.os890.jawelte.module.datasource.impl.util.DataSourceAdapter;
 
@@ -72,6 +73,16 @@ import org.os890.jawelte.module.datasource.impl.util.DataSourceAdapter;
  */
 @Priority(Integer.MAX_VALUE)
 public class DefaultDataSourceFactory implements DataSourceFactory {
+
+    /**
+     * MicroProfile Config key prefix for redirecting a declared data
+     * source. The definition's own name and {@link #URL_OVERRIDE_SUFFIX}
+     * complete it.
+     */
+    public static final String URL_OVERRIDE_PREFIX = "org.os890.jawelte.module.datasource.";
+
+    /** Suffix of the url-override key. */
+    public static final String URL_OVERRIDE_SUFFIX = ".url";
 
     /**
      * Attribute to candidate setter names, in the order they are
@@ -127,7 +138,7 @@ public class DefaultDataSourceFactory implements DataSourceFactory {
     }
 
     private static void applyStringAttributes(Object target, DataSourceDefinition definition) {
-        applyIfSet(target, "url", definition.url());
+        applyIfSet(target, "url", resolveUrl(definition));
         applyIfSet(target, "user", definition.user());
         applyIfSet(target, "password", definition.password());
         applyIfSet(target, "databaseName", definition.databaseName());
@@ -256,5 +267,52 @@ public class DefaultDataSourceFactory implements DataSourceFactory {
                 "@DataSourceDefinition(name = \"" + definition.name() + "\") names className '"
                         + definition.className() + "', which is none of javax.sql.DataSource, "
                         + "javax.sql.XADataSource or javax.sql.ConnectionPoolDataSource.");
+    }
+
+    /**
+     * The url to configure the vendor object with: the definition's own,
+     * unless a test run redirects it.
+     *
+     * <p>A production {@code @DataSourceDefinition} names a production
+     * database, and a <em>file</em> database is the case that bites — the
+     * file is created wherever the test JVM runs, survives the suite, and
+     * the next build reopens it with the previous build's rows still in
+     * it. That reads as flakiness rather than as leftover state, and it
+     * leaves a stray file in the working tree.
+     *
+     * <p>Redirecting it must not require replacing the factory: that
+     * would have every consumer re-implementing a URL rewrite for a
+     * vendor syntax a factory port should not have to guess at. The
+     * redirect is therefore a MicroProfile Config key carrying the
+     * definition's own name, read the same way every other module reads
+     * its keys — prefix, name, suffix, concatenated verbatim:
+     *
+     * <pre>
+     * org.os890.jawelte.module.datasource.java:app/jdbc/AppDS.url=jdbc:h2:mem:app;DB_CLOSE_DELAY=-1
+     * </pre>
+     *
+     * <p>In a {@code .properties} source the {@code :} inside the name
+     * has to be escaped as {@code \:}, because {@code :} is a
+     * key/value separator there. The name is not otherwise transformed.
+     *
+     * <p><b>Not settable through an environment variable.</b> The
+     * standard env-var mapping only reaches keys made of alphanumerics
+     * and dots, and a Jakarta name contains {@code :} and {@code /} —
+     * the same limitation jpa-module's persistence-property keys have
+     * (#75). A system property or any other MP Config source works.
+     *
+     * <p>Absent the key nothing changes and the declaration's own url is
+     * used, so this is invisible to anyone who does not need it.
+     *
+     * @param definition the declaration being built
+     * @return the url to apply to the vendor object
+     */
+    private static String resolveUrl(DataSourceDefinition definition) {
+        String key = URL_OVERRIDE_PREFIX + definition.name() + URL_OVERRIDE_SUFFIX;
+        return ConfigProvider.getConfig()
+                .getOptionalValue(key, String.class)
+                .map(String::trim)
+                .filter(redirected -> !redirected.isEmpty())
+                .orElseGet(definition::url);
     }
 }
