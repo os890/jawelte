@@ -36,6 +36,7 @@
         <module>scope-module</module>
         <module>jndi-module</module>
         <module>datasource-module</module>
+        <module>resource-module</module>
         <module>jpa-module</module>
         <module>jta-module</module>
         <module>ejb-module</module>

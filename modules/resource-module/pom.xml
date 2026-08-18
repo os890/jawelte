@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-modules</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-resource-module</artifactId>
+    <packaging>pom</packaging>
+
+    <name>jawelte (resource-module aggregator)</name>
+    <description>@Resource injection, so an application's production wiring runs unchanged in a test. resource-module/api ships the ResourceLookup port - a name to an object, with no assumption that the name lives in JNDI; resource-module/impl ships the CDI extension that fills @Resource fields through it and a default adapter that resolves against the naming tree jndi-module installs. It exists as its own module rather than inside cdi-module because cdi-module is mandatory and must not depend on jndi-module, and rather than inside jndi-module because that module's job is handing out the writable root, not consuming it - @Resource is a consumer of naming exactly as @DataSourceDefinition is. Optional and inert: a deployment with no @Resource field is never touched.</description>
+
+    <modules>
+        <module>api</module>
+        <module>impl</module>
+    </modules>
+</project>
