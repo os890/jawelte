@@ -14,23 +14,21 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
         <artifactId>jawelte-tests-jpa-module</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>jawelte-tests-jpa-module-scenario-73-persistence-unit-resolves-declared-data-source</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/jpa-module scenario 73: a persistence unit naming a declared data source uses it</name>
-    <description>The split-database failure from &#35;123: a production-shaped persistence.xml naming a data source that a @DataSourceDefinition declares. Rows written through the plain DataSource have to be visible through the EntityManager and the other way round - one database, which is what an application migrating its schema through JDBC and reading it through JPA depends on. The only scenario in this tree that pulls in datasource-module, because it is the only one about the two modules meeting.</description>
+    <description>The split-database failure from #123: a production-shaped persistence.xml naming a data source that a @DataSourceDefinition declares. Rows written through the plain DataSource have to be visible through the EntityManager and the other way round - one database, which is what an application migrating its schema through JDBC and reading it through JPA depends on. The only scenario in this tree that pulls in datasource-module, because it is the only one about the two modules meeting.</description>
 
     <dependencies>
         <dependency>

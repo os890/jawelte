@@ -14,23 +14,21 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
         <artifactId>jawelte-tests-datasource-module</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>jawelte-tests-datasource-module-scenario-12-plain-injection-separate-declaration</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/datasource-module scenario 12: a plain @Inject DataSource with the declaration on a separate bean</name>
-    <description>Reproduction for &#35;124 in the narrowed shape: one definition carried by a bean that does nothing else, and a second bean holding a single plain @Inject DataSource. The archive deliberately ships no beans.xml, which is the last difference between this and the scenarios that pass.</description>
+    <description>Reproduction for #124 in the narrowed shape: one definition carried by a bean that does nothing else, and a second bean holding a single plain @Inject DataSource. The archive deliberately ships no beans.xml, which is the last difference between this and the scenarios that pass.</description>
 
     <dependencies>
         <dependency>

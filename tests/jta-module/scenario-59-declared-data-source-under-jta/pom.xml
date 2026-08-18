@@ -14,23 +14,21 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
         <artifactId>jawelte-tests-jta-module</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>jawelte-tests-jta-module-scenario-59-declared-data-source-under-jta</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/jta-module scenario 59: a declared data source is used under JTA too</name>
-    <description>The interaction reported on &#35;123 after the resolution landed: with jta-module on the classpath the unit went back to jpa-module's generated database. jta-module's PersistencePropertyResolver builds its XA data source from the jdbc.url in the property bag and publishes it as jtaDataSource, which used to arrive before the declared data source was applied. Same declaration and same persistence.xml as tests/jpa-module scenario 73, with jta-module present - the only difference, which is what makes it the discriminator.</description>
+    <description>The interaction reported on #123 after the resolution landed: with jta-module on the classpath the unit went back to jpa-module's generated database. jta-module's PersistencePropertyResolver builds its XA data source from the jdbc.url in the property bag and publishes it as jtaDataSource, which used to arrive before the declared data source was applied. Same declaration and same persistence.xml as tests/jpa-module scenario 73, with jta-module present - the only difference, which is what makes it the discriminator.</description>
 
     <dependencies>
         <dependency>

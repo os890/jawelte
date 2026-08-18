@@ -14,23 +14,21 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
         <artifactId>jawelte-tests-resource-module</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>jawelte-tests-resource-module-scenario-02-resource-feeds-a-producer</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/resource-module scenario 02: a @Resource field feeding a @Produces method</name>
-    <description>The exact failure shape reported in &#35;125: a producer whose only input is a @Resource field. Left null, the producer returns null and an @ApplicationScoped producer method fails with IllegalProductException at first use rather than at deployment - a failure a long way from its cause. With the field filled, the producer produces.</description>
+    <description>The exact failure shape reported in #125: a producer whose only input is a @Resource field. Left null, the producer returns null and an @ApplicationScoped producer method fails with IllegalProductException at first use rather than at deployment - a failure a long way from its cause. With the field filled, the producer produces.</description>
 
     <dependencies>
         <dependency>

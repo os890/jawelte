@@ -14,23 +14,21 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
         <groupId>org.os890.jawelte</groupId>
         <artifactId>jawelte-tests-datasource-module</artifactId>
-        <version>0.2.0-SNAPSHOT</version>
+        <version>0.2.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>jawelte-tests-datasource-module-scenario-11-url-redirected-by-config</artifactId>
     <packaging>jar</packaging>
     <name>jawelte tests/datasource-module scenario 11: a declared url is redirectable per definition</name>
-    <description>Reproduction and regression guard for &#35;126: a production @DataSourceDefinition naming a file database must be redirectable for a test run without replacing the DataSourceFactory, so no database file is created in the working tree and no state survives the build.</description>
+    <description>Reproduction and regression guard for #126: a production @DataSourceDefinition naming a file database must be redirectable for a test run without replacing the DataSourceFactory, so no database file is created in the working tree and no state survives the build.</description>
 
     <dependencies>
         <dependency>
