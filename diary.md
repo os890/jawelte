@@ -7527,3 +7527,49 @@ identity. Restored and re-verified green.
 **Verification.** Full reactor `clean install` 685 tests; `tests/resource-module` 9 tests
 per runtime; `tests/datasource-module` 38 per runtime; `tests/cdi-module` 61 per runtime;
 `tests/jndi-module` 12. 0 failures, 0 errors.
+
+## 2026-08-18 — #123: a persistence unit uses the data source it names
+
+Ninth slice of the re-sliced series, cut from `main` after #145 merged. The one that
+changes an existing contract.
+
+**The defect.** A `<jta-data-source>` naming a declared `@DataSourceDefinition` was
+overridden by jpa-module's generated H2 url, so the declared data source and the
+persistence unit were two different databases. An application migrating its schema
+through a plain `DataSource` and reading it through JPA wrote to one and read from the
+other; and jpa-module's between-method row cleanup, which works on the unit's database,
+never reached the rows written through the declared one — isolation quietly stopping
+without any test failing.
+
+**The fix.** jpa-module parses `<jta-data-source>` / `<non-jta-data-source>` and resolves
+the name through **jndi-module's writable root**, not through datasource-module. So it
+depends on one interface jar rather than on datasource-module, any module that binds a
+data source resolves the same way, and that is what a real container does with the
+element. A name nothing binds is not an error: the unit keeps jpa-module's own generated
+database. The rule is *resolve when declared, override when not*, which is why
+`scenario-47`'s production-shaped `persistence.xml` naming
+`java:jboss/datasources/PostgresDS` still behaves as it always did — the scenario now
+asserts both halves instead of only the override.
+
+**jpa and jta stop forking.** jta-module's `JtaPersistencePropertyResolver` used to build
+its own `XADataSource` from the configured vendor class unconditionally and set it as the
+unit's `jtaDataSource`, so even a resolved declaration was overwritten straight after.
+It now takes what the unit already carries when that is an `XADataSource` — the common
+case, since vendors implement both on one class as H2's `JdbcDataSource` does — giving
+one object, one database, with enlistment. When the declared class is a plain
+`DataSource` it contributes nothing, the declared entry survives, and the unit runs on
+the declared database *without* XA enlistment, logged as the limitation it is. Quietly
+running against a different database, which is what happened before, is the worse trade.
+
+**Ordering.** Both modules now build in `AfterDeploymentValidation`, so the order is
+stated on the observers: datasource-module at
+`@Priority(Interceptor.Priority.LIBRARY_BEFORE)` (1000, the constant #124 established),
+jpa-module at 2000. #131 used a bare `1000`; the constant makes the two orderings in that
+class one convention rather than a magic number. The lifecycle-adapter priorities (150
+before 200) order the *test* lifecycle and say nothing about observer order inside one CDI
+event — the distinction #122 turned on, now written into `architecture.md`.
+
+**Verification.** Full reactor `clean install` 694 tests; `tests/jpa-module` 120 per
+runtime (was 114 — scenarios 73 and 74); `tests/jta-module` 54 per combination across all
+four CDI x JTA combinations (was 51 — scenario 59); `tests/datasource-module` 38 per
+runtime; `tests/resource-module` 9 per runtime. 0 failures, 0 errors.

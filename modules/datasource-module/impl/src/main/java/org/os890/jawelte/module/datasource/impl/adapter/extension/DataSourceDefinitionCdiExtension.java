@@ -242,7 +242,11 @@ public class DataSourceDefinitionCdiExtension implements Extension {
      *
      * @param event the CDI lifecycle event
      */
-    void onAfterDeploymentValidation(@Observes AfterDeploymentValidation event) {
+    // Ordered before jpa-module's AfterDeploymentValidation observer: a
+    // persistence unit naming a declared data source has to find it
+    // already built (#123).
+    void onAfterDeploymentValidation(
+            @Observes @Priority(Interceptor.Priority.LIBRARY_BEFORE) AfterDeploymentValidation event) {
         if (definitionsByName.isEmpty()) {
             return;
         }

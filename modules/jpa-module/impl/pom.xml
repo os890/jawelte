@@ -51,6 +51,19 @@
             <artifactId>jawelte-core-api</artifactId>
         </dependency>
 
+        <!--
+            jndi-module/api supplies JndiContextProvider, the shared
+            naming tree a persistence unit's <jta-data-source> name is
+            resolved in. Interfaces only, and it means jpa-module needs
+            no dependency on datasource-module: any module binding a
+            data source under that name is resolved the same way, which
+            is also what a real container does with the element.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-api</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>jakarta.enterprise</groupId>
             <artifactId>jakarta.enterprise.cdi-api</artifactId>
