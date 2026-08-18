@@ -30,6 +30,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import jakarta.annotation.Priority;
 import jakarta.enterprise.context.Dependent;
 import jakarta.enterprise.context.NormalScope;
 import jakarta.enterprise.context.RequestScoped;
@@ -58,9 +59,11 @@ import jakarta.inject.Provider;
 import jakarta.inject.Qualifier;
 import jakarta.inject.Scope;
 import jakarta.inject.Singleton;
+import jakarta.interceptor.Interceptor;
 
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.os890.jawelte.core.api.EnableTestBeans;
+import org.os890.jawelte.core.api.SuppliedTypeRegistry;
 import org.os890.jawelte.core.api.port.BeanScopeMapperPort;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.ExcludedPackageFilter;
@@ -85,6 +88,17 @@ import org.os890.jawelte.module.cdi.impl.util.TestBeanScanner;
  * (see {@code META-INF/microprofile-config.properties}), so the
  * filter is fully configurable through the standard MP Config
  * machinery.
+ *
+ * <p>Before synthesising anything the auto-mock loop consults
+ * {@link SuppliedTypeRegistry} on the active {@code TestContext} and
+ * skips the types other modules have already supplied. The
+ * {@code isUnsatisfied} re-check alone cannot cover them:
+ * {@code addBean()} registrations are invisible to
+ * {@code BeanManager.getBeans(...)} for the whole of
+ * {@code AfterBeanDiscovery}, so without the registry auto-mock
+ * registers a competing bean of the same type and the deployment fails
+ * with {@code AmbiguousResolutionException}. This observer therefore
+ * runs late, after the suppliers have recorded.
  *
  * <p>The Extension obtains the active {@link TestContext} via
  * {@link TestContext#get()} during {@code BeforeBeanDiscovery};
@@ -229,8 +243,14 @@ public class TestBeansCdiExtension implements Extension {
         }
     }
 
+    /**
+     * Runs late on purpose. Auto-mocking must see what every other
+     * module has supplied to this container, and a module records that
+     * as it registers, so this observer is ordered after theirs with
+     * {@code LIBRARY_AFTER}. See {@link SuppliedTypeRegistry}.
+     */
     void onAfterBeanDiscovery(
-            @Observes AfterBeanDiscovery event,
+            @Observes @Priority(Interceptor.Priority.LIBRARY_AFTER) AfterBeanDiscovery event,
             BeanManager beanManager) {
         if (scanResult == null) {
             return;
@@ -292,6 +312,15 @@ public class TestBeansCdiExtension implements Extension {
         // (into the autoMockNonJdkScope field), so each test class's
         // MP Config layer selects it rather than the value frozen by the
         // first container in the JVM.
+        // What other modules have already supplied to this container.
+        // They record it as they register, because the isUnsatisfied
+        // re-check below runs on getBeans(...), which does not see
+        // addBean() registrations while AfterBeanDiscovery is still in
+        // progress - on either runtime, at any observer priority. This
+        // observer runs late (see @Priority above) so the suppliers have
+        // recorded before it looks. See SuppliedTypeRegistry.
+        SuppliedTypeRegistry suppliedTypes = SuppliedTypeRegistry.of(activeContext);
+
         for (IpKey key : unsatisfiedCandidateIps) {
             Type targetType = key.targetType;
             Class<?> rawType = rawClassOf(targetType);
@@ -300,6 +329,9 @@ public class TestBeansCdiExtension implements Extension {
             }
             Set<Annotation> qualifiers = key.qualifiers;
             if (hasSyntheticBeanBinding(rawType)) {
+                continue;
+            }
+            if (suppliedTypes.isSupplied(targetType) || suppliedTypes.isSupplied(rawType)) {
                 continue;
             }
             if (excludedPackageFilter != null && excludedPackageFilter.isExcluded(rawType)) {
@@ -568,6 +600,7 @@ public class TestBeansCdiExtension implements Extension {
         }
         return false;
     }
+
 
     private static boolean isUnsatisfied(
             BeanManager beanManager, Type targetType, Set<Annotation> qualifiers) {

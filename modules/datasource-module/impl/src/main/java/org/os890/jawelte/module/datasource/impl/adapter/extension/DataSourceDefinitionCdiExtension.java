@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentMap;
 
 import javax.sql.DataSource;
 
+import jakarta.annotation.Priority;
 import jakarta.annotation.sql.DataSourceDefinition;
 import jakarta.annotation.sql.DataSourceDefinitions;
 import jakarta.enterprise.context.Dependent;
@@ -36,7 +37,9 @@ import jakarta.enterprise.inject.spi.BeforeBeanDiscovery;
 import jakarta.enterprise.inject.spi.Extension;
 import jakarta.enterprise.inject.spi.ProcessAnnotatedType;
 import jakarta.enterprise.inject.spi.WithAnnotations;
+import jakarta.interceptor.Interceptor;
 
+import org.os890.jawelte.core.api.SuppliedTypeRegistry;
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.datasource.api.port.DataSourceFactory;
 import org.os890.jawelte.module.datasource.impl.DataSourceLifecycle;
@@ -190,7 +193,15 @@ public class DataSourceDefinitionCdiExtension implements Extension {
      *
      * @param event the CDI lifecycle event
      */
-    void onAfterBeanDiscovery(@Observes AfterBeanDiscovery event) {
+    void onAfterBeanDiscovery(
+            @Observes @Priority(Interceptor.Priority.LIBRARY_BEFORE) AfterBeanDiscovery event) {
+        if (definitionsByName.isEmpty()) {
+            return;
+        }
+        // Recorded here, next to the registration it describes, so
+        // cdi-module's auto-mocking does not stand in for a type this
+        // module supplies itself. Its observer runs after this one.
+        SuppliedTypeRegistry.of(TestContext.get()).markSupplied(DataSource.class);
         boolean soleDefinition = definitionsByName.size() == 1;
         for (String name : sortedNames()) {
             var beanBuilder = event.addBean()
