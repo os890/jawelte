@@ -15,9 +15,12 @@
  */
 package org.os890.jawelte.module.cdi.impl.adapter.container;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import jakarta.annotation.Priority;
 import jakarta.enterprise.inject.se.SeContainer;
 import jakarta.enterprise.inject.se.SeContainerInitializer;
+import jakarta.enterprise.inject.spi.CDI;
 
 import org.os890.jawelte.core.api.port.TestContext;
 import org.os890.jawelte.module.cdi.api.port.CdiContainerPort;
@@ -60,13 +63,109 @@ public class SeContainerCdiContainerPort implements CdiContainerPort {
     public SeContainerCdiContainerPort() {
     }
 
+    /**
+     * The test class whose container failed to start and could not be
+     * released, or {@code null} when nothing is outstanding. Read by the
+     * next class that fails to start, so its error can name the real
+     * cause instead of leaving the reader to work out that
+     * "already registered" means "look at an earlier class".
+     */
+    private static final AtomicReference<String> UNRELEASED_CONTAINER_OWNER = new AtomicReference<>();
+
     @Override
     public void start(TestContext testContext) {
         // Discovery is left enabled, so TestBeansCdiExtension is picked
         // up from META-INF/services exactly once — no addExtensions(...),
         // which would double-register it (see class javadoc).
-        SeContainer container = SeContainerInitializer.newInstance().initialize();
+        String leakedFrom = UNRELEASED_CONTAINER_OWNER.get();
+        SeContainer container;
+        try {
+            container = SeContainerInitializer.newInstance().initialize();
+        } catch (RuntimeException | Error startFailure) {
+            // initialize() registered the container against this
+            // classloader before it got as far as failing — a deployment
+            // error or a throwing @Initialized(ApplicationScoped)
+            // observer both land here. The handle is lost, so stop()
+            // would find no metadata and close nothing.
+            if (releaseWithPortableApiOnly(startFailure)) {
+                UNRELEASED_CONTAINER_OWNER.set(null);
+            } else if (leakedFrom == null) {
+                UNRELEASED_CONTAINER_OWNER.set(testContext.getTestClass().getName());
+            }
+            if (leakedFrom != null) {
+                throw explainCollateralFailure(startFailure, leakedFrom);
+            }
+            throw startFailure;
+        }
+        // A successful start proves nothing is outstanding any more.
+        UNRELEASED_CONTAINER_OWNER.set(null);
         testContext.bindMetadata(SeContainer.class, container);
+    }
+
+    /**
+     * Best-effort release of a container whose {@code initialize()}
+     * threw, so its registration does not outlive this test class.
+     *
+     * <p>Portable API only, and measured not to succeed on either runtime
+     * the suite uses. CDI gives exactly one handle on a running container
+     * — {@link SeContainer} — and no way at all to abandon a bootstrap
+     * that threw: {@code initialize()} either returns the handle or loses
+     * it. Probed on a failed start:
+     *
+     * <ul>
+     *   <li>OpenWebBeans returns {@code org.apache.webbeans.container.OwbCDI}
+     *       — not a {@code SeContainer}, and not {@link AutoCloseable}
+     *       either, so there is nothing to call.</li>
+     *   <li>Weld throws from {@code CDI.current()} outright, so there is
+     *       nothing to inspect.</li>
+     * </ul>
+     *
+     * Both therefore fall through and the caller reports a collateral
+     * failure that names the class holding the real error.
+     *
+     * <p>The attempt is kept because it is the only correct thing the
+     * spec offers, costs nothing, and pays off on any runtime that does
+     * expose its container this way. Reaching into a specific runtime's
+     * internals would close the gap for one implementation and rot on
+     * the next — the suite runs on both, with more runtimes planned.
+     *
+     * @param startFailure the failure being propagated; anything that
+     *                     goes wrong here is attached to it as
+     *                     suppressed rather than thrown, since it is
+     *                     the exception that explains the run
+     * @return {@code true} when a container was actually closed
+     */
+    private static boolean releaseWithPortableApiOnly(Throwable startFailure) {
+        try {
+            if (CDI.current() instanceof SeContainer partiallyStarted && partiallyStarted.isRunning()) {
+                partiallyStarted.close();
+                return true;
+            }
+        } catch (RuntimeException | Error notReachableThatWay) {
+            startFailure.addSuppressed(notReachableThatWay);
+        }
+        return false;
+    }
+
+    /**
+     * Wrap a start failure that is a consequence of an earlier test
+     * class's leaked container, so the message names the situation
+     * instead of describing it in the runtime's terms.
+     *
+     * <p>"{@code ... is already registered}" is true but useless: it
+     * says nothing about there being an earlier failure, which class it
+     * was in, or that this one is collateral. In a run of N classes
+     * after the first failure, N−1 report it, and which of them holds
+     * the real error moves with execution order.
+     */
+    private static RuntimeException explainCollateralFailure(Throwable startFailure, String leakedFrom) {
+        return new IllegalStateException(
+                "This test class could not start a CDI container because the one started by "
+                        + leakedFrom + " was still registered: that class failed during its own"
+                        + " startup and this runtime offers no portable way to release a container"
+                        + " whose bootstrap threw. The failure in " + leakedFrom
+                        + " is the real one — this failure is a consequence of it.",
+                startFailure);
     }
 
     @Override
