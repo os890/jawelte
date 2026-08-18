@@ -42,17 +42,29 @@ Each integration is an independent module that hooks into the core via the SPI a
 | `jawelte-jndi-module` | JNDI | The in-process naming tree every binding module shares — one provider, one writable root |
 | `jawelte-datasource-module` | JDBC (`@DataSourceDefinition`) | Builds, binds and injects the data sources a test or a bean declares |
 | `jawelte-resource-module` | `@Resource(lookup = ...)` | Fills named `@Resource` fields on application beans from the naming tree |
-| `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
+| `jawelte-jpa-module` | JPA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
+| `jawelte-jta-module` | JTA (Geronimo / Narayana / Atomikos) | A real transaction manager behind `@Transactional` and `UserTransaction` |
 | `jawelte-db-migration-module` | Flyway / Liquibase | Keeps a migration tool's bookkeeping tables out of per-method cleanup |
+| `jawelte-db-testdata-module` | DBUnit | `DbSeed` fixture loading and `DbDiff` verification |
+| `jawelte-spring-data-module` | Spring Data | Discovers repository interfaces on the test classpath and registers real repository proxies as CDI beans |
 | `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
 | `jawelte-jaxrs-module` | Jakarta REST | Embedded REST container for endpoint testing |
-| `jawelte-microprofile` | MicroProfile | Config, Health, Metrics, OpenAPI support |
-| `jawelte-dbunit` | DB-Unit | Dataset-based database state management |
-| `jawelte-h2` | H2 | In-memory database for fast persistence tests |
-| `jawelte-mockito` | Mockito | CDI-aware mock injection |
 | `jawelte-wiremock-module` | WireMock | HTTP stub server lifecycle management |
 | `jawelte-batch-module` | Jakarta Batch (jBatch) | CDI event-driven job execution with synchronous polling and pluggable timeout policy |
+| `jawelte-content-diff-module` | JSON / XML | Semantic payload comparison — `ContentDiff.forJson(...)` / `forXml(...)` |
+| `jawelte-testcontrol-module` | (in-process) | `@TestControl` — per-method scope filtering and database-fixture handling |
 | `jawelte-flow-assert-module` | cdi-flow recorder (`dynamic-cdi-flow-renderer`) | Records the CDI call-flow of a test method and asserts it against an expected sequence-diagram |
+
+`cdi-module` and `scope-module` are deliberately absent from this table: they are the
+foundation rather than integrations — cdi-module is required, and scope-module supplies the
+test-lifecycle scopes every other module degrades gracefully without. Both are documented in
+the port sections below.
+
+**Technologies that are not modules of their own.** MicroProfile Config is consumed by the
+core itself (`ConfigResolver`, and every module's configuration keys). DBUnit lives inside
+`db-testdata-module`, Mockito inside `cdi-module` (as the default `MockFactory`), and H2 is
+simply the database the test tree runs against — jpa-module generates H2 URLs by default but
+ships no driver, so a consumer supplies whichever database it wants.
 
 New integrations follow the same pattern and require no changes to the core.
 
