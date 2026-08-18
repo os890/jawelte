@@ -7620,3 +7620,44 @@ The exclusion does one thing.
 runtime; `tests/jta-module` 54 per combination across all four; `tests/datasource-module`
 38 per runtime; `tests/db-testdata-module` 72 — the other consumer of the cleanup
 strategies. 0 failures, 0 errors.
+
+## 2026-08-18 — #127 (partial): a collateral start failure names the class that really failed
+
+Eleventh slice of the re-sliced series, cut from `main` after #147 merged. **Ships the
+ticket's secondary ask only** — the primary is not portably achievable, measured.
+
+**The defect.** A test class failing in `beforeAll` after the container started never shut
+that container down, so every later class in the JVM failed with OpenWebBeans'
+`... is already registered`. A run reports N failures of which N−1 are noise, and which
+class holds the real error moves with execution order.
+
+**The primary ask cannot be met with portable API**, and this time it is measured rather
+than asserted. CDI gives exactly one handle on a running container — `SeContainer` — and
+no way to abandon a bootstrap that threw: `initialize()` either returns the handle or
+loses it. Probed at the point of failure:
+
+- OpenWebBeans returns `org.apache.webbeans.container.OwbCDI` — not a `SeContainer`, and
+  not `AutoCloseable` either, so there is nothing to call;
+- Weld throws from `CDI.current()` outright, so there is nothing to inspect.
+
+Reaching into either runtime's internals would close the gap for one implementation and
+rot on the next, which the project has already rejected elsewhere.
+
+**What ships.** The portable attempt is kept — it costs nothing and pays off on any
+runtime that does expose its container — and the diagnostic on top: a collateral start
+failure now names the class holding the real error and says the first failure in the run
+is the real one, instead of reporting the runtime's "already registered". That removes the
+"re-run with a single test class to get a readable error" step the ticket describes. It
+does **not** make one broken class cost one failure; the cascade remains.
+
+`scenario-60` accepts either outcome deliberately — released cleanly, or diagnosed — so it
+does not hard-code today's runtime behaviour. Probed which branch is taken: **both
+runtimes take the diagnosed branch**, which is the fact recorded in the adapter's javadoc.
+
+**#127 stays open** rather than being closed by this PR. The ticket authorises the
+fallback, but its headline ask — one broken class, one failure — is unmet, and marking that
+done would misrepresent the state. Closing it is os890's call.
+
+**Verification.** Full reactor `clean install` 697 tests; `tests/cdi-module` 62 per runtime
+(was 61 — scenario 60); `tests/core` 29; `tests/scope-module` 46 per runtime. 0 failures,
+0 errors.
