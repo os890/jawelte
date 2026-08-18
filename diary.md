@@ -7789,3 +7789,41 @@ scenarios now say what actually makes them able to fail.
 **Verification.** `verify-all.sh`: ALL 28 PHASES GREEN, 32m 7s, and zero "cannot mock
 anything" errors anywhere in the log — so no scenario in the tree is silently running with
 auto-mocking disabled.
+
+## 2026-08-19 — README with module diagrams, and the stale architecture table
+
+**README.md created.** The repository had none — `CLAUDE.md` describes it as the primary
+documentation file, but it had never been written. Built around five mermaid diagrams, as
+os890 asked: the minimal setup (two artifacts, a CDI runtime, JUnit), three use cases each
+with only its own module subset (persistence against a declared data source; a REST endpoint
+with its downstream stubbed; Spring Data repositories over JPA), and a full overview of all
+17 modules plus a table of what each covers.
+
+Every diagram was rendered with `@mermaid-js/mermaid-cli` rather than eyeballed, which
+caught two things a read-through would not have. The first overview draft drew `→ core`
+edges from all 17 modules; because those edges cross subgraph boundaries, mermaid routes
+them cluster-to-cluster, so the picture implied whole groups depending on whole groups.
+Reworked so core sits at the top with "every module below builds on these two" and only real
+inter-module edges are drawn. The second was an edge label clipped to "contributes config
+t" — shortened to "excludes tables".
+
+Two arrows remain group-level rather than node-level (`testcontrol → db-testdata`,
+`jpa → jndi`), which is inherent to cross-cluster edges in mermaid; the tables carry the
+precise relationships.
+
+**architecture.md's Integration Layer table was stale**, which is what surfaced while
+gathering the facts for the README. It listed four modules that do not exist —
+`jawelte-microprofile`, `jawelte-dbunit`, `jawelte-h2`, `jawelte-mockito` — and omitted
+seven that do: jta, content-diff, db-testdata, testcontrol, spring-data (and cdi, scope,
+which belong elsewhere).
+
+Rewritten from `modules/pom.xml` and each module's own pom description, and cross-checked
+programmatically: the set of modules in the table now equals the set in the reactor, with no
+phantom entries and nothing missing. The four removed rows were not simply deleted — where
+those technologies actually live is now stated, since that was the useful part of the
+information: MicroProfile Config is consumed by the core itself, DBUnit lives inside
+db-testdata-module, Mockito inside cdi-module as the default `MockFactory`, and H2 is just
+the database the test tree runs against — jpa-module generates H2 URLs by default but ships
+no driver. A note also records why cdi-module and scope-module are deliberately absent from
+an *integration* table: they are the foundation, and cdi-module is required rather than
+opt-in.
