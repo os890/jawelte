@@ -7661,3 +7661,54 @@ done would misrepresent the state. Closing it is os890's call.
 **Verification.** Full reactor `clean install` 697 tests; `tests/cdi-module` 62 per runtime
 (was 61 — scenario 60); `tests/core` 29; `tests/scope-module` 46 per runtime. 0 failures,
 0 errors.
+
+## 2026-08-18 — #128: a mock refusal is reported instead of swallowed
+
+Twelfth and last slice of the re-sliced series, cut from `main` after #148 merged. Nothing
+to port — PR #121 shipped nothing for this.
+
+**The defect.** `MockitoMockFactory.create(...)` caught every `RuntimeException` from
+`Mockito.mock(...)` and answered `null`. `null` is legitimate in the `MockFactory`
+contract — "not mockable, skip it" — and right for a type that genuinely cannot be
+instrumented. Given *silently* when the library itself is unusable, it means every type is
+refused, auto-mocking is off for the whole deployment, and nothing says so.
+
+**What ships.** The two cases are told apart by asking Mockito to mock a trivial private
+interface of the factory's own: any working Mockito manages that, so a failure there is
+environmental rather than type-specific. Library unusable → one `ERROR`; type refused →
+one `WARNING` per type, repeats suppressed. Neither throws by default, because a refusal
+is a normal outcome of the contract and failing the bootstrap would break suites relying on
+today's behaviour; a suite that wants auto-mocking load-bearing sets
+`org.os890.jawelte.module.cdi.auto-mock.fail-on-unmockable=true` and gets an
+`IllegalStateException` naming the type.
+
+**What the diagnostic found the moment it existed, and it corrects the ticket.** Mockito is
+not broken on this JDK. Probed standalone, it mocks everything including
+`javax.sql.DataSource`. Inside surefire, even the trivial probe interface fails — the
+*inline mock maker* cannot self-attach its agent there. And 60 scenarios already work
+around exactly that by shipping
+`src/test/resources/mockito-extensions/org.mockito.plugins.MockMaker` with
+`mock-maker-subclass`. The scenarios without that file are the ones where auto-mocking is
+silently off.
+
+Verified rather than assumed: adding that one file to `tests/datasource-module/scenario-12`
+makes Mockito mock `DataSource` and reproduces #124's `AmbiguousResolutionException` with
+the **shipped** factory — no `StubMockFactory` needed. So the ERROR message names that
+remedy, and the remedy was tested before being prescribed.
+
+**A correction to earlier slices of this series.** #142's and #143's text, and the javadoc
+of the stub factories in `tests/datasource-module/scenario-12`,
+`tests/cdi-module/scenario-61` and `tests/wiremock-module/scenario-27`, all say those
+scenarios need their own `MockFactory` because "Mockito answers null on this JDK (#128)".
+That inherited #128's framing and is imprecise: the real reason is the missing mock-maker
+configuration in those scenario modules. The scenarios remain valid guards — each fails
+without its fix — but the stated reason is wrong, and a simpler setup was available. Filed
+as a follow-up together with making the mock-maker configuration consistent across the
+tree.
+
+**Guard-verified.** With the strict-mode throw disabled, exactly 1 of scenario-62's 3 tests
+fails — the strict one — while the default-null and library-usable assertions keep passing.
+
+**Verification.** Full reactor `clean install` 700 tests; `tests/cdi-module` 62 classes /
+65 tests, identical under both runtimes; `tests/scope-module` 46 per runtime;
+`tests/datasource-module` 38 per runtime. 0 failures, 0 errors.

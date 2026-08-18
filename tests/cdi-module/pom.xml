@@ -94,6 +94,7 @@
         <module>scenario-59-auto-mock-scope-resolved-per-container</module>
         <module>scenario-60-beforeall-failure-does-not-leak-the-container</module>
         <module>scenario-61-late-synthetic-bean-not-auto-mocked</module>
+        <module>scenario-62-mock-refusal-is-reported</module>
     </modules>
 
     <dependencies>
