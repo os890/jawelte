@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-resource-module</artifactId>
+        <version>0.2.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>jawelte-resource-module-impl</artifactId>
+    <packaging>jar</packaging>
+
+    <name>jawelte (resource-module/impl)</name>
+    <description>ResourceInjectionCdiExtension, which wraps the InjectionTarget of every type that declares a @Resource field and fills those fields through the ResourceLookup port; types without one are left untouched, so the module costs nothing on a deployment that does not use it. JndiResourceLookup is the shipped adapter at @Priority(Integer.MAX_VALUE), resolving names against the writable root jndi-module hands out - which is the same tree datasource-module binds its @DataSourceDefinition entries into, so @Resource(lookup = ...) and @Inject @Named(...) reach the same object.</description>
+
+    <dependencies>
+        <!--
+            resource-module/api supplies the ResourceLookup port this
+            module implements and resolves.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-resource-module-api</artifactId>
+        </dependency>
+
+        <!--
+            core-api supplies TestContext (SPI lookup). SPI-only - no
+            compile-time dep on core/impl.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-core-api</artifactId>
+        </dependency>
+
+        <!--
+            jndi-module/api supplies JndiContextProvider, which the
+            shipped lookup adapter resolves names against. Only the
+            adapter touches it: a consumer replacing ResourceLookup
+            takes the module somewhere else entirely.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>jawelte-jndi-module-api</artifactId>
+        </dependency>
+
+        <!--
+            CDI supplies the Extension SPI and the InjectionTarget
+            wrapping this module is built on. provided scope
+            (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+        </dependency>
+
+        <!--
+            jakarta.annotation-api supplies @Resource (what the
+            extension observes) and @Priority. provided scope
+            (inherited).
+        -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>javadoc-jar</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

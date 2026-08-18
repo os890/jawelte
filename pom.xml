@@ -442,6 +442,18 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- Internal resource-module cross-references -->
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-resource-module-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>jawelte-resource-module-impl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
             <!-- Internal wiremock-module cross-references -->
             <dependency>
                 <groupId>${project.groupId}</groupId>

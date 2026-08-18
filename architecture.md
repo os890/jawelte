@@ -41,6 +41,7 @@ Each integration is an independent module that hooks into the core via the SPI a
 |---|---|---|
 | `jawelte-jndi-module` | JNDI | The in-process naming tree every binding module shares — one provider, one writable root |
 | `jawelte-datasource-module` | JDBC (`@DataSourceDefinition`) | Builds, binds and injects the data sources a test or a bean declares |
+| `jawelte-resource-module` | `@Resource(lookup = ...)` | Fills named `@Resource` fields on application beans from the naming tree |
 | `jawelte-jpa-module` | JPA + JTA | Managed persistence context, transaction lifecycle, per-method DB cleanup |
 | `jawelte-ejb-module` | EJB session-bean annotations | Maps `@jakarta.ejb.Singleton` / `@jakarta.ejb.Stateless` to CDI scopes plus an implicit class-level `@jakarta.transaction.Transactional` |
 | `jawelte-jaxrs-module` | Jakarta REST | Embedded REST container for endpoint testing |
@@ -100,6 +101,14 @@ jta-module depends on jndi-module (api at compile scope, impl at runtime scope �
 
 datasource-module ships **no entry-point annotation of its own** — the platform's `@DataSourceDefinition` is the trigger, so a test declares only standard Jakarta API. It depends on neither jpa-module nor jta-module, and carries no JDBC-driver dependency: the vendor class the annotation names is loaded from the test's own classpath, which is the one place reflection is unavoidable here. It binds through jndi-module's `JndiContextProvider`, so its entries and jta-module's transaction artifacts share one naming tree.
 
+**resource-module additions (in `resource-module/api`):**
+
+- `ResourceLookup` — a name from a `@Resource` declaration to the object to inject. The port says nothing about JNDI: the shipped adapter resolves against jndi-module's writable root, but a consumer resolving from a registry or a map replaces it without the interface changing. Returning `null` means "this provider does not know the name" and the caller turns that into a failure naming the field; throwing means the lookup itself could not be performed.
+
+The mechanism is `ProcessInjectionTarget`: a type declaring no *named* `@Resource` field is not wrapped at all, so the module is inert on a deployment that does not use it. `@Resource` fields never become CDI injection points — no `ProcessInjectionPoint` fires for them — so cdi-module's auto-mocking cannot compete and there is nothing to record through `SuppliedTypeRegistry`. Two boundaries are deliberate and asserted by scenarios rather than assumed: a **bare** `@Resource` (no `lookup` / `mappedName` / `name`) is left untouched, because its EE name is inferred from the declaring class and field and failing a deployment over a declaration the module does not handle would be worse than doing nothing; and the **test class** is not covered, because cdi-module builds its `InjectionTarget` at runtime through `getInjectionTargetFactory(...)` rather than on the discovery-time path this extension observes.
+
+It is its own module rather than part of cdi-module because cdi-module is mandatory and must not depend on the optional jndi-module, and rather than part of jndi-module because that module's job is handing out the writable root, not consuming it — `@Resource` is a consumer of naming in exactly the way `@DataSourceDefinition` is. It depends on jndi-module and on nothing else of jawelte's beyond `core/api`; datasource-module does not know it exists.
+
 **jpa-module additions (in `jpa-module/api`):**
 
 - `@PersistenceConfig` — class-level JPA configuration (`fileMode`, `filePath`, `persistenceUnits`).
@@ -127,6 +136,7 @@ datasource-module ships **no entry-point annotation of its own** — the platfor
 | `TestModuleLifecyclePort` | `DataSourceLifecycleAdapter` (`@Priority(150)`) + `DataSourceDefinitionCdiExtension` | CDI runtime + whichever JDBC vendor class the annotation names | `datasource-module/impl` |
 | `DataSourceFactory` | `DefaultDataSourceFactory` (`@Priority(Integer.MAX_VALUE)`) | (reflective JavaBean configuration of the vendor class) | `datasource-module/impl` |
 | `BeanTypeContribution` | `DataSourceBeanTypeContribution` (contributes `javax.sql.DataSource`, but only once a `@DataSourceDefinition` was discovered) | (in-process, reads the extension off `TestContext`) | `datasource-module/impl` |
+| `ResourceLookup` | `JndiResourceLookup` (`@Priority(Integer.MAX_VALUE)`) + `ResourceInjectionCdiExtension` | JNDI (through jndi-module's `JndiContextProvider`) | `resource-module/impl` |
 | `TestModuleLifecyclePort` | `JpaLifecycleAdapter` (`@Priority(200)`) + `JpaCdiExtension` | CDI runtime + JPA provider (Hibernate) + JDBC driver (H2) | `jpa-module/impl` |
 | `TransactionStrategy` | `DefaultResourceLocalTransactionStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process) | `jpa-module/impl` |
 | `DbCleanupStrategy` | `JpqlDeleteDbCleanupStrategy` (`@Priority(Integer.MAX_VALUE)`) | (in-process; calls JPA) | `jpa-module/impl` |

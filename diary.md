@@ -7479,3 +7479,51 @@ and then not appearing is the whole ticket in one observation. Deleted afterward
 **Verification.** Full reactor `clean install` 676 tests; `tests/datasource-module` 38
 per runtime; `tests/jpa-module` 114 per runtime — jpa included because it owns the other
 url-generation path. 0 failures, 0 errors, and no untracked files left behind.
+
+## 2026-08-18 — #125: honour @Resource(lookup = ...) via a new opt-in resource-module
+
+Eighth slice of the re-sliced series, cut from `main` after #144 merged.
+
+**The gap.** `@Resource(lookup = ...)` had no support anywhere: the field was left null,
+and where it fed a producer the container failed at first use with
+`IllegalProductException` naming the producer rather than the unfilled field. With
+`@DataSourceDefinition` working (#120), that was the last reason an application could not
+run its **unmodified** production wiring in a test.
+
+**Placement.** A new optional `resource-module`, api + impl. Not part of cdi-module,
+which is mandatory and must not depend on the optional jndi-module; not part of
+jndi-module, whose job is handing out the writable root rather than consuming it.
+`@Resource` consumes naming in exactly the way `@DataSourceDefinition` does, so it gets
+its own module, depending on jndi-module and nothing else of jawelte's beyond
+`core/api`. datasource-module does not know it exists.
+
+**The port.** `ResourceLookup` — a name and the field's type in, an object out, saying
+nothing about JNDI, so a consumer resolving from a registry or a map replaces the shipped
+adapter without the interface changing. `null` means "this provider does not know the
+name" and the caller turns it into a failure naming the field; throwing means the lookup
+itself could not be performed.
+
+**Mechanism.** `ProcessInjectionTarget`. A type declaring no *named* `@Resource` field is
+not wrapped at all, so the module costs nothing where it is unused, and the fields are
+filled after the runtime's own injection so `@PostConstruct` finds them in place.
+
+**Corrected while porting.** Both the extension javadoc and #130's architecture text
+referenced `SyntheticBeanTypeDeclaration`, the port #141 replaced with
+`SuppliedTypeRegistry`. The point they made is still right and kept — `@Resource` fields
+never become CDI injection points, so auto-mocking cannot compete and there is nothing to
+record — but the name was stale before it ever merged.
+
+**Two boundaries, asserted rather than assumed.** A bare `@Resource` is left untouched
+(scenario 05 checks the field stays null *and* that the named declaration beside it still
+works, so adding bare support later is visible rather than silent); and the test class is
+not covered, because cdi-module builds its `InjectionTarget` at runtime through
+`getInjectionTargetFactory(...)` rather than the discovery-time path this extension
+observes.
+
+**Guard-verified.** With the extension's `META-INF/services` entry disabled and the jar
+rebuilt clean, scenario 01 fails both assertions — the resolution and the shared-instance
+identity. Restored and re-verified green.
+
+**Verification.** Full reactor `clean install` 685 tests; `tests/resource-module` 9 tests
+per runtime; `tests/datasource-module` 38 per runtime; `tests/cdi-module` 61 per runtime;
+`tests/jndi-module` 12. 0 failures, 0 errors.
