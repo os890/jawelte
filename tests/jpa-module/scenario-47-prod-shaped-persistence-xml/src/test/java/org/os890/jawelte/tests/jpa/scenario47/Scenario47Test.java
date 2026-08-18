@@ -32,6 +32,16 @@ import org.os890.jawelte.core.api.EnableTestBeans;
  * dialect detection. If the override didn't work, the EMF would
  * try to look up a JNDI {@code java:jboss/datasources/PostgresDS}
  * data source and fail.
+ *
+ * <p><b>The rule this half pins down.</b> Since #123 the override is
+ * conditional: a unit naming a data source that something in the
+ * deployment actually binds is given that data source
+ * (scenario 73). Nothing binds
+ * {@code java:jboss/datasources/PostgresDS} here — it names a
+ * container resource the test does not provide — so jpa-module
+ * supplies its own database, as it always has. The two scenarios are
+ * the two halves of one rule: resolve when declared, override when
+ * not.
  */
 @EnableTestBeans
 public class Scenario47Test {
