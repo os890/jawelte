@@ -181,11 +181,11 @@ looks like a jawelte bug.
 | jpa | `jawelte-jpa-module-api`, `-impl` | `jakarta.persistence-api` 3.2.0, `jakarta.transaction-api` 2.0.1, `org.hibernate.orm:hibernate-core` 7.0.4.Final, a JDBC driver (`com.h2database:h2` 2.3.232 by default), `jawelte-jndi-module-impl` |
 | jta | `jawelte-jta-module-api`, `-impl` | everything jpa needs, plus one transaction manager: `org.apache.geronimo.components:geronimo-transaction` 4.0.0, Narayana 7.0.0.Final or Atomikos 6.0.1 |
 | db-migration | `jawelte-db-migration-module` (single artifact) | Flyway or Liquibase, and everything jpa needs |
-| db-testdata | `jawelte-db-testdata-module-api`, `-impl` | everything jpa needs (DBUnit comes transitively) |
-| testcontrol | `jawelte-testcontrol-module-api`, `-impl` | `jawelte-db-testdata-module-impl` (only the api comes along) |
+| db-testdata | `jawelte-db-testdata-module-api`, `-impl` | everything jpa needs. DBUnit comes transitively — **and drags a JUnit 5.10 platform with it, which stops your tests being discovered at all.** Exclude it, see the note below |
+| testcontrol | `jawelte-testcontrol-module-api`, `-impl` | `jawelte-db-testdata-module-impl` (only the api comes along), and therefore the same DBUnit exclusion |
 | spring-data | `jawelte-spring-data-module` (single artifact) | everything jpa needs, plus `org.springframework.data:spring-data-jpa` 4.0.5 |
 | ejb | `jawelte-ejb-module-api`, `-impl` | `jakarta.ejb-api` 4.0.1 (`provided`, so not transitive) |
-| jaxrs | `jawelte-jaxrs-module-api`, `-impl` | a Jakarta REST implementation — CXF 4.1.2 or RESTEasy 7.0.0.Final |
+| jaxrs | `jawelte-jaxrs-module-api`, `-impl` | a Jakarta REST implementation, and it takes **three** artifacts, not one. CXF 4.1.2: `cxf-rt-frontend-jaxrs`, `cxf-rt-transports-http-jetty` (without it the server does not start) and `cxf-rt-rs-client` (for `ClientBuilder` in the test). RESTEasy 7.0.0.Final: `resteasy-core`, `resteasy-undertow`, `resteasy-client`. `jakarta.ws.rs-api` arrives transitively |
 | wiremock | `jawelte-wiremock-module-api`, `-impl` | — (WireMock comes transitively) |
 | content-diff | `jawelte-content-diff-module-api`, `-impl` | — (Jackson comes transitively) |
 | batch | `jawelte-batch-module-api`, `-impl` | `jakarta.batch:jakarta.batch-api` 2.1.1 (**not transitive**) plus a runtime: `org.apache.batchee:batchee-jbatch` 2.0.0 needs nothing else, JBeret 3.1.0.Final additionally needs `jakarta.transaction-api` and `org.wildfly.core:wildfly-security-manager` |
@@ -196,6 +196,39 @@ at `compile` scope. DBUnit, WireMock, Jackson and the cdi-flow recorder are `com
 on their own. The Jakarta APIs, Mockito, Hibernate, xbean-naming and **Spring Data JPA** are
 `provided` (some of them managed at `test` in `jawelte-parent` and raised to `provided` by the
 module that needs them), and neither scope is transitive — so the consumer declares them.
+
+**DBUnit breaks JUnit 6 test discovery unless you exclude one of its dependencies.** This is the
+worst failure in this file, because it takes the whole module down rather than one test:
+`org.dbunit:dbunit` 3.0.0 depends on `junit-platform-suite-engine` 1.10.1, which drags
+`junit-platform-launcher` 1.10.1 onto a JUnit 6 classpath. Surefire then reports
+
+```
+TestEngine with ID 'junit-jupiter' failed to discover tests
+  Caused by: OutputDirectoryCreator not available; probably due to unaligned versions of
+  the junit-platform-engine and junit-platform-launcher jars on the classpath
+```
+
+and runs **zero** tests — including tests that have nothing to do with the database. jawelte's own
+build does not hit this because its parent POM manages `junit-platform-launcher` to the project's
+JUnit version, and a consuming project has no such management. Exclude it:
+
+```xml
+<dependency>
+    <groupId>org.os890.jawelte</groupId>
+    <artifactId>jawelte-db-testdata-module-impl</artifactId>
+    <version>${jawelte.version}</version>
+    <scope>test</scope>
+    <exclusions>
+        <exclusion>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-suite-engine</artifactId>
+        </exclusion>
+    </exclusions>
+</dependency>
+```
+
+Declaring `org.junit.platform:junit-platform-launcher` at your JUnit version works too. The
+exclusion is preferable — it removes the stale subtree instead of out-voting part of it.
 
 **Anything that binds a name needs the naming tree, and the naming tree needs two artifacts.**
 `datasource-module` and `resource-module` both bind into JNDI, and both fail quietly without
@@ -221,5 +254,9 @@ artifacts; every other module is an `-api` / `-impl` pair.
 | Nothing resolves from the repository | missing `<repositories>` entry |
 | An error naming a type that could not be mocked | missing `mockito-extensions` mock-maker file |
 | `AmbiguousResolutionException` / `WELD-001409` on an auto-mocked type | three different causes — check which one before assuming a bug. **Before 0.3.0**: an unqualified type injected into both a bean and the test class produced two mocks (#155). **Before 0.4.0**: the same, whenever `@Any` was written out (#160). **Any version, and not a defect**: a direct `@Inject @Any T` while several mocks of `T` exist — `@Any` matches every bean of the type, so use `Instance<T>`. See `core-testing.md` |
+| `TestEngine with ID 'junit-jupiter' failed to discover tests`, zero tests run | DBUnit's `junit-platform-suite-engine` 1.10.1 against a JUnit 6 classpath — exclude it from `db-testdata-module-impl` |
+| `Failed to start JAX-RS server` | the REST implementation's HTTP transport is missing — `cxf-rt-transports-http-jetty` or `resteasy-undertow` |
+| `Provider for jakarta.ws.rs.client.ClientBuilder cannot be found` | the REST client artifact is missing — `cxf-rt-rs-client` or `resteasy-client` |
+| `No active persistence unit` / `No active EntityManager for persistence unit` from `DbSeed` or `DbDiff` | called outside a transaction — see `test-data.md` |
 | Beans are not discovered at all | missing or wrongly-moded `beans.xml` |
 | A collateral failure names an unrelated test class | a `beforeAll` container-start failure; the message names the class that really failed |
