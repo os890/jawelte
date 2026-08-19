@@ -8085,3 +8085,36 @@ either.
 Version strings moved to 0.3.0 in `SKILL.md`, `skill/README.md` and `references/setup.md`. The
 "verified against the published artifacts" claim was left un-pinned until the 0.3.0 artifacts are
 actually on GitHub Pages and a consumer build has been run against them.
+
+## Released 0.3.0, and the import gap the verification exposed
+
+`bash release.sh 0.3.0 0.4.0-SNAPSHOT` ran clean end to end — second release in a row needing no
+intervention. Tag `v0.3.0`, 52 artifacts in the publication repo at `15587a6`, main on
+`0.4.0-SNAPSHOT`. Zero build failures, zero failed goals, zero test failures across both
+full-reactor builds (the forked `clean verify` inside prepare, and perform's rebuild of the tag).
+`maven-metadata.xml` showed as modified rather than added, which is the signal that the version
+list merged instead of being replaced by a list of one.
+
+The post-release check was a consumer project outside the repository, built with
+`-Dmaven.repo.local` pointing at an empty directory, so every artifact came from GitHub Pages.
+Two tests: the `@TestBean` core pattern from `SKILL.md`, and the #155 shared-auto-mock case with
+the same unsatisfied type injected into both an application bean and the test class. Both green.
+That is the first time the #155 fix has been exercised against a *published* artifact rather than
+a locally built classpath, so the claim in `core-testing.md` is now backed by a released jar.
+
+Writing that consumer project turned up a gap in the skill I would not have found by reading it.
+I imported `@TestBean` from `org.os890.jawelte.module.cdi.api` — the obvious guess, since the
+skill files it under cdi-module — and it does not compile. `@EnableTestBeans`, `@TestBean` and
+`@ConfigBean` all live in `org.os890.jawelte.core.api`; the annotation is in core even though the
+extension that acts on it is in cdi-module. The skill never stated a single package anywhere, so
+an agent writing a test file from it has to guess, and the natural guess is wrong for the two most
+common annotations in the framework.
+
+Fixed by adding a package table for every public type to `references/setup.md`, an import line to
+both `SKILL.md` snippets, and a pointer from the setup paragraph. The general lesson: the skill was
+reviewed for whether its statements were *true*, which they were — but truth is not the same as
+sufficiency, and only writing code against it surfaced the difference. Same failure mode the user
+caught earlier with "it looked a bit short of those details".
+
+Version strings pinned to 0.3.0 across `SKILL.md`, `skill/README.md`, `references/setup.md` and
+`tests/skill/README.md`, with the verification claims now naming the version actually tested.

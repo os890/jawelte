@@ -18,7 +18,8 @@ entry is **not** inherited through a dependency's POM, so every consuming projec
 
 ## Minimal working POM
 
-Verified end to end against the published artifacts from an empty local repository.
+Verified end to end against the published **0.3.0** artifacts: this exact POM, built from an
+empty local repository, resolves and runs the documented tests.
 
 ```xml
 <properties>
@@ -143,6 +144,24 @@ refusal rather than swallowing it, so the symptom is an error naming the type it
 
 Setting `-Dmockito.mock.maker=subclass` on the Maven command line or via `argLine` does **not**
 work — Mockito 5.14.2 honours only the classpath resource here.
+
+## Packages of the public types
+
+The package does **not** always follow the module: the entry-point annotations live in core, not
+in cdi-module. Guessing here is a common way to produce a file that will not compile.
+
+| Package | Types |
+| --- | --- |
+| `org.os890.jawelte.core.api` | `@EnableTestBeans`, `@TestBean`, `@ConfigBean`, `TestContext` |
+| `org.os890.jawelte.module.scope.api` | `@TestClassScoped`, `@TestMethodScoped` |
+| `org.os890.jawelte.module.jpa.api` | `@PersistenceConfig`, `@ReadOnly` (events in `…jpa.api.event`) |
+| `org.os890.jawelte.module.testcontrol.api` | `@TestControl` |
+| `org.os890.jawelte.module.dbtestdata.api` | `DbSeed`, `DbDiff` |
+| `org.os890.jawelte.module.jaxrs.api` | `@EnableJaxRs`, `TestUrl`, `ResponseDiff` |
+| `org.os890.jawelte.module.wiremock.api` | `@EnableWireMock`, `@WireMockEndpoint` |
+| `org.os890.jawelte.module.contentdiff.api` | `ContentDiff` |
+| `org.os890.jawelte.module.batch.api` | `BatchExecution` |
+| `org.os890.jawelte.module.flowassert.api` | `@EnableFlowAssert`, `@ExpectedFlow`, `RecordedFlows`, `FlowDiff` |
 
 ## Per-module dependencies
 

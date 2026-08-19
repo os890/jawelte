@@ -53,5 +53,8 @@ already present and every scenario ships the files:
 - the `<repositories>` entry a consuming POM needs
 - the presence of `META-INF/beans.xml` in a consuming project
 
-Both were checked by hand against the published 0.2.0 artifacts, by building a consumer project
-outside this repository from an empty local repository.
+Both were checked by hand against the published 0.3.0 artifacts, by building a consumer project
+outside this repository from an empty local repository. That run also covers the two claims a
+scenario inside the reactor cannot make honestly: that the documented minimal POM resolves, and
+that the shared-auto-mock case from #155 works in a released artifact rather than only on a
+locally built classpath.

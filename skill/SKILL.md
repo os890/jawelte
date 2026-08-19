@@ -36,11 +36,14 @@ The Jakarta APIs are `provided` in `jawelte-parent`, so they are **not** transit
 consumer declares `jakarta.enterprise.cdi-api`, `jakarta.annotation-api`, `jakarta.inject-api`,
 `microprofile-config-api` + `smallrye-config`, `mockito-core` and exactly one CDI runtime itself.
 
-Full dependency blocks per module, versions and the runtime choice: **`references/setup.md`**.
+Full dependency blocks per module, the runtime choice and the **package of every public type** (they do not all follow the module name — `@EnableTestBeans` and `@TestBean` live in
+`org.os890.jawelte.core.api`, not in the cdi-module package): **`references/setup.md`**.
 
 ## The core pattern
 
 ```java
+import org.os890.jawelte.core.api.EnableTestBeans;   // note: core.api, not module.cdi.api
+
 @EnableTestBeans
 class GreetingTest {
 
@@ -61,6 +64,8 @@ To stub or verify a collaborator, declare it as a `@TestBean` static field rathe
 it into the test class:
 
 ```java
+import org.os890.jawelte.core.api.TestBean;          // core.api as well
+
 @EnableTestBeans
 class GreetingTest {
 
