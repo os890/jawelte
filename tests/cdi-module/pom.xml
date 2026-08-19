@@ -98,6 +98,7 @@
         <module>scenario-65-testbean-mock-stubbed-and-verified</module>
         <module>scenario-66-testbean-declared-on-superclass</module>
         <module>scenario-67-array-valued-qualifier-member</module>
+        <module>scenario-68-any-qualifier-normalization</module>
     </modules>
 
     <dependencies>
