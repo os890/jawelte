@@ -8004,3 +8004,39 @@ will agree in every test that exercises one of them. Scenario 63 exercised the n
 twice and passed for years' worth of scenarios; only crossing the boundary exposed the second
 dialect. And an explanation that would predict a failure the suite does not show is not an
 explanation — that is what caught this one.
+
+## 2026-08-19 — the skill described eight modules instead of showing them
+
+**The question that found it.** os890 asked whether the skill was actually enough to use the
+modules without knowing jawelte already. Checking it honestly — "could I write a working test for
+module X from this alone?" — the answer was no for eight of the sixteen.
+
+**The sharpest case was batch.** The skill showed how to *build* a `BatchExecution` with its
+fluent setters and never said how to run one. A job is started by firing the object as a CDI
+event (`@Inject Event<BatchExecution>`, then `fire(execution)`), and the module writes the outcome
+back into the instance. Nothing in the skill hinted at that, so an agent would look for
+`execution.execute()`, find no such method, and stop. The module was documented and unusable.
+
+The rest of the pattern was the same failure in milder form: `@DataSourceDefinition` was discussed
+at length without one example of the annotation, spring-data never showed a repository interface
+or how to drive it, and ejb, jndi, resource, jta and db-migration were described behaviourally
+rather than demonstrated. The eight modules that did have worked examples — core, cdi, scope, jpa,
+db-testdata, testcontrol, jaxrs, wiremock, content-diff, flow-assert — were fine, which is why the
+gap was not visible from the inside: the parts written first set the standard and the later ones
+quietly did not meet it.
+
+**Fix.** A worked example per module, lifted from that module's own scenario rather than composed
+from the api, and `persistence.md` split — it had been narrating seven modules in 137 lines.
+`enterprise.md` now carries ejb, spring-data and batch; persistence keeps jpa, jta, datasource,
+naming, `@Resource` and migrations. Java examples went from 21 to 34.
+
+**One claim did not survive the check.** The batch example first asserted
+`getExitStatus()).isEqualTo("COMPLETED")`. Scenario 12 only asserts `isNotNull()`, with the
+comment "defaults to BatchStatus name when not overridden" — the project deliberately declines to
+pin the string, because a job can set its own. The skill now says to assert `getStatus()`, the
+enum, and to treat the exit status as free-form. Writing an assertion the project itself refuses
+to make would have been the same mistake as the Spring Data scope error, in a different place.
+
+**Worth remembering.** Prose about a module reads as documentation and passes review; only the
+"write the test from this alone" test separates it from an example. Accuracy is not the same
+property as sufficiency, and the earlier verification rounds only checked accuracy.

@@ -90,58 +90,142 @@ do not.
 
 ## JTA
 
-Add `jta-module` and a transaction manager; the strategy is auto-selected. Geronimo, Narayana
-and Atomikos are each verified. A resource-local unit is switched to JTA automatically when the
-module is present, `UserTransaction` becomes the JTA-provided one, and multi-unit XA flushes,
-rollbacks and read-only semantics behave as in a container.
+Add `jta-module` plus exactly one transaction manager — `org.apache.geronimo.components:geronimo-transaction`,
+Narayana or Atomikos — and set the persistence unit to JTA:
+
+```xml
+<persistence-unit name="testJtaPU" transaction-type="JTA">
+    <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+    <exclude-unlisted-classes>false</exclude-unlisted-classes>
+</persistence-unit>
+```
+
+Nothing else changes in the test — the strategy is auto-selected from whichever manager is on the
+classpath, and the same `@Transactional` service as above now commits through JTA:
+
+```java
+@EnableTestBeans
+class CustomerServiceJtaTest {
+
+    @Inject
+    CustomerService customerService;                 // unchanged from the resource-local test
+
+    @Test
+    void transactionalCommitsTheJtaPersist() {
+        assertThat(customerService.createCustomer("Alice")).isNotNull();
+        assertThat(customerService.countCustomers()).isEqualTo(1L);
+    }
+}
+```
+
+A resource-local unit is switched to JTA automatically when the module is present,
+`UserTransaction` becomes the JTA-provided one, and multi-unit XA flushes, rollbacks and
+read-only semantics behave as in a container.
 
 Vendor internals (`com.arjuna.*`, `org.apache.geronimo.transaction.*`) are excluded from
 auto-mocking, so their presence does not confuse bean resolution.
 
-## Data sources and naming
+## Data sources
 
-`jndi-module` provides the one in-process naming tree every binding module shares. Add its
-`-impl` explicitly — other modules depend only on its `-api`.
+`@DataSourceDefinition` — the platform annotation — is what declares a data source. Put it on the
+test class or on any bean class; the module builds it, binds it in JNDI under its declared name,
+and makes it injectable. It is isolated per test class and closed afterwards.
 
-`datasource-module` turns `@DataSourceDefinition` — on the test class or on a bean class — into a
-real, bound, injectable `DataSource`, isolated per test class and closed afterwards. Multiple
-definitions are distinguished by name. A declared URL can be redirected through MicroProfile
-Config, which is what lets a production definition point at an in-memory database for the run.
+```java
+@EnableTestBeans
+@DataSourceDefinition(
+        name = "java:comp/env/jdbc/OrdersDS",
+        className = "org.h2.jdbcx.JdbcDataSource",
+        url = "jdbc:h2:mem:orders;DB_CLOSE_DELAY=-1",
+        user = "sa",
+        password = "")
+class OrderRepositoryTest {
+
+    @Inject
+    DataSource unqualified;                          // works while there is exactly one definition
+
+    @Inject
+    @Named("java:comp/env/jdbc/OrdersDS")
+    DataSource byName;                               // always works; required with several
+
+    @Test
+    void theDefinitionIsBoundAndInjectable() throws NamingException {
+        assertThat(byName).isSameAs(unqualified);
+        assertThat(new InitialContext().lookup("java:comp/env/jdbc/OrdersDS")).isSameAs(byName);
+    }
+}
+```
+
+Declaring it on an `@ApplicationScoped` bean instead of the test class is the shape to use when
+production code owns the declaration:
+
+```java
+@ApplicationScoped
+@DataSourceDefinition(name = "java:app/jdbc/AppDS", className = "org.h2.jdbcx.JdbcDataSource",
+        url = "jdbc:h2:mem:app;DB_CLOSE_DELAY=-1", user = "sa", password = "")
+public class AppDataSourceDeclaration {
+}
+```
+
+The `url` of a declared definition can be redirected through MicroProfile Config with
+`org.os890.jawelte.module.datasource.<definitionName>.url`, which is what lets a production
+definition point at an in-memory database for the run without editing it.
 
 The payoff: a `<jta-data-source>` name in `persistence.xml` resolves to the data source the
 annotation declares, so migration through a plain `DataSource` and reads through JPA hit **one**
 database, and per-method cleanup reaches both.
 
-With no naming provider on the classpath the modules degrade with an explanatory message rather
-than a `NullPointerException`.
+## `@Resource(lookup = ...)`
 
-`resource-module` honours `@Resource(lookup = ...)` on application beans, including feeding a
-producer. A bare `@Resource` with no lookup is left alone.
-
-## EJB
-
-`ejb-module` maps `@Singleton` and `@Stateless` onto CDI scopes and gives them implicit
-transactionality. `@Stateful` and `@MessageDriven` are ignored, as are `@TransactionAttribute`,
-`@Lock`, `@AccessTimeout` and `@Startup`. A user-declared scope or a user-declared
-`@Transactional` on a session bean is preserved.
-
-## Spring Data
-
-`spring-data-module` discovers repository interfaces and registers real proxies — derived query
-methods, `@Query` (JPQL and native), paging and sorting all work, and the injected repository is
-a real Spring Data proxy rather than a mock. If you produce a repository yourself, the module
-backs off. With no repository interface present it does nothing.
-
-## Jakarta Batch
-
-`batch-module` runs a job and gives you a typed result.
+`resource-module` resolves `@Resource(lookup = ...)` on application beans against the same naming
+tree, so a bean written for a container works unchanged:
 
 ```java
-BatchExecution execution = new BatchExecution("importJob")
-        .param("file", "customers.csv")
-        .timeout(Duration.ofSeconds(30));
+@ApplicationScoped
+public class OrderRepository {
+
+    @Resource(lookup = "java:app/jdbc/AppDS")
+    private DataSource declared;                     // resolved by resource-module
+
+    @Inject
+    @Named("java:app/jdbc/AppDS")
+    private DataSource injected;                     // the very same object
+}
 ```
 
-Default timeout 60s, polled with exponential backoff starting at 50ms and capped at 5s. A
-timeout does not cancel the job, it fails the assertion. `getExecutionId()` before the job has
-been fired throws. A custom `TimeoutHandler` can be supplied as an `@Alternative`.
+Both idioms reach one instance. A bare `@Resource` with no `lookup` is left alone, and an unbound
+name produces an error naming the field rather than a null.
+
+## Naming
+
+`jndi-module` owns the single in-process naming tree the binding modules share. Add its `-impl`
+explicitly — other modules depend only on its `-api` — plus `org.apache.xbean:xbean-naming`.
+
+Tests normally never touch it directly; `@DataSourceDefinition` and `@Resource` are the interface.
+When you do need the root, it is a port:
+
+```java
+JndiContextProvider provider = TestContext.loadService(JndiContextProvider.class);
+Context root = provider.writableRoot();              // null when no naming provider is present
+```
+
+`writableRoot()` returning `null` means "no naming implementation on this classpath" rather than
+an error, because callers disagree about whether that is fatal.
+
+## Database migration
+
+`db-migration-module` is a single artifact with no API: adding it keeps migration bookkeeping
+tables out of the per-method cleanup, so Flyway or Liquibase history survives while test rows do
+not. It ships these names by default —
+
+```
+flyway_schema_history, schema_version, DATABASECHANGELOG, DATABASECHANGELOGLOCK
+```
+
+— under `org.os890.jawelte.module.dbmigration.cleanup.exclude-tables`, which is aliased onto
+`org.os890.jawelte.module.jpa.cleanup.exclude-tables`. Override the key in a higher-ordinal config
+source to add your own.
+
+---
+
+EJB, Spring Data and Jakarta Batch live in `enterprise.md`.
