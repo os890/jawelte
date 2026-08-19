@@ -21,7 +21,7 @@ holds two scenarios rather than a copy of the skill.
 | An unsatisfied injection point is auto-mocked and answers `null` | `tests/cdi-module/scenario-01` |
 | A satisfied dependency is never mocked | `tests/cdi-module/scenario-12` |
 | One auto-mock is shared by every application bean that needs it | `tests/cdi-module/scenario-63` |
-| The same *unqualified* type in a bean *and* the test class stays ambiguous | `tests/cdi-module/scenario-64` |
+| One auto-mock is shared by an application bean and the test class | `tests/cdi-module/scenario-64` |
 | A `@TestBean` static mock can be stubbed and verified | `tests/cdi-module/scenario-65` |
 | `@TestBean` on a superclass applies to the subclass | `tests/cdi-module/scenario-66` |
 | `@TestBean` forms: bean, producer, static field, repeatable, meta-annotation, misuse | `tests/cdi-module/scenario-13` … `-17`, `-27` … `-29`, `-35` |

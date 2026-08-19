@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests-cdi-module</artifactId>
+        <version>0.3.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>jawelte-tests-cdi-module-scenario-64-auto-mock-shared-with-test-class-injection</artifactId>
+    <packaging>jar</packaging>
+    <description>The counterpart to scenario 63 on the other side of the boundary: deduplication has to hold between an application bean's injection point and the test class's own, not just between two beans. It did not, because the two collection paths keyed a plain @Inject differently - ProcessInjectionPoint reports CDI's normalized set, in which an undeclared qualifier is @Default, while the test class's fields are walked reflectively and yielded the empty set, so the same unqualified type registered two @Default beans and the deployment failed with AmbiguousResolutionException on OpenWebBeans and WELD-001409 on Weld. Issue 155 normalized the reflective walk to @Default; this scenario asserts the shared instance that follows, and would fail again the moment the two paths disagree.</description>
+    <name>jawelte tests/cdi-module scenario 64: one auto-mock is shared by an application bean and the test class</name>
+</project>

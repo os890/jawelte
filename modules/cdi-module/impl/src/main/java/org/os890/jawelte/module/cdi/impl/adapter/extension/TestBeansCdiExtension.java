@@ -510,6 +510,22 @@ public class TestBeansCdiExtension implements Extension {
                     qualifiers.add(annotation);
                 }
             }
+            if (qualifiers.isEmpty()) {
+                // Normalize to what the container itself reports for an
+                // injection point that declares no qualifier: exactly
+                // @Default (CDI 4.1, "Default qualifier at injection
+                // points"). Without this the key built here disagrees
+                // with the key onProcessInjectionPoint builds from
+                // ip.getQualifiers() for the very same injection, and
+                // IpKey's set stops deduplicating: the same unqualified
+                // type injected into an application bean and into the
+                // test class produced {@Default} and {} respectively,
+                // hence two synthetic @Default beans and an ambiguous
+                // deployment. An explicitly qualified injection never
+                // had the problem, because then both paths see the same
+                // annotation.
+                qualifiers.add(Default.Literal.INSTANCE);
+            }
             unsatisfiedCandidateIps.add(new IpKey(targetType, qualifiers));
         }
     }

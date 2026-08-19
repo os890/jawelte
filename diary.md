@@ -7948,3 +7948,59 @@ pins the current behaviour deliberately, so a fix is a visible change to a faili
 
 **Verification.** All six new scenarios green on OpenWebBeans and Weld; checkstyle clean across
 the full reactor; RAT reports zero unapproved files; both reactor entry points resolve.
+
+## 2026-08-19 — #155: give the test-class injection walk the same @Default the container uses
+
+**The bug.** Injecting one unqualified, unsatisfied type into both an application bean and the
+test class failed the deployment — `AmbiguousResolutionException` on OpenWebBeans, `WELD-001409`
+on Weld. Two synthetic `@Default` beans for one type.
+
+**The cause, after one wrong answer.** The first explanation was that deduplication "does not
+extend to the test class's own injection point". os890 rejected it immediately, and correctly:
+the same would then be true of two application beans, and scenario 63 proves it is not. The
+explanation described the symptom and called it a mechanism.
+
+Instrumenting the registration loop gave the real one. Candidates live in a
+`Set<IpKey>` keyed by `(targetType, qualifiers)`, and two paths fill it with different
+conventions. `onProcessInjectionPoint` uses `ip.getQualifiers()` — the container's normalized
+set, in which an injection point that declares no qualifier has exactly `@Default`.
+`addTestClassInjectionPoints` walks the test class's fields reflectively and keeps only the
+annotations physically written, which for a plain `@Inject` is nothing. So the same injection
+produced `IpKey(AuditService, {@Default})` from the bean and `IpKey(AuditService, {})` from the
+test class, the set saw two entries, and two beans were registered:
+
+```
+### IPKEY type=interface ...AuditService qualifiers=[@jakarta.enterprise.inject.Default()]
+### IPKEY type=interface ...AuditService qualifiers=[]
+```
+
+**Two boundaries, both verified rather than assumed.** Two application beans never collided
+because both take the normalized path. An explicitly qualified injection never collided either —
+checked against the published 0.2.0 artifacts with a custom `@Audited` on both sides, where the
+shared mock resolves and `isSameAs` holds. Only the unqualified case diverged, which is what made
+the fix a one-place normalization rather than a redesign of the key.
+
+**The fix.** `addTestClassInjectionPoints` adds `Default.Literal.INSTANCE` when it collects no
+qualifier. That is not a jawelte convention but the container's own rule (CDI 4.1: an injection
+point declaring no qualifier has exactly one, `@Default`), so the reflective walk now agrees with
+`ip.getQualifiers()` instead of inventing a second dialect. The existing `Set<IpKey>` deduplicates
+on its own and nothing else changed.
+
+An earlier guess — that writing `@Default @Any` on the test field would align the keys — was
+falsified by experiment: it only moves the asymmetry to `@Any`, since the reflective walk then
+keeps an annotation the bean side never has. Writing `@Any` on a plain injection point stays
+unfixed and is noted on the ticket; deriving the qualifiers through the `BeanManager` would close
+that too, if it ever matters.
+
+**Test impact.** `scenario-64-auto-mock-collides-with-test-class-injection` — added the same day
+to pin the limitation — is renamed to `-shared-with-test-class-injection` and inverted: it now
+asserts the shared instance, and its `EngineTestKit` harness and `CollidingSubject` are gone,
+because there is no deployment failure left to catch. Confirmed it is not vacuous by removing the
+fix and watching it fail with the original exception. The skill's `SKILL.md` loses the
+prohibition and `core-testing.md` documents the sharing with a "before 0.3.0" note.
+
+**Worth remembering.** Two code paths that answer the same question in different vocabularies
+will agree in every test that exercises one of them. Scenario 63 exercised the normalized path
+twice and passed for years' worth of scenarios; only crossing the boundary exposed the second
+dialect. And an explanation that would predict a failure the suite does not show is not an
+explanation — that is what caught this one.
