@@ -8040,3 +8040,48 @@ to make would have been the same mistake as the Spring Data scope error, in a di
 **Worth remembering.** Prose about a module reads as documentation and passes review; only the
 "write the test from this alone" test separates it from an example. Accuracy is not the same
 property as sufficiency, and the earlier verification rounds only checked accuracy.
+
+## Pre-release review of the skill, and the README setup fix
+
+Final pass over `skill/` before cutting 0.3.0. Every attribute table was re-checked against the
+annotation sources rather than against memory, which turned up four substantive errors and two
+gaps:
+
+- **`@PersistenceConfig(persistenceUnitName)` was described as "pick one unit by name".** It is
+  not a filter — `persistenceUnits` is. `persistenceUnitName` names the *primary* unit: the one
+  `DbSeed` / `DbDiff` default to (`AnnotationDrivenPersistenceUnitExtension`) and the one
+  `DefaultResourceLocalTransactionStrategy` opens eagerly when several units are active. A unit
+  left out of it is still bootstrapped. Following the old wording, a reader would have expected a
+  second unit to disappear and been puzzled when it did not.
+- **`fileMode` also skips per-method cleanup.** The table only mentioned the H2 URL change, which
+  is the less surprising half.
+- **`@TestControl(testData)` omitted `dbUpdate/` entirely** and never gave the `puName:path`
+  routing syntax, though it claimed multi-unit routing works. An agent could not have written a
+  routed entry from the skill alone.
+- **The `AmbiguousResolutionException` troubleshooting row still described #155 as current
+  behaviour.** It is fixed as of this release; the row now says so and points at the upgrade.
+
+Two smaller ones: `persistence.md` still carried the pre-split title naming EJB, Spring Data and
+batch (they moved to `enterprise.md` in #157), and `core-testing.md` still said "use a `@TestBean`
+static field **instead**" — a leftover from when the snippet above it was the broken case. After
+the #155 fix that snippet is correct, so "instead" contradicted the paragraph two lines up.
+
+`wiremock-module` gained a line about the zero-endpoint default: with no `@WireMockEndpoint`
+qualifier declared at all the module still boots one server on an OS-assigned port, which is the
+shortest path in and was undocumented.
+
+Verified-and-unchanged, for the record: `@EnableTestBeans` has exactly the two attributes with the
+documented defaults and is *not* `@Inherited`; `@EnableJaxRs.restResources()` genuinely has no
+default; `@EnableWireMock` is `@Inherited` while `@EnableJaxRs` is not — the skill already had all
+of these right.
+
+Also corrected `README.md`'s minimal setup, which claimed "`jawelte-core` comes along
+transitively". Only `core-api` does. A reader copying that block got a container that refuses to
+start with `No TestBeansExtension found via ServiceLoader`. The snippet now declares
+`jawelte-core-impl` explicitly and explains why an `-impl` never depends on another module's
+`-impl`. The surrounding prose no longer implies the Jakarta APIs and Mockito arrive on their own
+either.
+
+Version strings moved to 0.3.0 in `SKILL.md`, `skill/README.md` and `references/setup.md`. The
+"verified against the published artifacts" claim was left un-pinned until the 0.3.0 artifacts are
+actually on GitHub Pages and a consumer build has been run against them.

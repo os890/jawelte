@@ -40,6 +40,6 @@ a test that touches no database never pulls the persistence material into contex
 
 ## Versioning
 
-Written against jawelte **0.2.0**. The dependency coordinates and the minimal POM in
+Written against jawelte **0.3.0**. The dependency coordinates and the minimal POM in
 `references/setup.md` were verified by building and running a consumer project against the
 published artifacts from an empty local repository.

@@ -1,4 +1,4 @@
-# Persistence: JPA, JTA, data sources, EJB, Spring Data, batch
+# Persistence: JPA, JTA, data sources, naming, migrations
 
 The guiding rule: use the platform's annotations. `@Transactional`, `@Resource`,
 `@DataSourceDefinition` and `persistence.xml` behave in a test as they do in production.
@@ -72,10 +72,10 @@ On the test class, `@Inherited`.
 
 | Attribute | Effect |
 | --- | --- |
-| `persistenceUnitName` | pick one unit by name |
-| `persistenceUnits` | restrict which units are bootstrapped |
-| `fileMode` | `true` puts H2 on disk instead of in memory |
-| `filePath` | where, when `fileMode` is on |
+| `persistenceUnits` | restrict which units are bootstrapped; empty (the default) bootstraps every unit in `persistence.xml` |
+| `persistenceUnitName` | names the *primary* unit — the one `DbSeed` / `DbDiff` default to, and the one the transaction strategy opens eagerly when several units are active. It does **not** filter: a unit left out of it is still bootstrapped. Ignored with a single unit |
+| `fileMode` | `true` puts H2 on disk (`jdbc:h2:file:{filePath}/{puName}`) instead of in memory, **and skips per-method cleanup** so the data survives the run |
+| `filePath` | the directory, when `fileMode` is on; empty defaults to `~/{appLabel}_db/` |
 
 ### Multiple persistence units
 

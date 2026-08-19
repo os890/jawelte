@@ -39,7 +39,9 @@ ResponseDiff.forXml(response).expectedContent("<customer/>").assertEquals();
 
 ## `wiremock-module` — one stub server per endpoint
 
-Declare a qualifier annotated with `@WireMockEndpoint`; the module starts one server per
+With no endpoint declared at all, the module boots one server on an OS-assigned port and an
+unqualified `WireMockServer` injection resolves to it. To run several, or to pin a port,
+declare a qualifier annotated with `@WireMockEndpoint`; the module starts one server per
 qualifier and injects it.
 
 ```java

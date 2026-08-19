@@ -14,7 +14,7 @@ Everything beyond the core is opt-in: add the module for the technology under te
 else. A module that is not on the classpath changes nothing, and most modules stay inert until
 their entry-point annotation is used.
 
-Current release: **0.2.0**. Artifacts live in a plain Maven repository served over GitHub Pages,
+Current release: **0.3.0**. Artifacts live in a plain Maven repository served over GitHub Pages,
 not Maven Central.
 
 ## Before writing any test, verify the four setup preconditions

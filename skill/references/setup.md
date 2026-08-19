@@ -18,11 +18,11 @@ entry is **not** inherited through a dependency's POM, so every consuming projec
 
 ## Minimal working POM
 
-Verified end to end against the published 0.2.0 artifacts from an empty local repository.
+Verified end to end against the published artifacts from an empty local repository.
 
 ```xml
 <properties>
-    <jawelte.version>0.2.0</jawelte.version>
+    <jawelte.version>0.3.0</jawelte.version>
 </properties>
 
 <dependencies>
@@ -189,6 +189,6 @@ artifacts; every other module is an `-api` / `-impl` pair.
 | `Multiple TestBeansExtension implementations found` | two core-impl versions on the classpath |
 | Nothing resolves from the repository | missing `<repositories>` entry |
 | An error naming a type that could not be mocked | missing `mockito-extensions` mock-maker file |
-| `AmbiguousResolutionException` / `WELD-001409` on an auto-mocked type | the same unsatisfied type is injected into both an application bean and the test class — see `core-testing.md` |
+| `AmbiguousResolutionException` / `WELD-001409` on an auto-mocked type | a pre-0.3.0 defect: the same unsatisfied type injected into both an application bean and the test class produced two mocks. Upgrade — see `core-testing.md` |
 | Beans are not discovered at all | missing or wrongly-moded `beans.xml` |
 | A collateral failure names an unrelated test class | a `beforeAll` container-start failure; the message names the class that really failed |

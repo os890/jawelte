@@ -13,7 +13,7 @@ modules are inert until you use their entry-point annotation.
 
 ## The minimal setup
 
-Two artifacts, a CDI runtime, and JUnit. Nothing else is required.
+Two jawelte artifacts, a CDI runtime, the Jakarta APIs and JUnit. Nothing else is required.
 
 ```mermaid
 flowchart TB
@@ -47,11 +47,24 @@ flowchart TB
     <version>${jawelte.version}</version>
     <scope>test</scope>
 </dependency>
+<dependency>
+    <groupId>org.os890.jawelte</groupId>
+    <artifactId>jawelte-core-impl</artifactId>
+    <version>${jawelte.version}</version>
+    <scope>test</scope>
+</dependency>
 ```
 
-`jawelte-core` comes along transitively. Add `jawelte-scope-module` when you want
-`@TestMethodScoped` / `@TestClassScoped`; without it the framework falls back to
-`@Dependent` / `@RequestScoped` cleanly.
+Both are needed: `jawelte-cdi-module-impl` brings `cdi-module-api` and `core-api` transitively,
+but deliberately not `core-impl` — an `-impl` jar never depends on another module's `-impl`.
+Without `jawelte-core-impl` the container does not start.
+
+The Jakarta APIs, Mockito, JUnit and the CDI runtime are declared `provided` or `test` inside
+jawelte, and neither scope is transitive — so a consuming project declares those itself too.
+`skill/references/setup.md` carries a complete, verified minimal POM.
+
+Add `jawelte-scope-module` when you want `@TestMethodScoped` / `@TestClassScoped`; without it the
+framework falls back to `@Dependent` / `@RequestScoped` cleanly.
 
 ---
 

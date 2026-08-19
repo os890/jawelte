@@ -25,7 +25,7 @@ class CustomerCountTest {
 
 | Attribute | Effect |
 | --- | --- |
-| `testData` | classpath base paths; each is read as `<path>/dbIn/*.xml` before the method and `<path>/dbExpected/*.xml` after it |
+| `testData` | classpath base paths. Each is read as `<path>/dbIn/*.xml` (clean-inserted) then `<path>/dbUpdate/*.xml` (updated) before the method, and `<path>/dbExpected/*.xml` after it. Any subset of the three may be present. Prefix an entry with `puName:` to route it to a named persistence unit — `"customerPU:testdata/customers"` |
 | `testDataBasePath` | a prefix applied to `testData` entries |
 | `requireDbExpected` | defaults to **`true`** — a missing `dbExpected` directory fails the test. Set `false` for seed-only fixtures |
 | `startScopes` | which scopes to activate for this method; also vetoes the ones not listed |
@@ -34,9 +34,13 @@ Layout on the test classpath:
 
 ```
 src/test/resources/testdata/customers/
-├── dbIn/customers.xml          seeded before the method
+├── dbIn/customers.xml          clean-inserted before the method
+├── dbUpdate/customers.xml      applied as an update after dbIn (optional)
 └── dbExpected/customers.xml    compared after the method
 ```
+
+Within a sub-directory the files are processed in alphabetical order, and every entry's `dbIn/`
+phase runs before any entry's `dbUpdate/` phase.
 
 Both are DBUnit flat XML — element name is the table, attributes are the columns:
 
@@ -49,8 +53,8 @@ Both are DBUnit flat XML — element name is the table, attributes are the colum
 
 `@TestControl` is inherited from a superclass method, and an overriding method's own annotation
 wins. A failing `beforeEach` does not leak seeded data, and a `dbExpected` mismatch still cleans
-the database. With multiple persistence units each entry routes to its own unit; an unknown unit
-name fails loudly.
+the database. An unprefixed entry goes to the unit named by
+`@PersistenceConfig(persistenceUnitName = ...)`; an unknown unit name fails loudly.
 
 ## Programmatic: `DbSeed`
 

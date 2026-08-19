@@ -70,7 +70,8 @@ Distinct qualifiers still produce distinct mocks, which is the point of keying o
 > on the test class, so two `@Default` beans were registered. Explicitly qualified injections were
 > unaffected. Fixed in #155.
 
-Use a `@TestBean` static field instead — it is also how you stub and verify:
+To stub or verify that collaborator, declare it as a `@TestBean` static field — that is also
+the only way to supply a pre-configured instance:
 
 ```java
 @EnableTestBeans
