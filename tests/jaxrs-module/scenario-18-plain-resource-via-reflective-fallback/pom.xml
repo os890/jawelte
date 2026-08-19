@@ -19,7 +19,7 @@
     <parent>
         <groupId>org.os890.jawelte</groupId>
         <artifactId>jawelte-tests-jaxrs-module</artifactId>
-        <version>0.3.0-SNAPSHOT</version>
+        <version>0.3.0</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>jawelte-tests-jaxrs-module-scenario-18-plain-resource-via-reflective-fallback</artifactId>
