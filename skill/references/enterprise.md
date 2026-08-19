@@ -102,10 +102,37 @@ Needs everything `jpa-module` needs, plus `org.springframework.data:spring-data-
 
 ## Jakarta Batch
 
-`batch-module` runs a job and fills in a typed result. **A job is started by firing
-`BatchExecution` as a CDI event**, not by calling a method on it — the module observes the event,
-drives `JobOperator`, polls to a terminal state and writes the outcome back into the instance you
-fired:
+`batch-module` runs a job and fills in a typed result.
+
+The job itself is plain Jakarta Batch, and the two pieces the platform requires are easy to forget
+because nothing in jawelte replaces them — a **Job XML descriptor** at
+`src/test/resources/META-INF/batch-jobs/<jobName>.xml`, whose `id` is the name you will fire, and
+the artifact it references, resolved by CDI name:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<job id="importJob" xmlns="https://jakarta.ee/xml/ns/jakartaee" version="2.0">
+    <step id="step1">
+        <batchlet ref="importBatchlet"/>
+    </step>
+</job>
+```
+
+```java
+@Dependent
+@Named("importBatchlet")
+public class ImportBatchlet extends AbstractBatchlet {
+
+    @Override
+    public String process() {
+        return "DONE";
+    }
+}
+```
+
+**A job is started by firing `BatchExecution` as a CDI event**, not by calling a method on it —
+the module observes the event, drives `JobOperator`, polls to a terminal state and writes the
+outcome back into the instance you fired:
 
 ```java
 @EnableTestBeans
@@ -146,4 +173,8 @@ A timeout **fails the assertion without cancelling the job** — the job keeps r
 runtime, so a slow job produces a failure that says "not finished yet", not a cancellation. A
 custom `TimeoutHandler` can be supplied as an `@Alternative`.
 
-Needs a Jakarta Batch runtime on the test classpath, e.g. JBeret.
+Needs `jakarta.batch:jakarta.batch-api` on the test classpath — it does **not** arrive with the
+runtime — plus a runtime. `org.apache.batchee:batchee-jbatch` is what jawelte itself is verified
+against and needs nothing further; JBeret also works but additionally wants
+`jakarta.transaction-api` and `org.wildfly.core:wildfly-security-manager`, without which the
+container dies on `NoClassDefFoundError` during startup.
