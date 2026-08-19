@@ -38,15 +38,27 @@ sequenceDiagram
     participant Caller as caller
     participant OrderService
     participant PricingService
-    Caller->>OrderService: placeOrder(String, int)
-    activate OrderService
-        OrderService->>PricingService: priceOf(String)
-        activate PricingService
-        PricingService-->>OrderService: BigDecimal
-        deactivate PricingService
-    OrderService-->>Caller: String
-    deactivate OrderService
+    rect rgb(244, 244, 244)
+        Note over Caller,PricingService: OrderService.placeOrder
+        Caller->>OrderService: placeOrder(String, int)
+        activate OrderService
+            OrderService->>PricingService: priceOf(String)
+            activate PricingService
+            PricingService-->>OrderService: BigDecimal
+            deactivate PricingService
+        OrderService-->>Caller: String
+        deactivate OrderService
+    end
 ```
+
+The `rect` block and its `Note over` line are **not decoration** — they delimit one chain and name
+its entry point, and the comparison is chain by chain. Drop them and the diff reports
+`MISSING_CHAIN` for the chain it expected plus `UNEXPECTED_CHAIN` for
+`OrderService.placeOrder`, however well the arrows inside line up.
+
+What the recorder writes carries timings the expectation does not need — `— 7.92 ms | thread main`
+on the note, `[6.47 ms]` on each return. Those are ignored by the comparison, so strip them for
+readability or leave them in; both match.
 
 **Compared:** participants reached, calls, returned and thrown types, CDI event arrows, folded
 loop counts, nesting depth, and the number and order of chains.

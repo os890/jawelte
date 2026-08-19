@@ -58,3 +58,27 @@ outside this repository from an empty local repository. That run also covers the
 scenario inside the reactor cannot make honestly: that the documented minimal POM resolves, and
 that the shared-auto-mock case from #155 works in a released artifact rather than only on a
 locally built classpath.
+
+## The consumer audit
+
+A scenario inside the reactor cannot catch a wrong dependency row, because every artifact is
+already on the classpath there. So each reference file was also checked from the outside: a
+throwaway consumer project per area, built against published 0.3.0 from an empty local repository,
+with the documented example copied in as written.
+
+| Area | Result |
+| --- | --- |
+| minimal POM, core pattern, `@TestBean` | as documented |
+| jpa row + the `CustomerService` example | as documented |
+| wiremock row + the `@WireMockEndpoint` example | as documented, WireMock really is transitive |
+| flow-assert row | dependencies as documented — cdi-flow really does arrive transitively from the same Pages repository |
+| datasource row | **wrong** — missing `jndi-module-impl` and `xbean-naming`; the lookup fails while injection still succeeds |
+| batch row | **wrong** — `jakarta.batch-api` is not transitive, and JBeret needs two further artifacts |
+| the batch example in `enterprise.md` | **incomplete** — no mention of the Job XML descriptor or the batchlet it references, so the job cannot run |
+| the expected diagram in `flow-assert.md` | **wrong** — no `rect` / `Note over` chain wrapper, so copying it verbatim fails with `MISSING_CHAIN` + `UNEXPECTED_CHAIN` |
+| the "you must also supply" column | **incomplete** — named artifacts but no versions, leaving a consumer to guess |
+
+Not yet covered from the outside: jta, resource, db-migration, db-testdata, testcontrol,
+spring-data, ejb, jaxrs and content-diff. Their rows are unverified against a real consumer build,
+and the two rows that turned out wrong were both in that same untested majority — so absence of a
+finding there is absence of evidence, not evidence of correctness.

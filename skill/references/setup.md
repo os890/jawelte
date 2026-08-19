@@ -168,23 +168,27 @@ in cdi-module. Guessing here is a common way to produce a file that will not com
 Add the `-api` and `-impl` pair for each module you use, plus that module's own third-party
 requirements. All jawelte artifacts share `${jawelte.version}`.
 
+The versions in the third column are the ones jawelte is built and verified against. Nothing
+enforces them, but a mismatch in Hibernate or the Jakarta APIs is a likely cause of a failure that
+looks like a jawelte bug.
+
 | Module | Add these artifacts | You must also supply |
 | --- | --- | --- |
 | scope | `jawelte-scope-module-api`, `-impl` | — |
-| jndi | `jawelte-jndi-module-api`, `-impl` | `org.apache.xbean:xbean-naming` (`provided`, so not transitive) |
-| datasource | `jawelte-datasource-module-api`, `-impl` | a JDBC driver / `DataSource` implementation for the class the `@DataSourceDefinition` names |
-| resource | `jawelte-resource-module-api`, `-impl` | `jawelte-jndi-module-impl` (only the api comes along) |
-| jpa | `jawelte-jpa-module-api`, `-impl` | `jakarta.persistence-api`, `jakarta.transaction-api`, `org.hibernate.orm:hibernate-core`, a JDBC driver (`com.h2database:h2` by default), `jawelte-jndi-module-impl` |
-| jta | `jawelte-jta-module-api`, `-impl` | everything jpa needs, plus one transaction manager: Geronimo, Narayana or Atomikos |
-| db-migration | `jawelte-db-migration-module` (single artifact) | Flyway or Liquibase |
+| jndi | `jawelte-jndi-module-api`, `-impl` | `org.apache.xbean:xbean-naming` 4.30 (`provided`, so not transitive) |
+| datasource | `jawelte-datasource-module-api`, `-impl` | a JDBC driver / `DataSource` implementation for the class the `@DataSourceDefinition` names (`com.h2database:h2` 2.3.232 for the examples here), **plus `jawelte-jndi-module-impl` and `org.apache.xbean:xbean-naming`** — see the note below |
+| resource | `jawelte-resource-module-api`, `-impl` | `jawelte-jndi-module-impl` (only the api comes along) plus `xbean-naming` |
+| jpa | `jawelte-jpa-module-api`, `-impl` | `jakarta.persistence-api` 3.2.0, `jakarta.transaction-api` 2.0.1, `org.hibernate.orm:hibernate-core` 7.0.4.Final, a JDBC driver (`com.h2database:h2` 2.3.232 by default), `jawelte-jndi-module-impl` |
+| jta | `jawelte-jta-module-api`, `-impl` | everything jpa needs, plus one transaction manager: `org.apache.geronimo.components:geronimo-transaction` 4.0.0, Narayana 7.0.0.Final or Atomikos 6.0.1 |
+| db-migration | `jawelte-db-migration-module` (single artifact) | Flyway or Liquibase, and everything jpa needs |
 | db-testdata | `jawelte-db-testdata-module-api`, `-impl` | everything jpa needs (DBUnit comes transitively) |
 | testcontrol | `jawelte-testcontrol-module-api`, `-impl` | `jawelte-db-testdata-module-impl` (only the api comes along) |
-| spring-data | `jawelte-spring-data-module` (single artifact) | everything jpa needs, plus `org.springframework.data:spring-data-jpa` |
-| ejb | `jawelte-ejb-module-api`, `-impl` | `jakarta.ejb-api` (`provided`, so not transitive) |
-| jaxrs | `jawelte-jaxrs-module-api`, `-impl` | a Jakarta REST implementation — CXF or RESTEasy |
+| spring-data | `jawelte-spring-data-module` (single artifact) | everything jpa needs, plus `org.springframework.data:spring-data-jpa` 4.0.5 |
+| ejb | `jawelte-ejb-module-api`, `-impl` | `jakarta.ejb-api` 4.0.1 (`provided`, so not transitive) |
+| jaxrs | `jawelte-jaxrs-module-api`, `-impl` | a Jakarta REST implementation — CXF 4.1.2 or RESTEasy 7.0.0.Final |
 | wiremock | `jawelte-wiremock-module-api`, `-impl` | — (WireMock comes transitively) |
 | content-diff | `jawelte-content-diff-module-api`, `-impl` | — (Jackson comes transitively) |
-| batch | `jawelte-batch-module-api`, `-impl` | a Jakarta Batch runtime, e.g. JBeret |
+| batch | `jawelte-batch-module-api`, `-impl` | `jakarta.batch:jakarta.batch-api` 2.1.1 (**not transitive**) plus a runtime: `org.apache.batchee:batchee-jbatch` 2.0.0 needs nothing else, JBeret 3.1.0.Final additionally needs `jakarta.transaction-api` and `org.wildfly.core:wildfly-security-manager` |
 | flow-assert | `jawelte-flow-assert-module-api`, `-impl` | — (the cdi-flow recorder comes transitively at `compile` scope) |
 
 One rule explains most of this column: a library reaches a consumer only if the module needs it
@@ -192,6 +196,14 @@ at `compile` scope. DBUnit, WireMock, Jackson and the cdi-flow recorder are `com
 on their own. The Jakarta APIs, Mockito, Hibernate, xbean-naming and **Spring Data JPA** are
 `provided` (some of them managed at `test` in `jawelte-parent` and raised to `provided` by the
 module that needs them), and neither scope is transitive — so the consumer declares them.
+
+**Anything that binds a name needs the naming tree, and the naming tree needs two artifacts.**
+`datasource-module` and `resource-module` both bind into JNDI, and both fail quietly without
+`jawelte-jndi-module-impl` *and* `org.apache.xbean:xbean-naming`. Quietly is the problem: with
+neither of them present a `@DataSourceDefinition` is still built and still injects, so the test
+looks wired up — but the name is never bound, and `new InitialContext().lookup(...)` fails with
+`NoInitialContextException`. `@Resource(lookup = ...)` and a `<jta-data-source>` in
+`persistence.xml` resolve through that same tree, so they silently do not work either.
 
 An `-impl` jar depends only on the `-api` of the modules it integrates with, never on their
 `-impl`, except where the table says otherwise. So adding `jpa-module-impl` does not pull

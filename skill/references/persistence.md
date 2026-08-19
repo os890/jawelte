@@ -131,6 +131,13 @@ auto-mocking, so their presence does not confuse bean resolution.
 test class or on any bean class; the module builds it, binds it in JNDI under its declared name,
 and makes it injectable. It is isolated per test class and closed afterwards.
 
+**Add `jawelte-jndi-module-impl` and `org.apache.xbean:xbean-naming` alongside
+`datasource-module`.** Without them the failure is quiet rather than loud: the data source is
+still built and still injects, so a test that only injects it passes — but nothing is bound, so
+`new InitialContext().lookup(...)` fails with `NoInitialContextException`, and the two idioms this
+module exists for, `@Resource(lookup = ...)` and `<jta-data-source>` in `persistence.xml`,
+silently resolve to nothing.
+
 ```java
 @EnableTestBeans
 @DataSourceDefinition(

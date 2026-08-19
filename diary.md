@@ -8235,3 +8235,53 @@ omission to look like an oversight.
 `@Inject @Any T` and read the resulting deployment failure as a framework bug.
 
 Seven tests in the scenario now, green on OpenWebBeans and Weld.
+## The consumer audit: what the skill said and what a build actually needs
+
+The package gap found before the release only surfaced because I wrote code against the skill
+rather than reading it. So this pass did that deliberately, one throwaway consumer project per
+reference area, built against published 0.3.0 from an empty local repository, with the documented
+example copied in as written. A scenario inside the reactor structurally cannot catch a wrong
+dependency row — every artifact is already on the classpath there — which is why these had all
+survived a review that checked the statements for truth.
+
+Four wrong, one incomplete, four confirmed correct.
+
+**The datasource row fails quietly, which is the worst way to fail.** It lists only "a JDBC driver
+/ DataSource implementation". Following it literally, the container starts, `@DataSourceDefinition`
+is built, and the data source *injects fine* — the first assertion of the documented example
+passes. The second one dies on `NoInitialContextException`, because nothing was ever bound.
+`datasource-module` needs `jawelte-jndi-module-impl` **and** `org.apache.xbean:xbean-naming`; I
+confirmed both are required by removing each in turn. The consequence is larger than the example:
+`@Resource(lookup = ...)` and `<jta-data-source>` in `persistence.xml` resolve through that same
+tree, so persistence.md's headline payoff silently does not happen.
+
+**The batch row is wrong twice.** `jakarta.batch-api` is not transitive, so the documented example
+does not even compile — `package jakarta.batch.api ist nicht vorhanden`. And the runtime it names
+as the example, JBeret, is the awkward option: it needs `jakarta.transaction-api` and
+`org.wildfly.core:wildfly-security-manager` on top, each discovered by a separate
+`NoClassDefFoundError`. Apache BatchEE — which is what jawelte's own scenarios use, JBeret
+appearing only in the cross-compatibility scenario 15 — needs nothing beyond the API.
+
+**The batch example could never have run.** It fires `new BatchExecution("importJob")` and says
+nothing about `META-INF/batch-jobs/importJob.xml` or the batchlet the descriptor references. Those
+are plain Jakarta Batch requirements that jawelte does not replace, and without them there is no
+job to start. Both are now in enterprise.md.
+
+**The expected diagram in flow-assert.md cannot match anything.** Copying it verbatim fails with
+`MISSING_CHAIN` plus `UNEXPECTED_CHAIN` for `OrderService.placeOrder`. A chain is delimited by a
+`rect` block whose `Note over` line names its entry point, and the printed diagram had neither —
+it showed the arrows and dropped the wrapper. Adding the wrapper makes it pass; the timings the
+recorder emits really are ignored, as the file already claimed.
+
+**The "you must also supply" column named artifacts but no versions.** The project pins them all;
+a consumer had to guess, and guessing wrong on Hibernate or the Jakarta APIs produces a failure
+that reads like a jawelte bug. Versions are now in the table.
+
+Confirmed correct and left alone: the jpa row, the wiremock row (WireMock genuinely is
+transitive), the flow-assert row (cdi-flow genuinely arrives transitively from the same Pages
+repository), and the minimal POM.
+
+What I did not do is as important as what I did, so tests/skill/README.md now says it: jta,
+resource, db-migration, db-testdata, testcontrol, spring-data, ejb, jaxrs and content-diff are
+still unverified from the outside. Both rows that turned out wrong came from that same untested
+majority, so the sensible reading of the remaining nine is "not yet checked", not "fine".
