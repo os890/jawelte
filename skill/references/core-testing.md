@@ -52,25 +52,23 @@ the classpath, it wins; auto-mock only fills genuine gaps.
 
 **Deduplication.** Two application beans injecting the same unsatisfied type share one mock.
 
-**One asymmetry to know about.** Candidates are keyed by type *plus qualifiers*, and the two
-collection paths disagree on what a plain `@Inject` means. An injection point inside an
-application bean is keyed from CDI's normalized qualifier set, where no declared qualifier counts
-as `{@Default}`. The test class's own fields are keyed from the annotations physically written on
-them, which for a plain `@Inject` is the empty set. The keys differ, so the same unsatisfied type
-injected into both an application bean and the test class registers two `@Default` beans and the
-deployment fails:
+Deduplication is keyed by type *plus qualifiers*, and it holds across application beans and the
+test class alike, so this is fine and both fields see the same mock:
 
 ```java
-// BROKEN — AmbiguousResolutionException (OWB) / WELD-001409 (Weld)
 @EnableTestBeans
 class GreetingTest {
     @Inject Greeter greeter;            // Greeter injects AuditService
-    @Inject AuditService auditService;  // ...and so does the test class
+    @Inject AuditService auditService;  // ...and so does the test class — same instance
 }
 ```
 
-An **explicitly qualified** injection is unaffected — both sides then carry the same qualifier
-annotation, the keys match, and one shared mock is registered. Only the unqualified case diverges.
+Distinct qualifiers still produce distinct mocks, which is the point of keying on them.
+
+> Before 0.3.0 the snippet above failed to deploy with `AmbiguousResolutionException` (Weld:
+> `WELD-001409`): a plain `@Inject` was keyed as `{@Default}` inside a bean but as the empty set
+> on the test class, so two `@Default` beans were registered. Explicitly qualified injections were
+> unaffected. Fixed in #155.
 
 Use a `@TestBean` static field instead — it is also how you stub and verify:
 

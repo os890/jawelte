@@ -79,13 +79,10 @@ class GreetingTest {
 }
 ```
 
-**Do not `@Inject` the same *unqualified* unsatisfied type into both an application bean and the
-test class.** Auto-mock candidates are keyed by type plus qualifiers, and a plain `@Inject` is
-keyed as `{@Default}` inside a bean but as the empty set on the test class, so the two do not
-deduplicate: the deployment registers two `@Default` beans and fails with
-`AmbiguousResolutionException` (Weld: `WELD-001409`). Reproduced on both runtimes on 0.2.0. An
-explicitly qualified injection is unaffected. The `@TestBean` static field above is the way to
-hold a reference.
+One mock is registered per unsatisfied type, shared by every injection point that needs it —
+application beans and the test class alike — so injecting the collaborator into the test class as
+well is fine and yields the same instance the bean received. A `@TestBean` static field is still
+the clearer way to express "this is my stub", and the only way to supply a pre-configured one.
 
 ## Pick the module for what you are testing
 
