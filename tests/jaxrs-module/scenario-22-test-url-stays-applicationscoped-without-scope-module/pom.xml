@@ -36,7 +36,7 @@
     <parent>
         <groupId>org.os890.jawelte</groupId>
         <artifactId>jawelte-tests-cdi-module</artifactId>
-        <version>0.3.0</version>
+        <version>0.4.0-SNAPSHOT</version>
         <relativePath>../../cdi-module/pom.xml</relativePath>
     </parent>
     <artifactId>jawelte-tests-jaxrs-module-scenario-22-test-url-stays-applicationscoped-without-scope-module</artifactId>
