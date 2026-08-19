@@ -65,10 +65,25 @@ class GreetingTest {
 
 Distinct qualifiers still produce distinct mocks, which is the point of keying on them.
 
+`@Any` never splits a mock either — every bean holds it implicitly, so `@Inject Foo`,
+`@Inject @Any Foo` and `@Inject @Default @Any Foo` are one request and share one mock.
+
+**But `@Any` stops being injectable directly as soon as the type has more than one mock.** That is
+CDI, not jawelte: `@Any` matches *every* bean of the type, so asking for a single instance when two
+qualify has no answer, and the container rejects the deployment. Reach for `Instance<T>` — the
+spelling CDI provides for "all of them":
+
+```java
+@Inject @Audited PricingService audited;     // one mock
+@Inject PricingService plain;                // a second, @Default
+
+@Inject @Any Instance<PricingService> all;   // both; @Inject @Any PricingService would not deploy
+```
+
 > Before 0.3.0 the snippet above failed to deploy with `AmbiguousResolutionException` (Weld:
 > `WELD-001409`): a plain `@Inject` was keyed as `{@Default}` inside a bean but as the empty set
 > on the test class, so two `@Default` beans were registered. Explicitly qualified injections were
-> unaffected. Fixed in #155.
+> unaffected. Fixed in #155. `@Any` kept the same defect until 0.4.0 (#160).
 
 To stub or verify that collaborator, declare it as a `@TestBean` static field — that is also
 the only way to supply a pre-configured instance:
