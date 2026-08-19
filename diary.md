@@ -8304,3 +8304,53 @@ misreading as a framework bug — and it was missing from the one place a reader
 The row now names all three and says which is which. Nothing about this was visible while the
 branches were separate; it only appeared once the two halves of the story sat in the same tree,
 which is an argument for the step-by-step merge order rather than against it.
+
+## The remaining nine rows: six right, three wrong, one of them serious
+
+Second pass of the consumer audit, same method — a throwaway project per area against published
+0.3.0 from an empty local repository, each documented example copied in as written.
+
+Right as documented: **ejb**, **content-diff** (Jackson really is transitive), **resource** (with
+the jndi correction from the first pass applied), **jta**, **db-migration**, **spring-data**. Six
+of nine, which is a better hit rate than the first pass and mildly reassuring about the rows I
+wrote from reading source rather than building.
+
+**db-testdata is the worst finding of either pass, and it is not subtle once seen.** Adding the
+module to a consumer project makes Surefire report
+
+```
+TestEngine with ID 'junit-jupiter' failed to discover tests
+  Caused by: OutputDirectoryCreator not available; probably due to unaligned versions of
+  the junit-platform-engine and junit-platform-launcher jars on the classpath
+```
+
+and run **zero** tests. Not zero database tests — zero tests, including ones that never touch a
+database. `org.dbunit:dbunit` 3.0.0 depends on `junit-platform-suite-engine` 1.10.1, which drags
+`junit-platform-launcher` 1.10.1 onto a JUnit 6 classpath.
+
+The reason this repository never sees it is the reason it was worth looking from outside at all:
+the parent POM manages `junit-platform-launcher` to the project's JUnit version, so the stale
+transitive copy is out-voted for every scenario in the reactor. A consuming project has no such
+management and gets the 1.10.1 jar. No scenario inside this build could ever have caught it.
+`testcontrol` inherits the same problem through `db-testdata-module-impl`.
+
+Two remedies both work — excluding `junit-platform-suite-engine` from the module, or declaring
+`junit-platform-launcher` at your own JUnit version. The exclusion is documented as preferable: it
+removes the stale subtree rather than out-voting part of it.
+
+**jaxrs needed three artifacts where the row said one.** "A Jakarta REST implementation — CXF
+4.1.2" gets you `cxf-rt-frontend-jaxrs`, and then `Failed to start JAX-RS server`, because the HTTP
+transport is a separate artifact. Add `cxf-rt-transports-http-jetty` and it starts, then the
+documented example dies on `Provider for jakarta.ws.rs.client.ClientBuilder cannot be found`,
+because the client is a third. Found by adding one artifact at a time rather than copying the
+reactor's list, so the table can now say which artifact fixes which error. `jakarta.ws.rs-api` does
+arrive transitively.
+
+**And one gap I found by being wrong twice.** The `DbSeed` entry-point list warned that the no-arg
+`forPersistenceUnit()` needs an active unit. I read that as "so name the unit explicitly" and wrote
+`forPersistenceUnit("testPU")`, which failed too — `No active EntityManager for persistence unit`.
+Naming the unit says *which* unit, not *start* one. All three persistence-unit forms need an open
+transaction; only `forConnection` does not, and `@TestControl` opens its own. Two different error
+messages for one missing boundary, both now in the troubleshooting table.
+
+Every reference file has now been exercised from the outside at least once.

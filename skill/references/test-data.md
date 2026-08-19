@@ -3,6 +3,10 @@
 Two modules. `db-testdata-module` is the engine (`DbSeed`, `DbDiff`); `testcontrol-module` wires
 it to a test method declaratively via `@TestControl`. Both need `jpa-module`.
 
+Both also need DBUnit's stale `junit-platform-suite-engine` excluded, or **no test in the
+module is discovered at all** — see `setup.md`. That is the first thing to check if adding
+either module makes a previously green build report zero tests.
+
 ## Declarative: `@TestControl`
 
 On a **test method**.
@@ -59,11 +63,34 @@ the database. An unprefixed entry goes to the unit named by
 ## Programmatic: `DbSeed`
 
 ```java
-DbSeed.forPersistenceUnit()           // the configured unit
+DbSeed.forPersistenceUnit()           // the unit named by @PersistenceConfig(persistenceUnitName)
 DbSeed.forCurrentPersistenceUnit()    // the active one
 DbSeed.forPersistenceUnit("customerPU")
 DbSeed.forConnection(connection)      // caller owns the connection
 ```
+
+**All three persistence-unit forms need an open transaction — including the one you name
+explicitly.** Naming the unit says *which* unit, not *start* one, so outside a transaction even
+`forPersistenceUnit("customerPU")` fails with `No active EntityManager for persistence unit`.
+`@Transactional` works directly on a test method, which is the shortest way to get a boundary:
+
+```java
+@Test
+@Transactional
+void seedThenAssert() {
+    DbSeed.forCurrentPersistenceUnit()
+            .datasetContent("<dataset><CUSTOMER ID=\"1\" NAME=\"Alice\"/></dataset>")
+            .cleanInsert()
+            .execute();
+
+    DbDiff.forCurrentPersistenceUnit()
+            .expectedContent("<dataset><CUSTOMER ID=\"1\" NAME=\"Alice\"/></dataset>")
+            .assertEquals();
+}
+```
+
+`forConnection(...)` is the exception — you supply the connection, so no boundary is needed.
+`@TestControl` needs none of this: it opens its own.
 
 then a dataset, a mode and `execute()`:
 
@@ -76,9 +103,10 @@ DbSeed.forConnection(connection)
 ```
 
 Modes: `cleanInsert()` (delete then insert, foreign-key ordered, circular FKs handled),
-`insert()`, `update()`, `refresh()`. Failures are prefixed `[DbSeed]`. Calling
-`forPersistenceUnit()` outside an active unit throws `IllegalStateException` with
-`No active persistence unit`.
+`insert()`, `update()`, `refresh()`. Failures are prefixed `[DbSeed]`. Outside a transaction the
+no-arg `forPersistenceUnit()` throws `IllegalStateException` with `No active persistence unit`,
+and the named form throws `No active EntityManager for persistence unit '<name>'` — two messages
+for the same missing boundary.
 
 ## Programmatic: `DbDiff`
 

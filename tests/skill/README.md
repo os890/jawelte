@@ -78,7 +78,31 @@ with the documented example copied in as written.
 | the expected diagram in `flow-assert.md` | **wrong** — no `rect` / `Note over` chain wrapper, so copying it verbatim fails with `MISSING_CHAIN` + `UNEXPECTED_CHAIN` |
 | the "you must also supply" column | **incomplete** — named artifacts but no versions, leaving a consumer to guess |
 
-Not yet covered from the outside: jta, resource, db-migration, db-testdata, testcontrol,
-spring-data, ejb, jaxrs and content-diff. Their rows are unverified against a real consumer build,
-and the two rows that turned out wrong were both in that same untested majority — so absence of a
-finding there is absence of evidence, not evidence of correctness.
+The remaining nine rows were then checked the same way. Six were right; three were not, and one of
+those three is the worst finding of either pass.
+
+| Area | Result |
+| --- | --- |
+| ejb row + the `@Singleton` example | as documented |
+| content-diff row + JSON and XML examples | as documented, Jackson really is transitive |
+| resource row + the `@Resource(lookup)` example | as documented, once the jndi correction above is applied |
+| jta row + the JTA `CustomerService` example | as documented |
+| db-migration row | as documented |
+| spring-data row + the repository example | as documented |
+| jaxrs row | **wrong** — one implementation artifact is not enough; it takes three |
+| db-testdata row | **wrong** — DBUnit drags a JUnit 5.10 platform that stops *every* test in the module being discovered |
+| testcontrol row | **wrong** — inherits the same DBUnit problem |
+
+The db-testdata one is worth stating plainly: adding the module to a consumer project made Surefire
+report `TestEngine with ID 'junit-jupiter' failed to discover tests` and run **zero** tests,
+including tests with no database involvement. `org.dbunit:dbunit` 3.0.0 depends on
+`junit-platform-suite-engine` 1.10.1, which drags `junit-platform-launcher` 1.10.1 onto a JUnit 6
+classpath. This repository never sees it, because its parent POM manages `junit-platform-launcher`
+to the project's JUnit version — which is exactly the kind of defect a scenario inside the reactor
+is structurally incapable of finding.
+
+One further gap came from getting it wrong myself, twice: every persistence-unit entry point of
+`DbSeed` / `DbDiff` needs an open transaction, not only the no-arg one the file warned about.
+Naming the unit explicitly says which unit, not start one.
+
+Every reference file has now been exercised from the outside at least once.
