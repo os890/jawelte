@@ -31,7 +31,8 @@ a test that touches no database never pulls the persistence material into contex
 | --- | --- |
 | `references/setup.md` | dependencies, CDI runtime, required test resources, startup troubleshooting |
 | `references/core-testing.md` | `@EnableTestBeans`, `@TestBean`, auto-mocking, scopes, `@ConfigBean` |
-| `references/persistence.md` | JPA, JTA, data sources, JNDI, EJB, Spring Data, batch |
+| `references/persistence.md` | JPA, JTA, data sources, JNDI, `@Resource`, migrations |
+| `references/enterprise.md` | EJB session beans, Spring Data repositories, Jakarta Batch |
 | `references/test-data.md` | `@TestControl`, `DbSeed`, `DbDiff` |
 | `references/http-and-content.md` | `jaxrs-module`, `wiremock-module`, `content-diff-module` |
 | `references/flow-assert.md` | recording and asserting CDI call flows |

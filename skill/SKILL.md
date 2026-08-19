@@ -91,11 +91,11 @@ Load the reference file only when that area is actually in play.
 | Testing | Modules | Reference |
 | --- | --- | --- |
 | CDI beans, mocking, scopes, config beans | `cdi-module`, `scope-module` | `references/core-testing.md` |
-| JPA, transactions, data sources, EJB, Spring Data | `jpa-module`, `jta-module`, `datasource-module`, `jndi-module`, `resource-module`, `db-migration-module`, `spring-data-module`, `ejb-module` | `references/persistence.md` |
+| JPA, transactions, data sources, naming, migrations | `jpa-module`, `jta-module`, `datasource-module`, `jndi-module`, `resource-module`, `db-migration-module` | `references/persistence.md` |
+| EJB session beans, Spring Data repositories, Batch jobs | `ejb-module`, `spring-data-module`, `batch-module` | `references/enterprise.md` |
 | Seeding rows and asserting DB state | `db-testdata-module`, `testcontrol-module` | `references/test-data.md` |
 | REST endpoints, HTTP stubs, JSON/XML comparison | `jaxrs-module`, `wiremock-module`, `content-diff-module` | `references/http-and-content.md` |
 | Which bean called which, in what order | `flow-assert-module` | `references/flow-assert.md` |
-| Jakarta Batch jobs | `batch-module` | `references/persistence.md` (batch section) |
 | Tuning behaviour via MicroProfile Config | any | `references/configuration.md` |
 
 ## Rules that prevent the common failures
