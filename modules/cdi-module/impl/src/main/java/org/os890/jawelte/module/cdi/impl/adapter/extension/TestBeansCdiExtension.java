@@ -511,22 +511,12 @@ public class TestBeansCdiExtension implements Extension {
                     qualifiers.add(annotation);
                 }
             }
-            if (qualifiers.isEmpty()) {
-                // Normalize to what the container itself reports for an
-                // injection point that declares no qualifier: exactly
-                // @Default (CDI 4.1, "Default qualifier at injection
-                // points"). Without this the key built here disagrees
-                // with the key onProcessInjectionPoint builds from
-                // ip.getQualifiers() for the very same injection, and
-                // IpKey's set stops deduplicating: the same unqualified
-                // type injected into an application bean and into the
-                // test class produced {@Default} and {} respectively,
-                // hence two synthetic @Default beans and an ambiguous
-                // deployment. An explicitly qualified injection never
-                // had the problem, because then both paths see the same
-                // annotation.
-                qualifiers.add(Default.Literal.INSTANCE);
-            }
+            // Deliberately raw: this walk reads field annotations, so an
+            // unqualified field yields the empty set and an @Any field
+            // yields {@Any}, while onProcessInjectionPoint sees CDI's
+            // own normalized view of the very same injection. IpKey
+            // reconciles the two - see IpKey#normalize, and issue 155
+            // for what happens when only one side normalizes.
             unsatisfiedCandidateIps.add(new IpKey(targetType, qualifiers));
         }
     }
@@ -777,7 +767,51 @@ public class TestBeansCdiExtension implements Extension {
 
         IpKey(Type targetType, Set<Annotation> qualifiers) {
             this.targetType = targetType;
-            this.qualifiers = qualifiers;
+            this.qualifiers = normalize(qualifiers);
+        }
+
+        /**
+         * Reduces a qualifier set to the form CDI resolves on, so that
+         * two injection points the container would satisfy with one
+         * bean also produce one key here.
+         *
+         * <p>Two rules, and both exist because a collection path once
+         * disagreed with the other about the same injection:
+         *
+         * <ul>
+         *   <li>{@code @Any} is dropped. Every bean holds it
+         *       implicitly, so it never narrows a resolution - which
+         *       makes {@code @Inject @Any Foo} and plain
+         *       {@code @Inject Foo} the same request, and two keys a
+         *       bug. This is the remainder of issue 155 that was left
+         *       out of scope there, and it produced the same
+         *       {@code AmbiguousResolutionException} the moment
+         *       {@code @Any} was written out on a test-class field.</li>
+         *   <li>An otherwise empty set becomes {@code @Default}, which
+         *       is what the container reports for an injection point
+         *       that declares no qualifier (CDI 4.1, "Default qualifier
+         *       at injection points"). The reflective walk over the
+         *       test class sees raw annotations and would otherwise
+         *       yield the empty set - the original issue 155.</li>
+         * </ul>
+         *
+         * <p>Doing this in the constructor rather than at each call
+         * site is the point: the two paths cannot drift apart again.
+         *
+         * @param qualifiers the qualifiers as collected
+         * @return the normalized set, never empty
+         */
+        private static Set<Annotation> normalize(Set<Annotation> qualifiers) {
+            Set<Annotation> normalized = new LinkedHashSet<>();
+            for (Annotation qualifier : qualifiers) {
+                if (!Any.class.equals(qualifier.annotationType())) {
+                    normalized.add(qualifier);
+                }
+            }
+            if (normalized.isEmpty()) {
+                normalized.add(Default.Literal.INSTANCE);
+            }
+            return normalized;
         }
 
         Type targetType() {

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+   Copyright 2026 os890
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.os890.jawelte</groupId>
+        <artifactId>jawelte-tests-cdi-module</artifactId>
+        <version>0.4.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>jawelte-tests-cdi-module-scenario-68-any-qualifier-normalization</artifactId>
+    <packaging>jar</packaging>
+    <description>The half of issue 155 that was left out of scope there. That fix taught the reflective walk over the test class to key an unqualified @Inject as @Default, matching what ProcessInjectionPoint reports, but writing @Any out by hand on a test-class field still produced a key of {@Any} against the bean side's {@Default} - two synthetic beans for one type and AmbiguousResolutionException again. @Any never narrows a resolution, because every bean holds it implicitly, so it has no business in the key at all. Normalization now happens inside IpKey rather than at either call site, which is what stops the two paths drifting apart a third time. This scenario pins every spelling of the same request onto one mock, and pins that a real qualifier still separates them. It also pins the boundary: once several candidates of a type exist, a direct @Inject @Any T is ambiguous by the specification - @Any matches every bean of the type, so asking for one instance when two qualify has no answer - and that is a CDI usage error in the test rather than a keying defect. The supported spelling is @Any Instance&lt;T&gt;, which has to see the real auto-mocks and not a fresh one conjured by the module's own Instance unwrapping.</description>
+    <name>jawelte tests/cdi-module scenario 68: @Any never splits an auto-mock</name>
+</project>

@@ -8163,3 +8163,75 @@ The lesson is the one from #155 inverted. There I had a plausible story that was
 mechanism; here I had a plausible story that was wrong about reachability. Writing the scenario
 before the fix is what caught it both times — a fix-first order would have shipped a hardening
 described as a bug fix, and nobody would have learned that the input is illegal.
+## Issue 160: finishing #155 — @Any has no business in the auto-mock key
+
+The note left on #155 said the `@Any` edge case was out of scope: writing `@Any` explicitly on a
+test-class field still mismatched, because the reflective walk reads raw annotations while
+`ProcessInjectionPoint` reports CDI's normalized view. The user asked for it to be closed, and it
+turned out to be the same bug as #155 rather than a cousin of it.
+
+`@Inject @Any Foo` and plain `@Inject Foo` are one request. Every bean holds `@Any` implicitly, so
+it never narrows anything — which means keeping it in the key is simply wrong, not merely
+asymmetric. A probe reproduced the original failure verbatim:
+
+```
+AmbiguousResolutionException: There is more than one Bean with type ...PricingService
+  Qualifiers: [@jakarta.enterprise.inject.Default()]
+```
+
+Two keys, `{@Default}` and `{@Any}`, so two synthetic beans — and both end up carrying `@Default`
+anyway, because `SyntheticBeanUtil.qualifiersWithDefaults` adds `@Default` and `@Any` to every
+synthetic bean it registers. The bean side was never the problem; the duplication was entirely in
+the key.
+
+The fix moves normalization into `IpKey`'s constructor: drop `@Any`, then fall back to `@Default`
+if nothing is left. The second rule is the #155 fix relocated, and relocating it is the real point
+of the change. Two collection paths that each normalize in their own call site are exactly what
+produced #155, and then this. Now they cannot disagree, because neither of them normalizes at all
+— the key does.
+
+Two things the scenario taught me that I had wrong when I started.
+
+**The first draft of the test was invalid CDI.** I put a bare `@Any` injection point and a second,
+`@Audited`-qualified mock of the same type in one deployment and expected both to work. `@Inject
+@Any Foo` matches *every* bean of type `Foo`, so a second mock makes it ambiguous by the
+specification — the failure I got was correct behaviour, not a regression in my own fix. Splitting
+the two halves apart was not enough either, because every bean class in a scenario module is
+discovered by every container in that module. The guard now runs against a second type,
+`ShippingCalculator`, so both halves can be asserted without either deployment being illegal.
+
+**The fix is not vacuous.** Removing only the `@Any` clause from `normalize` and leaving the #155
+clause intact brings the `AmbiguousResolutionException` straight back; restoring it goes green.
+Five tests across two containers, and the whole cdi-module suite — 68 test classes — still passes,
+on OpenWebBeans and on Weld.
+
+## Correction on #160: the multi-candidate @Any case is user error, not a jawelte problem
+
+The user pushed back on how I had framed the awkward case in scenario 68. When two mocks of a type
+exist — say `@Default` and `@Audited` — and some other injection point asks for `@Inject @Any T`
+directly, that is a CDI usage violation. `@Any` matches every bean of the type, so requesting a
+single instance when two qualify has no answer. The container reporting it is correct, and the
+answer is `Instance<T>`. Not jawelte's fault, and not jawelte's to fix.
+
+That is what I had actually observed — I hit the ambiguity while drafting the test and wrote
+"correct behaviour, not a regression" — but I then treated it as an obstacle to design around
+rather than as a rule worth stating. Routing the separation guard onto a second type
+(`ShippingCalculator`) made the suite pass while leaving the boundary undocumented.
+
+So the boundary is now pinned on the side that *is* jawelte's business. A probe first, because I
+did not know the answer: with the two `ShippingCalculator` mocks in place, what does
+`@Inject @Any Instance<ShippingCalculator>` see? Exactly two — the `@Default` mock and the
+`@Audited` mock, and no third. That was the open question, because auto-mocking unwraps
+`Instance<T>` to decide whether a type needs a mock at all, and it could plausibly have conjured a
+fresh one for the `Instance` injection point itself. It does not: the unwrapped key normalizes onto
+`{@Default}`, which the plain injection already registered, so it deduplicates instead of adding.
+
+`Scenario68AnyOverSeveralCandidatesTest` pins both halves. The direct `@Inject @Any T` failure is
+deliberately *not* asserted — pinning it would only pin that the container enforces its own rules,
+and it needs a deployment-failure harness to observe. The javadoc says so rather than leaving the
+omission to look like an oversight.
+
+`core-testing.md` gained the rule, since an agent writing tests is exactly who would reach for
+`@Inject @Any T` and read the resulting deployment failure as a framework bug.
+
+Seven tests in the scenario now, green on OpenWebBeans and Weld.
