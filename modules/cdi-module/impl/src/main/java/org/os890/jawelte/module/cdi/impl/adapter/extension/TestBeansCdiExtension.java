@@ -21,6 +21,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -834,7 +835,26 @@ public class TestBeansCdiExtension implements Extension {
                 try {
                     Object value = member.invoke(annotation);
                     if (value != null) {
-                        h = 31 * h + value.hashCode();
+                        // deepHashCode, not value.hashCode(), to stay
+                        // consistent with the Objects.deepEquals in
+                        // qualifiersEquivalent. For an array the plain
+                        // hashCode is an identity hash, and an unstable
+                        // one: the annotation proxy clones an array
+                        // member on every access to keep the annotation
+                        // immutable, so two reads of the same member
+                        // hash differently.
+                        //
+                        // No legal qualifier can reach that branch
+                        // today - CDI 4.1 makes an array-valued or
+                        // annotation-valued member that is not
+                        // @Nonbinding a definition error, and the loop
+                        // above skips @Nonbinding members - so this is
+                        // an invariant guard, not a fix for an
+                        // observable failure. It keeps equals and
+                        // hashCode consistent on their own terms rather
+                        // than by relying on the container to reject
+                        // the input first. See issue 158.
+                        h = 31 * h + Arrays.deepHashCode(new Object[] {value});
                     }
                 } catch (ReflectiveOperationException ignored) {
                     // Fall through with the running accumulator; missing

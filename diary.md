@@ -8118,3 +8118,48 @@ caught earlier with "it looked a bit short of those details".
 
 Version strings pinned to 0.3.0 across `SKILL.md`, `skill/README.md`, `references/setup.md` and
 `tests/skill/README.md`, with the verification claims now naming the version actually tested.
+
+## Issue 158: an array-valued qualifier member, and a bug that was not one
+
+The user asked whether `@Nonbinding` on qualifier members is handled correctly. It is — but
+checking turned up something adjacent, and then checking *that* turned up that my first diagnosis
+was wrong. Both halves are worth recording.
+
+`IpKey` compares qualifier member values with `Objects.deepEquals` and hashes them with
+`value.hashCode()`. For an array those disagree: the plain hash is an identity hash. Worse, Java's
+annotation proxy clones an array member on every access to keep the annotation immutable, so the
+hash is not stable even for one key object — I measured `qualifierHashCode(a)` twice on the same
+annotation and got two different numbers. Since the candidate set is a `ConcurrentHashMap` key
+set, that looked like #155 all over again: two equal keys, two buckets, two synthetic beans, an
+ambiguous deployment.
+
+It is not, and the scenario said so on the first run. A qualifier with a binding array member
+never reaches jawelte's code, because the container refuses the deployment before that:
+
+```
+WebBeansConfigurationException: @Qualifier : ...Tagged must have @NonBinding valued members
+  for its array-valued and annotation valued members
+```
+
+CDI 4.1 §2.4.2.1 — an array-valued or annotation-valued qualifier member that is not
+`@Nonbinding` is a definition error. So the only array a qualifier may legally carry is a
+`@Nonbinding` one, and `qualifierHashCode` skips those before it ever calls `hashCode()`. Every
+member type that can actually reach the hash — `String`, primitives, `Class`, enums — hashes by
+value. The failure I had written up cannot happen.
+
+I had already filed the issue by then, so I corrected it in place rather than quietly closing it:
+the `AmbiguousResolutionException` in the original text does not occur, and the issue is re-scoped
+to the two things that survive.
+
+**What survived.** A latent `equals`/`hashCode` inconsistency, fixed with a one-line
+`Arrays.deepHashCode` and a comment saying plainly that nothing can reach it today — the class
+invariant should hold on its own terms rather than because the spec forbids the input that would
+break it. And a real coverage gap: scenario 07 pins a `@Nonbinding` scalar, scenario 54 a binding
+scalar, and no scenario used an array member at all. `scenario-67-array-valued-qualifier-member`
+now pins that a `@Nonbinding` array is ignored — including when the two arrays differ in length,
+not just contents — while a binding scalar still distinguishes. Green on OpenWebBeans and Weld.
+
+The lesson is the one from #155 inverted. There I had a plausible story that was wrong about the
+mechanism; here I had a plausible story that was wrong about reachability. Writing the scenario
+before the fix is what caught it both times — a fix-first order would have shipped a hardening
+described as a bug fix, and nobody would have learned that the input is illegal.
