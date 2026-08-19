@@ -93,6 +93,10 @@
         <module>scenario-60-beforeall-failure-does-not-leak-the-container</module>
         <module>scenario-61-late-synthetic-bean-not-auto-mocked</module>
         <module>scenario-62-mock-refusal-is-reported</module>
+        <module>scenario-63-auto-mock-shared-across-beans</module>
+        <module>scenario-64-auto-mock-collides-with-test-class-injection</module>
+        <module>scenario-65-testbean-mock-stubbed-and-verified</module>
+        <module>scenario-66-testbean-declared-on-superclass</module>
     </modules>
 
     <dependencies>

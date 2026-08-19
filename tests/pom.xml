@@ -61,5 +61,6 @@
         <module>spring-data-module</module>
         <module>flow-assert-module</module>
         <module>lnp-module</module>
+        <module>skill</module>
     </modules>
 </project>

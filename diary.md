@@ -7874,3 +7874,77 @@ serving the new files by the time the script finished.
 `SKIPPED` — that is `release:prepare` and `release:clean` running a plugin goal at the root
 with nothing to build, not a build that skipped its modules. Worth knowing before it looks
 alarming in a 144k-line log.
+
+## 2026-08-19 — a jawelte skill for agentic workflows, and the tests that check it
+
+**What it is.** `skill/` — a Claude Code skill a consuming project copies into
+`.claude/skills/jawelte/`, so an agent working in someone else's codebase knows how to set jawelte
+up and write tests with it without being re-taught every session. `SKILL.md` is the always-loaded
+part (setup preconditions, the worked example, a routing table); seven files under `references/`
+are loaded only when that area is in play, so a test that touches no database never pulls the
+persistence material into context.
+
+**It was written from the code, not from the prose**, and verified by building a consumer project
+outside the repository against the published 0.2.0 artifacts from an empty local repository. That
+run is what produced the setup section: `jawelte-core-impl` has to be declared explicitly because
+`cdi-module/impl` deliberately has no edge to `core/impl`, and the Jakarta APIs are `provided` and
+therefore not transitive either. The README's minimal-setup claim that "`jawelte-core` comes along
+transitively" is true only of `core-api`; a consumer following it verbatim gets a container that
+will not start.
+
+**Then the skill was checked against tests, which found two errors in it.** `spring-data-jpa` is
+managed at `provided` and the module does not override it, so Spring Data JPA does *not* come
+transitively — the skill said it did, which would have left a consumer with an unresolvable build.
+And the explanation of the consumer-supplied libraries was wrong in mechanism if not in outcome:
+`xbean-naming` and `hibernate-core` are managed at `test` in the parent and raised to `provided`
+by the module that needs them, so only the effective scope decides transitivity. Two other
+mistakes were caught earlier by reading the scenarios rather than trusting memory: `DbDiff` uses
+`[NULL]` and `[MATCH:…]`, not the tilde markers first assumed, and content-diff uses JSONPath, not
+globs.
+
+**Coverage audit.** Every one of the 18 shipped modules is covered. An audit of the 77 public api
+types against the skill text found four real omissions, now fixed: the JPA transaction events
+(`TransactionStarted` / `BeforeCompletion` / `Committed` / `RolledBack`) were described but never
+named, `ConfigResolver` is injectable and was missing entirely, `FlowStep` gives flow-assert a
+structural assertion path, and the port list in `configuration.md` was a representative sample
+rather than the real set. The one genuine feature gap was **Quarkus**: `@QuarkusTest` and
+`@QuarkusComponentTest` switch container management off automatically, which the skill did not
+mention at all. `tests/lnp-module` is deliberately absent — it is the project's own
+load-and-performance harness, not a shipped module.
+
+**Where the checking lives.** Most statements were already covered by existing scenarios, and
+those are cited rather than duplicated. Four module-local gaps became scenarios in
+`tests/cdi-module`: one auto-mock shared across beans (63), the ambiguity when the same type is
+injected into a bean *and* the test class (64), a `@TestBean` static Mockito mock stubbed and
+verified (65), and `@TestBean` declared on a superclass (66). Two cross-cutting statements got a
+new `tests/skill` module: the consumer dependency contract, which reads the project's own poms
+and is what caught the Spring Data error, and the worked examples from `SKILL.md` run as written.
+`tests/skill/README.md` carries the claim-to-scenario map, including the two preconditions that
+cannot be asserted from inside the reactor.
+
+**A bug worth its own ticket, and a wrong first explanation.** The first write-up said
+deduplication "does not extend to the test class's own injection point", which os890 rejected on
+the spot: the same would then be true of two application beans, and it demonstrably is not
+(scenario 63). Instrumenting the registration loop gave the real mechanism. Candidates are keyed
+by `(targetType, qualifiers)` in a `Set<IpKey>`, and two paths fill it with different
+conventions — `onProcessInjectionPoint` uses `ip.getQualifiers()`, CDI's normalized set in which
+an undeclared qualifier is `@Default`, while `addTestClassInjectionPoints` walks the test class's
+fields reflectively and keeps only the annotations physically present, which for a plain
+`@Inject` is empty. `IpKey(AuditService, {@Default})` and `IpKey(AuditService, {})` are distinct,
+so two `@Default` beans are registered and the deployment fails — `AmbiguousResolutionException`
+on OpenWebBeans, `WELD-001409` on Weld.
+
+Two application beans never collide because both go through the normalized path. And an
+explicitly qualified injection never collides either — verified against the published artifacts
+with a custom qualifier on both sides, where the shared mock resolves and `isSameAs` holds. Only
+the unqualified case diverges, which makes the fix a one-place normalization: give the
+test-class path `{@Default}` when it collects nothing. An earlier guess — that writing
+`@Default @Any` on the field would align the keys — was falsified by experiment; it only moves
+the asymmetry to `@Any`.
+
+That combination is the obvious way to reach for "stub the collaborator", and nothing in `tests/`
+stubbed an auto-mock before scenario 65, which is why 505 scenarios never hit it. Scenario 64
+pins the current behaviour deliberately, so a fix is a visible change to a failing assertion.
+
+**Verification.** All six new scenarios green on OpenWebBeans and Weld; checkstyle clean across
+the full reactor; RAT reports zero unapproved files; both reactor entry points resolve.
