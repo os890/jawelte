@@ -8285,3 +8285,22 @@ What I did not do is as important as what I did, so tests/skill/README.md now sa
 resource, db-migration, db-testdata, testcontrol, spring-data, ejb, jaxrs and content-diff are
 still unverified from the outside. Both rows that turned out wrong came from that same untested
 majority, so the sensible reading of the remaining nine is "not yet checked", not "fine".
+
+## A contradiction the merge order exposed
+
+Rebasing the consumer-audit branch after #161 landed turned up something neither branch could have
+seen on its own. `setup.md`'s troubleshooting table — owned by the audit branch — described
+`AmbiguousResolutionException` on an auto-mocked type as "a pre-0.3.0 defect: upgrade".
+`core-testing.md`, which came in with #161, now says the `@Any` spelling carried the same defect
+until 0.4.0. A reader on 0.3.0 hitting the `@Any` variant would have been told to upgrade from a
+version they were already on.
+
+Worse, the row only ever listed one cause, and there are three. Two are defects with different
+cutoffs (#155 before 0.3.0, #160 before 0.4.0). The third is not a defect at all: a direct
+`@Inject @Any T` while several mocks of `T` exist is a CDI usage violation, and the container is
+right to reject it. That is precisely the case a troubleshooting table exists to stop someone
+misreading as a framework bug — and it was missing from the one place a reader would look.
+
+The row now names all three and says which is which. Nothing about this was visible while the
+branches were separate; it only appeared once the two halves of the story sat in the same tree,
+which is an argument for the step-by-step merge order rather than against it.

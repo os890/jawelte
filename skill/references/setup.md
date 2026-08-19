@@ -220,6 +220,6 @@ artifacts; every other module is an `-api` / `-impl` pair.
 | `Multiple TestBeansExtension implementations found` | two core-impl versions on the classpath |
 | Nothing resolves from the repository | missing `<repositories>` entry |
 | An error naming a type that could not be mocked | missing `mockito-extensions` mock-maker file |
-| `AmbiguousResolutionException` / `WELD-001409` on an auto-mocked type | a pre-0.3.0 defect: the same unsatisfied type injected into both an application bean and the test class produced two mocks. Upgrade — see `core-testing.md` |
+| `AmbiguousResolutionException` / `WELD-001409` on an auto-mocked type | three different causes — check which one before assuming a bug. **Before 0.3.0**: an unqualified type injected into both a bean and the test class produced two mocks (#155). **Before 0.4.0**: the same, whenever `@Any` was written out (#160). **Any version, and not a defect**: a direct `@Inject @Any T` while several mocks of `T` exist — `@Any` matches every bean of the type, so use `Instance<T>`. See `core-testing.md` |
 | Beans are not discovered at all | missing or wrongly-moded `beans.xml` |
 | A collateral failure names an unrelated test class | a `beforeAll` container-start failure; the message names the class that really failed |
